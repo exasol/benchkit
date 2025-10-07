@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Benchmark Report Index</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        {% include "styles.css.j2" %}
+
+        body {
+            background: var(--color-bg-alt);
+        }
+
+        .container {
+            margin-top: var(--spacing-xl);
+            margin-bottom: var(--spacing-xl);
+        }
+
+        .header .intro {
+            color: var(--color-text-light);
+            font-size: 1rem;
+            margin-top: var(--spacing-sm);
+        }
+
+        .header .hint {
+            color: var(--color-text-light);
+            font-size: 0.9375rem;
+            margin-top: var(--spacing-xs);
+        }
+
+        .search-panel {
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-xs);
+            margin-bottom: var(--spacing-lg);
+        }
+
+        .search-panel label {
+            font-weight: 600;
+            color: var(--color-text);
+        }
+
+        .search-panel input[type="search"] {
+            padding: var(--spacing-sm);
+            font-size: 1rem;
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-md);
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .search-panel input[type="search"]:focus {
+            outline: none;
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 3px rgba(46, 134, 171, 0.15);
+        }
+
+        .search-summary {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: -var(--spacing-md) 0 var(--spacing-lg);
+            color: var(--color-text-light);
+            font-size: 0.9375rem;
+        }
+
+        .project-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: var(--spacing-lg);
+        }
+
+        .project-card {
+            background: linear-gradient(145deg, var(--color-bg) 0%, var(--color-bg-alt) 100%);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-lg);
+            box-shadow: var(--shadow-md);
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-md);
+            transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+        }
+
+        .project-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-lg);
+            border-color: var(--color-primary);
+        }
+
+        .project-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: var(--spacing-sm);
+        }
+
+        .project-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--color-text);
+        }
+
+        .project-meta {
+            display: grid;
+            gap: var(--spacing-xs);
+            color: var(--color-text-light);
+            font-size: 0.9375rem;
+        }
+
+        .project-meta strong {
+            color: var(--color-text);
+        }
+
+        .system-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--spacing-xs);
+        }
+
+        .system-badge {
+            background: rgba(46, 134, 171, 0.08);
+            border: 1px solid rgba(46, 134, 171, 0.25);
+            color: var(--color-primary);
+        }
+
+        .tag-list {
+            display: flex;
+            flex-wrap: wrap;
+            column-gap: 0.35rem;
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .tag-list li {
+            margin: 0;
+            padding: 0;
+        }
+
+        .tag-pill {
+            display: inline-flex;
+            align-items: center;
+            line-height: 1;
+            padding: 0.24rem 0.3rem;
+            font-size: 0.78rem;
+            border-radius: 999px;
+            background: rgba(162, 59, 114, 0.12);
+            color: var(--color-secondary);
+            border: 1px solid rgba(162, 59, 114, 0.25);
+            cursor: pointer;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .tag-pill:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .report-links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--spacing-xs);
+            align-items: center;
+        }
+
+        .report-link {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--spacing-xs);
+            padding: 0.4rem 0.85rem;
+            background: rgba(106, 153, 78, 0.12);
+            color: var(--color-text);
+            border: 1px solid rgba(106, 153, 78, 0.25);
+            border-radius: var(--radius-md);
+            font-size: 0.875rem;
+            text-decoration: none;
+            transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .report-link:hover {
+            background: rgba(106, 153, 78, 0.2);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .empty-state {
+            margin-top: var(--spacing-xl);
+            font-size: 1rem;
+            text-align: center;
+            color: var(--color-text-light);
+        }
+
+        .footer {
+            margin-top: var(--spacing-xl);
+            padding-top: var(--spacing-md);
+            border-top: 1px solid var(--color-border);
+            color: var(--color-text-light);
+            font-size: 0.875rem;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: var(--spacing-md);
+            }
+
+            .project-card {
+                padding: var(--spacing-md);
+            }
+
+            .project-title {
+                font-size: 1.25rem;
+            }
+
+            .project-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>Benchmark Report Index</h1>
+            <p class="intro">Explore reproducible benchmark projects across database systems, workloads, and infrastructures.</p>
+            <div class="metadata">
+                <span class="badge"><strong id="project-count">{{ project_count }}</strong> Projects Indexed</span>
+                <span class="badge">
+                    <strong>Generated:</strong>
+                    <span id="generated-at" data-timestamp="{{ generated_at }}">{{ generated_at }}</span> UTC
+                </span>
+            </div>
+            <p class="hint">Type keywords or use <code>#tags</code> such as <code>#clickhouse</code>, <code>#aws</code>, or <code>#scale-factor-100</code> to filter.</p>
+        </header>
+
+        <section class="search-panel" aria-label="Search and filter projects">
+            <label for="search-input">Search &amp; Filter</label>
+            <input
+                type="search"
+                id="search-input"
+                placeholder="Search projects or filter with #tags (e.g. #clickhouse, #aws, #scale-factor-10)"
+                autocomplete="off"
+                spellcheck="false"
+            >
+        </section>
+
+        <div class="search-summary">
+            <span id="results-count">{{ project_count }} projects</span>
+            <noscript>Enable JavaScript for interactive filtering.</noscript>
+        </div>
+
+        <section id="project-grid" class="project-grid" aria-live="polite"></section>
+
+        <template id="project-card-template">
+            <article class="project-card">
+                <div class="project-card-header">
+                    <h2 class="project-title"></h2>
+                    <span class="project-id badge"></span>
+                </div>
+
+                <div class="project-meta">
+                    <div class="meta-row author-row"></div>
+                    <div class="meta-row environment-row"></div>
+                    <div class="meta-row workload-row"></div>
+                    <div class="meta-row summary-row"></div>
+                </div>
+
+                <div class="system-badges"></div>
+
+                <ul class="tag-list"></ul>
+
+                <div class="report-links" aria-label="Available reports"></div>
+            </article>
+        </template>
+
+        <p class="empty-state" id="empty-state" hidden>No projects match your filters. Try adjusting the search terms or removing <code>#tags</code>.</p>
+
+        <footer class="footer">
+            <p>Index generated {{ generated_at }} UTC.</p>
+        </footer>
+    </div>
+
+    <script type="application/json" id="project-data">{{ projects_json | safe }}</script>
+    <script>
+        (() => {
+            const projectDataEl = document.getElementById("project-data");
+            const searchInput = document.getElementById("search-input");
+            const projectGrid = document.getElementById("project-grid");
+            const emptyState = document.getElementById("empty-state");
+            const projectCountEl = document.getElementById("project-count");
+            const resultsCountEl = document.getElementById("results-count");
+            const generatedAtEl = document.getElementById("generated-at");
+            const template = document.getElementById("project-card-template");
+
+            const rawProjects = projectDataEl ? JSON.parse(projectDataEl.textContent || "[]") : [];
+            const totalProjects = rawProjects.length;
+
+            if (projectCountEl) {
+                projectCountEl.textContent = totalProjects.toString();
+            }
+
+            if (generatedAtEl) {
+                const iso = generatedAtEl.dataset.timestamp;
+                if (iso) {
+                    try {
+                        const formatter = new Intl.DateTimeFormat(undefined, {
+                            year: "numeric",
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            second: "2-digit",
+                            timeZoneName: "short",
+                        });
+                        const date = new Date(iso);
+                        generatedAtEl.textContent = formatter.format(date);
+                    } catch (error) {
+                        // Keep original value if formatting fails
+                    }
+                }
+            }
+
+            const normalizedProjects = rawProjects.map((project) => {
+                const tags = Array.isArray(project.tags) ? project.tags : [];
+                const tagSlugs = Array.isArray(project.tag_slugs)
+                    ? project.tag_slugs.filter(Boolean)
+                    : tags.map((tag) => tag.slug).filter(Boolean);
+
+                const searchParts = [];
+                const pushValue = (value) => {
+                    if (value) {
+                        searchParts.push(String(value).toLowerCase());
+                    }
+                };
+
+                pushValue(project.project_id);
+                pushValue(project.title);
+                pushValue(project.author);
+                if (project.environment) {
+                    pushValue(project.environment.mode);
+                    pushValue(project.environment.region);
+                }
+                if (project.workload) {
+                    pushValue(project.workload.name);
+                    pushValue(project.workload.label);
+                    pushValue(project.workload.scale_factor);
+                }
+                tags.forEach((tag) => {
+                    pushValue(tag.label);
+                    pushValue(tag.slug);
+                    pushValue(tag.category);
+                });
+                (project.systems || []).forEach((system) => {
+                    pushValue(system.name);
+                    pushValue(system.kind);
+                    pushValue(system.version);
+                    pushValue(system.setup_method);
+                    pushValue(system.instance_type);
+                });
+
+                const searchBlob = searchParts.join(" ");
+                return {
+                    ...project,
+                    tags,
+                    tag_slugs: tagSlugs,
+                    searchBlob,
+                };
+            });
+
+            const normalizeToken = (token) => token.trim().toLowerCase().replace(/^#/, "").replace(/\s+/g, "-");
+
+            const parseSearch = (value) => {
+                const tokens = value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+                const tagFilters = [];
+                const textTerms = [];
+
+                tokens.forEach((token) => {
+                    if (token.startsWith("#")) {
+                        const normalized = normalizeToken(token);
+                        if (normalized) {
+                            tagFilters.push(normalized);
+                        }
+                    } else {
+                        textTerms.push(token);
+                    }
+                });
+
+                return { tagFilters, textTerms };
+            };
+
+            const formatDisplay = (value) => {
+                if (!value) {
+                    return "";
+                }
+                const canonical = String(value).trim();
+                if (!canonical) {
+                    return "";
+                }
+                const tokens = canonical
+                    .replace(/[_-]/g, " ")
+                    .split(" ")
+                    .map((token) => token.trim())
+                    .filter(Boolean);
+
+                if (!tokens.length) {
+                    return canonical;
+                }
+
+                const formatToken = (token) => {
+                    if (/^[A-Z0-9]+$/.test(token)) {
+                        return token;
+                    }
+                    const lower = token.toLowerCase();
+                    if (/^[a-z]+$/.test(lower) && !/[aeiou]/.test(lower)) {
+                        return token.toUpperCase();
+                    }
+                    if (/^[a-z]+$/.test(lower)) {
+                        return lower.charAt(0).toUpperCase() + lower.slice(1);
+                    }
+                    return token;
+                };
+
+                const formatted = tokens.map(formatToken).join(" ");
+                return formatted || canonical;
+            };
+
+            const formatDateTime = (value) => {
+                if (!value) {
+                    return "";
+                }
+                try {
+                    const formatter = new Intl.DateTimeFormat(undefined, {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        timeZoneName: "short",
+                    });
+                    return formatter.format(new Date(value));
+                } catch (error) {
+                    return value;
+                }
+            };
+
+            const renderProjects = (projects) => {
+                projectGrid.innerHTML = "";
+
+                if (resultsCountEl) {
+                    const noun = projects.length === 1 ? "project" : "projects";
+                    resultsCountEl.textContent = `Showing ${projects.length} ${noun} of ${totalProjects}`;
+                }
+
+                if (projects.length === 0) {
+                    if (emptyState) {
+                        emptyState.hidden = false;
+                    }
+                    return;
+                }
+
+                if (emptyState) {
+                    emptyState.hidden = true;
+                }
+
+                projects.forEach((project) => {
+                    const fragment = template.content.cloneNode(true);
+                    const titleEl = fragment.querySelector(".project-title");
+                    const idEl = fragment.querySelector(".project-id");
+                    const authorRow = fragment.querySelector(".author-row");
+                    const environmentRow = fragment.querySelector(".environment-row");
+                    const workloadRow = fragment.querySelector(".workload-row");
+                    const summaryRow = fragment.querySelector(".summary-row");
+                    const systemBadgesContainer = fragment.querySelector(".system-badges");
+                    const tagList = fragment.querySelector(".tag-list");
+                    const reportLinks = fragment.querySelector(".report-links");
+
+                    const title = project.title || project.project_id;
+                    if (titleEl) {
+                        titleEl.textContent = title;
+                    }
+                    if (idEl) {
+                        idEl.textContent = project.project_id || "";
+                    }
+
+                    if (authorRow && project.author) {
+                        authorRow.innerHTML = `<strong>Author:</strong> ${project.author}`;
+                    } else if (authorRow) {
+                        authorRow.remove();
+                    }
+
+                    if (environmentRow) {
+                        const parts = [];
+                        if (project.environment && project.environment.mode) {
+                            parts.push(formatDisplay(project.environment.mode));
+                        }
+                        if (project.environment && project.environment.region) {
+                            parts.push(project.environment.region);
+                        }
+                        if (parts.length) {
+                            environmentRow.innerHTML = `<strong>Environment:</strong> ${parts.join(" · ")}`;
+                        } else {
+                            environmentRow.remove();
+                        }
+                    }
+
+                    if (workloadRow) {
+                        const workloadPieces = [];
+                        if (project.workload && project.workload.label) {
+                            workloadPieces.push(project.workload.label);
+                        } else if (project.workload && project.workload.name) {
+                            workloadPieces.push(formatDisplay(project.workload.name));
+                        }
+                        if (project.workload && project.workload.scale_factor !== undefined && project.workload.scale_factor !== null) {
+                            workloadPieces.push(`Scale Factor ${project.workload.scale_factor}`);
+                        }
+                        if (project.workload && Array.isArray(project.workload.queries) && project.workload.queries.length) {
+                            workloadPieces.push(`${project.workload.queries.length} queries`);
+                        }
+                        if (workloadPieces.length) {
+                            workloadRow.innerHTML = `<strong>Workload:</strong> ${workloadPieces.join(" · ")}`;
+                        } else {
+                            workloadRow.remove();
+                        }
+                    }
+
+                    if (summaryRow) {
+                        const summaryPieces = [];
+                        if (project.summary && project.summary.total_queries) {
+                            summaryPieces.push(`${project.summary.total_queries} total queries`);
+                        }
+                        if (project.summary && project.summary.run_date) {
+                            summaryPieces.push(`Run ${formatDateTime(project.summary.run_date)}`);
+                        } else if (project.last_updated) {
+                            summaryPieces.push(`Updated ${formatDateTime(project.last_updated)}`);
+                        }
+                        if (summaryPieces.length) {
+                            summaryRow.innerHTML = `<strong>Summary:</strong> ${summaryPieces.join(" · ")}`;
+                        } else {
+                            summaryRow.remove();
+                        }
+                    }
+
+                    if (systemBadgesContainer) {
+                        const systems = Array.isArray(project.systems) ? project.systems : [];
+                        if (systems.length === 0) {
+                            systemBadgesContainer.remove();
+                        } else {
+                            systems.forEach((system) => {
+                                const badge = document.createElement("span");
+                                badge.className = "badge system-badge";
+                                const parts = [];
+                                parts.push(formatDisplay(system.name || system.kind));
+                                if (system.version) {
+                                    parts.push(`v${system.version}`);
+                                }
+                                if (system.setup_method) {
+                                    parts.push(formatDisplay(system.setup_method));
+                                }
+                                if (system.instance_type) {
+                                    parts.push(system.instance_type);
+                                }
+                                badge.textContent = parts.join(" · ");
+                                systemBadgesContainer.appendChild(badge);
+                            });
+                        }
+                    }
+
+                    if (tagList) {
+                        const tags = Array.isArray(project.tags) ? project.tags : [];
+                        if (tags.length === 0) {
+                            tagList.remove();
+                        } else {
+                            tags.forEach((tag) => {
+                                const li = document.createElement("li");
+                                const tagButton = document.createElement("button");
+                                tagButton.type = "button";
+                                tagButton.className = "tag-pill";
+                                tagButton.textContent = `#${tag.label}`;
+                                tagButton.dataset.slug = tag.slug;
+                                tagButton.title = `Filter by #${tag.slug}`;
+                                tagButton.addEventListener("click", () => appendTagToSearch(tag.slug));
+                                li.appendChild(tagButton);
+                                tagList.appendChild(li);
+                            });
+                        }
+                    }
+
+                    if (reportLinks) {
+                        const reports = Array.isArray(project.reports) ? project.reports : [];
+                        reports.forEach((report) => {
+                            if (!report.href) {
+                                return;
+                            }
+                            const link = document.createElement("a");
+                            link.className = "report-link";
+                            link.href = report.href;
+                            link.textContent = `${report.name} · ${report.format.toUpperCase()}`;
+                            link.target = "_blank";
+                            link.rel = "noopener";
+                            reportLinks.appendChild(link);
+                        });
+                    }
+
+                    projectGrid.appendChild(fragment);
+                });
+            };
+
+            const appendTagToSearch = (slug) => {
+                const currentValue = searchInput.value;
+                const tokens = currentValue.trim().split(/\s+/).filter(Boolean);
+                const normalizedSlug = normalizeToken(slug);
+                const hasTag = tokens.some((token) => normalizeToken(token) === normalizedSlug);
+                if (!hasTag) {
+                    tokens.push(`#${normalizedSlug}`);
+                    searchInput.value = tokens.join(" ");
+                }
+                searchInput.focus();
+                applyFilters();
+            };
+
+            const applyFilters = () => {
+                const { tagFilters, textTerms } = parseSearch(searchInput.value);
+                const filtered = normalizedProjects.filter((project) => {
+                    if (tagFilters.length) {
+                        const slugs = project.tag_slugs || [];
+                        const matchesAllTags = tagFilters.every((filter) =>
+                            slugs.some((slug) => typeof slug === "string" && slug.includes(filter))
+                        );
+                        if (!matchesAllTags) {
+                            return false;
+                        }
+                    }
+
+                    if (textTerms.length) {
+                        const blob = project.searchBlob || "";
+                        const matchesAllTerms = textTerms.every((term) => blob.includes(term));
+                        if (!matchesAllTerms) {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                });
+
+                renderProjects(filtered);
+            };
+
+            renderProjects(normalizedProjects);
+
+            if (searchInput) {
+                searchInput.addEventListener("input", applyFilters);
+                searchInput.addEventListener("keydown", (event) => {
+                    if (event.key === "Escape") {
+                        searchInput.value = "";
+                        applyFilters();
+                        event.preventDefault();
+                    }
+                });
+            }
+        })();
+    </script>
+</body>
+</html>

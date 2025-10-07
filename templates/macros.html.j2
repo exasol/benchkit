@@ -1,0 +1,164 @@
+{# Jinja2 Macros for Reusable Template Components #}
+
+{# Macro: Render a command block with deduplication and filtering #}
+{% macro render_command_block(commands, title, filter_patterns=[]) %}
+<div class="code-section">
+    <h4>{{ title }}</h4>
+    <pre><code class="language-bash">
+{%- set seen_cmds = [] -%}
+{%- for cmd in commands -%}
+{%- set clean_cmd = cmd.command | sanitize -%}
+{%- set clean_desc = cmd.description.replace('Remote: ', '') | sanitize -%}
+{%- set skip = false -%}
+{%- for pattern in filter_patterns -%}
+{%- if pattern in clean_cmd -%}
+{%- set skip = true -%}
+{%- endif -%}
+{%- endfor -%}
+{%- if not skip and clean_cmd not in seen_cmds -%}
+{%- set _ = seen_cmds.append(clean_cmd) -%}
+{%- if seen_cmds | length > 1 %}
+
+{%- endif -%}
+{%- if clean_desc and clean_desc != clean_cmd and not clean_cmd in clean_desc -%}
+# {{ clean_desc }}
+{{ clean_cmd }}
+{% else -%}
+{{ clean_cmd }}
+{% endif -%}
+{%- endif -%}
+{%- endfor -%}
+</code></pre>
+</div>
+{% endmacro %}
+
+{# Macro: Render ordered setup sections with tuning metadata #}
+{% macro render_setup_sections_html(setup_summary) %}
+{% if setup_summary.commands %}
+    {% set category_order = SETUP_CATEGORY_ORDER | default([]) %}
+    {% set category_labels = SETUP_CATEGORY_LABELS | default({}) %}
+    {% set filters_config = SETUP_CATEGORY_FILTERS | default({'default': []}) %}
+    {% set default_filters = filters_config.get('default', []) %}
+    {% for category in category_order %}
+        {% set commands = setup_summary.commands.get(category, []) %}
+        {% if commands %}
+            {% set label = category_labels.get(category, category | replace('_', ' ') | title) %}
+            {% set filters = filters_config.get(category, default_filters) %}
+            {{ render_command_block(commands, label, filters) }}
+        {% endif %}
+    {% endfor %}
+    {% for category, commands in setup_summary.commands.items() %}
+        {% if category not in category_order and commands %}
+            {% set label = category | replace('_', ' ') | title %}
+            {{ render_command_block(commands, label, default_filters) }}
+        {% endif %}
+    {% endfor %}
+{% endif %}
+
+{% if setup_summary.config_parameters and setup_summary.config_parameters.get('extra') %}
+    {% set extra = setup_summary.config_parameters.extra %}
+    {% if extra %}
+    <div class="tuning-parameters">
+        <h4>Tuning Parameters</h4>
+        <ul>
+            {% if extra.get('dbram') %}<li><code>dbram</code>: {{ extra.dbram }}</li>{% endif %}
+            {% if extra.get('optimizer_mode') %}<li><code>optimizer_mode</code>: {{ extra.optimizer_mode }}</li>{% endif %}
+            {% if extra.get('db_params') %}
+            <li>Database parameters:
+                <ul>
+                    {% for param in extra.db_params %}
+                    <li><code>{{ param }}</code></li>
+                    {% endfor %}
+                </ul>
+            </li>
+            {% endif %}
+            {% if extra.get('memory_limit') %}<li><code>memory_limit</code>: {{ extra.memory_limit }}</li>{% endif %}
+            {% if extra.get('max_threads') %}<li><code>max_threads</code>: {{ extra.max_threads }}</li>{% endif %}
+            {% if extra.get('max_memory_usage') %}
+                {% set max_mem = extra.max_memory_usage %}
+                {% if max_mem is string %}
+                    {% set max_mem_val = max_mem | int %}
+                {% else %}
+                    {% set max_mem_val = max_mem %}
+                {% endif %}
+                <li><code>max_memory_usage</code>: {{ (max_mem_val / 1000000000) | round(1) }}GB</li>
+            {% endif %}
+        </ul>
+    </div>
+    {% endif %}
+{% endif %}
+
+{% if setup_summary.data_directory %}
+<div class="data-directory">
+    <strong>Data Directory:</strong> <code>{{ setup_summary.data_directory }}</code>
+</div>
+{% endif %}
+{% endmacro %}
+
+{# Macro: Render a metric card #}
+{% macro render_metric_card(label, value, unit="", css_class="") %}
+<div class="metric {% if css_class %}{{ css_class }}{% endif %}">
+    <span class="metric-label">{{ label }}</span>
+    <span class="metric-value">{{ value }}{{ unit }}</span>
+</div>
+{% endmacro %}
+
+{# Macro: Render a download card #}
+{% macro render_download_card(icon, title, description, file_path) %}
+<div class="download-card">
+    <div class="download-icon">{{ icon }}</div>
+    <h4>{{ title }}</h4>
+    <p>{{ description }}</p>
+    <a href="{{ file_path }}" class="btn btn-download" download>Download</a>
+</div>
+{% endmacro %}
+
+{# Macro: Render a code section with collapsible details #}
+{% macro render_code_section(title, description, code, language="sql") %}
+<div class="code-section">
+    <h5>{{ title }}</h5>
+    {% if description %}
+    <p class="code-description">{{ description }}</p>
+    {% endif %}
+    <pre><code class="language-{{ language }}">{{ code }}</code></pre>
+</div>
+{% endmacro %}
+
+{# Macro: Render a collapsible section #}
+{% macro render_collapsible(summary_title, content, open=false) %}
+<details {% if open %}open{% endif %}>
+    <summary>{{ summary_title }}</summary>
+    {{ content }}
+</details>
+{% endmacro %}
+
+{# Macro: Render a notice/alert box #}
+{% macro render_notice(type, title, content) %}
+<div class="notice notice-{{ type }}">
+    <strong>{{ title }}</strong> {{ content }}
+</div>
+{% endmacro %}
+
+{# Macro: Render a table from data #}
+{% macro render_table(headers, rows, css_class="") %}
+<div class="table-wrapper">
+    <table {% if css_class %}class="{{ css_class }}"{% endif %}>
+        <thead>
+            <tr>
+                {% for header in headers %}
+                <th>{{ header }}</th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+            <tr>
+                {% for cell in row %}
+                <td>{{ cell }}</td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endmacro %}

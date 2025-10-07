@@ -1,0 +1,375 @@
+{% from 'macros.html.j2' import render_command_block, render_download_card, render_setup_sections_html %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="{{ cfg.title }} - Detailed Query Results">
+    <title>{{ cfg.title }} | Detailed Query Results</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-badge">📊 Detailed Query Results</div>
+            <h1>{{ cfg.title }}</h1>
+            <div class="metadata">
+                <span class="meta-item">
+                    <strong>Author:</strong> {{ cfg.author }}
+                </span>
+                <span class="meta-item">
+                    <strong>Date:</strong> {{ data.summary.run_date | default('N/A') }}
+                </span>
+                {% if cfg.env.mode %}
+                <span class="meta-item">
+                    <strong>Environment:</strong>
+                    <span class="badge badge-cloud">{{ cfg.env.mode | upper }}</span>
+                    {{ cfg.env.region | default('local') }}
+                </span>
+                {% endif %}
+            </div>
+        </header>
+
+        <!-- Overview -->
+        <section class="section">
+            <h2>Overview</h2>
+            <p>This report presents the complete query-by-query performance results for <strong>{{ data.summary.systems | length }} database systems</strong> tested using the TPC-H benchmark at scale factor {{ workload_metadata.info.scale_factor }}.</p>
+        </section>
+
+        <!-- Systems Under Test -->
+        <section class="section">
+            <h2>Systems Under Test</h2>
+
+            <div class="systems-grid">
+            {% for system_config in cfg.systems %}
+                <div class="system-card">
+                    <h3>{{ system_config.name | title }} {{ system_config.version }}</h3>
+
+                    {% if system_info.per_system and system_config.name in system_info.per_system %}
+                    {% set sys_probe = system_info.per_system[system_config.name] %}
+                    <div class="system-specs">
+                        <h4>Environment & Hardware</h4>
+                        <ul>
+                            {% if cfg.env.mode in ['aws', 'gcp', 'azure'] %}
+                            <li><strong>Cloud:</strong> {{ cfg.env.mode | upper }} {{ cfg.env.region | default('N/A') }}</li>
+                            {% if cfg.env.instances and system_config.name in cfg.env.instances %}
+                            <li><strong>Instance:</strong> {{ cfg.env.instances[system_config.name].instance_type | default('N/A') }}</li>
+                            {% endif %}
+                            {% endif %}
+                            {% if sys_probe.cpu_model %}
+                            <li><strong>CPU:</strong> {{ sys_probe.cpu_model }}{% if sys_probe.count_logical or sys_probe.cpu_count_logical %} ({{ sys_probe.count_logical | default(sys_probe.cpu_count_logical) }} vCPUs){% endif %}</li>
+                            {% endif %}
+                            {% if sys_probe.memory_total_gb or sys_probe.total_gb %}
+                            <li><strong>Memory:</strong> {{ sys_probe.memory_total_gb | default(sys_probe.total_gb) }}GB RAM</li>
+                            {% endif %}
+                        </ul>
+
+                        <h4>Software</h4>
+                        <ul>
+                            <li><strong>Database:</strong> {{ system_config.kind }} {{ system_config.version }}</li>
+                        </ul>
+                    </div>
+                    {% endif %}
+                </div>
+            {% endfor %}
+            </div>
+        </section>
+
+        {% if setup_summaries %}
+        <section class="section">
+            <h2>Installation &amp; Configuration</h2>
+
+            {% for system_config in cfg.systems %}
+            {% set setup_summary = setup_summaries.get(system_config.name) %}
+            {% if setup_summary %}
+            <details class="setup-details">
+                <summary>
+                    <strong>{{ setup_summary.system_name | title }} {{ setup_summary.system_version }}</strong>
+                    {% if preparation_timings and system_config.name in preparation_timings %}
+                    <span class="setup-timing">({{ preparation_timings[system_config.name].elapsed_s | format_duration }})</span>
+                    {% endif %}
+                </summary>
+                {{ render_setup_sections_html(setup_summary) }}
+            </details>
+            {% endif %}
+            {% endfor %}
+        </section>
+        {% endif %}
+
+        <!-- Performance Summary -->
+        <section class="section">
+            <h2>Performance Summary</h2>
+
+            {% if data.summary.per_system %}
+            {% if data.summary.per_system | length > 1 %}
+            {% set systems_list = data.summary.per_system.items() | list %}
+            {% set fastest_system = systems_list | min(attribute='1.median_runtime_ms') %}
+            {% set slowest_system = systems_list | max(attribute='1.median_runtime_ms') %}
+
+            <div class="key-findings">
+                <h3>Key Findings</h3>
+                <ul>
+                    <li><strong>{{ fastest_system[0] }}</strong> was the fastest overall with <strong>{{ fastest_system[1].median_runtime_ms | format_number }}ms</strong> median runtime</li>
+                    <li><strong>{{ slowest_system[0] }}</strong> was <strong>{{ (slowest_system[1].median_runtime_ms / fastest_system[1].median_runtime_ms) | format_number(1) }}×</strong> slower</li>
+                    <li>Tested <strong>{{ data.summary.total_queries }}</strong> total query executions across {{ cfg.workload.queries.include | length if cfg.workload.queries and cfg.workload.queries.include else '22' }} different query types</li>
+                </ul>
+            </div>
+            {% endif %}
+
+            <h3>Summary Statistics</h3>
+            {{ tables.summary_table }}
+            {% endif %}
+        </section>
+
+        <!-- Query Results -->
+        <section class="section">
+            <h2>Query-by-Query Results</h2>
+            <p>The following table shows the median execution time for each query across all systems:</p>
+            {{ tables.comparison_table }}
+        </section>
+
+        <!-- Visualizations -->
+        {% if figures %}
+        <section class="section">
+            <h2>Performance Visualizations</h2>
+
+            {% for fig_name, fig_path in figures.items() %}
+            {% if 'performance' in fig_name or 'comparison' in fig_name %}
+            <div class="chart-container">
+                <iframe src="{{ fig_path }}" width="100%" height="550" frameborder="0"></iframe>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </section>
+        {% endif %}
+
+        <!-- Detailed Analysis -->
+        <section class="section">
+            <h2>Detailed Analysis</h2>
+
+            <h3>Performance by Query Type</h3>
+            {% if data.runs_df is defined and not data.runs_df.empty %}
+            <p>The benchmark results reveal distinct performance characteristics across different query categories:</p>
+
+            {% if cfg.workload.name == 'tpch' %}
+            <ul>
+                <li><strong>Aggregation queries</strong> (<a href="#" class="query-link" data-query="Q01">Q01</a>, <a href="#" class="query-link" data-query="Q06">Q06</a>, <a href="#" class="query-link" data-query="Q12">Q12</a>, <a href="#" class="query-link" data-query="Q14">Q14</a>, <a href="#" class="query-link" data-query="Q15">Q15</a>, <a href="#" class="query-link" data-query="Q19">Q19</a>, <a href="#" class="query-link" data-query="Q20">Q20</a>): Test data reduction and grouping operations</li>
+                <li><strong>Join-heavy queries</strong> (<a href="#" class="query-link" data-query="Q02">Q02</a>, <a href="#" class="query-link" data-query="Q05">Q05</a>, <a href="#" class="query-link" data-query="Q08">Q08</a>, <a href="#" class="query-link" data-query="Q09">Q09</a>, <a href="#" class="query-link" data-query="Q10">Q10</a>, <a href="#" class="query-link" data-query="Q11">Q11</a>, <a href="#" class="query-link" data-query="Q21">Q21</a>, <a href="#" class="query-link" data-query="Q22">Q22</a>): Evaluate multi-table join performance</li>
+                <li><strong>Complex analytical queries</strong> (<a href="#" class="query-link" data-query="Q03">Q03</a>, <a href="#" class="query-link" data-query="Q04">Q04</a>, <a href="#" class="query-link" data-query="Q07">Q07</a>, <a href="#" class="query-link" data-query="Q13">Q13</a>, <a href="#" class="query-link" data-query="Q16">Q16</a>, <a href="#" class="query-link" data-query="Q17">Q17</a>, <a href="#" class="query-link" data-query="Q18">Q18</a>): Combine multiple operations</li>
+            </ul>
+            {% endif %}
+
+            <p>The performance patterns observed across these query types provide insights into each system's optimization strategies and architectural trade-offs.</p>
+            {% endif %}
+
+            <h3>System Rankings</h3>
+            {% if data.summary.per_system and data.summary.per_system | length > 1 %}
+            <p>Based on median query execution time:</p>
+
+            <div class="comparison-table">
+                <table class="styled-table">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>System</th>
+                            <th>Median Runtime</th>
+                            <th>Average Runtime</th>
+                            <th>Range (Min - Max)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% set ranked_systems = data.summary.per_system.items() | sort(attribute='1.median_runtime_ms') %}
+                    {% for system, stats in ranked_systems %}
+                        <tr>
+                            <td><strong>{{ loop.index }}</strong></td>
+                            <td>{{ system | title }}</td>
+                            <td>{{ stats.median_runtime_ms | format_number }}ms</td>
+                            <td>{{ stats.avg_runtime_ms | format_number }}ms</td>
+                            <td>{{ stats.min_runtime_ms | format_number }}ms - {{ stats.max_runtime_ms | format_number }}ms</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+        </section>
+
+        <!-- Methodology -->
+        <section class="section">
+            <h2>Benchmark Methodology</h2>
+
+            <div class="methodology-grid">
+                <div class="method-card">
+                    <h3>Workload Configuration</h3>
+                    <p><strong>TPC-H Benchmark:</strong></p>
+                    <ul>
+                        <li><strong>Scale Factor:</strong> {{ workload_metadata.info.scale_factor }}</li>
+                        <li><strong>Data Format:</strong> {{ cfg.workload.data_format | upper }}</li>
+                        <li><strong>Data Generator:</strong> {{ cfg.workload.generator }}</li>
+                    </ul>
+                </div>
+
+                <div class="method-card">
+                    <h3>Execution Parameters</h3>
+                    <ul>
+                        <li><strong>Warmup Runs:</strong> {{ cfg.workload.warmup_runs }}</li>
+                        <li><strong>Measured Runs:</strong> {{ cfg.workload.runs_per_query }}</li>
+                        <li><strong>Metric Reported:</strong> Median execution time</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="notice notice-info">
+                <h4>Performance Measurement</h4>
+                <p>All queries were executed with the same data and parameters across all systems. The median execution time from {{ cfg.workload.runs_per_query }} runs is reported for each query to minimize the impact of system variance and outliers.</p>
+            </div>
+        </section>
+
+        <!-- Conclusion -->
+        <section class="section">
+            <h2>Conclusion</h2>
+
+            <p>This benchmark provides a detailed, query-level comparison of {{ data.summary.systems | length }} database systems on analytical workloads. The results demonstrate the performance characteristics and trade-offs of each system when processing TPC-H queries.</p>
+
+            {% if data.summary.per_system | length > 1 %}
+            {% set systems_list = data.summary.per_system.items() | list %}
+            {% set fastest = systems_list | min(attribute='1.median_runtime_ms') %}
+            <p>While <strong>{{ fastest[0] }}</strong> demonstrated the strongest overall performance in this test, the optimal choice for a specific use case depends on multiple factors including workload characteristics, operational requirements, and system integration needs.</p>
+            {% endif %}
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p><em>All benchmark data, figures, and configuration files are available in the attachments directory for independent analysis and verification.</em></p>
+        </footer>
+    </div>
+
+    <!-- Query Modal -->
+    <div id="queryModal" class="query-modal">
+        <div class="query-modal-content">
+            <div class="query-modal-header">
+                <h3 id="modalTitle">Query Details</h3>
+                <button class="query-modal-close" onclick="closeQueryModal()">&times;</button>
+            </div>
+            <div id="modalBody">
+                <pre><code id="queryCode" class="language-sql"></code></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- Syntax Highlighting -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+
+    <script>
+        // Query data embedded from workload
+        const queryData = {
+            {% if workload_metadata and workload_metadata.info.query_names %}
+            {% for query_name in workload_metadata.info.query_names %}
+            "{{ query_name }}": {
+                {% for system_config in cfg.systems %}
+                "{{ system_config.name }}": "attachments/queries/{{ system_config.name }}/{{ query_name }}.sql"{% if not loop.last %},{% endif %}
+                {% endfor %}
+            }{% if not loop.last %},{% endif %}
+            {% endfor %}
+            {% endif %}
+        };
+
+        // Add click handlers to query links
+        document.addEventListener('DOMContentLoaded', function() {
+            const queryLinks = document.querySelectorAll('.query-link');
+            queryLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const query = this.dataset.query;
+                    // Default to first system if not specified
+                    const system = this.dataset.system || Object.keys(queryData[query] || {})[0];
+                    showQueryModal(query, system);
+                });
+            });
+        });
+
+        function showQueryModal(query, system) {
+            const modal = document.getElementById('queryModal');
+            const title = document.getElementById('modalTitle');
+            const code = document.getElementById('queryCode');
+
+            title.textContent = `${query} - ${system}`;
+
+            // Load query from file
+            if (queryData[query] && queryData[query][system]) {
+                fetch(queryData[query][system])
+                    .then(response => response.text())
+                    .then(sql => {
+                        code.textContent = sql;
+                        Prism.highlightElement(code);
+                        modal.classList.add('active');
+                    })
+                    .catch(error => {
+                        code.textContent = `Error loading query: ${error}`;
+                        modal.classList.add('active');
+                    });
+            } else {
+                code.textContent = `Query ${query} not found for system ${system}`;
+                modal.classList.add('active');
+            }
+        }
+
+        function closeQueryModal() {
+            const modal = document.getElementById('queryModal');
+            modal.classList.remove('active');
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('queryModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeQueryModal();
+            }
+        });
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeQueryModal();
+            }
+        });
+
+        // Auto-resize iframes to match content height
+        function resizeIframe(iframe) {
+            try {
+                const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                if (iframeDoc && iframeDoc.body) {
+                    // Get the full height of the iframe content
+                    const height = iframeDoc.body.scrollHeight;
+                    // Set iframe height to match content (add small padding)
+                    iframe.style.height = (height + 20) + 'px';
+                }
+            } catch (e) {
+                // Cross-origin or access issues - keep default height
+                console.warn('Could not resize iframe:', e);
+            }
+        }
+
+        // Resize all iframes on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            const iframes = document.querySelectorAll('iframe');
+            iframes.forEach(function(iframe) {
+                // Resize on load
+                iframe.addEventListener('load', function() {
+                    resizeIframe(iframe);
+                });
+                // Also try to resize immediately in case already loaded
+                if (iframe.contentDocument && iframe.contentDocument.readyState === 'complete') {
+                    resizeIframe(iframe);
+                }
+            });
+        });
+    </script>
+</body>
+</html>

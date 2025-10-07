@@ -1,0 +1,367 @@
+{% from 'macros.html.j2' import render_command_block, render_download_card, render_setup_sections_html %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="{{ cfg.title }} - Initial Performance Assessment">
+    <title>{{ cfg.title }} | Initial Performance Assessment</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-badge">📊 Initial Performance Assessment</div>
+            <h1>{{ cfg.title }}</h1>
+            <div class="metadata">
+                <span class="meta-item">
+                    <strong>Author:</strong> {{ cfg.author }}
+                </span>
+                <span class="meta-item">
+                    <strong>Date:</strong> {{ data.summary.run_date | default('N/A') }}
+                </span>
+                {% if cfg.env.mode %}
+                <span class="meta-item">
+                    <strong>Environment:</strong>
+                    <span class="badge badge-cloud">{{ cfg.env.mode | upper }}</span>
+                    {{ cfg.env.region | default('local') }}
+                </span>
+                {% endif %}
+            </div>
+
+            <div class="notice notice-security">
+                <strong>🔒 Security Note:</strong> Sensitive information (passwords, IP addresses) has been sanitized.
+                Placeholders like <code>&lt;EXASOL_DB_PASSWORD&gt;</code>, <code>&lt;PRIVATE_IP&gt;</code>, and <code>&lt;PUBLIC_IP&gt;</code>
+                are used throughout. Substitute with your actual credentials when reproducing.
+            </div>
+        </header>
+
+        <!-- Overview -->
+        <section class="section">
+            <h2>Overview</h2>
+            <div class="summary-intro">
+                <p>We conducted performance testing of <strong>{{ tested_systems_names | join(', ') }}</strong> against <strong>{{ winner_system_name }}</strong> using the TPC-H benchmark at scale factor {{ workload_metadata.info.scale_factor }}.</p>
+
+                <div class="callout callout-info">
+                    <strong>Key Finding:</strong> {{ tested_systems_names[0] | title }} demonstrated <strong>{{ speedup_factor | format_number_ceil }}× slower</strong> median query performance compared to {{ winner_system_name | title }}, highlighting significant optimization opportunities.
+                </div>
+            </div>
+        </section>
+
+        <!-- Baseline System -->
+        <section class="section">
+            <h2>The Baseline: {{ winner_system_name | title }}</h2>
+            <p>{{ winner_system_name | title }} achieved a median query runtime of <strong>{{ winner_median | format_number }}ms</strong> across all TPC-H queries, establishing a competitive performance baseline for analytical workload processing.</p>
+        </section>
+
+        <!-- Tested System Details -->
+        {% set tested_system = tested_systems[0] %}
+        <section class="section">
+            <h2>{{ tested_system.name | title }} {{ tested_system.version }} - System Under Test</h2>
+
+            {% if system_info.per_system and tested_system.name in system_info.per_system %}
+            {% set sys_probe = system_info.per_system[tested_system.name] %}
+            <div class="specs-grid">
+                <div class="spec-card">
+                    <h3>Hardware Specifications</h3>
+                    <ul>
+                        {% if cfg.env.mode in ['aws', 'gcp', 'azure'] %}
+                        <li><strong>Cloud Provider:</strong> {{ cfg.env.mode | upper }}</li>
+                        <li><strong>Region:</strong> {{ cfg.env.region | default('N/A') }}</li>
+                        {% if cfg.env.instances and tested_system.name in cfg.env.instances %}
+                        <li><strong>Instance Type:</strong> {{ cfg.env.instances[tested_system.name].instance_type | default('N/A') }}</li>
+                        {% endif %}
+                        {% endif %}
+                        {% if sys_probe.cpu_model %}
+                        <li><strong>CPU:</strong> {{ sys_probe.cpu_model }}</li>
+                        {% endif %}
+                        {% if sys_probe.count_logical or sys_probe.cpu_count_logical %}
+                        <li><strong>CPU Cores:</strong> {{ sys_probe.count_logical | default(sys_probe.cpu_count_logical) }} vCPUs</li>
+                        {% endif %}
+                        {% if sys_probe.memory_total_gb or sys_probe.total_gb %}
+                        <li><strong>Memory:</strong> {{ sys_probe.memory_total_gb | default(sys_probe.total_gb) }}GB RAM</li>
+                        {% endif %}
+                        {% if sys_probe.system or sys_probe.platform %}
+                        <li><strong>Operating System:</strong> {{ sys_probe.system | default(sys_probe.platform) }}</li>
+                        {% endif %}
+                    </ul>
+                </div>
+
+                <div class="spec-card">
+                    <h3>Software Configuration</h3>
+                    <ul>
+                        <li><strong>Database:</strong> {{ tested_system.kind }} {{ tested_system.version }}</li>
+                        <li><strong>Setup Method:</strong> {{ tested_system.setup.method }}</li>
+                        {% if tested_system.setup.data_dir %}
+                        <li><strong>Data Directory:</strong> {{ tested_system.setup.data_dir }}</li>
+                        {% endif %}
+                    </ul>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Installation -->
+            {% if setup_summaries and tested_system.name in setup_summaries %}
+            {% set setup = setup_summaries[tested_system.name] %}
+            <h3>Installation & Configuration</h3>
+
+            <details class="setup-details">
+                <summary>
+                    <strong>{{ tested_system.name | title }} {{ tested_system.version }}</strong> &nbsp;&nbsp; Installation Steps
+                    {% if preparation_timings and tested_system.name in preparation_timings %}
+                    <span class="setup-timing">({{ preparation_timings[tested_system.name].elapsed_s | format_duration }})</span>
+                    {% endif %}
+                </summary>
+
+                {% if setup %}
+                <div class="setup-section">
+                    {{ render_setup_sections_html(setup) }}
+                </div>
+                {% endif %}
+            </details>
+            {% endif %}
+        </section>
+
+        <!-- Performance Results -->
+        <section class="section">
+            <h2>Performance Results</h2>
+
+            <h3>Overall Performance Summary</h3>
+
+            {% if data.summary.per_system and tested_system.name in data.summary.per_system %}
+            {% set stats = data.summary.per_system[tested_system.name] %}
+
+            <div class="comparison-table">
+                <table class="styled-table">
+                    <thead>
+                        <tr>
+                            <th>Metric</th>
+                            <th>{{ tested_system.name | title }}</th>
+                            <th>{{ winner_system_name | title }}</th>
+                            <th>Difference</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Median Runtime</strong></td>
+                            <td>{{ stats.median_runtime_ms | format_number }}ms</td>
+                            <td>{{ winner_median | format_number }}ms</td>
+                            <td class="metric-slow">{{ speedup_factor | format_number_ceil }}× slower</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Average Runtime</strong></td>
+                            <td>{{ stats.avg_runtime_ms | format_number }}ms</td>
+                            <td>{{ winner_avg | format_number }}ms</td>
+                            <td class="metric-slow">{{ (stats.avg_runtime_ms / winner_avg) | format_number_ceil }}× slower</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Fastest Query</strong></td>
+                            <td>{{ stats.min_runtime_ms | format_number }}ms</td>
+                            <td>{{ winner_min | format_number }}ms</td>
+                            <td class="metric-slow">{{ (stats.min_runtime_ms / winner_min) | format_number(1) }}× slower</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Slowest Query</strong></td>
+                            <td>{{ stats.max_runtime_ms | format_number }}ms</td>
+                            <td>{{ winner_max | format_number }}ms</td>
+                            <td class="metric-slow">{{ (stats.max_runtime_ms / winner_max) | format_number(1) }}× slower</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+
+            <h3>Selected Query Highlights</h3>
+            <p>The following queries demonstrate the performance characteristics observed during testing:</p>
+
+            {% if extreme_queries %}
+            <div class="query-highlights">
+                <div class="highlight-section">
+                    <h4>Queries with Largest Performance Gaps</h4>
+                    <ul>
+                    {% for query in extreme_queries %}
+                    {% if query.category == 'slowest' %}
+                        <li>
+                            <strong><a href="#" class="query-link" data-query="{{ query.query_name }}" data-system="{{ tested_system.name }}">{{ query.query_name }}</a>:</strong>
+                            {{ tested_system.name | title }} <span class="metric-value">{{ query.tested_median | format_number }}ms</span>
+                            vs {{ winner_system_name | title }} <span class="metric-value">{{ query.winner_median | format_number }}ms</span>
+                            <span class="metric-slow">({{ query.speedup_factor | format_number_ceil }}× slower)</span>
+                        </li>
+                    {% endif %}
+                    {% endfor %}
+                    </ul>
+                </div>
+
+                <div class="highlight-section">
+                    <h4>Queries with Competitive Performance</h4>
+                    <ul>
+                    {% for query in extreme_queries %}
+                    {% if query.category == 'competitive' %}
+                        <li>
+                            <strong><a href="#" class="query-link" data-query="{{ query.query_name }}" data-system="{{ tested_system.name }}">{{ query.query_name }}</a>:</strong>
+                            {{ tested_system.name | title }} <span class="metric-value">{{ query.tested_median | format_number }}ms</span>
+                            vs {{ winner_system_name | title }} <span class="metric-value">{{ query.winner_median | format_number }}ms</span>
+                            <span class="metric-neutral">({{ query.speedup_factor | format_number_ceil }}× slower)</span>
+                        </li>
+                    {% endif %}
+                    {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            {% endif %}
+        </section>
+
+        <!-- Analysis -->
+        <section class="section">
+            <h2>Analysis & Optimization Opportunities</h2>
+
+            <p>Based on these initial results, several areas for investigation and potential optimization emerge:</p>
+
+            <div class="optimization-list">
+                <div class="optimization-item">
+                    <h4>1. Query Execution Planning</h4>
+                    <p>The significant performance variance across different query types suggests opportunities for query optimizer tuning and execution strategy refinement.</p>
+                </div>
+
+                <div class="optimization-item">
+                    <h4>2. Resource Utilization</h4>
+                    <p>Analyzing memory allocation, CPU utilization patterns, and I/O characteristics could reveal bottlenecks limiting performance on analytical workloads.</p>
+                </div>
+
+                <div class="optimization-item">
+                    <h4>3. Configuration Tuning</h4>
+                    <p>Database-specific parameters, cache settings, and parallelism configurations warrant detailed examination to maximize hardware utilization.</p>
+                </div>
+
+                <div class="optimization-item">
+                    <h4>4. Data Structure Optimization</h4>
+                    <p>Table layout, partitioning strategies, and index usage patterns may offer substantial performance improvements for specific query patterns.</p>
+                </div>
+            </div>
+
+            <h3>Key Questions</h3>
+            <ul class="questions-list">
+                <li>What specific query execution patterns lead to the largest performance differences?</li>
+                <li>How do different query types (aggregations, joins, scans) perform comparatively?</li>
+                <li>What configuration changes could narrow the performance gap?</li>
+                <li>Are there workload-specific tuning opportunities that weren't explored in this initial assessment?</li>
+            </ul>
+        </section>
+
+	<!-- Download Section -->
+        <section class="section">
+            <h2>Download Data</h2>
+            {% if download_cards %}
+            <div class="download-grid">
+                {% for card in download_cards %}
+                {{ render_download_card(card.icon, card.title, card.description, card.path) }}
+                {% endfor %}
+            </div>
+            {% else %}
+            <p>No downloadable artifacts available for the tested systems.</p>
+            {% endif %}
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p><em>This benchmark was conducted to provide transparent, reproducible performance comparisons. All configuration details and setup commands are included to enable independent verification of these results.</em></p>
+        </footer>
+    </div>
+
+    <!-- Query Modal -->
+    <div id="queryModal" class="query-modal">
+        <div class="query-modal-content">
+            <div class="query-modal-header">
+                <h3 id="modalTitle">Query Details</h3>
+                <button class="query-modal-close" onclick="closeQueryModal()">&times;</button>
+            </div>
+            <div id="modalBody">
+                <pre><code id="queryCode" class="language-sql"></code></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- Syntax Highlighting -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+
+    <script>
+        // Query data embedded from workload
+        const queryData = {
+            {% if workload_metadata and workload_metadata.info.query_names %}
+            {% for query_name in workload_metadata.info.query_names %}
+            "{{ query_name }}": {
+                {% for system_config in cfg.systems %}
+                "{{ system_config.name }}": "attachments/queries/{{ system_config.name }}/{{ query_name }}.sql"{% if not loop.last %},{% endif %}
+                {% endfor %}
+            }{% if not loop.last %},{% endif %}
+            {% endfor %}
+            {% endif %}
+        };
+
+        // Add click handlers to query links
+        document.addEventListener('DOMContentLoaded', function() {
+            const queryLinks = document.querySelectorAll('.query-link');
+            queryLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const query = this.dataset.query;
+                    const system = this.dataset.system;
+                    showQueryModal(query, system);
+                });
+            });
+        });
+
+        function showQueryModal(query, system) {
+            const modal = document.getElementById('queryModal');
+            const title = document.getElementById('modalTitle');
+            const code = document.getElementById('queryCode');
+
+            title.textContent = `${query} - ${system}`;
+
+            // Load query from file
+            if (queryData[query] && queryData[query][system]) {
+                fetch(queryData[query][system])
+                    .then(response => response.text())
+                    .then(sql => {
+                        code.textContent = sql;
+                        Prism.highlightElement(code);
+                        modal.classList.add('active');
+                    })
+                    .catch(error => {
+                        code.textContent = `Error loading query: ${error}`;
+                        modal.classList.add('active');
+                    });
+            } else {
+                code.textContent = `Query ${query} not found for system ${system}`;
+                modal.classList.add('active');
+            }
+        }
+
+        function closeQueryModal() {
+            const modal = document.getElementById('queryModal');
+            modal.classList.remove('active');
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('queryModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeQueryModal();
+            }
+        });
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeQueryModal();
+            }
+        });
+    </script>
+</body>
+</html>

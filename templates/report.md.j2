@@ -1,0 +1,398 @@
+# {{ cfg.title }}
+
+**Author:** {{ cfg.author }}
+{% if cfg.env.instances %}
+{% set instance_types = [] %}
+{% for system_name, instance_config in cfg.env.instances.items() %}
+{% if instance_config.instance_type and instance_config.instance_type not in instance_types %}
+{% set _ = instance_types.append(instance_config.instance_type) %}
+{% endif %}
+{% endfor %}
+**Environment:** {{ cfg.env.mode }} / {{ cfg.env.region | default('local') }} / {{ instance_types | join(', ') if instance_types else 'N/A' }}
+{% else %}
+**Environment:** {{ cfg.env.mode }} / {{ cfg.env.region | default('local') }} / {{ cfg.env.instance_type | default('local') }}
+{% endif %}
+**Date:** {{ data.summary.run_date | default('N/A') }}
+
+> **Note:** Sensitive information (passwords, IP addresses) has been sanitized for security reasons. Placeholders like `<EXASOL_DB_PASSWORD>`, `<PRIVATE_IP>`, and `<PUBLIC_IP>` are used throughout this document. When reproducing this benchmark, substitute these with your actual credentials and addresses.
+
+This document shows exactly how the benchmark was run so it can be reproduced.
+
+## Executive Summary
+
+{% if data.summary.per_system %}
+We compared {{ data.summary.systems | length }} database systems:
+{% for system in data.summary.systems %}
+- **{{ system }}**
+{% endfor %}
+
+{% if data.summary.per_system | length > 1 %}
+**Key Findings:**
+{% set systems_list = data.summary.per_system.items() | list %}
+{% set fastest_system = systems_list | min(attribute='1.median_runtime_ms') %}
+{% set slowest_system = systems_list | max(attribute='1.median_runtime_ms') %}
+- {{ fastest_system[0] }} was the fastest overall with {{ fastest_system[1].median_runtime_ms | format_number }}ms median runtime
+- {{ slowest_system[0] }} was {{ (slowest_system[1].median_runtime_ms / fastest_system[1].median_runtime_ms) | format_number(1) }}x slower
+{% if cfg.workload.queries and cfg.workload.queries.include %}
+- Tested {{ data.summary.total_queries }} total queries across {{ cfg.workload.queries.include | length }} different query types
+{% else %}
+- Tested {{ data.summary.total_queries }} total query executions across 22 different TPC-H queries
+{% endif %}
+{% endif %}
+{% endif %}
+
+## Systems Under Test
+
+{% for system_config in cfg.systems %}
+### {{ system_config.name | title }} {{ system_config.version }}
+
+**Software Configuration:**
+- **Database:** {{ system_config.kind }} {{ system_config.version }}
+- **Setup method:** {{ system_config.setup.method }}
+{% if system_config.setup.data_dir %}
+- **Data directory:** {{ system_config.setup.data_dir }}
+{% endif %}
+
+{% if system_info.per_system and system_config.name in system_info.per_system %}
+{% set sys_probe = system_info.per_system[system_config.name] %}
+**Hardware Specifications:**
+{% if cfg.env.mode in ['aws', 'gcp', 'azure'] %}
+- **Cloud Provider:** {{ cfg.env.mode | upper }}
+- **Region:** {{ cfg.env.region | default('N/A') }}
+{% if cfg.env.instances and system_config.name in cfg.env.instances %}
+- **Instance Type:** {{ cfg.env.instances[system_config.name].instance_type | default('N/A') }}
+{% endif %}
+{% endif %}
+{% if sys_probe.cpu_model %}
+- **CPU:** {{ sys_probe.cpu_model }}
+{% endif %}
+{% if sys_probe.count_logical or sys_probe.cpu_count_logical %}
+- **CPU Cores:** {{ sys_probe.count_logical | default(sys_probe.cpu_count_logical) }} vCPUs
+{% endif %}
+{% if sys_probe.memory_total_gb or sys_probe.total_gb %}
+- **Memory:** {{ sys_probe.memory_total_gb | default(sys_probe.total_gb) }}GB RAM
+{% endif %}
+{% if sys_probe.system or sys_probe.platform %}
+- **Operating System:** {{ sys_probe.system | default(sys_probe.platform) }}
+{% endif %}
+{% if sys_probe.hostname %}
+- **Hostname:** {{ sys_probe.hostname }}
+{% endif %}
+
+{% endif %}
+{% endfor %}
+
+**Detailed system information:** See attachments for complete system specifications
+
+## Test Environment
+
+This benchmark was executed on the following infrastructure:
+
+### Hardware Specifications
+
+{% if cfg.env.mode in ['aws', 'gcp', 'azure'] %}
+- **Cloud Provider:** {{ cfg.env.mode | upper }}
+- **Region:** {{ cfg.env.region | default('N/A') }}
+{% for system_config in cfg.systems %}
+- **{{ system_config.name | title }} Instance:** {{ cfg.env.instances[system_config.name].instance_type | default('N/A') }}
+{% endfor %}
+{% else %}
+- **CPU:** Multi-core processor (8+ cores recommended)
+- **Memory:** 16GB+ RAM (32GB+ for larger scale factors)
+- **Storage:** Fast SSD storage (100GB+ free space)
+{% endif %}
+
+{% import 'snippets/setup_macros_md.j2' as setup_macros %}
+
+{% if setup_summaries %}
+### Database Configuration
+
+The following commands were **actually executed** during the benchmark setup. You can copy and paste these to reproduce the installation:
+
+{% for system_name, setup_summary in setup_summaries.items() %}
+#### {{ setup_summary.system_name | title }} {{ setup_summary.system_version }} Setup
+
+{{ setup_macros.render_setup_sections_md(setup_summary) }}
+
+{% endfor %}
+{% else %}
+### Database Configuration
+
+{% for system_config in cfg.systems %}
+**{{ system_config.name | title }} {{ system_config.version }} Setup:**
+
+- **Setup method:** {{ system_config.setup.method }}
+{% if system_config.setup.data_dir %}
+- **Data directory:** {{ system_config.setup.data_dir }}
+{% endif %}
+
+{% if system_config.setup.extra %}
+**Applied Tuning Parameters:**
+{% for key, value in system_config.setup.extra.items() %}
+- `{{ key }}`: {{ value }}
+{% endfor %}
+{% endif %}
+
+{% endfor %}
+{% endif %}
+
+## Workload Configuration
+
+### Benchmark Parameters
+
+- **Workload:** {{ cfg.workload.name | upper }}
+- **Scale factor:** {{ cfg.workload.scale_factor }}
+- **Data format:** {{ cfg.workload.data_format }}
+{% if cfg.workload.queries and cfg.workload.queries.include %}
+- **Queries tested:** {{ cfg.workload.queries.include | join(", ") }}
+{% else %}
+- **Queries tested:** All standard {{ cfg.workload.name | upper }} queries (Q01-Q22)
+{% endif %}
+- **Warmup runs per query:** {{ cfg.workload.warmup_runs }}
+- **Measured runs per query:** {{ cfg.workload.runs_per_query }}
+
+### Execution Command
+
+This benchmark is completely self-contained and includes all tuning configurations:
+
+```bash
+# Extract and run the benchmark
+unzip {{ project_id }}-benchmark.zip
+cd {{ project_id }}
+
+# Execute the complete benchmark
+./run_benchmark.sh
+```
+
+**Manual execution steps:**
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Probe system information
+python -m benchkit probe --config config.yaml
+
+# Run benchmark with all configurations applied
+python -m benchkit run --config config.yaml
+```
+
+**Note:** All database tuning parameters and system configurations are embedded in the benchmark package and applied automatically during execution.
+
+## Results
+
+### Infrastructure Setup Timings
+
+{% if infrastructure_timings %}
+The following table shows the time taken to provision cloud instances and install database software:
+
+| System | Instance Provisioning | Software Installation | Total Setup Time | Notes |
+|--------|----------------------|----------------------|------------------|-------|
+{% for system_name, timings in infrastructure_timings.systems.items() %}
+{% set provision_time = infrastructure_timings.infrastructure_provisioning_s | default(0.0) %}
+{% if timings.installation_s is defined and timings.installation_s > 0 %}
+{% set total_time = provision_time + timings.installation_s %}
+| {{ system_name | title }} | {{ "%.2f"|format(provision_time) }}s | {{ "%.2f"|format(timings.installation_s) }}s | {{ "%.2f"|format(total_time) }}s | {% if provision_time > 0 %}New infrastructure{% else %}Existing infrastructure{% endif %} |
+{% elif timings.restart_s is defined %}
+| {{ system_name | title }} | {{ "%.2f"|format(provision_time) }}s | {{ "%.2f"|format(timings.restart_s) }}s | {{ "%.2f"|format(provision_time + timings.restart_s) }}s | Service restart |
+{% else %}
+| {{ system_name | title }} | {{ "%.2f"|format(provision_time) }}s | 0.00s | {{ "%.2f"|format(provision_time) }}s | Already configured |
+{% endif %}
+{% endfor %}
+
+**Infrastructure Provisioning:** {{ "%.2f"|format(infrastructure_timings.infrastructure_provisioning_s | default(0.0)) }}s
+{% if infrastructure_timings.infrastructure_provisioning_s | default(0.0) > 0 %}
+- Cloud instances were provisioned (VMs created, networking configured)
+{% else %}
+- Using existing cloud infrastructure (instances already running)
+{% endif %}
+
+{% if infrastructure_timings.systems | length > 1 %}
+**Software Installation Comparison:**
+{% set install_times = [] %}
+{% for system_name, timings in infrastructure_timings.systems.items() %}
+{% if timings.installation_s is defined and timings.installation_s > 0 %}
+{% set _ = install_times.append((system_name, timings.installation_s)) %}
+{% endif %}
+{% endfor %}
+{% if install_times | length > 1 %}
+{% set fastest_install = install_times | min(attribute='1') %}
+{% set slowest_install = install_times | max(attribute='1') %}
+- {{ fastest_install[0] | title }} had the fastest software installation at {{ "%.2f"|format(fastest_install[1]) }}s
+- {{ slowest_install[0] | title }} took {{ "%.2f"|format(slowest_install[1]) }}s to install ({{ "%.1f"|format(slowest_install[1] / fastest_install[1]) }}x slower)
+{% endif %}
+{% endif %}
+
+{% endif %}
+
+### Workload Preparation Timings
+
+{% if preparation_timings %}
+The following table shows the time taken for data generation, schema creation, and data loading for each system:
+
+| System | Data Generation | Schema Creation | Data Loading | Total Preparation |
+|--------|----------------|-----------------|--------------|-------------------|
+{% for system_name, timings in preparation_timings.items() %}
+| {{ system_name | title }} | {{ "%.2f"|format(timings.data_generation_s) }}s | {{ "%.2f"|format(timings.schema_creation_s) }}s | {{ "%.2f"|format(timings.data_loading_s) }}s | {{ "%.2f"|format(timings.total_preparation_s) }}s |
+{% endfor %}
+
+{% if preparation_timings | length > 1 %}
+**Key Observations:**
+{% set prep_list = preparation_timings.items() | list %}
+{% set fastest_prep = prep_list | min(attribute='1.total_preparation_s') %}
+{% set slowest_prep = prep_list | max(attribute='1.total_preparation_s') %}
+- {{ fastest_prep[0] | title }} had the fastest preparation time at {{ "%.2f"|format(fastest_prep[1].total_preparation_s) }}s
+- {{ slowest_prep[0] | title }} took {{ "%.2f"|format(slowest_prep[1].total_preparation_s) }}s ({{ "%.1f"|format(slowest_prep[1].total_preparation_s / fastest_prep[1].total_preparation_s) }}x slower)
+{% endif %}
+
+{% endif %}
+
+### Performance Summary
+
+{% if tables.summary %}
+{{ tables.summary }}
+{% else %}
+*No performance data available*
+{% endif %}
+
+{% if tables.comparison and data.summary.systems | length > 1 %}
+### System Comparison
+
+{{ tables.comparison }}
+{% endif %}
+
+### Visualizations
+
+#### Performance Overview
+
+{% if figures.system_overview %}
+![System Performance Overview](attachments/figures/system_performance_overview.png)
+
+*Comprehensive dashboard showing key performance metrics: total runtime, average query time, query count, and performance variability (coefficient of variation) across all systems.*
+
+**Interactive version:** [View interactive chart](attachments/figures/system_performance_overview.html) for detailed insights and hover information.
+{% endif %}
+
+#### Runtime Distributions
+
+{% if figures.boxplot %}
+![Query Runtime Distribution](attachments/figures/query_runtime_boxplot.png)
+
+*Box plot showing the distribution of query runtimes. The box shows the interquartile range (25th to 75th percentile), with the median marked by the line inside the box. Whiskers extend to show the full range, excluding outliers.*
+
+**Interactive version:** [View interactive chart](attachments/figures/query_runtime_boxplot.html) for detailed query-by-query analysis.
+{% endif %}
+
+{% if figures.bar_chart %}
+![Median Query Runtimes](attachments/figures/median_runtime_bar.png)
+
+*Bar chart comparing median query runtimes across systems. Lower bars indicate better performance.*
+
+**Interactive version:** [View interactive chart](attachments/figures/median_runtime_bar.html) to explore individual query performance.
+{% endif %}
+
+#### Comparative Analysis
+
+{% if figures.speedup %}
+![Performance Speedup Comparison](attachments/figures/speedup_comparison.png)
+
+*Speedup factor comparing each system against the baseline. Values above 1.0 indicate faster performance than the baseline, while values below 1.0 indicate slower performance.*
+
+**Interactive version:** [View interactive chart](attachments/figures/speedup_comparison.html) to compare performance across queries.
+{% endif %}
+
+{% if figures.heatmap %}
+![Performance Heatmap](attachments/figures/performance_heatmap.png)
+
+*Heatmap showing relative performance across queries and systems. Values are normalized so that 1.0 represents the fastest system for each query. Darker colors indicate better performance.*
+
+**Interactive version:** [View interactive chart](attachments/figures/performance_heatmap.html) for detailed heat map analysis.
+{% endif %}
+
+{% if figures.cdf %}
+![Runtime Distribution (CDF)](attachments/figures/query_runtime_cdf.png)
+
+*Cumulative distribution function showing the probability that a query completes within a given time. Curves closer to the left indicate better performance.*
+
+**Interactive version:** [View interactive chart](attachments/figures/query_runtime_cdf.html) for interactive exploration.
+{% endif %}
+
+> **Note:** All visualizations are available as both static PNG images (shown above) and interactive HTML charts (linked). The interactive versions allow you to zoom, pan, and hover for detailed information.
+
+### Key Observations
+
+{% if data.summary.per_system %}
+{% for system, stats in data.summary.per_system.items() %}
+**{{ system }}:**
+- Median runtime: {{ stats.median_runtime_ms | format_number }}ms
+- Average runtime: {{ stats.avg_runtime_ms | format_number }}ms
+- Fastest query: {{ stats.min_runtime_ms | format_number }}ms
+- Slowest query: {{ stats.max_runtime_ms | format_number }}ms
+
+{% endfor %}
+{% endif %}
+
+### Raw Data
+
+The complete dataset is available in the following files:
+- **Query results:** [`attachments/runs.csv`](attachments/runs.csv)
+- **Summary statistics:** [`attachments/summary.json`](attachments/summary.json)
+- **System information:** [`attachments/system.json`](attachments/system.json)
+- **Benchmark package:** [`{{ project_id }}-benchmark.zip`]({{ project_id }}-benchmark.zip)
+
+## Reproducibility
+
+### System Requirements
+
+Based on our testing environment:
+
+{% if system_info.per_system %}
+{% set first_system = system_info.per_system.values() | list | first %}
+- **CPU:** {{ first_system.cpu_count_logical | default(first_system.count_logical) | default('N/A') }} logical cores
+- **Memory:** {{ first_system.memory_total_gb | default(first_system.total_gb) | default('N/A') }}GB RAM
+- **Storage:** NVMe SSD recommended for optimal performance
+- **OS:** {{ first_system.platform | default(first_system.system) | default('Linux') }}
+{% else %}
+- See `attachments/system.json` for detailed system specifications
+{% endif %}
+
+### Configuration Files
+
+The exact configuration used for this benchmark is available at:
+[`attachments/config.yaml`](attachments/config.yaml)
+
+### System Specifications
+
+{% for system_config in cfg.systems %}
+**{{ system_config.name | title }} {{ system_config.version }}:**
+- **Setup method:** {{ system_config.setup.method }}
+{% if system_config.setup.method == "docker" %}
+- **Docker image:** `{{ system_config.kind }}/{{ system_config.kind }}-server:{{ system_config.version }}`
+{% endif %}
+- **Data directory:** {{ system_config.setup.data_dir }}
+{% if system_config.setup.extra %}
+- **Applied configurations:**
+{% for key, value in system_config.setup.extra.items() %}
+  - {{ key }}: {{ value }}
+{% endfor %}
+{% endif %}
+
+{% endfor %}
+
+## Methodology Notes
+
+**Environment Consistency:**
+- All systems tested on identical hardware specifications
+- Same operating system and software versions
+- Consistent resource allocation and container limits
+
+**Execution Protocol:**
+- {{ cfg.workload.warmup_runs }} warmup run(s) per query (results discarded)
+- {{ cfg.workload.runs_per_query }} measured runs per query (results recorded)
+- Wall-clock time measured by benchmark client
+- Database processes restarted between test runs for consistency
+
+**Configuration Management:**
+- All tuning parameters documented in this post
+- Configuration commands provided for exact reproduction
+- System-specific optimizations applied as documented above
+- Benchmark package contains all configuration files and scripts

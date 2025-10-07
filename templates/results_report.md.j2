@@ -1,0 +1,174 @@
+# {{ cfg.title }} - Detailed Query Results
+
+**Author:** {{ cfg.author }}
+{% if cfg.env.instances %}
+{% set instance_types = [] %}
+{% for system_name, instance_config in cfg.env.instances.items() %}
+{% if instance_config.instance_type and instance_config.instance_type not in instance_types %}
+{% set _ = instance_types.append(instance_config.instance_type) %}
+{% endif %}
+{% endfor %}
+**Environment:** {{ cfg.env.mode }} / {{ cfg.env.region | default('local') }} / {{ instance_types | join(', ') if instance_types else 'N/A' }}
+{% else %}
+**Environment:** {{ cfg.env.mode }} / {{ cfg.env.region | default('local') }} / {{ cfg.env.instance_type | default('local') }}
+{% endif %}
+**Date:** {{ data.summary.run_date | default('N/A') }}
+
+{% import 'snippets/setup_macros_md.j2' as setup_macros %}
+
+## Overview
+
+This report presents the complete query-by-query performance results for {{ data.summary.systems | length }} database systems tested using the TPC-H benchmark at scale factor {{ workload_metadata.scale_factor }}.
+
+**Systems Compared:**
+{% for system in data.summary.systems %}
+- **{{ system }}**
+{% endfor %}
+
+## Systems Under Test
+
+{% for system_config in cfg.systems %}
+### {{ system_config.name | title }} {{ system_config.version }}
+
+{% if system_info.per_system and system_config.name in system_info.per_system %}
+{% set sys_probe = system_info.per_system[system_config.name] %}
+**Environment & Hardware:**
+{% if cfg.env.mode in ['aws', 'gcp', 'azure'] %}
+- **Cloud:** {{ cfg.env.mode | upper }} {{ cfg.env.region | default('N/A') }}
+{% if cfg.env.instances and system_config.name in cfg.env.instances %}
+- **Instance:** {{ cfg.env.instances[system_config.name].instance_type | default('N/A') }}
+{% endif %}
+{% endif %}
+{% if sys_probe.cpu_model %}
+- **CPU:** {{ sys_probe.cpu_model }}{% if sys_probe.count_logical or sys_probe.cpu_count_logical %} ({{ sys_probe.count_logical | default(sys_probe.cpu_count_logical) }} vCPUs){% endif %}
+{% endif %}
+{% if sys_probe.memory_total_gb or sys_probe.total_gb %}
+- **Memory:** {{ sys_probe.memory_total_gb | default(sys_probe.total_gb) }}GB RAM
+{% endif %}
+{% endif %}
+
+**Software:**
+- **Database:** {{ system_config.kind }} {{ system_config.version }}
+
+{% endfor %}
+
+## Database Configuration
+
+{% if setup_summaries %}
+The following commands were **actually executed** during the benchmark setup. You can copy and paste these to reproduce the installation:
+
+{% for system_name, setup_summary in setup_summaries.items() %}
+### {{ setup_summary.system_name | title }} {{ setup_summary.system_version }} Setup
+
+{{ setup_macros.render_setup_sections_md(setup_summary) }}
+
+{% endfor %}
+{% else %}
+No setup details were captured for this benchmark run.
+{% endif %}
+
+## Performance Summary
+
+{% if data.summary.per_system %}
+{% if data.summary.per_system | length > 1 %}
+{% set systems_list = data.summary.per_system.items() | list %}
+{% set fastest_system = systems_list | min(attribute='1.median_runtime_ms') %}
+{% set slowest_system = systems_list | max(attribute='1.median_runtime_ms') %}
+
+**Key Findings:**
+- **{{ fastest_system[0] }}** was the fastest overall with **{{ fastest_system[1].median_runtime_ms | format_number }}ms** median runtime
+- **{{ slowest_system[0] }}** was **{{ (slowest_system[1].median_runtime_ms / fastest_system[1].median_runtime_ms) | format_number(1) }}×** slower
+- Tested **{{ data.summary.total_queries }}** total query executions across {{ cfg.workload.queries.include | length if cfg.workload.queries and cfg.workload.queries.include else '22' }} different query types
+{% endif %}
+
+### Summary Statistics
+
+{{ tables.summary_table }}
+
+{% endif %}
+
+## Query-by-Query Results
+
+The following table shows the median execution time for each query across all systems:
+
+{{ tables.comparison_table }}
+
+## Performance Visualizations
+
+{% if figures %}
+### Query Performance Comparison
+
+{% for fig_name, fig_path in figures.items() %}
+{% if 'performance' in fig_name or 'comparison' in fig_name %}
+![{{ fig_name | title | replace('_', ' ') }}]({{ fig_path }})
+
+{% endif %}
+{% endfor %}
+{% endif %}
+
+## Detailed Analysis
+
+### Performance by Query Type
+
+{% if data.runs_df is defined and not data.runs_df.empty %}
+The benchmark results reveal distinct performance characteristics across different query categories:
+
+{% if cfg.workload.name == 'tpch' %}
+- **Aggregation queries** (Q01, Q06, Q12, Q14, Q15, Q19, Q20): Test data reduction and grouping operations
+- **Join-heavy queries** (Q02, Q05, Q08, Q09, Q10, Q11, Q21, Q22): Evaluate multi-table join performance
+- **Complex analytical queries** (Q03, Q04, Q07, Q13, Q16, Q17, Q18): Combine multiple operations
+{% endif %}
+
+The performance patterns observed across these query types provide insights into each system's optimization strategies and architectural trade-offs.
+{% endif %}
+
+### System Rankings
+
+{% if data.summary.per_system and data.summary.per_system | length > 1 %}
+Based on median query execution time:
+
+{% set ranked_systems = data.summary.per_system.items() | sort(attribute='1.median_runtime_ms') %}
+{% for system, stats in ranked_systems %}
+**#{{ loop.index }}. {{ system | title }}**
+- Median: {{ stats.median_runtime_ms | format_number }}ms
+- Average: {{ stats.avg_runtime_ms | format_number }}ms
+- Range: {{ stats.min_runtime_ms | format_number }}ms - {{ stats.max_runtime_ms | format_number }}ms
+
+{% endfor %}
+{% endif %}
+
+## Benchmark Methodology
+
+### Workload Configuration
+
+**TPC-H Benchmark:**
+- **Scale Factor:** {{ workload_metadata.scale_factor }}
+- **Data Format:** {{ cfg.workload.data_format | upper }}
+- **Data Generator:** {{ cfg.workload.generator }}
+
+**Execution Parameters:**
+- **Warmup Runs:** {{ cfg.workload.warmup_runs }}
+- **Measured Runs:** {{ cfg.workload.runs_per_query }}
+- **Metric Reported:** Median execution time
+
+### Performance Measurement
+
+All queries were executed with the same data and parameters across all systems. The median execution time from {{ cfg.workload.runs_per_query }} runs is reported for each query to minimize the impact of system variance and outliers.
+
+## Conclusion
+
+This benchmark provides a detailed, query-level comparison of {{ data.summary.systems | length }} database systems on analytical workloads. The results demonstrate the performance characteristics and trade-offs of each system when processing TPC-H queries.
+
+{% if data.summary.per_system | length > 1 %}
+{% set systems_list = data.summary.per_system.items() | list %}
+{% set fastest = systems_list | min(attribute='1.median_runtime_ms') %}
+While **{{ fastest[0] }}** demonstrated the strongest overall performance in this test, the optimal choice for a specific use case depends on multiple factors including workload characteristics, operational requirements, and system integration needs.
+{% endif %}
+
+---
+
+**For complete reproduction details** including installation steps, configuration parameters, and a self-contained benchmark package, see the [full benchmark report](../3-full/REPORT.md).
+
+---
+
+*All benchmark data, figures, and configuration files are available in the attachments directory for independent analysis and verification.*

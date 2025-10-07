@@ -1,0 +1,1699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Benchmark Report Index</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+/* Modern Tech-Focused Blog Post Styling */
+
+:root {
+    /* Tech Color Palette */
+    --color-primary: #2E86AB;
+    --color-secondary: #A23B72;
+    --color-accent-1: #F18F01;
+    --color-accent-2: #C73E1D;
+    --color-accent-3: #6A994E;
+    --color-accent-4: #7209B7;
+
+    /* Neutral Colors */
+    --color-text: #1a1a1a;
+    --color-text-light: #666;
+    --color-bg: #ffffff;
+    --color-bg-alt: #f8f9fa;
+    --color-border: #e0e0e0;
+    --color-shadow: rgba(0, 0, 0, 0.1);
+
+    /* Typography */
+    --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-code: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+
+    /* Spacing */
+    --spacing-xs: 0.5rem;
+    --spacing-sm: 1rem;
+    --spacing-md: 1.5rem;
+    --spacing-lg: 2rem;
+    --spacing-xl: 3rem;
+
+    /* Border Radius */
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+
+    /* Shadows */
+    --shadow-sm: 0 2px 4px var(--color-shadow);
+    --shadow-md: 0 4px 12px var(--color-shadow);
+    --shadow-lg: 0 8px 24px var(--color-shadow);
+}
+
+/* Base Styles */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--color-text);
+    background: var(--color-bg-alt);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: var(--spacing-lg);
+    background: var(--color-bg);
+    box-shadow: var(--shadow-lg);
+}
+
+/* Header */
+.header {
+    margin-bottom: var(--spacing-xl);
+    padding-bottom: var(--spacing-lg);
+    border-bottom: 2px solid var(--color-border);
+}
+
+.header h1 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--color-text);
+    margin-bottom: var(--spacing-sm);
+    background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.metadata {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+    margin: var(--spacing-md) 0;
+    align-items: center;
+}
+
+.meta-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+}
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    background: var(--color-bg-alt);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--color-text-light);
+    transition: all 0.2s ease;
+}
+
+.badge:hover {
+    border-color: var(--color-primary);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
+}
+
+.badge strong {
+    color: var(--color-text);
+    margin-right: var(--spacing-xs);
+}
+
+/* Security Notice */
+.security-notice {
+    background: linear-gradient(135deg, #fff5e6 0%, #ffe6e6 100%);
+    border-left: 4px solid var(--color-accent-1);
+    padding: var(--spacing-md);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--spacing-lg);
+}
+
+.security-notice h3 {
+    color: var(--color-accent-2);
+    font-size: 1.125rem;
+    margin-bottom: var(--spacing-xs);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+}
+
+.security-notice p {
+    color: var(--color-text);
+    font-size: 0.9375rem;
+}
+
+/* Section Titles */
+h2 {
+    font-size: 1.875rem;
+    font-weight: 700;
+    color: var(--color-text);
+    margin: var(--spacing-xl) 0 var(--spacing-md);
+    padding-bottom: var(--spacing-sm);
+    border-bottom: 2px solid var(--color-primary);
+}
+
+h3 {
+    font-size: 1.375rem;
+    font-weight: 600;
+    color: var(--color-text);
+    margin: var(--spacing-lg) 0 var(--spacing-sm);
+}
+
+/* Summary Cards */
+.summary-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: var(--spacing-md);
+    margin: var(--spacing-lg) 0;
+}
+
+.summary-card {
+    background: linear-gradient(135deg, var(--color-bg) 0%, var(--color-bg-alt) 100%);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-md);
+    box-shadow: var(--shadow-md);
+    transition: all 0.3s ease;
+}
+
+.summary-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--color-primary);
+}
+
+.summary-card h3 {
+    color: var(--color-primary);
+    font-size: 1.25rem;
+    margin: 0 0 var(--spacing-md);
+    padding-bottom: var(--spacing-sm);
+    border-bottom: 2px solid var(--color-border);
+}
+
+.card-metrics {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.metric {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-xs);
+}
+
+.metric-label {
+    font-size: 0.875rem;
+    color: var(--color-text-light);
+    font-weight: 500;
+}
+
+.metric-value {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: var(--color-primary);
+    font-family: var(--font-code);
+}
+
+/* Systems Grid */
+.systems-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: var(--spacing-md);
+    margin: var(--spacing-lg) 0;
+}
+
+.system-card {
+    background: var(--color-bg);
+    border: 2px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-md);
+    transition: all 0.3s ease;
+}
+
+.system-card:hover {
+    border-color: var(--color-secondary);
+    box-shadow: var(--shadow-md);
+}
+
+.system-card h4 {
+    color: var(--color-secondary);
+    font-size: 1.125rem;
+    margin-bottom: var(--spacing-sm);
+}
+
+.system-info {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.system-info-item {
+    display: flex;
+    align-items: center;
+    font-size: 0.9375rem;
+}
+
+.system-info-item strong {
+    min-width: 100px;
+    color: var(--color-text);
+    font-weight: 600;
+}
+
+.system-info-item span {
+    color: var(--color-text-light);
+    font-family: var(--font-code);
+    font-size: 0.875rem;
+}
+
+/* Chart Cards */
+.chart-card {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-md);
+    margin: var(--spacing-lg) 0;
+    box-shadow: var(--shadow-sm);
+}
+
+.chart-card h3 {
+    color: var(--color-primary);
+    font-size: 1.25rem;
+    margin: 0 0 var(--spacing-md);
+}
+
+.chart-iframe {
+    width: 100%;
+    height: 600px;
+    border: none;
+    border-radius: var(--radius-md);
+    background: var(--color-bg-alt);
+}
+
+/* Collapsible Sections */
+.collapsible {
+    background: var(--color-bg-alt);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    margin: var(--spacing-md) 0;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.collapsible-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-md);
+    cursor: pointer;
+    user-select: none;
+    background: var(--color-bg);
+    transition: background 0.2s ease;
+}
+
+.collapsible-header:hover {
+    background: var(--color-bg-alt);
+}
+
+.collapsible-header h3 {
+    margin: 0;
+    font-size: 1.125rem;
+    color: var(--color-text);
+}
+
+.collapsible-toggle {
+    font-size: 1.5rem;
+    color: var(--color-primary);
+    transition: transform 0.3s ease;
+}
+
+.collapsible.open .collapsible-toggle {
+    transform: rotate(180deg);
+}
+
+.collapsible-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+}
+
+.collapsible.open .collapsible-content {
+    max-height: 5000px;
+    padding: var(--spacing-md);
+}
+
+/* Details/Summary (for setup sections) */
+details.setup-details {
+    background: var(--color-bg-alt);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    margin: var(--spacing-md) 0;
+    overflow: hidden;
+}
+
+details.setup-details summary {
+    cursor: pointer;
+    padding: var(--spacing-md);
+    background: var(--color-bg);
+    transition: background 0.2s ease;
+    list-style: none;
+    display: flex;
+    align-items: center;
+}
+
+details.setup-details summary::-webkit-details-marker {
+    display: none;
+}
+
+details.setup-details summary::marker {
+    display: none;
+}
+
+details.setup-details summary:hover {
+    background: var(--color-bg-alt);
+}
+
+details.setup-details summary::before {
+    content: '▶';
+    color: var(--color-primary);
+    font-size: 0.9rem;
+    margin-right: var(--spacing-sm);
+    transition: transform 0.3s ease;
+    display: inline-block;
+}
+
+details.setup-details[open] summary::before {
+    transform: rotate(90deg);
+}
+
+details.setup-details summary h3 {
+    margin: 0;
+    font-size: 1.125rem;
+    color: var(--color-text);
+    display: inline;
+}
+
+details.setup-details .code-section {
+    padding: var(--spacing-md);
+}
+
+details.setup-details .code-section h4 {
+    color: var(--color-primary);
+    margin-bottom: var(--spacing-sm);
+}
+
+/* Code Blocks */
+pre {
+    background: #1e1e1e;
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+    overflow-x: auto;
+    margin: var(--spacing-md) 0;
+    box-shadow: var(--shadow-sm);
+}
+
+code {
+    font-family: var(--font-code);
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+:not(pre) > code {
+    background: var(--color-bg-alt);
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    color: var(--color-accent-2);
+    font-size: 0.875rem;
+}
+
+/* Tables */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: var(--spacing-md) 0;
+    background: var(--color-bg);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+}
+
+thead {
+    background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+    color: white;
+}
+
+th {
+    padding: var(--spacing-sm) var(--spacing-md);
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.9375rem;
+}
+
+td {
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-bottom: 1px solid var(--color-border);
+    font-size: 0.9375rem;
+}
+
+tbody tr {
+    transition: background 0.2s ease;
+}
+
+tbody tr:hover {
+    background: var(--color-bg-alt);
+}
+
+tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* Summary table specific styling */
+.summary-table tbody tr {
+    cursor: pointer;
+    position: relative;
+}
+
+.summary-table tbody tr::after {
+    content: '👁️';
+    position: absolute;
+    right: 10px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.summary-table tbody tr:hover::after {
+    opacity: 0.5;
+}
+
+.summary-table tbody tr:hover {
+    background: var(--color-primary) !important;
+    color: white;
+}
+
+.summary-table tbody tr:hover td {
+    color: white;
+}
+
+/* Alternating query groups - first row of each query gets light background */
+.summary-table tbody tr[data-query-start="true"] {
+    border-top: 3px solid var(--color-primary);
+}
+
+.summary-table tbody tr[data-query-group="odd"] {
+    background: var(--color-bg-alt);
+}
+
+.summary-table tbody tr[data-query-group="even"] {
+    background: var(--color-bg);
+}
+
+/* Query modal */
+.query-modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    animation: fadeIn 0.3s ease;
+}
+
+.query-modal.active {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.query-modal-content {
+    background: var(--color-bg);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    max-width: 900px;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: var(--shadow-lg);
+    position: relative;
+}
+
+.query-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-md);
+    border-bottom: 2px solid var(--color-primary);
+    padding-bottom: var(--spacing-sm);
+}
+
+.query-modal-header h3 {
+    margin: 0;
+    color: var(--color-primary);
+}
+
+.query-modal-close {
+    background: none;
+    border: none;
+    font-size: 2rem;
+    cursor: pointer;
+    color: var(--color-text-light);
+    transition: color 0.2s ease;
+}
+
+.query-modal-close:hover {
+    color: var(--color-accent-2);
+}
+
+.query-modal pre {
+    margin-top: var(--spacing-md);
+}
+
+/* Performance color coding for table cells */
+.perf-excellent {
+    background: linear-gradient(90deg, #6A994E20 0%, transparent 100%);
+    font-weight: 600;
+    color: var(--color-accent-3);
+}
+
+.perf-good {
+    background: linear-gradient(90deg, #2E86AB20 0%, transparent 100%);
+    color: var(--color-primary);
+}
+
+.perf-average {
+    background: linear-gradient(90deg, #F18F0120 0%, transparent 100%);
+    color: var(--color-accent-1);
+}
+
+.perf-poor {
+    background: linear-gradient(90deg, #C73E1D20 0%, transparent 100%);
+    color: var(--color-accent-2);
+}
+
+/* Download Section */
+.download-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: var(--spacing-md);
+    margin: var(--spacing-lg) 0;
+}
+
+.download-card {
+    background: var(--color-bg);
+    border: 2px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-md);
+    text-align: center;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.download-card:hover {
+    border-color: var(--color-primary);
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-md);
+}
+
+.download-icon {
+    font-size: 2.5rem;
+    color: var(--color-primary);
+}
+
+.download-card h4 {
+    color: var(--color-text);
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.download-card p {
+    color: var(--color-text-light);
+    font-size: 0.875rem;
+    margin: 0;
+}
+
+/* Lists */
+ul, ol {
+    margin: var(--spacing-md) 0;
+    padding-left: var(--spacing-lg);
+}
+
+li {
+    margin: var(--spacing-xs) 0;
+    color: var(--color-text);
+}
+
+/* Links */
+a {
+    color: var(--color-primary);
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+a:hover {
+    color: var(--color-secondary);
+    text-decoration: underline;
+}
+
+/* Paragraphs */
+p {
+    margin: var(--spacing-md) 0;
+    color: var(--color-text);
+    line-height: 1.7;
+}
+
+/* Blockquotes */
+blockquote {
+    border-left: 4px solid var(--color-primary);
+    padding-left: var(--spacing-md);
+    margin: var(--spacing-md) 0;
+    color: var(--color-text-light);
+    font-style: italic;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .container {
+        padding: var(--spacing-md);
+    }
+
+    .header h1 {
+        font-size: 2rem;
+    }
+
+    h2 {
+        font-size: 1.5rem;
+    }
+
+    .summary-cards,
+    .systems-grid,
+    .download-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .chart-iframe {
+        height: 400px;
+    }
+
+    .metadata {
+        flex-direction: column;
+    }
+}
+
+/* Print Styles */
+@media print {
+    .container {
+        box-shadow: none;
+        max-width: 100%;
+    }
+
+    .collapsible-content {
+        max-height: none !important;
+        padding: var(--spacing-md) !important;
+    }
+
+    .chart-iframe {
+        page-break-inside: avoid;
+    }
+
+    .summary-card,
+    .system-card,
+    .chart-card {
+        page-break-inside: avoid;
+    }
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.summary-card,
+.system-card,
+.chart-card,
+.download-card {
+    animation: fadeIn 0.5s ease-out;
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--color-bg-alt);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: var(--radius-sm);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--color-primary);
+}
+
+/* ============================================
+   Workload Sections Styling
+   ============================================ */
+
+/* Workload Introduction */
+.workload-intro {
+    background: linear-gradient(135deg, rgba(46, 134, 171, 0.1) 0%, var(--color-bg-alt) 100%);
+    padding: var(--spacing-md);
+    border-radius: var(--radius-md);
+    margin: var(--spacing-lg) 0;
+    border-left: 4px solid var(--color-primary);
+}
+
+.workload-intro p {
+    margin: 0;
+    font-size: 1.05rem;
+    line-height: 1.6;
+}
+
+/* Workload Description */
+.workload-description {
+    background: var(--color-bg);
+    padding: var(--spacing-lg);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--spacing-xl);
+    border: 1px solid var(--color-border);
+}
+
+.workload-description p {
+    margin-bottom: var(--spacing-md);
+    line-height: 1.8;
+}
+
+.workload-description h3 {
+    color: var(--color-primary);
+    margin-top: var(--spacing-lg);
+    margin-bottom: var(--spacing-md);
+    font-size: 1.3rem;
+}
+
+.characteristics-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: var(--spacing-sm);
+    margin-top: var(--spacing-md);
+    list-style: none;
+    padding: 0;
+}
+
+.characteristics-list li {
+    background: var(--color-bg-alt);
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--radius-sm);
+    border-left: 3px solid var(--color-primary);
+    font-size: 0.95rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.characteristics-list li:hover {
+    transform: translateX(4px);
+    box-shadow: var(--shadow-sm);
+}
+
+/* Tables Grid */
+.tables-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: var(--spacing-md);
+    margin: var(--spacing-lg) 0;
+}
+
+.table-card {
+    background: var(--color-bg);
+    padding: var(--spacing-md);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    transition: box-shadow 0.3s ease, transform 0.2s ease;
+}
+
+.table-card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+}
+
+.table-card h4 {
+    margin-top: 0;
+    margin-bottom: var(--spacing-sm);
+    color: var(--color-primary);
+    font-size: 1.1rem;
+}
+
+.table-description {
+    color: var(--color-text-light);
+    font-size: 0.95rem;
+    margin: var(--spacing-sm) 0;
+    line-height: 1.5;
+}
+
+.table-cardinality {
+    font-size: 0.9rem;
+    color: var(--color-text-light);
+    margin: var(--spacing-xs) 0;
+}
+
+.table-cardinality strong {
+    color: var(--color-text);
+}
+
+.table-relationships {
+    font-size: 0.85rem;
+    color: var(--color-text-light);
+    margin-top: var(--spacing-sm);
+    font-style: italic;
+}
+
+.table-card details {
+    margin-top: var(--spacing-sm);
+}
+
+.table-card summary {
+    cursor: pointer;
+    font-weight: 500;
+    color: var(--color-primary);
+    padding: var(--spacing-xs) 0;
+    user-select: none;
+}
+
+.table-card summary:hover {
+    text-decoration: underline;
+}
+
+.columns-list {
+    margin: var(--spacing-sm) 0;
+    padding-left: var(--spacing-lg);
+}
+
+.columns-list li {
+    font-size: 0.9rem;
+    margin: var(--spacing-xs) 0;
+    font-family: var(--font-code);
+}
+
+.columns-list li code {
+    background: var(--color-bg-alt);
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+}
+
+/* DDL Details (Collapsible Sections) */
+.ddl-details {
+    margin-bottom: var(--spacing-lg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    background: var(--color-bg);
+}
+
+.ddl-details summary {
+    cursor: pointer;
+    padding: var(--spacing-md);
+    background: var(--color-bg-alt);
+    display: flex;
+    align-items: center;
+    list-style: none;
+    user-select: none;
+    transition: background 0.2s ease;
+}
+
+.ddl-details summary:hover {
+    background: #e8eef2;
+}
+
+.ddl-details summary::before {
+    content: '▶';
+    margin-right: var(--spacing-sm);
+    transition: transform 0.3s ease;
+    color: var(--color-primary);
+    font-size: 0.8rem;
+    display: inline-block;
+}
+
+.ddl-details[open] summary::before {
+    transform: rotate(90deg);
+}
+
+.ddl-details summary h4 {
+    margin: 0;
+    font-size: 1.05rem;
+    color: var(--color-text);
+}
+
+.ddl-details summary::-webkit-details-marker {
+    display: none;
+}
+
+.code-section {
+    margin: var(--spacing-md);
+    padding: var(--spacing-md);
+    background: var(--color-bg-alt);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+}
+
+.code-section h5 {
+    margin-top: 0;
+    margin-bottom: var(--spacing-sm);
+    color: var(--color-primary);
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+}
+
+.code-description {
+    color: var(--color-text-light);
+    font-size: 0.95rem;
+    margin-bottom: var(--spacing-sm);
+    font-style: italic;
+}
+
+.code-section pre {
+    margin: var(--spacing-sm) 0 0 0;
+    background: #2d2d2d;
+    border-radius: var(--radius-sm);
+    overflow-x: auto;
+}
+
+.code-section code {
+    font-family: var(--font-code);
+    font-size: 0.875rem;
+    line-height: 1.6;
+}
+
+/* Timing Notes Styling */
+.timing-notes {
+    background: var(--color-bg-alt);
+    padding: var(--spacing-md);
+    border-radius: var(--radius-md);
+    margin-top: var(--spacing-md);
+    border-left: 4px solid var(--color-primary);
+}
+
+.timing-notes p {
+    margin-bottom: var(--spacing-sm);
+}
+
+.timing-notes p:last-child {
+    margin-bottom: 0;
+}
+
+.timing-notes ul {
+    margin-left: var(--spacing-lg);
+    margin-top: var(--spacing-sm);
+}
+
+.timing-notes li {
+    margin-bottom: var(--spacing-xs);
+}
+
+.timings-table {
+    margin: var(--spacing-md) 0;
+}
+
+.timings-table td:nth-child(2),
+.timings-table td:nth-child(3),
+.timings-table td:nth-child(4) {
+    font-family: var(--font-code);
+    font-size: 0.875rem;
+}
+        body {
+            background: var(--color-bg-alt);
+        }
+
+        .container {
+            margin-top: var(--spacing-xl);
+            margin-bottom: var(--spacing-xl);
+        }
+
+        .header .intro {
+            color: var(--color-text-light);
+            font-size: 1rem;
+            margin-top: var(--spacing-sm);
+        }
+
+        .header .hint {
+            color: var(--color-text-light);
+            font-size: 0.9375rem;
+            margin-top: var(--spacing-xs);
+        }
+
+        .search-panel {
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-xs);
+            margin-bottom: var(--spacing-lg);
+        }
+
+        .search-panel label {
+            font-weight: 600;
+            color: var(--color-text);
+        }
+
+        .search-panel input[type="search"] {
+            padding: var(--spacing-sm);
+            font-size: 1rem;
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-md);
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .search-panel input[type="search"]:focus {
+            outline: none;
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 3px rgba(46, 134, 171, 0.15);
+        }
+
+        .search-summary {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: -var(--spacing-md) 0 var(--spacing-lg);
+            color: var(--color-text-light);
+            font-size: 0.9375rem;
+        }
+
+        .project-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: var(--spacing-lg);
+        }
+
+        .project-card {
+            background: linear-gradient(145deg, var(--color-bg) 0%, var(--color-bg-alt) 100%);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-lg);
+            box-shadow: var(--shadow-md);
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-md);
+            transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+        }
+
+        .project-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-lg);
+            border-color: var(--color-primary);
+        }
+
+        .project-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: var(--spacing-sm);
+        }
+
+        .project-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--color-text);
+        }
+
+        .project-meta {
+            display: grid;
+            gap: var(--spacing-xs);
+            color: var(--color-text-light);
+            font-size: 0.9375rem;
+        }
+
+        .project-meta strong {
+            color: var(--color-text);
+        }
+
+        .system-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--spacing-xs);
+        }
+
+        .system-badge {
+            background: rgba(46, 134, 171, 0.08);
+            border: 1px solid rgba(46, 134, 171, 0.25);
+            color: var(--color-primary);
+        }
+
+        .tag-list {
+            display: flex;
+            flex-wrap: wrap;
+            column-gap: 0.35rem;
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .tag-list li {
+            margin: 0;
+            padding: 0;
+        }
+
+        .tag-pill {
+            display: inline-flex;
+            align-items: center;
+            line-height: 1;
+            padding: 0.24rem 0.3rem;
+            font-size: 0.78rem;
+            border-radius: 999px;
+            background: rgba(162, 59, 114, 0.12);
+            color: var(--color-secondary);
+            border: 1px solid rgba(162, 59, 114, 0.25);
+            cursor: pointer;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .tag-pill:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .report-links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--spacing-xs);
+            align-items: center;
+        }
+
+        .report-link {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--spacing-xs);
+            padding: 0.4rem 0.85rem;
+            background: rgba(106, 153, 78, 0.12);
+            color: var(--color-text);
+            border: 1px solid rgba(106, 153, 78, 0.25);
+            border-radius: var(--radius-md);
+            font-size: 0.875rem;
+            text-decoration: none;
+            transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .report-link:hover {
+            background: rgba(106, 153, 78, 0.2);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .empty-state {
+            margin-top: var(--spacing-xl);
+            font-size: 1rem;
+            text-align: center;
+            color: var(--color-text-light);
+        }
+
+        .footer {
+            margin-top: var(--spacing-xl);
+            padding-top: var(--spacing-md);
+            border-top: 1px solid var(--color-border);
+            color: var(--color-text-light);
+            font-size: 0.875rem;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: var(--spacing-md);
+            }
+
+            .project-card {
+                padding: var(--spacing-md);
+            }
+
+            .project-title {
+                font-size: 1.25rem;
+            }
+
+            .project-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>Benchmark Report Index</h1>
+            <p class="intro">Explore reproducible benchmark projects across database systems, workloads, and infrastructures.</p>
+            <div class="metadata">
+                <span class="badge"><strong id="project-count">3</strong> Projects Indexed</span>
+                <span class="badge">
+                    <strong>Generated:</strong>
+                    <span id="generated-at" data-timestamp="2025-10-09T09:49:14.367218+00:00">2025-10-09T09:49:14.367218+00:00</span> UTC
+                </span>
+            </div>
+            <p class="hint">Type keywords or use <code>#tags</code> such as <code>#clickhouse</code>, <code>#aws</code>, or <code>#scale-factor-100</code> to filter.</p>
+        </header>
+
+        <section class="search-panel" aria-label="Search and filter projects">
+            <label for="search-input">Search &amp; Filter</label>
+            <input
+                type="search"
+                id="search-input"
+                placeholder="Search projects or filter with #tags (e.g. #clickhouse, #aws, #scale-factor-10)"
+                autocomplete="off"
+                spellcheck="false"
+            >
+        </section>
+
+        <div class="search-summary">
+            <span id="results-count">3 projects</span>
+            <noscript>Enable JavaScript for interactive filtering.</noscript>
+        </div>
+
+        <section id="project-grid" class="project-grid" aria-live="polite"></section>
+
+        <template id="project-card-template">
+            <article class="project-card">
+                <div class="project-card-header">
+                    <h2 class="project-title"></h2>
+                    <span class="project-id badge"></span>
+                </div>
+
+                <div class="project-meta">
+                    <div class="meta-row author-row"></div>
+                    <div class="meta-row environment-row"></div>
+                    <div class="meta-row workload-row"></div>
+                    <div class="meta-row summary-row"></div>
+                </div>
+
+                <div class="system-badges"></div>
+
+                <ul class="tag-list"></ul>
+
+                <div class="report-links" aria-label="Available reports"></div>
+            </article>
+        </template>
+
+        <p class="empty-state" id="empty-state" hidden>No projects match your filters. Try adjusting the search terms or removing <code>#tags</code>.</p>
+
+        <footer class="footer">
+            <p>Index generated 2025-10-09T09:49:14.367218+00:00 UTC.</p>
+        </footer>
+    </div>
+
+    <script type="application/json" id="project-data">[{"author": "Oleksandr Kozachuk, Principal Architect at Exasol AG", "environment": {"instances": {"clickhouse": {"disk": {"type": "local"}, "instance_type": "r5d.4xlarge", "label": "ok-bench-ch"}, "exasol": {"disk": {"type": "local"}, "instance_type": "r5d.4xlarge", "label": "ok-bench-exa"}}, "mode": "aws", "region": "eu-west-1"}, "last_updated": "2025-10-09T08:58:59+00:00", "project_id": "exa_vs_ch_10g", "report_base_dir": "results/exa_vs_ch_10g/reports", "reports": [{"format": "html", "name": "Short", "path": "1-short/REPORT.html", "variant": "1-short", "href": "exa_vs_ch_10g/reports/1-short/REPORT.html"}, {"format": "markdown", "name": "Short", "path": "1-short/REPORT.md", "variant": "1-short", "href": "exa_vs_ch_10g/reports/1-short/REPORT.md"}, {"format": "package", "name": "Short", "path": "1-short/exa_vs_ch_10g-workload.zip", "variant": "1-short", "href": "exa_vs_ch_10g/reports/1-short/exa_vs_ch_10g-workload.zip"}, {"format": "html", "name": "Results", "path": "2-results/REPORT.html", "variant": "2-results", "href": "exa_vs_ch_10g/reports/2-results/REPORT.html"}, {"format": "markdown", "name": "Results", "path": "2-results/REPORT.md", "variant": "2-results", "href": "exa_vs_ch_10g/reports/2-results/REPORT.md"}, {"format": "html", "name": "Full", "path": "3-full/REPORT.html", "variant": "3-full", "href": "exa_vs_ch_10g/reports/3-full/REPORT.html"}, {"format": "markdown", "name": "Full", "path": "3-full/REPORT.md", "variant": "3-full", "href": "exa_vs_ch_10g/reports/3-full/REPORT.md"}, {"format": "package", "name": "Full", "path": "3-full/exa_vs_ch_10g-workload.zip", "variant": "3-full", "href": "exa_vs_ch_10g/reports/3-full/exa_vs_ch_10g-workload.zip"}], "summary": {"per_query": {"Q01": {"per_system": {"clickhouse": {"avg_runtime_ms": 539.8142857142857, "max_runtime_ms": 556.8, "median_runtime_ms": 539.0, "min_runtime_ms": 531.4, "runs": 7}, "exasol": {"avg_runtime_ms": 216.47142857142856, "max_runtime_ms": 218.8, "median_runtime_ms": 216.0, "min_runtime_ms": 215.5, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q02": {"per_system": {"clickhouse": {"avg_runtime_ms": 238.95714285714283, "max_runtime_ms": 246.4, "median_runtime_ms": 238.4, "min_runtime_ms": 231.0, "runs": 7}, "exasol": {"avg_runtime_ms": 34.728571428571435, "max_runtime_ms": 35.5, "median_runtime_ms": 34.5, "min_runtime_ms": 34.2, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q03": {"per_system": {"clickhouse": {"avg_runtime_ms": 794.657142857143, "max_runtime_ms": 861.3, "median_runtime_ms": 783.0, "min_runtime_ms": 770.0, "runs": 7}, "exasol": {"avg_runtime_ms": 97.57142857142857, "max_runtime_ms": 98.3, "median_runtime_ms": 97.7, "min_runtime_ms": 96.3, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q04": {"per_system": {"clickhouse": {"avg_runtime_ms": 414.30000000000007, "max_runtime_ms": 431.4, "median_runtime_ms": 421.9, "min_runtime_ms": 393.4, "runs": 7}, "exasol": {"avg_runtime_ms": 23.27142857142857, "max_runtime_ms": 23.7, "median_runtime_ms": 23.1, "min_runtime_ms": 22.9, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q05": {"per_system": {"clickhouse": {"avg_runtime_ms": 1509.642857142857, "max_runtime_ms": 1532.6, "median_runtime_ms": 1516.3, "min_runtime_ms": 1489.1, "runs": 7}, "exasol": {"avg_runtime_ms": 63.17142857142857, "max_runtime_ms": 63.7, "median_runtime_ms": 63.1, "min_runtime_ms": 62.4, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q06": {"per_system": {"clickhouse": {"avg_runtime_ms": 54.385714285714286, "max_runtime_ms": 57.3, "median_runtime_ms": 53.4, "min_runtime_ms": 52.7, "runs": 7}, "exasol": {"avg_runtime_ms": 15.4, "max_runtime_ms": 15.6, "median_runtime_ms": 15.4, "min_runtime_ms": 15.2, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q07": {"per_system": {"clickhouse": {"avg_runtime_ms": 815.5142857142857, "max_runtime_ms": 836.0, "median_runtime_ms": 814.8, "min_runtime_ms": 796.0, "runs": 7}, "exasol": {"avg_runtime_ms": 73.0, "max_runtime_ms": 74.0, "median_runtime_ms": 72.9, "min_runtime_ms": 72.2, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q08": {"per_system": {"clickhouse": {"avg_runtime_ms": 1613.0285714285715, "max_runtime_ms": 1726.5, "median_runtime_ms": 1582.3, "min_runtime_ms": 1578.2, "runs": 7}, "exasol": {"avg_runtime_ms": 37.471428571428575, "max_runtime_ms": 61.7, "median_runtime_ms": 33.5, "min_runtime_ms": 32.6, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q09": {"per_system": {"clickhouse": {"avg_runtime_ms": 2074.742857142857, "max_runtime_ms": 2099.9, "median_runtime_ms": 2071.4, "min_runtime_ms": 2052.0, "runs": 7}, "exasol": {"avg_runtime_ms": 186.9857142857143, "max_runtime_ms": 187.8, "median_runtime_ms": 187.2, "min_runtime_ms": 185.5, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q10": {"per_system": {"clickhouse": {"avg_runtime_ms": 509.31428571428575, "max_runtime_ms": 521.3, "median_runtime_ms": 508.2, "min_runtime_ms": 504.8, "runs": 7}, "exasol": {"avg_runtime_ms": 166.57142857142858, "max_runtime_ms": 174.1, "median_runtime_ms": 169.1, "min_runtime_ms": 158.2, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q11": {"per_system": {"clickhouse": {"avg_runtime_ms": 137.5, "max_runtime_ms": 144.4, "median_runtime_ms": 136.6, "min_runtime_ms": 134.7, "runs": 7}, "exasol": {"avg_runtime_ms": 54.785714285714285, "max_runtime_ms": 56.0, "median_runtime_ms": 54.9, "min_runtime_ms": 53.8, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q12": {"per_system": {"clickhouse": {"avg_runtime_ms": 179.98571428571427, "max_runtime_ms": 190.2, "median_runtime_ms": 176.9, "min_runtime_ms": 173.0, "runs": 7}, "exasol": {"avg_runtime_ms": 28.842857142857145, "max_runtime_ms": 29.5, "median_runtime_ms": 28.6, "min_runtime_ms": 28.4, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q13": {"per_system": {"clickhouse": {"avg_runtime_ms": 718.2571428571429, "max_runtime_ms": 772.7, "median_runtime_ms": 721.1, "min_runtime_ms": 657.5, "runs": 7}, "exasol": {"avg_runtime_ms": 154.97142857142856, "max_runtime_ms": 156.0, "median_runtime_ms": 155.1, "min_runtime_ms": 154.0, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q14": {"per_system": {"clickhouse": {"avg_runtime_ms": 54.057142857142864, "max_runtime_ms": 57.8, "median_runtime_ms": 53.3, "min_runtime_ms": 52.5, "runs": 7}, "exasol": {"avg_runtime_ms": 24.914285714285715, "max_runtime_ms": 25.4, "median_runtime_ms": 24.9, "min_runtime_ms": 24.6, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q15": {"per_system": {"clickhouse": {"avg_runtime_ms": 91.74285714285713, "max_runtime_ms": 92.7, "median_runtime_ms": 91.8, "min_runtime_ms": 91.2, "runs": 7}, "exasol": {"avg_runtime_ms": 82.74285714285715, "max_runtime_ms": 84.5, "median_runtime_ms": 82.7, "min_runtime_ms": 81.8, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q16": {"per_system": {"clickhouse": {"avg_runtime_ms": 188.34285714285716, "max_runtime_ms": 204.6, "median_runtime_ms": 185.2, "min_runtime_ms": 182.9, "runs": 7}, "exasol": {"avg_runtime_ms": 235.47142857142856, "max_runtime_ms": 255.1, "median_runtime_ms": 232.1, "min_runtime_ms": 230.1, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q17": {"per_system": {"clickhouse": {"avg_runtime_ms": 724.6714285714286, "max_runtime_ms": 757.8, "median_runtime_ms": 719.9, "min_runtime_ms": 710.1, "runs": 7}, "exasol": {"avg_runtime_ms": 16.242857142857144, "max_runtime_ms": 16.7, "median_runtime_ms": 16.2, "min_runtime_ms": 15.9, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q18": {"per_system": {"clickhouse": {"avg_runtime_ms": 727.3142857142857, "max_runtime_ms": 895.6, "median_runtime_ms": 701.6, "min_runtime_ms": 685.4, "runs": 7}, "exasol": {"avg_runtime_ms": 153.1142857142857, "max_runtime_ms": 157.0, "median_runtime_ms": 152.0, "min_runtime_ms": 150.9, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q19": {"per_system": {"clickhouse": {"avg_runtime_ms": 535.1857142857143, "max_runtime_ms": 545.3, "median_runtime_ms": 531.8, "min_runtime_ms": 528.8, "runs": 7}, "exasol": {"avg_runtime_ms": 14.028571428571428, "max_runtime_ms": 14.4, "median_runtime_ms": 14.0, "min_runtime_ms": 13.8, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q20": {"per_system": {"clickhouse": {"avg_runtime_ms": 110.91428571428571, "max_runtime_ms": 116.6, "median_runtime_ms": 110.8, "min_runtime_ms": 106.0, "runs": 7}, "exasol": {"avg_runtime_ms": 74.85714285714286, "max_runtime_ms": 78.7, "median_runtime_ms": 72.7, "min_runtime_ms": 72.1, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q21": {"per_system": {"clickhouse": {"avg_runtime_ms": 6035.042857142857, "max_runtime_ms": 6098.9, "median_runtime_ms": 6071.5, "min_runtime_ms": 5874.0, "runs": 7}, "exasol": {"avg_runtime_ms": 114.24285714285715, "max_runtime_ms": 150.2, "median_runtime_ms": 108.2, "min_runtime_ms": 105.9, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q22": {"per_system": {"clickhouse": {"avg_runtime_ms": 135.14285714285714, "max_runtime_ms": 160.5, "median_runtime_ms": 129.2, "min_runtime_ms": 125.4, "runs": 7}, "exasol": {"avg_runtime_ms": 35.25714285714285, "max_runtime_ms": 35.9, "median_runtime_ms": 35.2, "min_runtime_ms": 35.0, "runs": 7}}, "systems": ["clickhouse", "exasol"]}}, "per_system": {"clickhouse": {"avg_runtime_ms": 827.387012987013, "max_runtime_ms": 6098.9, "median_runtime_ms": 525.05, "min_runtime_ms": 52.5, "total_queries": 154}, "exasol": {"avg_runtime_ms": 86.55064935064935, "max_runtime_ms": 255.1, "median_runtime_ms": 67.9, "min_runtime_ms": 13.8, "total_queries": 154}}, "query_names": ["Q01", "Q02", "Q03", "Q04", "Q05", "Q06", "Q07", "Q08", "Q09", "Q10", "Q11", "Q12", "Q13", "Q14", "Q15", "Q16", "Q17", "Q18", "Q19", "Q20", "Q21", "Q22"], "run_date": "2025-10-09 08:58:59", "systems": ["clickhouse", "exasol"], "total_queries": 308}, "systems": [{"extras": {"db_params": ["-writeTouchInit=1", "-cacheMonitorLimit=0", "-maxOverallSlbUsageRatio=0.95", "-useQueryCache=0", "-query_log_timeout=0", "-joinOrderMethod=0", "-etlCheckCertsDefault=0"], "dbram": "48g", "optimizer_mode": "analytical"}, "instance_type": "r5d.4xlarge", "kind": "exasol", "name": "exasol", "setup_method": "installer", "version": "2025.1.0"}, {"extras": {"max_memory_usage": "45000000000", "max_threads": "16", "memory_limit": "48g"}, "instance_type": "r5d.4xlarge", "kind": "clickhouse", "name": "clickhouse", "setup_method": "native", "version": "25.9.3.48"}], "tags": [{"category": "environment", "label": "AWS", "slug": "aws"}, {"category": "environment", "label": "eu-west-1", "slug": "eu-west-1"}, {"category": "installation", "label": "Installer", "slug": "installer"}, {"category": "installation", "label": "Native", "slug": "native"}, {"category": "instance", "label": "r5d.4xlarge", "slug": "r5d.4xlarge"}, {"category": "system", "label": "Clickhouse", "slug": "clickhouse"}, {"category": "system", "label": "Exasol", "slug": "exasol"}, {"category": "workload", "label": "Scale Factor 10", "slug": "scale-factor-10"}, {"category": "workload", "label": "TPCH", "slug": "tpch"}], "title": "Exasol vs ClickHouse Performance Comparison on TPC-H", "workload": {"label": "TPCH", "name": "tpch", "queries": [], "runs_per_query": 7, "scale_factor": 10, "warmup_runs": 1}, "relative_path": "exa_vs_ch_10g/reports", "tag_slugs": ["aws", "eu-west-1", "installer", "native", "r5d.4xlarge", "clickhouse", "exasol", "scale-factor-10", "tpch"]}, {"author": "Oleksandr Kozachuk, Principal Architect at Exasol AG", "environment": {"instances": {"clickhouse": {"disk": {"type": "local"}, "instance_type": "r5d.4xlarge", "label": "ok-bench-ch"}, "exasol": {"disk": {"type": "local"}, "instance_type": "r5d.4xlarge", "label": "ok-bench-exa"}}, "mode": "aws", "region": "eu-west-1"}, "last_updated": "2025-10-09T08:31:14+00:00", "project_id": "exa_vs_ch_1g", "report_base_dir": "results/exa_vs_ch_1g/reports", "reports": [{"format": "html", "name": "Short", "path": "1-short/REPORT.html", "variant": "1-short", "href": "exa_vs_ch_1g/reports/1-short/REPORT.html"}, {"format": "markdown", "name": "Short", "path": "1-short/REPORT.md", "variant": "1-short", "href": "exa_vs_ch_1g/reports/1-short/REPORT.md"}, {"format": "package", "name": "Short", "path": "1-short/exa_vs_ch_1g-workload.zip", "variant": "1-short", "href": "exa_vs_ch_1g/reports/1-short/exa_vs_ch_1g-workload.zip"}, {"format": "html", "name": "Results", "path": "2-results/REPORT.html", "variant": "2-results", "href": "exa_vs_ch_1g/reports/2-results/REPORT.html"}, {"format": "markdown", "name": "Results", "path": "2-results/REPORT.md", "variant": "2-results", "href": "exa_vs_ch_1g/reports/2-results/REPORT.md"}, {"format": "html", "name": "Full", "path": "3-full/REPORT.html", "variant": "3-full", "href": "exa_vs_ch_1g/reports/3-full/REPORT.html"}, {"format": "markdown", "name": "Full", "path": "3-full/REPORT.md", "variant": "3-full", "href": "exa_vs_ch_1g/reports/3-full/REPORT.md"}, {"format": "package", "name": "Full", "path": "3-full/exa_vs_ch_1g-workload.zip", "variant": "3-full", "href": "exa_vs_ch_1g/reports/3-full/exa_vs_ch_1g-workload.zip"}], "summary": {"per_query": {"Q01": {"per_system": {"clickhouse": {"avg_runtime_ms": 79.95714285714287, "max_runtime_ms": 102.5, "median_runtime_ms": 75.4, "min_runtime_ms": 74.5, "runs": 7}, "exasol": {"avg_runtime_ms": 30.142857142857142, "max_runtime_ms": 30.5, "median_runtime_ms": 30.2, "min_runtime_ms": 29.6, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q02": {"per_system": {"clickhouse": {"avg_runtime_ms": 60.75714285714286, "max_runtime_ms": 65.7, "median_runtime_ms": 59.3, "min_runtime_ms": 58.2, "runs": 7}, "exasol": {"avg_runtime_ms": 25.599999999999998, "max_runtime_ms": 26.1, "median_runtime_ms": 25.6, "min_runtime_ms": 24.7, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q03": {"per_system": {"clickhouse": {"avg_runtime_ms": 89.55714285714285, "max_runtime_ms": 96.8, "median_runtime_ms": 87.7, "min_runtime_ms": 86.5, "runs": 7}, "exasol": {"avg_runtime_ms": 23.728571428571424, "max_runtime_ms": 24.1, "median_runtime_ms": 23.7, "min_runtime_ms": 23.3, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q04": {"per_system": {"clickhouse": {"avg_runtime_ms": 66.81428571428572, "max_runtime_ms": 71.3, "median_runtime_ms": 66.3, "min_runtime_ms": 65.7, "runs": 7}, "exasol": {"avg_runtime_ms": 10.914285714285715, "max_runtime_ms": 11.4, "median_runtime_ms": 10.8, "min_runtime_ms": 10.7, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q05": {"per_system": {"clickhouse": {"avg_runtime_ms": 182.97142857142856, "max_runtime_ms": 188.2, "median_runtime_ms": 182.8, "min_runtime_ms": 177.2, "runs": 7}, "exasol": {"avg_runtime_ms": 22.471428571428568, "max_runtime_ms": 23.3, "median_runtime_ms": 22.4, "min_runtime_ms": 21.8, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q06": {"per_system": {"clickhouse": {"avg_runtime_ms": 21.614285714285717, "max_runtime_ms": 23.1, "median_runtime_ms": 21.3, "min_runtime_ms": 21.1, "runs": 7}, "exasol": {"avg_runtime_ms": 7.528571428571428, "max_runtime_ms": 7.8, "median_runtime_ms": 7.5, "min_runtime_ms": 7.3, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q07": {"per_system": {"clickhouse": {"avg_runtime_ms": 102.38571428571429, "max_runtime_ms": 103.1, "median_runtime_ms": 102.4, "min_runtime_ms": 101.7, "runs": 7}, "exasol": {"avg_runtime_ms": 22.028571428571432, "max_runtime_ms": 23.0, "median_runtime_ms": 21.9, "min_runtime_ms": 21.4, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q08": {"per_system": {"clickhouse": {"avg_runtime_ms": 145.15714285714287, "max_runtime_ms": 162.8, "median_runtime_ms": 141.4, "min_runtime_ms": 137.1, "runs": 7}, "exasol": {"avg_runtime_ms": 22.9, "max_runtime_ms": 36.6, "median_runtime_ms": 20.6, "min_runtime_ms": 20.0, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q09": {"per_system": {"clickhouse": {"avg_runtime_ms": 199.77142857142857, "max_runtime_ms": 223.3, "median_runtime_ms": 201.3, "min_runtime_ms": 184.0, "runs": 7}, "exasol": {"avg_runtime_ms": 34.82857142857143, "max_runtime_ms": 39.8, "median_runtime_ms": 34.2, "min_runtime_ms": 33.6, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q10": {"per_system": {"clickhouse": {"avg_runtime_ms": 95.78571428571429, "max_runtime_ms": 98.4, "median_runtime_ms": 95.5, "min_runtime_ms": 91.8, "runs": 7}, "exasol": {"avg_runtime_ms": 47.51428571428572, "max_runtime_ms": 48.2, "median_runtime_ms": 47.7, "min_runtime_ms": 46.3, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q11": {"per_system": {"clickhouse": {"avg_runtime_ms": 37.385714285714286, "max_runtime_ms": 37.8, "median_runtime_ms": 37.3, "min_runtime_ms": 37.0, "runs": 7}, "exasol": {"avg_runtime_ms": 22.571428571428573, "max_runtime_ms": 23.3, "median_runtime_ms": 22.6, "min_runtime_ms": 21.7, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q12": {"per_system": {"clickhouse": {"avg_runtime_ms": 40.214285714285715, "max_runtime_ms": 55.3, "median_runtime_ms": 37.5, "min_runtime_ms": 35.9, "runs": 7}, "exasol": {"avg_runtime_ms": 12.214285714285714, "max_runtime_ms": 12.7, "median_runtime_ms": 12.2, "min_runtime_ms": 11.7, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q13": {"per_system": {"clickhouse": {"avg_runtime_ms": 105.04285714285713, "max_runtime_ms": 122.5, "median_runtime_ms": 106.3, "min_runtime_ms": 87.2, "runs": 7}, "exasol": {"avg_runtime_ms": 38.042857142857144, "max_runtime_ms": 39.6, "median_runtime_ms": 38.4, "min_runtime_ms": 36.5, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q14": {"per_system": {"clickhouse": {"avg_runtime_ms": 29.671428571428574, "max_runtime_ms": 33.7, "median_runtime_ms": 29.0, "min_runtime_ms": 26.3, "runs": 7}, "exasol": {"avg_runtime_ms": 10.228571428571428, "max_runtime_ms": 10.5, "median_runtime_ms": 10.2, "min_runtime_ms": 10.0, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q15": {"per_system": {"clickhouse": {"avg_runtime_ms": 31.11428571428571, "max_runtime_ms": 34.2, "median_runtime_ms": 31.3, "min_runtime_ms": 29.5, "runs": 7}, "exasol": {"avg_runtime_ms": 20.914285714285715, "max_runtime_ms": 21.5, "median_runtime_ms": 20.9, "min_runtime_ms": 20.4, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q16": {"per_system": {"clickhouse": {"avg_runtime_ms": 83.94285714285715, "max_runtime_ms": 87.5, "median_runtime_ms": 84.0, "min_runtime_ms": 81.9, "runs": 7}, "exasol": {"avg_runtime_ms": 97.98571428571428, "max_runtime_ms": 116.8, "median_runtime_ms": 94.3, "min_runtime_ms": 94.0, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q17": {"per_system": {"clickhouse": {"avg_runtime_ms": 92.51428571428572, "max_runtime_ms": 95.3, "median_runtime_ms": 92.5, "min_runtime_ms": 90.3, "runs": 7}, "exasol": {"avg_runtime_ms": 12.6, "max_runtime_ms": 12.8, "median_runtime_ms": 12.6, "min_runtime_ms": 12.3, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q18": {"per_system": {"clickhouse": {"avg_runtime_ms": 96.3, "max_runtime_ms": 105.4, "median_runtime_ms": 94.9, "min_runtime_ms": 93.6, "runs": 7}, "exasol": {"avg_runtime_ms": 28.457142857142856, "max_runtime_ms": 29.7, "median_runtime_ms": 28.3, "min_runtime_ms": 27.9, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q19": {"per_system": {"clickhouse": {"avg_runtime_ms": 85.1, "max_runtime_ms": 88.6, "median_runtime_ms": 85.3, "min_runtime_ms": 80.7, "runs": 7}, "exasol": {"avg_runtime_ms": 11.357142857142858, "max_runtime_ms": 11.9, "median_runtime_ms": 11.2, "min_runtime_ms": 10.8, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q20": {"per_system": {"clickhouse": {"avg_runtime_ms": 38.6, "max_runtime_ms": 54.1, "median_runtime_ms": 36.2, "min_runtime_ms": 35.1, "runs": 7}, "exasol": {"avg_runtime_ms": 22.24285714285714, "max_runtime_ms": 22.8, "median_runtime_ms": 22.2, "min_runtime_ms": 21.7, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q21": {"per_system": {"clickhouse": {"avg_runtime_ms": 522.9142857142858, "max_runtime_ms": 560.8, "median_runtime_ms": 522.2, "min_runtime_ms": 465.4, "runs": 7}, "exasol": {"avg_runtime_ms": 25.9, "max_runtime_ms": 37.2, "median_runtime_ms": 24.0, "min_runtime_ms": 23.5, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q22": {"per_system": {"clickhouse": {"avg_runtime_ms": 51.6, "max_runtime_ms": 64.5, "median_runtime_ms": 49.5, "min_runtime_ms": 48.8, "runs": 7}, "exasol": {"avg_runtime_ms": 14.37142857142857, "max_runtime_ms": 14.6, "median_runtime_ms": 14.5, "min_runtime_ms": 13.9, "runs": 7}}, "systems": ["clickhouse", "exasol"]}}, "per_system": {"clickhouse": {"avg_runtime_ms": 102.6896103896104, "max_runtime_ms": 560.8, "median_runtime_ms": 84.94999999999999, "min_runtime_ms": 21.1, "total_queries": 154}, "exasol": {"avg_runtime_ms": 25.661038961038965, "max_runtime_ms": 116.8, "median_runtime_ms": 22.3, "min_runtime_ms": 7.3, "total_queries": 154}}, "query_names": ["Q01", "Q02", "Q03", "Q04", "Q05", "Q06", "Q07", "Q08", "Q09", "Q10", "Q11", "Q12", "Q13", "Q14", "Q15", "Q16", "Q17", "Q18", "Q19", "Q20", "Q21", "Q22"], "run_date": "2025-10-09 08:31:14", "systems": ["clickhouse", "exasol"], "total_queries": 308}, "systems": [{"extras": {"db_params": ["-writeTouchInit=1", "-cacheMonitorLimit=0", "-maxOverallSlbUsageRatio=0.95", "-useQueryCache=0", "-query_log_timeout=0", "-joinOrderMethod=0", "-etlCheckCertsDefault=0"], "dbram": "32g", "optimizer_mode": "analytical"}, "instance_type": "r5d.4xlarge", "kind": "exasol", "name": "exasol", "setup_method": "installer", "version": "2025.1.0"}, {"extras": {"max_memory_usage": "30000000000", "max_threads": "16", "memory_limit": "32g"}, "instance_type": "r5d.4xlarge", "kind": "clickhouse", "name": "clickhouse", "setup_method": "native", "version": "25.9.3.48"}], "tags": [{"category": "environment", "label": "AWS", "slug": "aws"}, {"category": "environment", "label": "eu-west-1", "slug": "eu-west-1"}, {"category": "installation", "label": "Installer", "slug": "installer"}, {"category": "installation", "label": "Native", "slug": "native"}, {"category": "instance", "label": "r5d.4xlarge", "slug": "r5d.4xlarge"}, {"category": "system", "label": "Clickhouse", "slug": "clickhouse"}, {"category": "system", "label": "Exasol", "slug": "exasol"}, {"category": "workload", "label": "Scale Factor 1", "slug": "scale-factor-1"}, {"category": "workload", "label": "TPCH", "slug": "tpch"}], "title": "Exasol vs ClickHouse Performance Comparison on TPC-H", "workload": {"label": "TPCH", "name": "tpch", "queries": [], "runs_per_query": 7, "scale_factor": 1, "warmup_runs": 1}, "relative_path": "exa_vs_ch_1g/reports", "tag_slugs": ["aws", "eu-west-1", "installer", "native", "r5d.4xlarge", "clickhouse", "exasol", "scale-factor-1", "tpch"]}, {"author": "Oleksandr Kozachuk, Principal Architect at Exasol AG", "environment": {"instances": {"clickhouse": {"disk": {"type": "local"}, "instance_type": "r5d.4xlarge", "label": "ok-bench-ch"}, "exasol": {"disk": {"type": "local"}, "instance_type": "r5d.4xlarge", "label": "ok-bench-exa"}}, "mode": "aws", "region": "eu-west-1"}, "last_updated": "2025-10-09T09:48:49+00:00", "project_id": "exa_vs_ch_30g", "report_base_dir": "results/exa_vs_ch_30g/reports", "reports": [{"format": "html", "name": "Short", "path": "1-short/REPORT.html", "variant": "1-short", "href": "exa_vs_ch_30g/reports/1-short/REPORT.html"}, {"format": "markdown", "name": "Short", "path": "1-short/REPORT.md", "variant": "1-short", "href": "exa_vs_ch_30g/reports/1-short/REPORT.md"}, {"format": "package", "name": "Short", "path": "1-short/exa_vs_ch_30g-workload.zip", "variant": "1-short", "href": "exa_vs_ch_30g/reports/1-short/exa_vs_ch_30g-workload.zip"}, {"format": "html", "name": "Results", "path": "2-results/REPORT.html", "variant": "2-results", "href": "exa_vs_ch_30g/reports/2-results/REPORT.html"}, {"format": "markdown", "name": "Results", "path": "2-results/REPORT.md", "variant": "2-results", "href": "exa_vs_ch_30g/reports/2-results/REPORT.md"}, {"format": "html", "name": "Full", "path": "3-full/REPORT.html", "variant": "3-full", "href": "exa_vs_ch_30g/reports/3-full/REPORT.html"}, {"format": "markdown", "name": "Full", "path": "3-full/REPORT.md", "variant": "3-full", "href": "exa_vs_ch_30g/reports/3-full/REPORT.md"}, {"format": "package", "name": "Full", "path": "3-full/exa_vs_ch_30g-workload.zip", "variant": "3-full", "href": "exa_vs_ch_30g/reports/3-full/exa_vs_ch_30g-workload.zip"}], "summary": {"per_query": {"Q01": {"per_system": {"clickhouse": {"avg_runtime_ms": 1601.757142857143, "max_runtime_ms": 1617.4, "median_runtime_ms": 1597.0, "min_runtime_ms": 1584.2, "runs": 7}, "exasol": {"avg_runtime_ms": 606.6999999999999, "max_runtime_ms": 610.4, "median_runtime_ms": 606.3, "min_runtime_ms": 604.2, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q02": {"per_system": {"clickhouse": {"avg_runtime_ms": 609.4, "max_runtime_ms": 617.9, "median_runtime_ms": 612.9, "min_runtime_ms": 595.2, "runs": 7}, "exasol": {"avg_runtime_ms": 48.37142857142857, "max_runtime_ms": 49.4, "median_runtime_ms": 48.3, "min_runtime_ms": 47.2, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q03": {"per_system": {"clickhouse": {"avg_runtime_ms": 2381.9, "max_runtime_ms": 2446.2, "median_runtime_ms": 2371.4, "min_runtime_ms": 2345.4, "runs": 7}, "exasol": {"avg_runtime_ms": 204.35714285714286, "max_runtime_ms": 208.2, "median_runtime_ms": 206.1, "min_runtime_ms": 193.6, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q04": {"per_system": {"clickhouse": {"avg_runtime_ms": 1359.4428571428573, "max_runtime_ms": 1429.5, "median_runtime_ms": 1365.1, "min_runtime_ms": 1316.1, "runs": 7}, "exasol": {"avg_runtime_ms": 46.214285714285715, "max_runtime_ms": 46.7, "median_runtime_ms": 46.3, "min_runtime_ms": 45.7, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q05": {"per_system": {"clickhouse": {"avg_runtime_ms": 5290.4571428571435, "max_runtime_ms": 5375.7, "median_runtime_ms": 5278.6, "min_runtime_ms": 5261.1, "runs": 7}, "exasol": {"avg_runtime_ms": 150.45714285714286, "max_runtime_ms": 157.7, "median_runtime_ms": 148.9, "min_runtime_ms": 147.9, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q06": {"per_system": {"clickhouse": {"avg_runtime_ms": 123.02857142857144, "max_runtime_ms": 126.9, "median_runtime_ms": 122.5, "min_runtime_ms": 121.5, "runs": 7}, "exasol": {"avg_runtime_ms": 30.814285714285713, "max_runtime_ms": 31.0, "median_runtime_ms": 30.9, "min_runtime_ms": 30.6, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q07": {"per_system": {"clickhouse": {"avg_runtime_ms": 2915.828571428571, "max_runtime_ms": 3019.6, "median_runtime_ms": 2936.8, "min_runtime_ms": 2750.8, "runs": 7}, "exasol": {"avg_runtime_ms": 172.08571428571426, "max_runtime_ms": 172.9, "median_runtime_ms": 172.2, "min_runtime_ms": 170.9, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q08": {"per_system": {"clickhouse": {"avg_runtime_ms": 5642.5428571428565, "max_runtime_ms": 5701.6, "median_runtime_ms": 5668.4, "min_runtime_ms": 5571.1, "runs": 7}, "exasol": {"avg_runtime_ms": 60.71428571428571, "max_runtime_ms": 79.7, "median_runtime_ms": 57.5, "min_runtime_ms": 56.8, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q09": {"per_system": {"clickhouse": {"avg_runtime_ms": 7584.099999999999, "max_runtime_ms": 7664.5, "median_runtime_ms": 7596.1, "min_runtime_ms": 7483.4, "runs": 7}, "exasol": {"avg_runtime_ms": 657.6999999999999, "max_runtime_ms": 660.7, "median_runtime_ms": 657.4, "min_runtime_ms": 656.3, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q10": {"per_system": {"clickhouse": {"avg_runtime_ms": 1635.185714285714, "max_runtime_ms": 1692.3, "median_runtime_ms": 1652.5, "min_runtime_ms": 1560.1, "runs": 7}, "exasol": {"avg_runtime_ms": 333.0571428571429, "max_runtime_ms": 335.3, "median_runtime_ms": 333.6, "min_runtime_ms": 327.1, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q11": {"per_system": {"clickhouse": {"avg_runtime_ms": 383.8285714285715, "max_runtime_ms": 390.2, "median_runtime_ms": 384.6, "min_runtime_ms": 376.9, "runs": 7}, "exasol": {"avg_runtime_ms": 119.25714285714285, "max_runtime_ms": 121.0, "median_runtime_ms": 118.8, "min_runtime_ms": 117.4, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q12": {"per_system": {"clickhouse": {"avg_runtime_ms": 524.7428571428571, "max_runtime_ms": 539.3, "median_runtime_ms": 522.0, "min_runtime_ms": 505.1, "runs": 7}, "exasol": {"avg_runtime_ms": 62.38571428571428, "max_runtime_ms": 63.6, "median_runtime_ms": 62.3, "min_runtime_ms": 61.4, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q13": {"per_system": {"clickhouse": {"avg_runtime_ms": 2354.057142857143, "max_runtime_ms": 2515.4, "median_runtime_ms": 2346.3, "min_runtime_ms": 2134.0, "runs": 7}, "exasol": {"avg_runtime_ms": 437.7571428571428, "max_runtime_ms": 439.3, "median_runtime_ms": 437.8, "min_runtime_ms": 436.2, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q14": {"per_system": {"clickhouse": {"avg_runtime_ms": 128.4142857142857, "max_runtime_ms": 129.6, "median_runtime_ms": 128.3, "min_runtime_ms": 127.5, "runs": 7}, "exasol": {"avg_runtime_ms": 56.21428571428572, "max_runtime_ms": 57.5, "median_runtime_ms": 55.9, "min_runtime_ms": 55.7, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q15": {"per_system": {"clickhouse": {"avg_runtime_ms": 157.97142857142856, "max_runtime_ms": 168.5, "median_runtime_ms": 155.3, "min_runtime_ms": 154.1, "runs": 7}, "exasol": {"avg_runtime_ms": 200.91428571428574, "max_runtime_ms": 205.7, "median_runtime_ms": 200.3, "min_runtime_ms": 198.7, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q16": {"per_system": {"clickhouse": {"avg_runtime_ms": 340.0142857142857, "max_runtime_ms": 360.2, "median_runtime_ms": 334.6, "min_runtime_ms": 330.6, "runs": 7}, "exasol": {"avg_runtime_ms": 372.7142857142857, "max_runtime_ms": 395.9, "median_runtime_ms": 369.8, "min_runtime_ms": 364.5, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q17": {"per_system": {"clickhouse": {"avg_runtime_ms": 2565.171428571429, "max_runtime_ms": 2595.1, "median_runtime_ms": 2567.9, "min_runtime_ms": 2514.6, "runs": 7}, "exasol": {"avg_runtime_ms": 19.957142857142856, "max_runtime_ms": 20.6, "median_runtime_ms": 20.1, "min_runtime_ms": 19.2, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q18": {"per_system": {"clickhouse": {"avg_runtime_ms": 2525.3571428571427, "max_runtime_ms": 2584.7, "median_runtime_ms": 2516.0, "min_runtime_ms": 2504.6, "runs": 7}, "exasol": {"avg_runtime_ms": 410.30000000000007, "max_runtime_ms": 414.7, "median_runtime_ms": 409.4, "min_runtime_ms": 408.4, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q19": {"per_system": {"clickhouse": {"avg_runtime_ms": 1606.785714285714, "max_runtime_ms": 1650.2, "median_runtime_ms": 1595.9, "min_runtime_ms": 1575.2, "runs": 7}, "exasol": {"avg_runtime_ms": 19.8, "max_runtime_ms": 20.1, "median_runtime_ms": 19.9, "min_runtime_ms": 19.4, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q20": {"per_system": {"clickhouse": {"avg_runtime_ms": 216.8714285714286, "max_runtime_ms": 223.6, "median_runtime_ms": 216.8, "min_runtime_ms": 210.4, "runs": 7}, "exasol": {"avg_runtime_ms": 221.02857142857144, "max_runtime_ms": 222.4, "median_runtime_ms": 221.4, "min_runtime_ms": 218.7, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q21": {"per_system": {"clickhouse": {"avg_runtime_ms": 20738.271428571432, "max_runtime_ms": 20866.1, "median_runtime_ms": 20754.4, "min_runtime_ms": 20638.5, "runs": 7}, "exasol": {"avg_runtime_ms": 258.51428571428573, "max_runtime_ms": 290.1, "median_runtime_ms": 253.2, "min_runtime_ms": 250.5, "runs": 7}}, "systems": ["clickhouse", "exasol"]}, "Q22": {"per_system": {"clickhouse": {"avg_runtime_ms": 379.5571428571429, "max_runtime_ms": 389.8, "median_runtime_ms": 381.9, "min_runtime_ms": 365.1, "runs": 7}, "exasol": {"avg_runtime_ms": 76.05714285714285, "max_runtime_ms": 76.6, "median_runtime_ms": 76.0, "min_runtime_ms": 75.6, "runs": 7}}, "systems": ["clickhouse", "exasol"]}}, "per_system": {"clickhouse": {"avg_runtime_ms": 2775.667532467532, "max_runtime_ms": 20866.1, "median_runtime_ms": 1592.6999999999998, "min_runtime_ms": 121.5, "total_queries": 154}, "exasol": {"avg_runtime_ms": 207.5168831168831, "max_runtime_ms": 660.7, "median_runtime_ms": 164.3, "min_runtime_ms": 19.2, "total_queries": 154}}, "query_names": ["Q01", "Q02", "Q03", "Q04", "Q05", "Q06", "Q07", "Q08", "Q09", "Q10", "Q11", "Q12", "Q13", "Q14", "Q15", "Q16", "Q17", "Q18", "Q19", "Q20", "Q21", "Q22"], "run_date": "2025-10-09 09:48:49", "systems": ["clickhouse", "exasol"], "total_queries": 308}, "systems": [{"extras": {"db_params": ["-writeTouchInit=1", "-cacheMonitorLimit=0", "-maxOverallSlbUsageRatio=0.95", "-useQueryCache=0", "-query_log_timeout=0", "-joinOrderMethod=0", "-etlCheckCertsDefault=0"], "dbram": "64g", "optimizer_mode": "analytical"}, "instance_type": "r5d.4xlarge", "kind": "exasol", "name": "exasol", "setup_method": "installer", "version": "2025.1.0"}, {"extras": {"max_memory_usage": "60000000000", "max_threads": "16", "memory_limit": "64g"}, "instance_type": "r5d.4xlarge", "kind": "clickhouse", "name": "clickhouse", "setup_method": "native", "version": "25.9.3.48"}], "tags": [{"category": "environment", "label": "AWS", "slug": "aws"}, {"category": "environment", "label": "eu-west-1", "slug": "eu-west-1"}, {"category": "installation", "label": "Installer", "slug": "installer"}, {"category": "installation", "label": "Native", "slug": "native"}, {"category": "instance", "label": "r5d.4xlarge", "slug": "r5d.4xlarge"}, {"category": "system", "label": "Clickhouse", "slug": "clickhouse"}, {"category": "system", "label": "Exasol", "slug": "exasol"}, {"category": "workload", "label": "Scale Factor 30", "slug": "scale-factor-30"}, {"category": "workload", "label": "TPCH", "slug": "tpch"}], "title": "Exasol vs ClickHouse Performance Comparison on TPC-H SF30", "workload": {"label": "TPCH", "name": "tpch", "queries": [], "runs_per_query": 7, "scale_factor": 30, "warmup_runs": 1}, "relative_path": "exa_vs_ch_30g/reports", "tag_slugs": ["aws", "eu-west-1", "installer", "native", "r5d.4xlarge", "clickhouse", "exasol", "scale-factor-30", "tpch"]}]</script>
+    <script>
+        (() => {
+            const projectDataEl = document.getElementById("project-data");
+            const searchInput = document.getElementById("search-input");
+            const projectGrid = document.getElementById("project-grid");
+            const emptyState = document.getElementById("empty-state");
+            const projectCountEl = document.getElementById("project-count");
+            const resultsCountEl = document.getElementById("results-count");
+            const generatedAtEl = document.getElementById("generated-at");
+            const template = document.getElementById("project-card-template");
+
+            const rawProjects = projectDataEl ? JSON.parse(projectDataEl.textContent || "[]") : [];
+            const totalProjects = rawProjects.length;
+
+            if (projectCountEl) {
+                projectCountEl.textContent = totalProjects.toString();
+            }
+
+            if (generatedAtEl) {
+                const iso = generatedAtEl.dataset.timestamp;
+                if (iso) {
+                    try {
+                        const formatter = new Intl.DateTimeFormat(undefined, {
+                            year: "numeric",
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            second: "2-digit",
+                            timeZoneName: "short",
+                        });
+                        const date = new Date(iso);
+                        generatedAtEl.textContent = formatter.format(date);
+                    } catch (error) {
+                        // Keep original value if formatting fails
+                    }
+                }
+            }
+
+            const normalizedProjects = rawProjects.map((project) => {
+                const tags = Array.isArray(project.tags) ? project.tags : [];
+                const tagSlugs = Array.isArray(project.tag_slugs)
+                    ? project.tag_slugs.filter(Boolean)
+                    : tags.map((tag) => tag.slug).filter(Boolean);
+
+                const searchParts = [];
+                const pushValue = (value) => {
+                    if (value) {
+                        searchParts.push(String(value).toLowerCase());
+                    }
+                };
+
+                pushValue(project.project_id);
+                pushValue(project.title);
+                pushValue(project.author);
+                if (project.environment) {
+                    pushValue(project.environment.mode);
+                    pushValue(project.environment.region);
+                }
+                if (project.workload) {
+                    pushValue(project.workload.name);
+                    pushValue(project.workload.label);
+                    pushValue(project.workload.scale_factor);
+                }
+                tags.forEach((tag) => {
+                    pushValue(tag.label);
+                    pushValue(tag.slug);
+                    pushValue(tag.category);
+                });
+                (project.systems || []).forEach((system) => {
+                    pushValue(system.name);
+                    pushValue(system.kind);
+                    pushValue(system.version);
+                    pushValue(system.setup_method);
+                    pushValue(system.instance_type);
+                });
+
+                const searchBlob = searchParts.join(" ");
+                return {
+                    ...project,
+                    tags,
+                    tag_slugs: tagSlugs,
+                    searchBlob,
+                };
+            });
+
+            const normalizeToken = (token) => token.trim().toLowerCase().replace(/^#/, "").replace(/\s+/g, "-");
+
+            const parseSearch = (value) => {
+                const tokens = value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+                const tagFilters = [];
+                const textTerms = [];
+
+                tokens.forEach((token) => {
+                    if (token.startsWith("#")) {
+                        const normalized = normalizeToken(token);
+                        if (normalized) {
+                            tagFilters.push(normalized);
+                        }
+                    } else {
+                        textTerms.push(token);
+                    }
+                });
+
+                return { tagFilters, textTerms };
+            };
+
+            const formatDisplay = (value) => {
+                if (!value) {
+                    return "";
+                }
+                const canonical = String(value).trim();
+                if (!canonical) {
+                    return "";
+                }
+                const tokens = canonical
+                    .replace(/[_-]/g, " ")
+                    .split(" ")
+                    .map((token) => token.trim())
+                    .filter(Boolean);
+
+                if (!tokens.length) {
+                    return canonical;
+                }
+
+                const formatToken = (token) => {
+                    if (/^[A-Z0-9]+$/.test(token)) {
+                        return token;
+                    }
+                    const lower = token.toLowerCase();
+                    if (/^[a-z]+$/.test(lower) && !/[aeiou]/.test(lower)) {
+                        return token.toUpperCase();
+                    }
+                    if (/^[a-z]+$/.test(lower)) {
+                        return lower.charAt(0).toUpperCase() + lower.slice(1);
+                    }
+                    return token;
+                };
+
+                const formatted = tokens.map(formatToken).join(" ");
+                return formatted || canonical;
+            };
+
+            const formatDateTime = (value) => {
+                if (!value) {
+                    return "";
+                }
+                try {
+                    const formatter = new Intl.DateTimeFormat(undefined, {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        timeZoneName: "short",
+                    });
+                    return formatter.format(new Date(value));
+                } catch (error) {
+                    return value;
+                }
+            };
+
+            const renderProjects = (projects) => {
+                projectGrid.innerHTML = "";
+
+                if (resultsCountEl) {
+                    const noun = projects.length === 1 ? "project" : "projects";
+                    resultsCountEl.textContent = `Showing ${projects.length} ${noun} of ${totalProjects}`;
+                }
+
+                if (projects.length === 0) {
+                    if (emptyState) {
+                        emptyState.hidden = false;
+                    }
+                    return;
+                }
+
+                if (emptyState) {
+                    emptyState.hidden = true;
+                }
+
+                projects.forEach((project) => {
+                    const fragment = template.content.cloneNode(true);
+                    const titleEl = fragment.querySelector(".project-title");
+                    const idEl = fragment.querySelector(".project-id");
+                    const authorRow = fragment.querySelector(".author-row");
+                    const environmentRow = fragment.querySelector(".environment-row");
+                    const workloadRow = fragment.querySelector(".workload-row");
+                    const summaryRow = fragment.querySelector(".summary-row");
+                    const systemBadgesContainer = fragment.querySelector(".system-badges");
+                    const tagList = fragment.querySelector(".tag-list");
+                    const reportLinks = fragment.querySelector(".report-links");
+
+                    const title = project.title || project.project_id;
+                    if (titleEl) {
+                        titleEl.textContent = title;
+                    }
+                    if (idEl) {
+                        idEl.textContent = project.project_id || "";
+                    }
+
+                    if (authorRow && project.author) {
+                        authorRow.innerHTML = `<strong>Author:</strong> ${project.author}`;
+                    } else if (authorRow) {
+                        authorRow.remove();
+                    }
+
+                    if (environmentRow) {
+                        const parts = [];
+                        if (project.environment && project.environment.mode) {
+                            parts.push(formatDisplay(project.environment.mode));
+                        }
+                        if (project.environment && project.environment.region) {
+                            parts.push(project.environment.region);
+                        }
+                        if (parts.length) {
+                            environmentRow.innerHTML = `<strong>Environment:</strong> ${parts.join(" · ")}`;
+                        } else {
+                            environmentRow.remove();
+                        }
+                    }
+
+                    if (workloadRow) {
+                        const workloadPieces = [];
+                        if (project.workload && project.workload.label) {
+                            workloadPieces.push(project.workload.label);
+                        } else if (project.workload && project.workload.name) {
+                            workloadPieces.push(formatDisplay(project.workload.name));
+                        }
+                        if (project.workload && project.workload.scale_factor !== undefined && project.workload.scale_factor !== null) {
+                            workloadPieces.push(`Scale Factor ${project.workload.scale_factor}`);
+                        }
+                        if (project.workload && Array.isArray(project.workload.queries) && project.workload.queries.length) {
+                            workloadPieces.push(`${project.workload.queries.length} queries`);
+                        }
+                        if (workloadPieces.length) {
+                            workloadRow.innerHTML = `<strong>Workload:</strong> ${workloadPieces.join(" · ")}`;
+                        } else {
+                            workloadRow.remove();
+                        }
+                    }
+
+                    if (summaryRow) {
+                        const summaryPieces = [];
+                        if (project.summary && project.summary.total_queries) {
+                            summaryPieces.push(`${project.summary.total_queries} total queries`);
+                        }
+                        if (project.summary && project.summary.run_date) {
+                            summaryPieces.push(`Run ${formatDateTime(project.summary.run_date)}`);
+                        } else if (project.last_updated) {
+                            summaryPieces.push(`Updated ${formatDateTime(project.last_updated)}`);
+                        }
+                        if (summaryPieces.length) {
+                            summaryRow.innerHTML = `<strong>Summary:</strong> ${summaryPieces.join(" · ")}`;
+                        } else {
+                            summaryRow.remove();
+                        }
+                    }
+
+                    if (systemBadgesContainer) {
+                        const systems = Array.isArray(project.systems) ? project.systems : [];
+                        if (systems.length === 0) {
+                            systemBadgesContainer.remove();
+                        } else {
+                            systems.forEach((system) => {
+                                const badge = document.createElement("span");
+                                badge.className = "badge system-badge";
+                                const parts = [];
+                                parts.push(formatDisplay(system.name || system.kind));
+                                if (system.version) {
+                                    parts.push(`v${system.version}`);
+                                }
+                                if (system.setup_method) {
+                                    parts.push(formatDisplay(system.setup_method));
+                                }
+                                if (system.instance_type) {
+                                    parts.push(system.instance_type);
+                                }
+                                badge.textContent = parts.join(" · ");
+                                systemBadgesContainer.appendChild(badge);
+                            });
+                        }
+                    }
+
+                    if (tagList) {
+                        const tags = Array.isArray(project.tags) ? project.tags : [];
+                        if (tags.length === 0) {
+                            tagList.remove();
+                        } else {
+                            tags.forEach((tag) => {
+                                const li = document.createElement("li");
+                                const tagButton = document.createElement("button");
+                                tagButton.type = "button";
+                                tagButton.className = "tag-pill";
+                                tagButton.textContent = `#${tag.label}`;
+                                tagButton.dataset.slug = tag.slug;
+                                tagButton.title = `Filter by #${tag.slug}`;
+                                tagButton.addEventListener("click", () => appendTagToSearch(tag.slug));
+                                li.appendChild(tagButton);
+                                tagList.appendChild(li);
+                            });
+                        }
+                    }
+
+                    if (reportLinks) {
+                        const reports = Array.isArray(project.reports) ? project.reports : [];
+                        reports.forEach((report) => {
+                            if (!report.href) {
+                                return;
+                            }
+                            const link = document.createElement("a");
+                            link.className = "report-link";
+                            link.href = report.href;
+                            link.textContent = `${report.name} · ${report.format.toUpperCase()}`;
+                            link.target = "_blank";
+                            link.rel = "noopener";
+                            reportLinks.appendChild(link);
+                        });
+                    }
+
+                    projectGrid.appendChild(fragment);
+                });
+            };
+
+            const appendTagToSearch = (slug) => {
+                const currentValue = searchInput.value;
+                const tokens = currentValue.trim().split(/\s+/).filter(Boolean);
+                const normalizedSlug = normalizeToken(slug);
+                const hasTag = tokens.some((token) => normalizeToken(token) === normalizedSlug);
+                if (!hasTag) {
+                    tokens.push(`#${normalizedSlug}`);
+                    searchInput.value = tokens.join(" ");
+                }
+                searchInput.focus();
+                applyFilters();
+            };
+
+            const applyFilters = () => {
+                const { tagFilters, textTerms } = parseSearch(searchInput.value);
+                const filtered = normalizedProjects.filter((project) => {
+                    if (tagFilters.length) {
+                        const slugs = project.tag_slugs || [];
+                        const matchesAllTags = tagFilters.every((filter) =>
+                            slugs.some((slug) => typeof slug === "string" && slug.includes(filter))
+                        );
+                        if (!matchesAllTags) {
+                            return false;
+                        }
+                    }
+
+                    if (textTerms.length) {
+                        const blob = project.searchBlob || "";
+                        const matchesAllTerms = textTerms.every((term) => blob.includes(term));
+                        if (!matchesAllTerms) {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                });
+
+                renderProjects(filtered);
+            };
+
+            renderProjects(normalizedProjects);
+
+            if (searchInput) {
+                searchInput.addEventListener("input", applyFilters);
+                searchInput.addEventListener("keydown", (event) => {
+                    if (event.key === "Escape") {
+                        searchInput.value = "";
+                        applyFilters();
+                        event.preventDefault();
+                    }
+                });
+            }
+        })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,82 @@
+{% macro render_setup_sections_md(setup_summary) %}
+{% if setup_summary.commands %}
+{% set category_order = SETUP_CATEGORY_ORDER | default([]) %}
+{% set category_labels = SETUP_CATEGORY_LABELS | default({}) %}
+{% for category in category_order %}
+{% set commands = setup_summary.commands.get(category, []) %}
+{% if commands %}
+**{{ category_labels.get(category, category | replace('_', ' ') | title) }}:**
+```bash
+{% set seen_commands = [] %}
+{% for cmd in commands %}
+{% set clean_cmd = cmd.command | sanitize %}
+{% set clean_desc = cmd.description.replace('Remote: ', '') | sanitize %}
+{% if clean_cmd not in seen_commands %}
+{% set _ = seen_commands.append(clean_cmd) %}
+{% if clean_desc %}
+# {{ clean_desc }}
+{% endif %}
+{{ clean_cmd }}
+
+{% endif %}
+{% endfor %}
+```
+
+{% endif %}
+{% endfor %}
+{% for category, commands in setup_summary.commands.items() %}
+{% if category not in category_order and commands %}
+**{{ category | replace('_', ' ') | title }}:**
+```bash
+{% set seen_commands = [] %}
+{% for cmd in commands %}
+{% set clean_cmd = cmd.command | sanitize %}
+{% set clean_desc = cmd.description.replace('Remote: ', '') | sanitize %}
+{% if clean_cmd not in seen_commands %}
+{% set _ = seen_commands.append(clean_cmd) %}
+{% if clean_desc %}
+# {{ clean_desc }}
+{% endif %}
+{{ clean_cmd }}
+
+{% endif %}
+{% endfor %}
+```
+
+{% endif %}
+{% endfor %}
+{% endif %}
+
+{% if setup_summary.config_parameters and setup_summary.config_parameters.get('extra') %}
+{% set extra = setup_summary.config_parameters.extra %}
+{% if extra %}
+**Tuning Parameters:**
+{% if extra.get('dbram') %}
+- Database RAM: `{{ extra.dbram }}`
+{% endif %}
+{% if extra.get('optimizer_mode') %}
+- Optimizer mode: `{{ extra.optimizer_mode }}`
+{% endif %}
+{% if extra.get('db_params') %}
+- Database parameters:
+{% for param in extra.db_params %}
+  - `{{ param }}`
+{% endfor %}
+{% endif %}
+{% if extra.get('memory_limit') %}
+- Memory limit: `{{ extra.memory_limit }}`
+{% endif %}
+{% if extra.get('max_threads') %}
+- Max threads: `{{ extra.max_threads }}`
+{% endif %}
+{% if extra.get('max_memory_usage') %}
+- Max memory usage: `{{ (extra.max_memory_usage | int / 1000000000) | round(1) }}GB`
+{% endif %}
+{% endif %}
+{% endif %}
+
+{% if setup_summary.data_directory %}
+**Data Directory:** `{{ setup_summary.data_directory }}`
+
+{% endif %}
+{% endmacro %}

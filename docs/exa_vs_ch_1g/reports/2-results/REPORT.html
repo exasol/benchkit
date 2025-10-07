@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Exasol vs ClickHouse Performance Comparison on TPC-H - Detailed Query Results">
+    <title>Exasol vs ClickHouse Performance Comparison on TPC-H | Detailed Query Results</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-badge">📊 Detailed Query Results</div>
+            <h1>Exasol vs ClickHouse Performance Comparison on TPC-H</h1>
+            <div class="metadata">
+                <span class="meta-item">
+                    <strong>Author:</strong> Oleksandr Kozachuk, Principal Architect at Exasol AG
+                </span>
+                <span class="meta-item">
+                    <strong>Date:</strong> 2025-10-09 08:31:14
+                </span>
+                <span class="meta-item">
+                    <strong>Environment:</strong>
+                    <span class="badge badge-cloud">AWS</span>
+                    eu-west-1
+                </span>
+            </div>
+        </header>
+
+        <!-- Overview -->
+        <section class="section">
+            <h2>Overview</h2>
+            <p>This report presents the complete query-by-query performance results for <strong>2 database systems</strong> tested using the TPC-H benchmark at scale factor 1.</p>
+        </section>
+
+        <!-- Systems Under Test -->
+        <section class="section">
+            <h2>Systems Under Test</h2>
+
+            <div class="systems-grid">
+                <div class="system-card">
+                    <h3>Exasol 2025.1.0</h3>
+
+                    <div class="system-specs">
+                        <h4>Environment & Hardware</h4>
+                        <ul>
+                            <li><strong>Cloud:</strong> AWS eu-west-1</li>
+                            <li><strong>Instance:</strong> r5d.4xlarge</li>
+                            <li><strong>CPU:</strong> Intel(R) Xeon(R) Platinum 8259CL CPU @ 2.50GHz (16 vCPUs)</li>
+                            <li><strong>Memory:</strong> 124.4GB RAM</li>
+                        </ul>
+
+                        <h4>Software</h4>
+                        <ul>
+                            <li><strong>Database:</strong> exasol 2025.1.0</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="system-card">
+                    <h3>Clickhouse 25.9.3.48</h3>
+
+                    <div class="system-specs">
+                        <h4>Environment & Hardware</h4>
+                        <ul>
+                            <li><strong>Cloud:</strong> AWS eu-west-1</li>
+                            <li><strong>Instance:</strong> r5d.4xlarge</li>
+                            <li><strong>CPU:</strong> Intel(R) Xeon(R) Platinum 8259CL CPU @ 2.50GHz (16 vCPUs)</li>
+                            <li><strong>Memory:</strong> 124.4GB RAM</li>
+                        </ul>
+
+                        <h4>Software</h4>
+                        <ul>
+                            <li><strong>Database:</strong> clickhouse 25.9.3.48</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- Performance Summary -->
+        <section class="section">
+            <h2>Performance Summary</h2>
+
+
+            <div class="key-findings">
+                <h3>Key Findings</h3>
+                <ul>
+                    <li><strong>exasol</strong> was the fastest overall with <strong>22.3ms</strong> median runtime</li>
+                    <li><strong>clickhouse</strong> was <strong>3.8×</strong> slower</li>
+                    <li>Tested <strong>308</strong> total query executions across 22 different query types</li>
+                </ul>
+            </div>
+
+            <h3>Summary Statistics</h3>
+            
+        </section>
+
+        <!-- Query Results -->
+        <section class="section">
+            <h2>Query-by-Query Results</h2>
+            <p>The following table shows the median execution time for each query across all systems:</p>
+            
+        </section>
+
+        <!-- Visualizations -->
+        <section class="section">
+            <h2>Performance Visualizations</h2>
+
+            <div class="chart-container">
+                <iframe src="attachments/figures/system_performance_overview.html" width="100%" height="550" frameborder="0"></iframe>
+            </div>
+            <div class="chart-container">
+                <iframe src="attachments/figures/all_systems_comparison.html" width="100%" height="550" frameborder="0"></iframe>
+            </div>
+            <div class="chart-container">
+                <iframe src="attachments/figures/performance_heatmap.html" width="100%" height="550" frameborder="0"></iframe>
+            </div>
+            <div class="chart-container">
+                <iframe src="attachments/figures/speedup_comparison.html" width="100%" height="550" frameborder="0"></iframe>
+            </div>
+        </section>
+
+        <!-- Detailed Analysis -->
+        <section class="section">
+            <h2>Detailed Analysis</h2>
+
+            <h3>Performance by Query Type</h3>
+            <p>The benchmark results reveal distinct performance characteristics across different query categories:</p>
+
+            <ul>
+                <li><strong>Aggregation queries</strong> (<a href="#" class="query-link" data-query="Q01">Q01</a>, <a href="#" class="query-link" data-query="Q06">Q06</a>, <a href="#" class="query-link" data-query="Q12">Q12</a>, <a href="#" class="query-link" data-query="Q14">Q14</a>, <a href="#" class="query-link" data-query="Q15">Q15</a>, <a href="#" class="query-link" data-query="Q19">Q19</a>, <a href="#" class="query-link" data-query="Q20">Q20</a>): Test data reduction and grouping operations</li>
+                <li><strong>Join-heavy queries</strong> (<a href="#" class="query-link" data-query="Q02">Q02</a>, <a href="#" class="query-link" data-query="Q05">Q05</a>, <a href="#" class="query-link" data-query="Q08">Q08</a>, <a href="#" class="query-link" data-query="Q09">Q09</a>, <a href="#" class="query-link" data-query="Q10">Q10</a>, <a href="#" class="query-link" data-query="Q11">Q11</a>, <a href="#" class="query-link" data-query="Q21">Q21</a>, <a href="#" class="query-link" data-query="Q22">Q22</a>): Evaluate multi-table join performance</li>
+                <li><strong>Complex analytical queries</strong> (<a href="#" class="query-link" data-query="Q03">Q03</a>, <a href="#" class="query-link" data-query="Q04">Q04</a>, <a href="#" class="query-link" data-query="Q07">Q07</a>, <a href="#" class="query-link" data-query="Q13">Q13</a>, <a href="#" class="query-link" data-query="Q16">Q16</a>, <a href="#" class="query-link" data-query="Q17">Q17</a>, <a href="#" class="query-link" data-query="Q18">Q18</a>): Combine multiple operations</li>
+            </ul>
+
+            <p>The performance patterns observed across these query types provide insights into each system's optimization strategies and architectural trade-offs.</p>
+
+            <h3>System Rankings</h3>
+            <p>Based on median query execution time:</p>
+
+            <div class="comparison-table">
+                <table class="styled-table">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>System</th>
+                            <th>Median Runtime</th>
+                            <th>Average Runtime</th>
+                            <th>Range (Min - Max)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>1</strong></td>
+                            <td>Exasol</td>
+                            <td>22.3ms</td>
+                            <td>25.7ms</td>
+                            <td>7.3ms - 116.8ms</td>
+                        </tr>
+                        <tr>
+                            <td><strong>2</strong></td>
+                            <td>Clickhouse</td>
+                            <td>84.9ms</td>
+                            <td>102.7ms</td>
+                            <td>21.1ms - 560.8ms</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Methodology -->
+        <section class="section">
+            <h2>Benchmark Methodology</h2>
+
+            <div class="methodology-grid">
+                <div class="method-card">
+                    <h3>Workload Configuration</h3>
+                    <p><strong>TPC-H Benchmark:</strong></p>
+                    <ul>
+                        <li><strong>Scale Factor:</strong> 1</li>
+                        <li><strong>Data Format:</strong> CSV</li>
+                        <li><strong>Data Generator:</strong> dbgen</li>
+                    </ul>
+                </div>
+
+                <div class="method-card">
+                    <h3>Execution Parameters</h3>
+                    <ul>
+                        <li><strong>Warmup Runs:</strong> 1</li>
+                        <li><strong>Measured Runs:</strong> 7</li>
+                        <li><strong>Metric Reported:</strong> Median execution time</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="notice notice-info">
+                <h4>Performance Measurement</h4>
+                <p>All queries were executed with the same data and parameters across all systems. The median execution time from 7 runs is reported for each query to minimize the impact of system variance and outliers.</p>
+            </div>
+        </section>
+
+        <!-- Conclusion -->
+        <section class="section">
+            <h2>Conclusion</h2>
+
+            <p>This benchmark provides a detailed, query-level comparison of 2 database systems on analytical workloads. The results demonstrate the performance characteristics and trade-offs of each system when processing TPC-H queries.</p>
+
+            <p>While <strong>exasol</strong> demonstrated the strongest overall performance in this test, the optimal choice for a specific use case depends on multiple factors including workload characteristics, operational requirements, and system integration needs.</p>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p><em>All benchmark data, figures, and configuration files are available in the attachments directory for independent analysis and verification.</em></p>
+        </footer>
+    </div>
+
+    <!-- Query Modal -->
+    <div id="queryModal" class="query-modal">
+        <div class="query-modal-content">
+            <div class="query-modal-header">
+                <h3 id="modalTitle">Query Details</h3>
+                <button class="query-modal-close" onclick="closeQueryModal()">&times;</button>
+            </div>
+            <div id="modalBody">
+                <pre><code id="queryCode" class="language-sql"></code></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- Syntax Highlighting -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+
+    <script>
+        // Query data embedded from workload
+        const queryData = {
+            "Q01": {
+                "exasol": "attachments/queries/exasol/Q01.sql",                "clickhouse": "attachments/queries/clickhouse/Q01.sql"            },            "Q02": {
+                "exasol": "attachments/queries/exasol/Q02.sql",                "clickhouse": "attachments/queries/clickhouse/Q02.sql"            },            "Q03": {
+                "exasol": "attachments/queries/exasol/Q03.sql",                "clickhouse": "attachments/queries/clickhouse/Q03.sql"            },            "Q04": {
+                "exasol": "attachments/queries/exasol/Q04.sql",                "clickhouse": "attachments/queries/clickhouse/Q04.sql"            },            "Q05": {
+                "exasol": "attachments/queries/exasol/Q05.sql",                "clickhouse": "attachments/queries/clickhouse/Q05.sql"            },            "Q06": {
+                "exasol": "attachments/queries/exasol/Q06.sql",                "clickhouse": "attachments/queries/clickhouse/Q06.sql"            },            "Q07": {
+                "exasol": "attachments/queries/exasol/Q07.sql",                "clickhouse": "attachments/queries/clickhouse/Q07.sql"            },            "Q08": {
+                "exasol": "attachments/queries/exasol/Q08.sql",                "clickhouse": "attachments/queries/clickhouse/Q08.sql"            },            "Q09": {
+                "exasol": "attachments/queries/exasol/Q09.sql",                "clickhouse": "attachments/queries/clickhouse/Q09.sql"            },            "Q10": {
+                "exasol": "attachments/queries/exasol/Q10.sql",                "clickhouse": "attachments/queries/clickhouse/Q10.sql"            },            "Q11": {
+                "exasol": "attachments/queries/exasol/Q11.sql",                "clickhouse": "attachments/queries/clickhouse/Q11.sql"            },            "Q12": {
+                "exasol": "attachments/queries/exasol/Q12.sql",                "clickhouse": "attachments/queries/clickhouse/Q12.sql"            },            "Q13": {
+                "exasol": "attachments/queries/exasol/Q13.sql",                "clickhouse": "attachments/queries/clickhouse/Q13.sql"            },            "Q14": {
+                "exasol": "attachments/queries/exasol/Q14.sql",                "clickhouse": "attachments/queries/clickhouse/Q14.sql"            },            "Q15": {
+                "exasol": "attachments/queries/exasol/Q15.sql",                "clickhouse": "attachments/queries/clickhouse/Q15.sql"            },            "Q16": {
+                "exasol": "attachments/queries/exasol/Q16.sql",                "clickhouse": "attachments/queries/clickhouse/Q16.sql"            },            "Q17": {
+                "exasol": "attachments/queries/exasol/Q17.sql",                "clickhouse": "attachments/queries/clickhouse/Q17.sql"            },            "Q18": {
+                "exasol": "attachments/queries/exasol/Q18.sql",                "clickhouse": "attachments/queries/clickhouse/Q18.sql"            },            "Q19": {
+                "exasol": "attachments/queries/exasol/Q19.sql",                "clickhouse": "attachments/queries/clickhouse/Q19.sql"            },            "Q20": {
+                "exasol": "attachments/queries/exasol/Q20.sql",                "clickhouse": "attachments/queries/clickhouse/Q20.sql"            },            "Q21": {
+                "exasol": "attachments/queries/exasol/Q21.sql",                "clickhouse": "attachments/queries/clickhouse/Q21.sql"            },            "Q22": {
+                "exasol": "attachments/queries/exasol/Q22.sql",                "clickhouse": "attachments/queries/clickhouse/Q22.sql"            }        };
+
+        // Add click handlers to query links
+        document.addEventListener('DOMContentLoaded', function() {
+            const queryLinks = document.querySelectorAll('.query-link');
+            queryLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const query = this.dataset.query;
+                    // Default to first system if not specified
+                    const system = this.dataset.system || Object.keys(queryData[query] || {})[0];
+                    showQueryModal(query, system);
+                });
+            });
+        });
+
+        function showQueryModal(query, system) {
+            const modal = document.getElementById('queryModal');
+            const title = document.getElementById('modalTitle');
+            const code = document.getElementById('queryCode');
+
+            title.textContent = `${query} - ${system}`;
+
+            // Load query from file
+            if (queryData[query] && queryData[query][system]) {
+                fetch(queryData[query][system])
+                    .then(response => response.text())
+                    .then(sql => {
+                        code.textContent = sql;
+                        Prism.highlightElement(code);
+                        modal.classList.add('active');
+                    })
+                    .catch(error => {
+                        code.textContent = `Error loading query: ${error}`;
+                        modal.classList.add('active');
+                    });
+            } else {
+                code.textContent = `Query ${query} not found for system ${system}`;
+                modal.classList.add('active');
+            }
+        }
+
+        function closeQueryModal() {
+            const modal = document.getElementById('queryModal');
+            modal.classList.remove('active');
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('queryModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeQueryModal();
+            }
+        });
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeQueryModal();
+            }
+        });
+
+        // Auto-resize iframes to match content height
+        function resizeIframe(iframe) {
+            try {
+                const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                if (iframeDoc && iframeDoc.body) {
+                    // Get the full height of the iframe content
+                    const height = iframeDoc.body.scrollHeight;
+                    // Set iframe height to match content (add small padding)
+                    iframe.style.height = (height + 20) + 'px';
+                }
+            } catch (e) {
+                // Cross-origin or access issues - keep default height
+                console.warn('Could not resize iframe:', e);
+            }
+        }
+
+        // Resize all iframes on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            const iframes = document.querySelectorAll('iframe');
+            iframes.forEach(function(iframe) {
+                // Resize on load
+                iframe.addEventListener('load', function() {
+                    resizeIframe(iframe);
+                });
+                // Also try to resize immediately in case already loaded
+                if (iframe.contentDocument && iframe.contentDocument.readyState === 'complete') {
+                    resizeIframe(iframe);
+                }
+            });
+        });
+    </script>
+</body>
+</html>

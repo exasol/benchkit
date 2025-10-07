@@ -1,0 +1,137 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Results and generated content
+results/*/reports/*/workload-package
+docs/*/reports/*/workload-package
+packages/*/
+!posts/.gitkeep
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Data files
+data/
+*.csv
+*.tbl
+*.dat
+
+# Infrastructure state
+infra/*/.terraform/
+infra/*/.terraform.lock.hcl
+infra/*/terraform.tfstate*
+infra/*/terraform.tfvars
+
+# Secrets and credentials
+*.key
+*.pem
+.env.local
+.env.production
+.env.secrets
+credentials.json
+config.local.yaml
+configs/*.license
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Docker volumes
+docker-compose.override.yml
+
+# Jupyter notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# Coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ruff
+.ruff_cache/
+
+# bandit
+bandit-report.json
+
+# Testing
+.tox/
+.pytest_cache/
+tests/output/
+
+# Documentation build
+docs/_build/
+docs/site/
+
+# Large files
+*.tar.gz
+*.tar.bz2
+*.gz
+
+# Benchmark packages (but keep examples)
+*-benchmark.zip
+!example-benchmark.zip
+
+# Benchmark data
+workloads/*/data/
+generated_data/

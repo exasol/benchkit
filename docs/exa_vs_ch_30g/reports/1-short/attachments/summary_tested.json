@@ -1,0 +1,526 @@
+{
+  "total_queries": 308,
+  "systems": [
+    "clickhouse"
+  ],
+  "query_names": [
+    "Q01",
+    "Q02",
+    "Q03",
+    "Q04",
+    "Q05",
+    "Q06",
+    "Q07",
+    "Q08",
+    "Q09",
+    "Q10",
+    "Q11",
+    "Q12",
+    "Q13",
+    "Q14",
+    "Q15",
+    "Q16",
+    "Q17",
+    "Q18",
+    "Q19",
+    "Q20",
+    "Q21",
+    "Q22"
+  ],
+  "run_date": "2025-10-09 09:48:49",
+  "per_system": {
+    "clickhouse": {
+      "total_queries": 154,
+      "avg_runtime_ms": 2775.667532467532,
+      "median_runtime_ms": 1592.6999999999998,
+      "min_runtime_ms": 121.5,
+      "max_runtime_ms": 20866.1
+    }
+  },
+  "per_query": {
+    "Q01": {
+      "systems": [
+        "clickhouse",
+        "exasol"
+      ],
+      "per_system": {
+        "clickhouse": {
+          "runs": 7,
+          "avg_runtime_ms": 1601.757142857143,
+          "median_runtime_ms": 1597.0,
+          "min_runtime_ms": 1584.2,
+          "max_runtime_ms": 1617.4
+        },
+        "exasol": {
+          "runs": 7,
+          "avg_runtime_ms": 606.6999999999999,
+          "median_runtime_ms": 606.3,
+          "min_runtime_ms": 604.2,
+          "max_runtime_ms": 610.4
+        }
+      }
+    },
+    "Q02": {
+      "systems": [
+        "clickhouse",
+        "exasol"
+      ],
+      "per_system": {
+        "clickhouse": {
+          "runs": 7,
+          "avg_runtime_ms": 609.4,
+          "median_runtime_ms": 612.9,
+          "min_runtime_ms": 595.2,
+          "max_runtime_ms": 617.9
+        },
+        "exasol": {
+          "runs": 7,
+          "avg_runtime_ms": 48.37142857142857,
+          "median_runtime_ms": 48.3,
+          "min_runtime_ms": 47.2,
+          "max_runtime_ms": 49.4
+        }
+      }
+    },
+    "Q03": {
+      "systems": [
+        "clickhouse",
+        "exasol"
+      ],
+      "per_system": {
+        "clickhouse": {
+          "runs": 7,
+          "avg_runtime_ms": 2381.9,
+          "median_runtime_ms": 2371.4,
+          "min_runtime_ms": 2345.4,
+          "max_runtime_ms": 2446.2
+        },
+        "exasol": {
+          "runs": 7,
+          "avg_runtime_ms": 204.35714285714286,
+          "median_runtime_ms": 206.1,
+          "min_runtime_ms": 193.6,
+          "max_runtime_ms": 208.2
+        }
+      }
+    },
+    "Q04": {
+      "systems": [
+        "clickhouse",
+        "exasol"
+      ],
+      "per_system": {
+        "clickhouse": {
+          "runs": 7,
+          "avg_runtime_ms": 1359.4428571428573,
+          "median_runtime_ms": 1365.1,
+          "min_runtime_ms": 1316.1,
+          "max_runtime_ms": 1429.5
+        },
+        "exasol": {
+          "runs": 7,
+          "avg_runtime_ms": 46.214285714285715,
+          "median_runtime_ms": 46.3,
+          "min_runtime_ms": 45.7,
+          "max_runtime_ms": 46.7
+        }
+      }
+    },
+    "Q05": {
+      "systems": [
+        "clickhouse",
+        "exasol"
+      ],
+      "per_system": {
+        "clickhouse": {
+          "runs": 7,
+          "avg_runtime_ms": 5290.4571428571435,
+          "median_runtime_ms": 5278.6,
+          "min_runtime_ms": 5261.1,
+          "max_runtime_ms": 5375.7
+        },
+        "exasol": {
+          "runs": 7,
+          "avg_runtime_ms": 150.45714285714286,
+          "median_runtime_ms": 148.9,
+          "min_runtime_ms": 147.9,
+          "max_runtime_ms": 157.7
+        }
+      }
+    },
+    "Q06": {
+      "systems": [
+        "clickhouse",
+        "exasol"
+      ],
+      "per_system": {
+        "clickhouse": {
+          "runs": 7,
+          "avg_runtime_ms": 123.02857142857144,
+          "median_runtime_ms": 122.5,
+          "min_runtime_ms": 121.5,
+          "max_runtime_ms": 126.9
+        },
+        "exasol": {
+          "runs": 7,
+          "avg_runtime_ms": 30.814285714285713,
+          "median_runtime_ms": 30.9,
+          "min_runtime_ms": 30.6,
+          "max_runtime_ms": 31.0
+        }
+      }
+    },
+    "Q07": {
+      "systems": [
+        "clickhouse",
+        "exasol"
+      ],
+      "per_system": {
+        "clickhouse": {
+          "runs": 7,
+          "avg_runtime_ms": 2915.828571428571,
+          "median_runtime_ms": 2936.8,
+          "min_runtime_ms": 2750.8,
+          "max_runtime_ms": 3019.6
+        },
+        "exasol": {
+          "runs": 7,
+          "avg_runtime_ms": 172.08571428571426,
+          "median_runtime_ms": 172.2,
+          "min_runtime_ms": 170.9,
+          "max_runtime_ms": 172.9
+        }
+      }
+    },
+    "Q08": {
+      "systems": [
+        "clickhouse",
+        "exasol"
+      ],
+      "per_system": {
+        "clickhouse": {
+          "runs": 7,
+          "avg_runtime_ms": 5642.5428571428565,
+          "median_runtime_ms": 5668.4,
+          "min_runtime_ms": 5571.1,
+          "max_runtime_ms": 5701.6
+        },
+        "exasol": {
+          "runs": 7,
+          "avg_runtime_ms": 60.71428571428571,
+          "median_runtime_ms": 57.5,
+          "min_runtime_ms": 56.8,
+          "max_runtime_ms": 79.7
+        }
+      }
+    },
+    "Q09": {
+      "systems": [
+        "clickhouse",
+        "exasol"
+      ],
+      "per_system": {
+        "clickhouse": {
+          "runs": 7,
+          "avg_runtime_ms": 7584.099999999999,
+          "median_runtime_ms": 7596.1,
+          "min_runtime_ms": 7483.4,
+          "max_runtime_ms": 7664.5
+        },
+        "exasol": {
+          "runs": 7,
+          "avg_runtime_ms": 657.6999999999999,
+          "median_runtime_ms": 657.4,
+          "min_runtime_ms": 656.3,
+          "max_runtime_ms": 660.7
+        }
+      }
+    },
+    "Q10": {
+      "systems": [
+        "clickhouse",
+        "exasol"
+      ],
+      "per_system": {
+        "clickhouse": {
+          "runs": 7,
+          "avg_runtime_ms": 1635.185714285714,
+          "median_runtime_ms": 1652.5,
+          "min_runtime_ms": 1560.1,
+          "max_runtime_ms": 1692.3
+        },
+        "exasol": {
+          "runs": 7,
+          "avg_runtime_ms": 333.0571428571429,
+          "median_runtime_ms": 333.6,
+          "min_runtime_ms": 327.1,
+          "max_runtime_ms": 335.3
+        }
+      }
+    },
+    "Q11": {
+      "systems": [
+        "clickhouse",
+        "exasol"
+      ],
+      "per_system": {
+        "clickhouse": {
+          "runs": 7,
+          "avg_runtime_ms": 383.8285714285715,
+          "median_runtime_ms": 384.6,
+          "min_runtime_ms": 376.9,
+          "max_runtime_ms": 390.2
+        },
+        "exasol": {
+          "runs": 7,
+          "avg_runtime_ms": 119.25714285714285,
+          "median_runtime_ms": 118.8,
+          "min_runtime_ms": 117.4,
+          "max_runtime_ms": 121.0
+        }
+      }
+    },
+    "Q12": {
+      "systems": [
+        "clickhouse",
+        "exasol"
+      ],
+      "per_system": {
+        "clickhouse": {
+          "runs": 7,
+          "avg_runtime_ms": 524.7428571428571,
+          "median_runtime_ms": 522.0,
+          "min_runtime_ms": 505.1,
+          "max_runtime_ms": 539.3
+        },
+        "exasol": {
+          "runs": 7,
+          "avg_runtime_ms": 62.38571428571428,
+          "median_runtime_ms": 62.3,
+          "min_runtime_ms": 61.4,
+          "max_runtime_ms": 63.6
+        }
+      }
+    },
+    "Q13": {
+      "systems": [
+        "clickhouse",
+        "exasol"
+      ],
+      "per_system": {
+        "clickhouse": {
+          "runs": 7,
+          "avg_runtime_ms": 2354.057142857143,
+          "median_runtime_ms": 2346.3,
+          "min_runtime_ms": 2134.0,
+          "max_runtime_ms": 2515.4
+        },
+        "exasol": {
+          "runs": 7,
+          "avg_runtime_ms": 437.7571428571428,
+          "median_runtime_ms": 437.8,
+          "min_runtime_ms": 436.2,
+          "max_runtime_ms": 439.3
+        }
+      }
+    },
+    "Q14": {
+      "systems": [
+        "clickhouse",
+        "exasol"
+      ],
+      "per_system": {
+        "clickhouse": {
+          "runs": 7,
+          "avg_runtime_ms": 128.4142857142857,
+          "median_runtime_ms": 128.3,
+          "min_runtime_ms": 127.5,
+          "max_runtime_ms": 129.6
+        },
+        "exasol": {
+          "runs": 7,
+          "avg_runtime_ms": 56.21428571428572,
+          "median_runtime_ms": 55.9,
+          "min_runtime_ms": 55.7,
+          "max_runtime_ms": 57.5
+        }
+      }
+    },
+    "Q15": {
+      "systems": [
+        "clickhouse",
+        "exasol"
+      ],
+      "per_system": {
+        "clickhouse": {
+          "runs": 7,
+          "avg_runtime_ms": 157.97142857142856,
+          "median_runtime_ms": 155.3,
+          "min_runtime_ms": 154.1,
+          "max_runtime_ms": 168.5
+        },
+        "exasol": {
+          "runs": 7,
+          "avg_runtime_ms": 200.91428571428574,
+          "median_runtime_ms": 200.3,
+          "min_runtime_ms": 198.7,
+          "max_runtime_ms": 205.7
+        }
+      }
+    },
+    "Q16": {
+      "systems": [
+        "clickhouse",
+        "exasol"
+      ],
+      "per_system": {
+        "clickhouse": {
+          "runs": 7,
+          "avg_runtime_ms": 340.0142857142857,
+          "median_runtime_ms": 334.6,
+          "min_runtime_ms": 330.6,
+          "max_runtime_ms": 360.2
+        },
+        "exasol": {
+          "runs": 7,
+          "avg_runtime_ms": 372.7142857142857,
+          "median_runtime_ms": 369.8,
+          "min_runtime_ms": 364.5,
+          "max_runtime_ms": 395.9
+        }
+      }
+    },
+    "Q17": {
+      "systems": [
+        "clickhouse",
+        "exasol"
+      ],
+      "per_system": {
+        "clickhouse": {
+          "runs": 7,
+          "avg_runtime_ms": 2565.171428571429,
+          "median_runtime_ms": 2567.9,
+          "min_runtime_ms": 2514.6,
+          "max_runtime_ms": 2595.1
+        },
+        "exasol": {
+          "runs": 7,
+          "avg_runtime_ms": 19.957142857142856,
+          "median_runtime_ms": 20.1,
+          "min_runtime_ms": 19.2,
+          "max_runtime_ms": 20.6
+        }
+      }
+    },
+    "Q18": {
+      "systems": [
+        "clickhouse",
+        "exasol"
+      ],
+      "per_system": {
+        "clickhouse": {
+          "runs": 7,
+          "avg_runtime_ms": 2525.3571428571427,
+          "median_runtime_ms": 2516.0,
+          "min_runtime_ms": 2504.6,
+          "max_runtime_ms": 2584.7
+        },
+        "exasol": {
+          "runs": 7,
+          "avg_runtime_ms": 410.30000000000007,
+          "median_runtime_ms": 409.4,
+          "min_runtime_ms": 408.4,
+          "max_runtime_ms": 414.7
+        }
+      }
+    },
+    "Q19": {
+      "systems": [
+        "clickhouse",
+        "exasol"
+      ],
+      "per_system": {
+        "clickhouse": {
+          "runs": 7,
+          "avg_runtime_ms": 1606.785714285714,
+          "median_runtime_ms": 1595.9,
+          "min_runtime_ms": 1575.2,
+          "max_runtime_ms": 1650.2
+        },
+        "exasol": {
+          "runs": 7,
+          "avg_runtime_ms": 19.8,
+          "median_runtime_ms": 19.9,
+          "min_runtime_ms": 19.4,
+          "max_runtime_ms": 20.1
+        }
+      }
+    },
+    "Q20": {
+      "systems": [
+        "clickhouse",
+        "exasol"
+      ],
+      "per_system": {
+        "clickhouse": {
+          "runs": 7,
+          "avg_runtime_ms": 216.8714285714286,
+          "median_runtime_ms": 216.8,
+          "min_runtime_ms": 210.4,
+          "max_runtime_ms": 223.6
+        },
+        "exasol": {
+          "runs": 7,
+          "avg_runtime_ms": 221.02857142857144,
+          "median_runtime_ms": 221.4,
+          "min_runtime_ms": 218.7,
+          "max_runtime_ms": 222.4
+        }
+      }
+    },
+    "Q21": {
+      "systems": [
+        "clickhouse",
+        "exasol"
+      ],
+      "per_system": {
+        "clickhouse": {
+          "runs": 7,
+          "avg_runtime_ms": 20738.271428571432,
+          "median_runtime_ms": 20754.4,
+          "min_runtime_ms": 20638.5,
+          "max_runtime_ms": 20866.1
+        },
+        "exasol": {
+          "runs": 7,
+          "avg_runtime_ms": 258.51428571428573,
+          "median_runtime_ms": 253.2,
+          "min_runtime_ms": 250.5,
+          "max_runtime_ms": 290.1
+        }
+      }
+    },
+    "Q22": {
+      "systems": [
+        "clickhouse",
+        "exasol"
+      ],
+      "per_system": {
+        "clickhouse": {
+          "runs": 7,
+          "avg_runtime_ms": 379.5571428571429,
+          "median_runtime_ms": 381.9,
+          "min_runtime_ms": 365.1,
+          "max_runtime_ms": 389.8
+        },
+        "exasol": {
+          "runs": 7,
+          "avg_runtime_ms": 76.05714285714285,
+          "median_runtime_ms": 76.0,
+          "min_runtime_ms": 75.6,
+          "max_runtime_ms": 76.6
+        }
+      }
+    }
+  }
+}

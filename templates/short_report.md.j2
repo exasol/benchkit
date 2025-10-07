@@ -1,0 +1,146 @@
+# {{ cfg.title }} - Initial Performance Assessment
+
+**Author:** {{ cfg.author }}
+{% if cfg.env.instances %}
+{% set instance_types = [] %}
+{% for system_name, instance_config in cfg.env.instances.items() %}
+{% if instance_config.instance_type and instance_config.instance_type not in instance_types %}
+{% set _ = instance_types.append(instance_config.instance_type) %}
+{% endif %}
+{% endfor %}
+**Environment:** {{ cfg.env.mode }} / {{ cfg.env.region | default('local') }} / {{ instance_types | join(', ') if instance_types else 'N/A' }}
+{% else %}
+**Environment:** {{ cfg.env.mode }} / {{ cfg.env.region | default('local') }} / {{ cfg.env.instance_type | default('local') }}
+{% endif %}
+**Date:** {{ data.summary.run_date | default('N/A') }}
+
+{% import 'snippets/setup_macros_md.j2' as setup_macros %}
+
+> **Note:** Sensitive information (passwords, IP addresses) has been sanitized for security reasons. Placeholders like `<EXASOL_DB_PASSWORD>`, `<PRIVATE_IP>`, and `<PUBLIC_IP>` are used throughout this document.
+
+## Overview
+
+We conducted performance testing of **{{ tested_systems_names | join(', ') }}** against **{{ winner_system_name }}** using the TPC-H benchmark at scale factor {{ workload_metadata.scale_factor }}.
+
+**Key Finding:** {{ tested_systems_names[0] | title }} demonstrated {{ speedup_factor | format_number(1) }}× slower median query performance compared to {{ winner_system_name | title }}, highlighting significant optimization opportunities.
+
+## The Baseline: {{ winner_system_name | title }}
+
+{{ winner_system_name | title }} achieved a median query runtime of **{{ winner_median | format_number }}ms** across all TPC-H queries, establishing a competitive performance baseline for analytical workload processing.
+
+## {{ tested_systems_names[0] | title }} {{ tested_systems[0].version }} - System Under Test
+
+{% set tested_system = tested_systems[0] %}
+{% if system_info.per_system and tested_system.name in system_info.per_system %}
+{% set sys_probe = system_info.per_system[tested_system.name] %}
+**Hardware Specifications:**
+{% if cfg.env.mode in ['aws', 'gcp', 'azure'] %}
+- **Cloud Provider:** {{ cfg.env.mode | upper }}
+- **Region:** {{ cfg.env.region | default('N/A') }}
+{% if cfg.env.instances and tested_system.name in cfg.env.instances %}
+- **Instance Type:** {{ cfg.env.instances[tested_system.name].instance_type | default('N/A') }}
+{% endif %}
+{% endif %}
+{% if sys_probe.cpu_model %}
+- **CPU:** {{ sys_probe.cpu_model }}
+{% endif %}
+{% if sys_probe.count_logical or sys_probe.cpu_count_logical %}
+- **CPU Cores:** {{ sys_probe.count_logical | default(sys_probe.cpu_count_logical) }} vCPUs
+{% endif %}
+{% if sys_probe.memory_total_gb or sys_probe.total_gb %}
+- **Memory:** {{ sys_probe.memory_total_gb | default(sys_probe.total_gb) }}GB RAM
+{% endif %}
+{% if sys_probe.system or sys_probe.platform %}
+- **Operating System:** {{ sys_probe.system | default(sys_probe.platform) }}
+{% endif %}
+{% endif %}
+
+**Software Configuration:**
+- **Database:** {{ tested_system.kind }} {{ tested_system.version }}
+- **Setup Method:** {{ tested_system.setup.method }}
+{% if tested_system.setup.data_dir %}
+- **Data Directory:** {{ tested_system.setup.data_dir }}
+{% endif %}
+
+### Installation & Configuration
+
+{% if setup_summaries and tested_system.name in setup_summaries %}
+{% set setup = setup_summaries[tested_system.name] %}
+
+The following steps were performed to install and configure {{ tested_system.name | title }}:
+
+{{ setup_macros.render_setup_sections_md(setup) }}
+
+{% if preparation_timings and tested_system.name in preparation_timings %}
+**Installation Time:** {{ preparation_timings[tested_system.name].elapsed_s | format_duration }}
+{% endif %}
+{% endif %}
+
+## Performance Results
+
+### Overall Performance Summary
+
+{% if data.summary.per_system and tested_system.name in data.summary.per_system %}
+{% set stats = data.summary.per_system[tested_system.name] %}
+
+| Metric | {{ tested_system.name | title }} | {{ winner_system_name | title }} | Difference |
+|--------|{% for _ in tested_system.name %}--{% endfor %}|{% for _ in winner_system_name %}--{% endfor %}|------------|
+| Median Runtime | {{ stats.median_runtime_ms | format_number }}ms | {{ winner_median | format_number }}ms | {{ speedup_factor | format_number(1) }}× slower |
+| Average Runtime | {{ stats.avg_runtime_ms | format_number }}ms | {{ winner_avg | format_number }}ms | {{ (stats.avg_runtime_ms / winner_avg) | format_number(1) }}× slower |
+| Fastest Query | {{ stats.min_runtime_ms | format_number }}ms | {{ winner_min | format_number }}ms | {{ (stats.min_runtime_ms / winner_min) | format_number(1) }}× slower |
+| Slowest Query | {{ stats.max_runtime_ms | format_number }}ms | {{ winner_max | format_number }}ms | {{ (stats.max_runtime_ms / winner_max) | format_number(1) }}× slower |
+
+{% endif %}
+
+### Selected Query Highlights
+
+The following queries demonstrate the performance characteristics observed during testing:
+
+{% if extreme_queries %}
+**Queries with Largest Performance Gaps:**
+
+{% for query in extreme_queries %}
+{% if query.category == 'slowest' %}
+- **{{ query.query_name }}**: {{ tested_system.name | title }} {{ query.tested_median | format_number }}ms vs {{ winner_system_name | title }} {{ query.winner_median | format_number }}ms ({{ query.speedup_factor | format_number(1) }}× slower)
+{% endif %}
+{% endfor %}
+
+**Queries with Competitive Performance:**
+
+{% for query in extreme_queries %}
+{% if query.category == 'competitive' %}
+- **{{ query.query_name }}**: {{ tested_system.name | title }} {{ query.tested_median | format_number }}ms vs {{ winner_system_name | title }} {{ query.winner_median | format_number }}ms ({{ query.speedup_factor | format_number(1) }}× slower)
+{% endif %}
+{% endfor %}
+{% endif %}
+
+## Analysis & Optimization Opportunities
+
+Based on these initial results, several areas for investigation and potential optimization emerge:
+
+1. **Query Execution Planning**: The significant performance variance across different query types suggests opportunities for query optimizer tuning and execution strategy refinement.
+
+2. **Resource Utilization**: Analyzing memory allocation, CPU utilization patterns, and I/O characteristics could reveal bottlenecks limiting performance on analytical workloads.
+
+3. **Configuration Tuning**: Database-specific parameters, cache settings, and parallelism configurations warrant detailed examination to maximize hardware utilization.
+
+4. **Data Structure Optimization**: Table layout, partitioning strategies, and index usage patterns may offer substantial performance improvements for specific query patterns.
+
+### Key Questions
+
+- What specific query execution patterns lead to the largest performance differences?
+- How do different query types (aggregations, joins, scans) perform comparatively?
+- What configuration changes could narrow the performance gap?
+- Are there workload-specific tuning opportunities that weren't explored in this initial assessment?
+
+## Next Steps
+
+This initial performance assessment establishes a baseline and identifies key areas for optimization. Our next publication will present the complete query-by-query performance analysis across all tested systems.
+
+For readers interested in:
+- **Detailed query-by-query results** → See our upcoming detailed results post
+- **Complete reproduction steps** → See our full benchmark report with installation instructions for all systems
+
+---
+
+*This benchmark was conducted to provide transparent, reproducible performance comparisons. All configuration details and setup commands are included to enable independent verification of these results.*

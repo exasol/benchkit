@@ -1,0 +1,551 @@
+{% from 'macros.html.j2' import render_command_block, render_download_card, render_setup_sections_html %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="{{ cfg.title }} - Database Performance Benchmark">
+    <title>{{ cfg.title }} | Benchmark Results</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-badge">📊 Benchmark Report</div>
+            <h1>{{ cfg.title }}</h1>
+            <div class="metadata">
+                <span class="meta-item">
+                    <strong>Author:</strong> {{ cfg.author }}
+                </span>
+                <span class="meta-item">
+                    <strong>Date:</strong> {{ data.summary.run_date | default('N/A') }}
+                </span>
+                {% if cfg.env.mode %}
+                <span class="meta-item">
+                    <strong>Environment:</strong>
+                    <span class="badge badge-cloud">{{ cfg.env.mode | upper }}</span>
+                    {{ cfg.env.region | default('local') }}
+                </span>
+                {% endif %}
+            </div>
+
+            <div class="notice notice-security">
+                <strong>🔒 Security Note:</strong> Sensitive information (passwords, IP addresses) has been sanitized.
+                Placeholders like <code>&lt;EXASOL_DB_PASSWORD&gt;</code>, <code>&lt;PRIVATE_IP&gt;</code>, and <code>&lt;PUBLIC_IP&gt;</code>
+                are used throughout. Substitute with your actual credentials when reproducing.
+            </div>
+        </header>
+
+        <!-- Overview -->
+        <section class="section">
+            <h2>Overview</h2>
+            <p>This comprehensive benchmark report provides complete reproduction details for performance testing of <strong>{{ data.summary.systems | length }} database systems</strong> using the TPC-H benchmark at scale factor {{ workload_metadata.info.scale_factor }}. All installation steps, configuration parameters, and a self-contained benchmark package are included for independent verification.</p>
+        </section>
+
+        <!-- Executive Summary -->
+        <section class="section">
+            <h2>Executive Summary</h2>
+
+            {% if data.summary.per_system %}
+            <div class="summary-intro">
+                <p>We compared <strong>{{ data.summary.systems | length }} database systems</strong>:</p>
+            </div>
+
+            <!-- Performance Cards -->
+            <div class="summary-cards">
+                {% for system, stats in data.summary.per_system.items() %}
+                <div class="summary-card">
+                    <h3>{{ system | title }}</h3>
+                    <div class="card-metrics">
+                        <div class="metric">
+                            <span class="metric-label">Median Runtime</span>
+                            <span class="metric-value">{{ stats.median_runtime_ms | format_number }}ms</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Average Runtime</span>
+                            <span class="metric-value">{{ stats.avg_runtime_ms | format_number }}ms</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Fastest Query</span>
+                            <span class="metric-value metric-fast">{{ stats.min_runtime_ms | format_number }}ms</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Slowest Query</span>
+                            <span class="metric-value metric-slow">{{ stats.max_runtime_ms | format_number }}ms</span>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            {% if data.summary.per_system | length > 1 %}
+            {% set systems_list = data.summary.per_system.items() | list %}
+            {% set fastest_system = systems_list | min(attribute='1.median_runtime_ms') %}
+            {% set slowest_system = systems_list | max(attribute='1.median_runtime_ms') %}
+            <div class="key-findings">
+                <h3>Key Findings</h3>
+                <ul>
+                    <li><strong>{{ fastest_system[0] }}</strong> was the fastest overall with <strong>{{ fastest_system[1].median_runtime_ms | format_number }}ms</strong> median runtime</li>
+                    <li><strong>{{ slowest_system[0] }}</strong> was <strong>{{ (slowest_system[1].median_runtime_ms / fastest_system[1].median_runtime_ms) | format_number(1) }}x</strong> slower</li>
+                    <li>Tested <strong>{{ data.summary.total_queries }}</strong> total query executions</li>
+                </ul>
+            </div>
+            {% endif %}
+            {% endif %}
+        </section>
+
+        <!-- Performance Visualizations -->
+        {% if figures %}
+        <section class="section">
+            <h2>Performance Visualizations</h2>
+
+            <div class="chart-container">
+                <iframe src="attachments/figures/system_performance_overview.html" width="100%" height="500" frameborder="0"></iframe>
+            </div>
+            <div class="chart-container">
+                <iframe src="attachments/figures/performance_heatmap.html" width="100%" height="450" frameborder="0"></iframe>
+            </div>
+            <div class="chart-container">
+                <iframe src="attachments/figures/all_systems_comparison.html" width="100%" height="550" frameborder="0"></iframe>
+            </div>
+        </section>
+        {% endif %}
+
+        <!-- Systems Under Test -->
+        <section class="section">
+            <h2>Systems Under Test</h2>
+
+            <div class="systems-grid">
+                {% for system_config in cfg.systems %}
+                <div class="system-card">
+                    <h3>{{ system_config.name | title }} {{ system_config.version }}</h3>
+
+                    <div class="system-info">
+                        <h4>Software Configuration</h4>
+                        <table class="info-table">
+                            <tr><td>Database</td><td><strong>{{ system_config.kind }} {{ system_config.version }}</strong></td></tr>
+                            <tr><td>Setup Method</td><td>{{ system_config.setup.method }}</td></tr>
+                            {% if system_config.setup.data_dir %}
+                            <tr><td>Data Directory</td><td><code>{{ system_config.setup.data_dir }}</code></td></tr>
+                            {% endif %}
+                        </table>
+                    </div>
+
+                    {% if system_info.per_system and system_config.name in system_info.per_system %}
+                    {% set sys_probe = system_info.per_system[system_config.name] %}
+                    <div class="system-info">
+                        <h4>Hardware Specifications</h4>
+                        <table class="info-table">
+                            {% if cfg.env.mode in ['aws', 'gcp', 'azure'] %}
+                            <tr><td>Cloud Provider</td><td><span class="badge badge-cloud">{{ cfg.env.mode | upper }}</span></td></tr>
+                            <tr><td>Region</td><td>{{ cfg.env.region | default('N/A') }}</td></tr>
+                            {% if cfg.env.instances and system_config.name in cfg.env.instances %}
+                            <tr><td>Instance Type</td><td><strong>{{ cfg.env.instances[system_config.name].instance_type }}</strong></td></tr>
+                            {% endif %}
+                            {% endif %}
+                            {% if sys_probe.cpu_model %}
+                            <tr><td>CPU</td><td>{{ sys_probe.cpu_model }}</td></tr>
+                            {% endif %}
+                            {% if sys_probe.count_logical or sys_probe.cpu_count_logical %}
+                            <tr><td>CPU Cores</td><td>{{ sys_probe.count_logical | default(sys_probe.cpu_count_logical) }} vCPUs</td></tr>
+                            {% endif %}
+                            {% if sys_probe.memory_total_gb or sys_probe.total_gb %}
+                            <tr><td>Memory</td><td>{{ sys_probe.memory_total_gb | default(sys_probe.total_gb) }}GB RAM</td></tr>
+                            {% endif %}
+                        </table>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+
+        <!-- Workload Details Section -->
+        {% if workload_metadata and workload_metadata.info %}
+        <section class="section">
+            <h2>Workload: {{ workload_metadata.info.name | upper }} (Scale Factor {{ workload_metadata.info.scale_factor }})</h2>
+
+            <!-- Full Description -->
+            <div class="workload-description">
+                <p>{{ workload_metadata.info.description.full }}</p>
+
+                {% if workload_metadata.info.description.characteristics %}
+                <h3>Key Characteristics</h3>
+                <ul class="characteristics-list">
+                    {% for characteristic in workload_metadata.info.description.characteristics %}
+                    <li>{{ characteristic }}</li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+            </div>
+
+            <!-- Table Overview -->
+            {% if workload_metadata.info.table_info %}
+            <h3>Database Schema ({{ workload_metadata.info.table_info | length }} Tables)</h3>
+            <div class="tables-grid">
+                {% for table_name, table_info in workload_metadata.info.table_info.items() %}
+                <div class="table-card">
+                    <h4>{{ table_name | title }}</h4>
+                    <p class="table-description">{{ table_info.description }}</p>
+                    {% if table_info.cardinality_sf1 %}
+                    <p class="table-cardinality">
+                        <strong>Rows:</strong>
+                        ~{{ (table_info.cardinality_sf1 * workload_metadata.info.scale_factor) | format_number(0) }}
+                    </p>
+                    {% endif %}
+                    <details>
+                        <summary>Columns ({{ table_info.columns | length }})</summary>
+                        <ul class="columns-list">
+                            {% for column in table_info.columns %}
+                            <li><code>{{ column }}</code></li>
+                            {% endfor %}
+                        </ul>
+                    </details>
+                    {% if table_info.relationships %}
+                    <p class="table-relationships"><em>{{ table_info.relationships | join(', ') }}</em></p>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <!-- System-Specific DDL & Optimizations -->
+            {% if workload_metadata.per_system_ddl %}
+            <h3>Table Definitions & Optimizations</h3>
+            <p>Each database system uses optimized DDL tailored to its architecture and query optimizer.</p>
+
+            {% for system_name, ddl_info in workload_metadata.per_system_ddl.items() %}
+            <details class="ddl-details">
+                <summary>
+                    <h4>{{ system_name | title }} - DDL & Optimization</h4>
+                </summary>
+
+                {% if ddl_info.scripts.create_tables %}
+                <div class="code-section">
+                    <h5>📋 Table Creation</h5>
+                    <p class="code-description">{{ workload_metadata.info.setup_steps.schema_creation }}</p>
+                    <pre><code class="language-sql">{{ ddl_info.scripts.create_tables }}</code></pre>
+                </div>
+                {% endif %}
+
+                {% if ddl_info.scripts.create_indexes %}
+                <div class="code-section">
+                    <h5>🔍 Index Creation</h5>
+                    <p class="code-description">{{ workload_metadata.info.setup_steps.index_creation }}</p>
+                    <pre><code class="language-sql">{{ ddl_info.scripts.create_indexes }}</code></pre>
+                </div>
+                {% endif %}
+
+                {% if ddl_info.scripts.analyze_tables %}
+                <div class="code-section">
+                    <h5>📊 Table Analysis & Optimization</h5>
+                    <p class="code-description">{{ workload_metadata.info.setup_steps.table_analysis }}</p>
+                    <pre><code class="language-sql">{{ ddl_info.scripts.analyze_tables }}</code></pre>
+                </div>
+                {% endif %}
+            </details>
+            {% endfor %}
+            {% endif %}
+        </section>
+        {% endif %}
+
+        <!-- Performance Results -->
+        <section class="section">
+            <h2>Performance Results</h2>
+
+            <!-- Interactive Charts -->
+            <div class="charts-section">
+                {% if figures.boxplot %}
+                <div class="chart-card">
+                    <h3>Query Runtime Distribution</h3>
+                    <iframe src="attachments/figures/query_runtime_boxplot.html" class="chart-iframe"></iframe>
+                    <p class="chart-caption">
+                        Box plot showing the distribution of query runtimes. The box shows the interquartile range (25th to 75th percentile),
+                        with the median marked by the line inside the box.
+                    </p>
+                </div>
+                {% endif %}
+
+                {% if figures.bar_chart %}
+                <div class="chart-card">
+                    <h3>Median Query Runtimes</h3>
+                    <iframe src="attachments/figures/median_runtime_bar.html" class="chart-iframe"></iframe>
+                    <p class="chart-caption">
+                        Bar chart comparing median query runtimes across systems. Lower bars indicate better performance.
+                    </p>
+                </div>
+                {% endif %}
+
+                {% if figures.heatmap %}
+                <div class="chart-card">
+                    <h3>Performance Heatmap</h3>
+                    <iframe src="attachments/figures/performance_heatmap.html" class="chart-iframe"></iframe>
+                    <p class="chart-caption">
+                        Heatmap showing relative performance across queries and systems. Values are normalized so that 1.0 represents
+                        the fastest system for each query.
+                    </p>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Performance Summary Table -->
+            {% if tables.summary %}
+            <div class="table-container">
+                <h3>Detailed Performance Summary</h3>
+                <div class="table-wrapper">
+                    {{ tables.summary | safe }}
+                </div>
+            </div>
+            {% endif %}
+        </section>
+
+        <!-- Infrastructure Setup Timings -->
+        {% if infrastructure_timings and infrastructure_timings.systems %}
+        <section class="section">
+            <h2>Infrastructure Setup Timings</h2>
+            <p>The following table shows the time taken to provision cloud instances and install database software:</p>
+
+            <div class="table-wrapper">
+                <table class="timings-table">
+                    <thead>
+                        <tr>
+                            <th>System</th>
+                            <th>Instance Provisioning</th>
+                            <th>Software Installation</th>
+                            <th>Total Setup Time</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for system_name, timings in infrastructure_timings.systems.items() %}
+                        {% set provision_time = infrastructure_timings.infrastructure_provisioning_s | default(0.0) %}
+                        <tr>
+                            <td><strong>{{ system_name | title }}</strong></td>
+                            <td>{{ "%.2f" | format(provision_time) }}s</td>
+                            <td>
+                                {% if timings.installation_s is defined and timings.installation_s > 0 %}
+                                {{ "%.2f" | format(timings.installation_s) }}s
+                                {% elif timings.restart_s is defined %}
+                                {{ "%.2f" | format(timings.restart_s) }}s
+                                {% else %}
+                                0.00s
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if timings.installation_s is defined and timings.installation_s > 0 %}
+                                {{ "%.2f" | format(provision_time + timings.installation_s) }}s
+                                {% elif timings.restart_s is defined %}
+                                {{ "%.2f" | format(provision_time + timings.restart_s) }}s
+                                {% else %}
+                                {{ "%.2f" | format(provision_time) }}s
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="timing-notes">
+                <p><strong>Infrastructure Provisioning:</strong> {{ "%.2f" | format(infrastructure_timings.infrastructure_provisioning_s | default(0.0)) }}s</p>
+                {% if infrastructure_timings.infrastructure_provisioning_s | default(0.0) > 0 %}
+                <p>Cloud instances were provisioned (VMs created, networking configured)</p>
+                {% else %}
+                <p>Using existing cloud infrastructure (instances already running)</p>
+                {% endif %}
+
+                {% if infrastructure_timings.systems | length > 1 %}
+                {% set install_times = [] %}
+                {% for system_name, timings in infrastructure_timings.systems.items() %}
+                {% if timings.installation_s is defined and timings.installation_s > 0 %}
+                {% set _ = install_times.append((system_name, timings.installation_s)) %}
+                {% endif %}
+                {% endfor %}
+                {% if install_times | length > 1 %}
+                {% set fastest_install = install_times | min(attribute='1') %}
+                {% set slowest_install = install_times | max(attribute='1') %}
+                <p><strong>Software Installation Comparison:</strong></p>
+                <ul>
+                    <li>{{ fastest_install[0] | title }} had the fastest software installation at {{ "%.2f" | format(fastest_install[1]) }}s</li>
+                    <li>{{ slowest_install[0] | title }} took {{ "%.2f" | format(slowest_install[1]) }}s to install ({{ "%.1f" | format(slowest_install[1] / fastest_install[1]) }}x slower)</li>
+                </ul>
+                {% endif %}
+                {% endif %}
+            </div>
+        </section>
+        {% endif %}
+
+        <!-- Configuration & Setup -->
+        <section class="section">
+            <h2>Configuration & Setup</h2>
+
+            {% if setup_summaries %}
+            {% for system_name, setup_summary in setup_summaries.items() %}
+            <details class="setup-details">
+                <summary>
+                    <h3>{{ setup_summary.system_name | title }} {{ setup_summary.system_version }} Setup</h3>
+                </summary>
+
+                {% if setup_summary %}
+                {{ render_setup_sections_html(setup_summary) }}
+                {% endif %}
+            </details>
+            {% endfor %}
+            {% endif %}
+        </section>
+
+        <!-- Download Section -->
+        <section class="section">
+            <h2>Download Data</h2>
+            <div class="download-grid">
+                {{ render_download_card("📊", "Query Results", "Raw benchmark results (CSV format)", "attachments/runs.csv") }}
+                {{ render_download_card("📈", "Summary Statistics", "Aggregated performance metrics (JSON)", "attachments/summary.json") }}
+
+                {% if system_info.primary %}
+                {{ render_download_card("💻", "System Information", "Complete hardware specs (JSON)", "attachments/system.json") }}
+                {% elif system_info.per_system is defined %}
+                    {% for system_name, _info in system_info.per_system.items() %}
+                    {{ render_download_card("💻", system_name|title ~ " System Information", "Hardware specifications captured during the benchmark (JSON)", "attachments/system_" ~ system_name ~ ".json") }}
+                    {% endfor %}
+                {% endif %}
+
+                {% if project_id %}
+                {{ render_download_card("📦", "Benchmark Package", "Self-contained reproduction package", project_id ~ "-workload.zip") }}
+                {% endif %}
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Generated by BenchKit | {{ data.summary.run_date | default('N/A') }}</p>
+        </footer>
+    </div>
+
+    <!-- Query Modal -->
+    <div id="queryModal" class="query-modal">
+        <div class="query-modal-content">
+            <div class="query-modal-header">
+                <h3 id="modalTitle">Query Details</h3>
+                <button class="query-modal-close" onclick="closeQueryModal()">&times;</button>
+            </div>
+            <div id="modalBody">
+                <pre><code id="queryCode" class="language-sql"></code></pre>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+
+    <script>
+        // Query data embedded from workload
+        const queryData = {
+            {% if workload_metadata and workload_metadata.info.query_names %}
+            {% for query_name in workload_metadata.info.query_names %}
+            "{{ query_name }}": {
+                {% for system_config in cfg.systems %}
+                "{{ system_config.name }}": "attachments/queries/{{ system_config.name }}/{{ query_name }}.sql"{% if not loop.last %},{% endif %}
+                {% endfor %}
+            }{% if not loop.last %},{% endif %}
+            {% endfor %}
+            {% endif %}
+        };
+
+        // Add click handlers to summary table rows
+        document.addEventListener('DOMContentLoaded', function() {
+            const summaryTable = document.querySelector('.summary-table');
+            if (summaryTable) {
+                const rows = summaryTable.querySelectorAll('tbody tr[data-query]');
+                rows.forEach(row => {
+                    row.addEventListener('click', function() {
+                        const query = this.dataset.query;
+                        const system = this.dataset.system;
+                        showQueryModal(query, system);
+                    });
+                });
+            }
+        });
+
+        function showQueryModal(query, system) {
+            const modal = document.getElementById('queryModal');
+            const title = document.getElementById('modalTitle');
+            const code = document.getElementById('queryCode');
+
+            title.textContent = `${query} - ${system}`;
+
+            // Load query from file
+            if (queryData[query] && queryData[query][system]) {
+                fetch(queryData[query][system])
+                    .then(response => response.text())
+                    .then(sql => {
+                        code.textContent = sql;
+                        Prism.highlightElement(code);
+                        modal.classList.add('active');
+                    })
+                    .catch(error => {
+                        code.textContent = `Error loading query: ${error}`;
+                        modal.classList.add('active');
+                    });
+            } else {
+                code.textContent = `Query ${query} not found for system ${system}`;
+                modal.classList.add('active');
+            }
+        }
+
+        function closeQueryModal() {
+            const modal = document.getElementById('queryModal');
+            modal.classList.remove('active');
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('queryModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeQueryModal();
+            }
+        });
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeQueryModal();
+            }
+        });
+
+        // Auto-resize iframes to match content height
+        function resizeIframe(iframe) {
+            try {
+                const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                if (iframeDoc && iframeDoc.body) {
+                    // Get the full height of the iframe content
+                    const height = iframeDoc.body.scrollHeight;
+                    // Set iframe height to match content (add small padding)
+                    iframe.style.height = (height + 20) + 'px';
+                }
+            } catch (e) {
+                // Cross-origin or access issues - keep default height
+                console.warn('Could not resize iframe:', e);
+            }
+        }
+
+        // Resize all iframes on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            const iframes = document.querySelectorAll('iframe');
+            iframes.forEach(function(iframe) {
+                // Resize on load
+                iframe.addEventListener('load', function() {
+                    resizeIframe(iframe);
+                });
+                // Also try to resize immediately in case already loaded
+                if (iframe.contentDocument && iframe.contentDocument.readyState === 'complete') {
+                    resizeIframe(iframe);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
