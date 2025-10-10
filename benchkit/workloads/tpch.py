@@ -135,12 +135,18 @@ class TPCH(Workload):
     def _execute_setup_script(self, system: SystemUnderTest, script_name: str) -> bool:
         """Execute a templated setup script by splitting into individual statements."""
         try:
+            # Get system extra config for conditional features
+            system_extra = {}
+            if hasattr(system, "setup_config"):
+                system_extra = system.setup_config.get("extra", {})
+
             # Load and render the template
             template = self.template_env.get_template(script_name)
             rendered_sql = template.render(
                 system_kind=system.kind,
                 scale_factor=self.scale_factor,
                 schema=self.get_schema_name(),
+                system_extra=system_extra,
             )
 
             # Split SQL into individual statements and execute them one by one

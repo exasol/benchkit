@@ -63,6 +63,11 @@ class ClickHouseSystem(SystemUnderTest):
         if setup_config.get("use_additional_disk", False):
             connection_info["use_additional_disk"] = True
 
+        # Preserve extra configuration (includes settings like allow_statistics_optimize)
+        # This is needed for conditional features in workload setup scripts
+        if "extra" in setup_config:
+            connection_info["extra"] = setup_config["extra"]
+
         return connection_info
 
     @classmethod
@@ -628,6 +633,11 @@ class ClickHouseSystem(SystemUnderTest):
                 f"            <max_bytes_before_external_group_by>{settings['max_bytes_before_external_group_by']}</max_bytes_before_external_group_by>"
             )
 
+        if "optimize_move_to_prewhere" in settings:
+            profile_settings.append(
+                f"            <optimize_move_to_prewhere>{settings['optimize_move_to_prewhere']}</optimize_move_to_prewhere>"
+            )
+
         # TPC-H specific settings
         profile_settings.append("            <join_use_nulls>1</join_use_nulls>")
         profile_settings.append(
@@ -641,6 +651,17 @@ class ClickHouseSystem(SystemUnderTest):
         profile_settings.append(
             "            <max_insert_threads>8</max_insert_threads>"
         )
+
+        # Statistics for query optimization (ClickHouse 24.6+)
+        # Only enable if explicitly requested in extra config
+        extra_config = self.setup_config.get("extra", {})
+        if extra_config.get("allow_statistics_optimize", 0) == 1:
+            profile_settings.append(
+                "            <allow_experimental_statistics>1</allow_experimental_statistics>"
+            )
+            profile_settings.append(
+                "            <allow_statistics_optimize>1</allow_statistics_optimize>"
+            )
 
         # Create users configuration file with profile settings
         profile_lines = "\n".join(profile_settings)
@@ -810,6 +831,11 @@ class ClickHouseSystem(SystemUnderTest):
             settings["max_memory_usage"] = self._parse_memory_size(
                 extra_config["memory_limit"]
             )
+
+        # Gather rest of configs
+        for k in extra_config.keys():
+            if k not in settings:
+                settings[k] = extra_config[k]
 
         return settings
 

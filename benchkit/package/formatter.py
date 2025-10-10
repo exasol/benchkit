@@ -138,7 +138,13 @@ allow_untyped_calls = true
         """Type-check code with mypy."""
         try:
             result = subprocess.run(
-                ["env", "PYTHONPATH=.", "mypy", "benchkit/", "--config-file=pyproject.toml"],
+                [
+                    "env",
+                    "PYTHONPATH=.",
+                    "mypy",
+                    "benchkit/",
+                    "--config-file=pyproject.toml",
+                ],
                 cwd=self.package_dir,
                 capture_output=True,
                 text=True,
