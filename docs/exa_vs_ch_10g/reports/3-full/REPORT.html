@@ -4,8 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Exasol vs ClickHouse Performance Comparison on TPC-H - Database Performance Benchmark">
-    <title>Exasol vs ClickHouse Performance Comparison on TPC-H | Benchmark Results</title>
+    <meta name="description" content="Exasol vs ClickHouse Performance Comparison on TPC-H SF10 - Database Performance Benchmark">
+    <title>Exasol vs ClickHouse Performance Comparison on TPC-H SF10 | Benchmark Results</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,13 +16,13 @@
         <!-- Header -->
         <header class="header">
             <div class="header-badge">📊 Benchmark Report</div>
-            <h1>Exasol vs ClickHouse Performance Comparison on TPC-H</h1>
+            <h1>Exasol vs ClickHouse Performance Comparison on TPC-H SF10</h1>
             <div class="metadata">
                 <span class="meta-item">
                     <strong>Author:</strong> Oleksandr Kozachuk, Principal Architect at Exasol AG
                 </span>
                 <span class="meta-item">
-                    <strong>Date:</strong> 2025-10-09 08:58:59
+                    <strong>Date:</strong> 2025-10-24 14:55:06
                 </span>
                 
                 <span class="meta-item">
@@ -43,7 +43,7 @@
         <!-- Overview -->
         <section class="section">
             <h2>Overview</h2>
-            <p>This comprehensive benchmark report provides complete reproduction details for performance testing of <strong>2 database systems</strong> using the TPC-H benchmark at scale factor 10. All installation steps, configuration parameters, and a self-contained benchmark package are included for independent verification.</p>
+            <p>This comprehensive benchmark report provides complete reproduction details for performance testing of <strong>4 database systems</strong> using the TPC-H benchmark at scale factor 10. All installation steps, configuration parameters, and a self-contained benchmark package are included for independent verification.</p>
         </section>
 
         <!-- Executive Summary -->
@@ -52,30 +52,74 @@
 
             
             <div class="summary-intro">
-                <p>We compared <strong>2 database systems</strong>:</p>
+                <p>We compared <strong>4 database systems</strong>:</p>
             </div>
 
             <!-- Performance Cards -->
             <div class="summary-cards">
                 
                 <div class="summary-card">
+                    <h3>Clickhouse_tuned</h3>
+                    <div class="card-metrics">
+                        <div class="metric">
+                            <span class="metric-label">Median Runtime</span>
+                            <span class="metric-value">553.0ms</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Average Runtime</span>
+                            <span class="metric-value">831.6ms</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Fastest Query</span>
+                            <span class="metric-value metric-fast">54.1ms</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Slowest Query</span>
+                            <span class="metric-value metric-slow">3074.9ms</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="summary-card">
                     <h3>Clickhouse</h3>
                     <div class="card-metrics">
                         <div class="metric">
                             <span class="metric-label">Median Runtime</span>
-                            <span class="metric-value">525.0ms</span>
+                            <span class="metric-value">540.7ms</span>
                         </div>
                         <div class="metric">
                             <span class="metric-label">Average Runtime</span>
-                            <span class="metric-value">827.4ms</span>
+                            <span class="metric-value">852.1ms</span>
                         </div>
                         <div class="metric">
                             <span class="metric-label">Fastest Query</span>
-                            <span class="metric-value metric-fast">52.5ms</span>
+                            <span class="metric-value metric-fast">53.4ms</span>
                         </div>
                         <div class="metric">
                             <span class="metric-label">Slowest Query</span>
-                            <span class="metric-value metric-slow">6098.9ms</span>
+                            <span class="metric-value metric-slow">6578.9ms</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="summary-card">
+                    <h3>Clickhouse_stat</h3>
+                    <div class="card-metrics">
+                        <div class="metric">
+                            <span class="metric-label">Median Runtime</span>
+                            <span class="metric-value">462.1ms</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Average Runtime</span>
+                            <span class="metric-value">748.0ms</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Fastest Query</span>
+                            <span class="metric-value metric-fast">52.8ms</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Slowest Query</span>
+                            <span class="metric-value metric-slow">6319.0ms</span>
                         </div>
                     </div>
                 </div>
@@ -85,19 +129,19 @@
                     <div class="card-metrics">
                         <div class="metric">
                             <span class="metric-label">Median Runtime</span>
-                            <span class="metric-value">67.9ms</span>
+                            <span class="metric-value">63.6ms</span>
                         </div>
                         <div class="metric">
                             <span class="metric-label">Average Runtime</span>
-                            <span class="metric-value">86.6ms</span>
+                            <span class="metric-value">82.2ms</span>
                         </div>
                         <div class="metric">
                             <span class="metric-label">Fastest Query</span>
-                            <span class="metric-value metric-fast">13.8ms</span>
+                            <span class="metric-value metric-fast">11.6ms</span>
                         </div>
                         <div class="metric">
                             <span class="metric-label">Slowest Query</span>
-                            <span class="metric-value metric-slow">255.1ms</span>
+                            <span class="metric-value metric-slow">241.0ms</span>
                         </div>
                     </div>
                 </div>
@@ -111,9 +155,9 @@
             <div class="key-findings">
                 <h3>Key Findings</h3>
                 <ul>
-                    <li><strong>exasol</strong> was the fastest overall with <strong>67.9ms</strong> median runtime</li>
-                    <li><strong>clickhouse</strong> was <strong>7.7x</strong> slower</li>
-                    <li>Tested <strong>308</strong> total query executions</li>
+                    <li><strong>exasol</strong> was the fastest overall with <strong>63.6ms</strong> median runtime</li>
+                    <li><strong>clickhouse_tuned</strong> was <strong>8.7x</strong> slower</li>
+                    <li>Tested <strong>616</strong> total query executions</li>
                 </ul>
             </div>
             
@@ -182,12 +226,92 @@
                 </div>
                 
                 <div class="system-card">
-                    <h3>Clickhouse 25.9.3.48</h3>
+                    <h3>Clickhouse 25.9.4.58</h3>
 
                     <div class="system-info">
                         <h4>Software Configuration</h4>
                         <table class="info-table">
-                            <tr><td>Database</td><td><strong>clickhouse 25.9.3.48</strong></td></tr>
+                            <tr><td>Database</td><td><strong>clickhouse 25.9.4.58</strong></td></tr>
+                            <tr><td>Setup Method</td><td>native</td></tr>
+                            
+                            <tr><td>Data Directory</td><td><code>/data/clickhouse</code></td></tr>
+                            
+                        </table>
+                    </div>
+
+                    
+                    
+                    <div class="system-info">
+                        <h4>Hardware Specifications</h4>
+                        <table class="info-table">
+                            
+                            <tr><td>Cloud Provider</td><td><span class="badge badge-cloud">AWS</span></td></tr>
+                            <tr><td>Region</td><td>eu-west-1</td></tr>
+                            
+                            <tr><td>Instance Type</td><td><strong>r5d.4xlarge</strong></td></tr>
+                            
+                            
+                            
+                            <tr><td>CPU</td><td>Intel(R) Xeon(R) Platinum 8259CL CPU @ 2.50GHz</td></tr>
+                            
+                            
+                            <tr><td>CPU Cores</td><td>16 vCPUs</td></tr>
+                            
+                            
+                            <tr><td>Memory</td><td>124.4GB RAM</td></tr>
+                            
+                        </table>
+                    </div>
+                    
+                </div>
+                
+                <div class="system-card">
+                    <h3>Clickhouse_tuned 25.9.4.58</h3>
+
+                    <div class="system-info">
+                        <h4>Software Configuration</h4>
+                        <table class="info-table">
+                            <tr><td>Database</td><td><strong>clickhouse 25.9.4.58</strong></td></tr>
+                            <tr><td>Setup Method</td><td>native</td></tr>
+                            
+                            <tr><td>Data Directory</td><td><code>/data/clickhouse</code></td></tr>
+                            
+                        </table>
+                    </div>
+
+                    
+                    
+                    <div class="system-info">
+                        <h4>Hardware Specifications</h4>
+                        <table class="info-table">
+                            
+                            <tr><td>Cloud Provider</td><td><span class="badge badge-cloud">AWS</span></td></tr>
+                            <tr><td>Region</td><td>eu-west-1</td></tr>
+                            
+                            <tr><td>Instance Type</td><td><strong>r5d.4xlarge</strong></td></tr>
+                            
+                            
+                            
+                            <tr><td>CPU</td><td>Intel(R) Xeon(R) Platinum 8259CL CPU @ 2.50GHz</td></tr>
+                            
+                            
+                            <tr><td>CPU Cores</td><td>16 vCPUs</td></tr>
+                            
+                            
+                            <tr><td>Memory</td><td>124.4GB RAM</td></tr>
+                            
+                        </table>
+                    </div>
+                    
+                </div>
+                
+                <div class="system-card">
+                    <h3>Clickhouse_stat 25.9.4.58</h3>
+
+                    <div class="system-info">
+                        <h4>Software Configuration</h4>
+                        <table class="info-table">
+                            <tr><td>Database</td><td><strong>clickhouse 25.9.4.58</strong></td></tr>
                             <tr><td>Setup Method</td><td>native</td></tr>
                             
                             <tr><td>Data Directory</td><td><code>/data/clickhouse</code></td></tr>
@@ -823,20 +947,24 @@ CREATE OR REPLACE TABLE benchmark.lineitem (
                     <pre><code class="language-sql">-- TPC-H Index Creation Script
 -- Creates indexes to optimize query performance for both database systems
 
--- ClickHouse uses primary keys defined in table creation (ORDER BY clause)
--- Additional indexes are not typically needed for TPC-H queries in ClickHouse
--- The MergeTree ORDER BY clauses provide the necessary indexing:
---   - nation: ORDER BY n_nationkey
---   - region: ORDER BY r_regionkey
---   - part: ORDER BY p_partkey
---   - supplier: ORDER BY s_suppkey
---   - partsupp: ORDER BY ps_partkey
---   - customer: ORDER BY c_custkey
---   - orders: ORDER BY o_orderkey
---   - lineitem: ORDER BY l_orderkey
+-- ClickHouse Skip Indexes: DISABLED for TPC-H Analytical Workload
+--
+-- Analysis showed that skip indexes cause net performance REGRESSION for TPC-H:
+-- - 15/22 queries became slower (1-7% regression)
+-- - Only 2/22 queries improved (Q20: -9.5%, Q12: -1.3%)
+-- - Overall net negative impact on workload
+--
+-- Root causes:
+-- 1. Redundancy: Many skip indexes duplicate MergeTree primary key (ORDER BY)
+--    Example: l_orderkey bloom_filter is redundant with ORDER BY (l_shipdate, l_orderkey, l_partkey)
+-- 2. Low selectivity: Indexes on low-cardinality columns (o_orderstatus: 3 values) add overhead
+-- 3. Workload mismatch: TPC-H = analytical scans; skip indexes = OLTP point queries
+-- 4. Granularity overhead: GRANULARITY 4 adds index maintenance cost without benefit
+--
+-- Decision: Rely on MergeTree primary keys and OPTIMIZE TABLE compression for best performance
+-- For analytical workloads, well-designed ORDER BY clauses are more effective than skip indexes
 
--- No additional indexes needed for ClickHouse
-SELECT &#39;ClickHouse indexes created via ORDER BY clauses in table definitions&#39;;
+SELECT &#39;ClickHouse indexing: Using MergeTree primary keys only (skip indexes disabled for analytical workload)&#39;;
 </code></pre>
                 </div>
                 
@@ -848,8 +976,12 @@ SELECT &#39;ClickHouse indexes created via ORDER BY clauses in table definitions
                     <pre><code class="language-sql">-- TPC-H Table Analysis Script
 -- Analyzes tables and updates statistics for optimal query performance
 
--- ClickHouse automatically maintains statistics
--- OPTIMIZE can be run to merge data parts and improve performance
+-- ClickHouse Table Optimization
+-- Statistics are disabled - using basic optimization only
+
+-- Optimize tables to merge data parts and improve compression
+-- OPTIMIZE TABLE FINAL merges all data parts into a single optimized part
+-- This improves query performance by reducing the number of parts to scan
 OPTIMIZE TABLE benchmark.nation FINAL;
 OPTIMIZE TABLE benchmark.region FINAL;
 OPTIMIZE TABLE benchmark.part FINAL;
@@ -859,7 +991,396 @@ OPTIMIZE TABLE benchmark.customer FINAL;
 OPTIMIZE TABLE benchmark.orders FINAL;
 OPTIMIZE TABLE benchmark.lineitem FINAL;
 
-SELECT &#39;Table optimization completed for ClickHouse&#39;;
+SELECT &#39;ClickHouse tables optimized (statistics disabled)&#39;;
+</code></pre>
+                </div>
+                
+            </details>
+            
+            <details class="ddl-details">
+                <summary>
+                    <h4>Clickhouse_tuned - DDL & Optimization</h4>
+                </summary>
+
+                
+                <div class="code-section">
+                    <h5>📋 Table Creation</h5>
+                    <p class="code-description">Create 8 TPC-H tables with system-optimized data types</p>
+                    <pre><code class="language-sql">-- TPC-H Table Creation Script
+-- Creates all 8 TPC-H tables with appropriate data types and storage options for each database system
+
+-- ClickHouse table creation
+
+-- Nation table
+CREATE OR REPLACE TABLE benchmark.nation (
+    n_nationkey INTEGER NOT NULL,
+    n_name CHAR(25) NOT NULL,
+    n_regionkey INTEGER NOT NULL,
+    n_comment VARCHAR(152)
+) ENGINE MergeTree() ORDER BY n_nationkey;
+
+-- Region table
+CREATE OR REPLACE TABLE benchmark.region (
+    r_regionkey INTEGER NOT NULL,
+    r_name CHAR(25) NOT NULL,
+    r_comment VARCHAR(152)
+) ENGINE MergeTree() ORDER BY r_regionkey;
+
+-- Part table
+CREATE OR REPLACE TABLE benchmark.part (
+    p_partkey INTEGER NOT NULL,
+    p_name VARCHAR(55) NOT NULL,
+    p_mfgr CHAR(25) NOT NULL,
+    p_brand CHAR(10) NOT NULL,
+    p_type VARCHAR(25) NOT NULL,
+    p_size INTEGER NOT NULL,
+    p_container CHAR(10) NOT NULL,
+    p_retailprice DECIMAL(15,2) NOT NULL,
+    p_comment VARCHAR(23) NOT NULL
+) ENGINE MergeTree() ORDER BY p_partkey;
+
+-- Supplier table
+CREATE OR REPLACE TABLE benchmark.supplier (
+    s_suppkey INTEGER NOT NULL,
+    s_name CHAR(25) NOT NULL,
+    s_address VARCHAR(40) NOT NULL,
+    s_nationkey INTEGER NOT NULL,
+    s_phone CHAR(15) NOT NULL,
+    s_acctbal DECIMAL(15,2) NOT NULL,
+    s_comment VARCHAR(101) NOT NULL
+) ENGINE MergeTree() ORDER BY s_suppkey;
+
+-- Partsupp table
+CREATE OR REPLACE TABLE benchmark.partsupp (
+    ps_partkey INTEGER NOT NULL,
+    ps_suppkey INTEGER NOT NULL,
+    ps_availqty INTEGER NOT NULL,
+    ps_supplycost DECIMAL(15,2) NOT NULL,
+    ps_comment VARCHAR(199) NOT NULL
+) ENGINE MergeTree() ORDER BY (ps_partkey, ps_suppkey);
+
+-- Customer table
+CREATE OR REPLACE TABLE benchmark.customer (
+    c_custkey INTEGER NOT NULL,
+    c_name VARCHAR(25) NOT NULL,
+    c_address VARCHAR(40) NOT NULL,
+    c_nationkey INTEGER NOT NULL,
+    c_phone CHAR(15) NOT NULL,
+    c_acctbal DECIMAL(15,2) NOT NULL,
+    c_mktsegment CHAR(10) NOT NULL,
+    c_comment VARCHAR(117) NOT NULL
+) ENGINE MergeTree() ORDER BY (c_mktsegment, c_custkey);
+
+-- Orders table
+CREATE OR REPLACE TABLE benchmark.orders (
+    o_orderkey BIGINT NOT NULL,
+    o_custkey INTEGER NOT NULL,
+    o_orderstatus CHAR(1) NOT NULL,
+    o_totalprice DECIMAL(15,2) NOT NULL,
+    o_orderdate DATE NOT NULL,
+    o_orderpriority CHAR(15) NOT NULL,
+    o_clerk CHAR(15) NOT NULL,
+    o_shippriority INTEGER NOT NULL,
+    o_comment VARCHAR(79) NOT NULL
+) ENGINE MergeTree() ORDER BY (o_orderdate, o_orderkey);
+
+-- Lineitem table
+CREATE OR REPLACE TABLE benchmark.lineitem (
+    l_orderkey BIGINT NOT NULL,
+    l_partkey INTEGER NOT NULL,
+    l_suppkey INTEGER NOT NULL,
+    l_linenumber INTEGER NOT NULL,
+    l_quantity DECIMAL(15,2) NOT NULL,
+    l_extendedprice DECIMAL(15,2) NOT NULL,
+    l_discount DECIMAL(15,2) NOT NULL,
+    l_tax DECIMAL(15,2) NOT NULL,
+    l_returnflag CHAR(1) NOT NULL,
+    l_linestatus CHAR(1) NOT NULL,
+    l_shipdate DATE NOT NULL,
+    l_commitdate DATE NOT NULL,
+    l_receiptdate DATE NOT NULL,
+    l_shipinstruct CHAR(25) NOT NULL,
+    l_shipmode CHAR(10) NOT NULL,
+    l_comment VARCHAR(44) NOT NULL
+) ENGINE MergeTree() ORDER BY (l_shipdate, l_orderkey, l_partkey);
+</code></pre>
+                </div>
+                
+
+                
+                <div class="code-section">
+                    <h5>🔍 Index Creation</h5>
+                    <p class="code-description">Create indexes on foreign keys and join columns</p>
+                    <pre><code class="language-sql">-- TPC-H Index Creation Script
+-- Creates indexes to optimize query performance for both database systems
+
+-- ClickHouse Skip Indexes: DISABLED for TPC-H Analytical Workload
+--
+-- Analysis showed that skip indexes cause net performance REGRESSION for TPC-H:
+-- - 15/22 queries became slower (1-7% regression)
+-- - Only 2/22 queries improved (Q20: -9.5%, Q12: -1.3%)
+-- - Overall net negative impact on workload
+--
+-- Root causes:
+-- 1. Redundancy: Many skip indexes duplicate MergeTree primary key (ORDER BY)
+--    Example: l_orderkey bloom_filter is redundant with ORDER BY (l_shipdate, l_orderkey, l_partkey)
+-- 2. Low selectivity: Indexes on low-cardinality columns (o_orderstatus: 3 values) add overhead
+-- 3. Workload mismatch: TPC-H = analytical scans; skip indexes = OLTP point queries
+-- 4. Granularity overhead: GRANULARITY 4 adds index maintenance cost without benefit
+--
+-- Decision: Rely on MergeTree primary keys and OPTIMIZE TABLE compression for best performance
+-- For analytical workloads, well-designed ORDER BY clauses are more effective than skip indexes
+
+SELECT &#39;ClickHouse indexing: Using MergeTree primary keys only (skip indexes disabled for analytical workload)&#39;;
+</code></pre>
+                </div>
+                
+
+                
+                <div class="code-section">
+                    <h5>📊 Table Analysis & Optimization</h5>
+                    <p class="code-description">Update database statistics for query optimizer</p>
+                    <pre><code class="language-sql">-- TPC-H Table Analysis Script
+-- Analyzes tables and updates statistics for optimal query performance
+
+-- ClickHouse Table Optimization
+-- Statistics are disabled - using basic optimization only
+
+-- Optimize tables to merge data parts and improve compression
+-- OPTIMIZE TABLE FINAL merges all data parts into a single optimized part
+-- This improves query performance by reducing the number of parts to scan
+OPTIMIZE TABLE benchmark.nation FINAL;
+OPTIMIZE TABLE benchmark.region FINAL;
+OPTIMIZE TABLE benchmark.part FINAL;
+OPTIMIZE TABLE benchmark.supplier FINAL;
+OPTIMIZE TABLE benchmark.partsupp FINAL;
+OPTIMIZE TABLE benchmark.customer FINAL;
+OPTIMIZE TABLE benchmark.orders FINAL;
+OPTIMIZE TABLE benchmark.lineitem FINAL;
+
+SELECT &#39;ClickHouse tables optimized (statistics disabled)&#39;;
+</code></pre>
+                </div>
+                
+            </details>
+            
+            <details class="ddl-details">
+                <summary>
+                    <h4>Clickhouse_stat - DDL & Optimization</h4>
+                </summary>
+
+                
+                <div class="code-section">
+                    <h5>📋 Table Creation</h5>
+                    <p class="code-description">Create 8 TPC-H tables with system-optimized data types</p>
+                    <pre><code class="language-sql">-- TPC-H Table Creation Script
+-- Creates all 8 TPC-H tables with appropriate data types and storage options for each database system
+
+-- ClickHouse table creation
+
+-- Nation table
+CREATE OR REPLACE TABLE benchmark.nation (
+    n_nationkey INTEGER NOT NULL,
+    n_name CHAR(25) NOT NULL,
+    n_regionkey INTEGER NOT NULL,
+    n_comment VARCHAR(152)
+) ENGINE MergeTree() ORDER BY n_nationkey;
+
+-- Region table
+CREATE OR REPLACE TABLE benchmark.region (
+    r_regionkey INTEGER NOT NULL,
+    r_name CHAR(25) NOT NULL,
+    r_comment VARCHAR(152)
+) ENGINE MergeTree() ORDER BY r_regionkey;
+
+-- Part table
+CREATE OR REPLACE TABLE benchmark.part (
+    p_partkey INTEGER NOT NULL,
+    p_name VARCHAR(55) NOT NULL,
+    p_mfgr CHAR(25) NOT NULL,
+    p_brand CHAR(10) NOT NULL,
+    p_type VARCHAR(25) NOT NULL,
+    p_size INTEGER NOT NULL,
+    p_container CHAR(10) NOT NULL,
+    p_retailprice DECIMAL(15,2) NOT NULL,
+    p_comment VARCHAR(23) NOT NULL
+) ENGINE MergeTree() ORDER BY p_partkey;
+
+-- Supplier table
+CREATE OR REPLACE TABLE benchmark.supplier (
+    s_suppkey INTEGER NOT NULL,
+    s_name CHAR(25) NOT NULL,
+    s_address VARCHAR(40) NOT NULL,
+    s_nationkey INTEGER NOT NULL,
+    s_phone CHAR(15) NOT NULL,
+    s_acctbal DECIMAL(15,2) NOT NULL,
+    s_comment VARCHAR(101) NOT NULL
+) ENGINE MergeTree() ORDER BY s_suppkey;
+
+-- Partsupp table
+CREATE OR REPLACE TABLE benchmark.partsupp (
+    ps_partkey INTEGER NOT NULL,
+    ps_suppkey INTEGER NOT NULL,
+    ps_availqty INTEGER NOT NULL,
+    ps_supplycost DECIMAL(15,2) NOT NULL,
+    ps_comment VARCHAR(199) NOT NULL
+) ENGINE MergeTree() ORDER BY (ps_partkey, ps_suppkey);
+
+-- Customer table
+CREATE OR REPLACE TABLE benchmark.customer (
+    c_custkey INTEGER NOT NULL,
+    c_name VARCHAR(25) NOT NULL,
+    c_address VARCHAR(40) NOT NULL,
+    c_nationkey INTEGER NOT NULL,
+    c_phone CHAR(15) NOT NULL,
+    c_acctbal DECIMAL(15,2) NOT NULL,
+    c_mktsegment CHAR(10) NOT NULL,
+    c_comment VARCHAR(117) NOT NULL
+) ENGINE MergeTree() ORDER BY (c_mktsegment, c_custkey);
+
+-- Orders table
+CREATE OR REPLACE TABLE benchmark.orders (
+    o_orderkey BIGINT NOT NULL,
+    o_custkey INTEGER NOT NULL,
+    o_orderstatus CHAR(1) NOT NULL,
+    o_totalprice DECIMAL(15,2) NOT NULL,
+    o_orderdate DATE NOT NULL,
+    o_orderpriority CHAR(15) NOT NULL,
+    o_clerk CHAR(15) NOT NULL,
+    o_shippriority INTEGER NOT NULL,
+    o_comment VARCHAR(79) NOT NULL
+) ENGINE MergeTree() ORDER BY (o_orderdate, o_orderkey);
+
+-- Lineitem table
+CREATE OR REPLACE TABLE benchmark.lineitem (
+    l_orderkey BIGINT NOT NULL,
+    l_partkey INTEGER NOT NULL,
+    l_suppkey INTEGER NOT NULL,
+    l_linenumber INTEGER NOT NULL,
+    l_quantity DECIMAL(15,2) NOT NULL,
+    l_extendedprice DECIMAL(15,2) NOT NULL,
+    l_discount DECIMAL(15,2) NOT NULL,
+    l_tax DECIMAL(15,2) NOT NULL,
+    l_returnflag CHAR(1) NOT NULL,
+    l_linestatus CHAR(1) NOT NULL,
+    l_shipdate DATE NOT NULL,
+    l_commitdate DATE NOT NULL,
+    l_receiptdate DATE NOT NULL,
+    l_shipinstruct CHAR(25) NOT NULL,
+    l_shipmode CHAR(10) NOT NULL,
+    l_comment VARCHAR(44) NOT NULL
+) ENGINE MergeTree() ORDER BY (l_shipdate, l_orderkey, l_partkey);
+</code></pre>
+                </div>
+                
+
+                
+                <div class="code-section">
+                    <h5>🔍 Index Creation</h5>
+                    <p class="code-description">Create indexes on foreign keys and join columns</p>
+                    <pre><code class="language-sql">-- TPC-H Index Creation Script
+-- Creates indexes to optimize query performance for both database systems
+
+-- ClickHouse Skip Indexes: DISABLED for TPC-H Analytical Workload
+--
+-- Analysis showed that skip indexes cause net performance REGRESSION for TPC-H:
+-- - 15/22 queries became slower (1-7% regression)
+-- - Only 2/22 queries improved (Q20: -9.5%, Q12: -1.3%)
+-- - Overall net negative impact on workload
+--
+-- Root causes:
+-- 1. Redundancy: Many skip indexes duplicate MergeTree primary key (ORDER BY)
+--    Example: l_orderkey bloom_filter is redundant with ORDER BY (l_shipdate, l_orderkey, l_partkey)
+-- 2. Low selectivity: Indexes on low-cardinality columns (o_orderstatus: 3 values) add overhead
+-- 3. Workload mismatch: TPC-H = analytical scans; skip indexes = OLTP point queries
+-- 4. Granularity overhead: GRANULARITY 4 adds index maintenance cost without benefit
+--
+-- Decision: Rely on MergeTree primary keys and OPTIMIZE TABLE compression for best performance
+-- For analytical workloads, well-designed ORDER BY clauses are more effective than skip indexes
+
+SELECT &#39;ClickHouse indexing: Using MergeTree primary keys only (skip indexes disabled for analytical workload)&#39;;
+</code></pre>
+                </div>
+                
+
+                
+                <div class="code-section">
+                    <h5>📊 Table Analysis & Optimization</h5>
+                    <p class="code-description">Update database statistics for query optimizer</p>
+                    <pre><code class="language-sql">-- TPC-H Table Analysis Script
+-- Analyzes tables and updates statistics for optimal query performance
+
+-- ClickHouse Table Optimization
+-- Statistics are enabled - collect statistics for query optimizer (ClickHouse 24.6+)
+-- Statistics help the query optimizer make better join order decisions
+
+-- Add statistics for join optimization (most critical columns)
+
+-- Lineitem: Most critical table for complex queries
+ALTER TABLE benchmark.lineitem ADD STATISTICS IF NOT EXISTS l_orderkey TYPE countmin, tdigest, uniq;
+ALTER TABLE benchmark.lineitem ADD STATISTICS IF NOT EXISTS l_partkey TYPE countmin, tdigest, uniq;
+ALTER TABLE benchmark.lineitem ADD STATISTICS IF NOT EXISTS l_suppkey TYPE countmin, tdigest, uniq;
+ALTER TABLE benchmark.lineitem ADD STATISTICS IF NOT EXISTS l_quantity TYPE countmin, tdigest;
+ALTER TABLE benchmark.lineitem ADD STATISTICS IF NOT EXISTS l_receiptdate TYPE countmin;
+ALTER TABLE benchmark.lineitem ADD STATISTICS IF NOT EXISTS l_commitdate TYPE countmin;
+
+-- Orders: Critical for joins
+ALTER TABLE benchmark.orders ADD STATISTICS IF NOT EXISTS o_orderkey TYPE countmin, tdigest, uniq;
+ALTER TABLE benchmark.orders ADD STATISTICS IF NOT EXISTS o_custkey TYPE countmin, tdigest, uniq;
+ALTER TABLE benchmark.orders ADD STATISTICS IF NOT EXISTS o_orderdate TYPE countmin, tdigest;
+ALTER TABLE benchmark.orders ADD STATISTICS IF NOT EXISTS o_orderstatus TYPE countmin, uniq;
+
+-- Part: Used in filtered joins
+ALTER TABLE benchmark.part ADD STATISTICS IF NOT EXISTS p_partkey TYPE countmin, tdigest, uniq;
+ALTER TABLE benchmark.part ADD STATISTICS IF NOT EXISTS p_type TYPE countmin, uniq;
+ALTER TABLE benchmark.part ADD STATISTICS IF NOT EXISTS p_brand TYPE countmin, uniq;
+ALTER TABLE benchmark.part ADD STATISTICS IF NOT EXISTS p_container TYPE countmin, uniq;
+
+-- Supplier: Join and filter columns
+ALTER TABLE benchmark.supplier ADD STATISTICS IF NOT EXISTS s_suppkey TYPE countmin, tdigest, uniq;
+ALTER TABLE benchmark.supplier ADD STATISTICS IF NOT EXISTS s_nationkey TYPE countmin, tdigest, uniq;
+
+-- Customer: Join columns
+ALTER TABLE benchmark.customer ADD STATISTICS IF NOT EXISTS c_custkey TYPE countmin, tdigest, uniq;
+ALTER TABLE benchmark.customer ADD STATISTICS IF NOT EXISTS c_nationkey TYPE countmin, tdigest, uniq;
+ALTER TABLE benchmark.customer ADD STATISTICS IF NOT EXISTS c_mktsegment TYPE countmin, uniq;
+
+-- Partsupp: Join columns
+ALTER TABLE benchmark.partsupp ADD STATISTICS IF NOT EXISTS ps_partkey TYPE countmin, tdigest, uniq;
+ALTER TABLE benchmark.partsupp ADD STATISTICS IF NOT EXISTS ps_suppkey TYPE countmin, tdigest, uniq;
+
+-- Nation: Small table but frequently joined
+ALTER TABLE benchmark.nation ADD STATISTICS IF NOT EXISTS n_nationkey TYPE countmin, tdigest, uniq;
+ALTER TABLE benchmark.nation ADD STATISTICS IF NOT EXISTS n_name TYPE countmin, uniq;
+ALTER TABLE benchmark.nation ADD STATISTICS IF NOT EXISTS n_regionkey TYPE countmin, tdigest, uniq;
+
+-- Region: Small table
+ALTER TABLE benchmark.region ADD STATISTICS IF NOT EXISTS r_regionkey TYPE countmin, tdigest, uniq;
+ALTER TABLE benchmark.region ADD STATISTICS IF NOT EXISTS r_name TYPE countmin, uniq;
+
+-- Materialize statistics
+ALTER TABLE benchmark.lineitem MATERIALIZE STATISTICS l_orderkey, l_partkey, l_suppkey, l_quantity, l_receiptdate, l_commitdate;
+ALTER TABLE benchmark.orders MATERIALIZE STATISTICS o_orderkey, o_custkey, o_orderdate, o_orderstatus;
+ALTER TABLE benchmark.part MATERIALIZE STATISTICS p_partkey, p_type, p_brand, p_container;
+ALTER TABLE benchmark.supplier MATERIALIZE STATISTICS s_suppkey, s_nationkey;
+ALTER TABLE benchmark.customer MATERIALIZE STATISTICS c_custkey, c_nationkey, c_mktsegment;
+ALTER TABLE benchmark.partsupp MATERIALIZE STATISTICS ps_partkey, ps_suppkey;
+ALTER TABLE benchmark.nation MATERIALIZE STATISTICS n_nationkey, n_name, n_regionkey;
+ALTER TABLE benchmark.region MATERIALIZE STATISTICS r_regionkey, r_name;
+
+-- Optimize tables to merge data parts and improve compression
+-- OPTIMIZE TABLE FINAL merges all data parts into a single optimized part
+-- This improves query performance by reducing the number of parts to scan
+OPTIMIZE TABLE benchmark.nation FINAL;
+OPTIMIZE TABLE benchmark.region FINAL;
+OPTIMIZE TABLE benchmark.part FINAL;
+OPTIMIZE TABLE benchmark.supplier FINAL;
+OPTIMIZE TABLE benchmark.partsupp FINAL;
+OPTIMIZE TABLE benchmark.customer FINAL;
+OPTIMIZE TABLE benchmark.orders FINAL;
+OPTIMIZE TABLE benchmark.lineitem FINAL;
+
+SELECT &#39;ClickHouse statistics collected and tables optimized&#39;;
 </code></pre>
                 </div>
                 
@@ -891,6 +1412,7 @@ SELECT &#39;Table optimization completed for ClickHouse&#39;;
 <thead><tr>
 <th>query</th>
 <th>system</th>
+<th>warmup</th>
 <th>runs</th>
 <th>median_ms</th>
 <th>mean_ms</th>
@@ -902,442 +1424,970 @@ SELECT &#39;Table optimization completed for ClickHouse&#39;;
 <tr data-query-start="true" data-query-group="odd" data-query="Q01" data-system="clickhouse">
 <td>Q01</td>
 <td>clickhouse</td>
+<td class="perf-average">556.80</td>
 <td>7</td>
-<td class="perf-poor">539.00</td>
-<td class="perf-poor">539.80</td>
-<td class="perf-average">8.50</td>
-<td class="perf-poor">531.40</td>
-<td class="perf-poor">556.80</td>
+<td class="perf-average">556.90</td>
+<td class="perf-average">559.10</td>
+<td class="perf-average">7.40</td>
+<td class="perf-average">551.00</td>
+<td class="perf-average">573.30</td>
+</tr>
+<tr data-query-group="odd" data-query="Q01" data-system="clickhouse_stat">
+<td>Q01</td>
+<td>clickhouse_stat</td>
+<td class="perf-average">534.70</td>
+<td>7</td>
+<td class="perf-average">535.10</td>
+<td class="perf-average">536.60</td>
+<td class="perf-good">6.00</td>
+<td class="perf-average">531.40</td>
+<td class="perf-average">548.50</td>
+</tr>
+<tr data-query-group="odd" data-query="Q01" data-system="clickhouse_tuned">
+<td>Q01</td>
+<td>clickhouse_tuned</td>
+<td class="perf-average">565.20</td>
+<td>7</td>
+<td class="perf-average">563.60</td>
+<td class="perf-average">566.60</td>
+<td class="perf-average">10.00</td>
+<td class="perf-average">554.70</td>
+<td class="perf-average">580.30</td>
 </tr>
 <tr data-query-group="odd" data-query="Q01" data-system="exasol">
 <td>Q01</td>
 <td>exasol</td>
+<td class="perf-good">209.10</td>
 <td>7</td>
-<td class="perf-average">216.00</td>
-<td class="perf-average">216.50</td>
-<td class="perf-good">1.20</td>
-<td class="perf-average">215.50</td>
-<td class="perf-average">218.80</td>
+<td class="perf-good">207.00</td>
+<td class="perf-good">207.30</td>
+<td class="perf-excellent">1.10</td>
+<td class="perf-good">206.30</td>
+<td class="perf-good">209.50</td>
 </tr>
 <tr data-query-start="true" data-query-group="even" data-query="Q02" data-system="clickhouse">
 <td>Q02</td>
 <td>clickhouse</td>
+<td class="perf-average">302.40</td>
 <td>7</td>
-<td class="perf-average">238.40</td>
-<td class="perf-average">239.00</td>
-<td class="perf-average">5.00</td>
-<td class="perf-average">231.00</td>
-<td class="perf-average">246.40</td>
+<td class="perf-average">256.70</td>
+<td class="perf-average">255.20</td>
+<td class="perf-good">3.70</td>
+<td class="perf-average">249.50</td>
+<td class="perf-average">259.80</td>
+</tr>
+<tr data-query-group="even" data-query="Q02" data-system="clickhouse_stat">
+<td>Q02</td>
+<td>clickhouse_stat</td>
+<td class="perf-good">229.00</td>
+<td>7</td>
+<td class="perf-good">210.40</td>
+<td class="perf-good">210.20</td>
+<td class="perf-good">6.10</td>
+<td class="perf-good">203.70</td>
+<td class="perf-good">220.00</td>
+</tr>
+<tr data-query-group="even" data-query="Q02" data-system="clickhouse_tuned">
+<td>Q02</td>
+<td>clickhouse_tuned</td>
+<td class="perf-average">302.50</td>
+<td>7</td>
+<td class="perf-average">252.30</td>
+<td class="perf-average">251.40</td>
+<td class="perf-good">3.80</td>
+<td class="perf-average">246.60</td>
+<td class="perf-average">256.50</td>
 </tr>
 <tr data-query-group="even" data-query="Q02" data-system="exasol">
 <td>Q02</td>
 <td>exasol</td>
+<td class="perf-excellent">81.80</td>
 <td>7</td>
-<td class="perf-excellent">34.50</td>
-<td class="perf-excellent">34.70</td>
+<td class="perf-excellent">31.30</td>
+<td class="perf-excellent">31.30</td>
 <td class="perf-excellent">0.50</td>
-<td class="perf-excellent">34.20</td>
-<td class="perf-excellent">35.50</td>
+<td class="perf-excellent">30.60</td>
+<td class="perf-excellent">31.90</td>
 </tr>
 <tr data-query-start="true" data-query-group="odd" data-query="Q03" data-system="clickhouse">
 <td>Q03</td>
 <td>clickhouse</td>
+<td class="perf-poor">855.20</td>
 <td>7</td>
-<td class="perf-poor">783.00</td>
-<td class="perf-poor">794.70</td>
-<td class="perf-poor">32.20</td>
-<td class="perf-poor">770.00</td>
-<td class="perf-poor">861.30</td>
+<td class="perf-poor">802.10</td>
+<td class="perf-poor">807.80</td>
+<td class="perf-poor">17.90</td>
+<td class="perf-poor">787.30</td>
+<td class="perf-poor">840.50</td>
+</tr>
+<tr data-query-group="odd" data-query="Q03" data-system="clickhouse_stat">
+<td>Q03</td>
+<td>clickhouse_stat</td>
+<td class="perf-poor">889.60</td>
+<td>7</td>
+<td class="perf-poor">808.10</td>
+<td class="perf-poor">805.70</td>
+<td class="perf-average">15.40</td>
+<td class="perf-poor">787.40</td>
+<td class="perf-poor">829.00</td>
+</tr>
+<tr data-query-group="odd" data-query="Q03" data-system="clickhouse_tuned">
+<td>Q03</td>
+<td>clickhouse_tuned</td>
+<td class="perf-poor">891.80</td>
+<td>7</td>
+<td class="perf-poor">827.70</td>
+<td class="perf-poor">827.90</td>
+<td class="perf-poor">18.10</td>
+<td class="perf-poor">801.30</td>
+<td class="perf-poor">849.30</td>
 </tr>
 <tr data-query-group="odd" data-query="Q03" data-system="exasol">
 <td>Q03</td>
 <td>exasol</td>
+<td class="perf-excellent">100.50</td>
 <td>7</td>
-<td class="perf-good">97.70</td>
-<td class="perf-good">97.60</td>
-<td class="perf-good">0.70</td>
-<td class="perf-good">96.30</td>
-<td class="perf-good">98.30</td>
+<td class="perf-excellent">95.30</td>
+<td class="perf-excellent">95.90</td>
+<td class="perf-excellent">1.80</td>
+<td class="perf-excellent">93.20</td>
+<td class="perf-excellent">98.20</td>
 </tr>
 <tr data-query-start="true" data-query-group="even" data-query="Q04" data-system="clickhouse">
 <td>Q04</td>
 <td>clickhouse</td>
+<td class="perf-average">458.00</td>
 <td>7</td>
-<td class="perf-average">421.90</td>
-<td class="perf-average">414.30</td>
-<td class="perf-poor">16.70</td>
-<td class="perf-average">393.40</td>
-<td class="perf-average">431.40</td>
+<td class="perf-average">411.70</td>
+<td class="perf-average">414.50</td>
+<td class="perf-average">8.70</td>
+<td class="perf-average">405.60</td>
+<td class="perf-average">428.40</td>
+</tr>
+<tr data-query-group="even" data-query="Q04" data-system="clickhouse_stat">
+<td>Q04</td>
+<td>clickhouse_stat</td>
+<td class="perf-average">451.10</td>
+<td>7</td>
+<td class="perf-average">402.10</td>
+<td class="perf-average">402.00</td>
+<td class="perf-good">2.60</td>
+<td class="perf-average">398.80</td>
+<td class="perf-average">406.20</td>
+</tr>
+<tr data-query-group="even" data-query="Q04" data-system="clickhouse_tuned">
+<td>Q04</td>
+<td>clickhouse_tuned</td>
+<td class="perf-poor">1,290.20</td>
+<td>7</td>
+<td class="perf-poor">1,179.40</td>
+<td class="perf-poor">1,168.20</td>
+<td class="perf-poor">165.50</td>
+<td class="perf-poor">963.60</td>
+<td class="perf-poor">1,486.50</td>
 </tr>
 <tr data-query-group="even" data-query="Q04" data-system="exasol">
 <td>Q04</td>
 <td>exasol</td>
-<td>7</td>
 <td class="perf-excellent">23.10</td>
-<td class="perf-excellent">23.30</td>
-<td class="perf-excellent">0.30</td>
-<td class="perf-excellent">22.90</td>
-<td class="perf-excellent">23.70</td>
+<td>7</td>
+<td class="perf-excellent">20.80</td>
+<td class="perf-excellent">20.80</td>
+<td class="perf-excellent">0.20</td>
+<td class="perf-excellent">20.50</td>
+<td class="perf-excellent">21.10</td>
 </tr>
 <tr data-query-start="true" data-query-group="odd" data-query="Q05" data-system="clickhouse">
 <td>Q05</td>
 <td>clickhouse</td>
+<td class="perf-poor">1,734.30</td>
 <td>7</td>
-<td class="perf-poor">1,516.30</td>
-<td class="perf-poor">1,509.60</td>
-<td class="perf-poor">17.40</td>
-<td class="perf-poor">1,489.10</td>
-<td class="perf-poor">1,532.60</td>
+<td class="perf-poor">1,531.30</td>
+<td class="perf-poor">1,534.10</td>
+<td class="perf-poor">28.90</td>
+<td class="perf-poor">1,495.10</td>
+<td class="perf-poor">1,570.90</td>
+</tr>
+<tr data-query-group="odd" data-query="Q05" data-system="clickhouse_stat">
+<td>Q05</td>
+<td>clickhouse_stat</td>
+<td class="perf-poor">1,688.60</td>
+<td>7</td>
+<td class="perf-poor">1,531.90</td>
+<td class="perf-poor">1,537.90</td>
+<td class="perf-poor">30.80</td>
+<td class="perf-poor">1,512.30</td>
+<td class="perf-poor">1,604.30</td>
+</tr>
+<tr data-query-group="odd" data-query="Q05" data-system="clickhouse_tuned">
+<td>Q05</td>
+<td>clickhouse_tuned</td>
+<td class="perf-poor">1,790.40</td>
+<td>7</td>
+<td class="perf-poor">1,587.90</td>
+<td class="perf-poor">1,596.20</td>
+<td class="perf-poor">45.20</td>
+<td class="perf-poor">1,557.40</td>
+<td class="perf-poor">1,685.40</td>
 </tr>
 <tr data-query-group="odd" data-query="Q05" data-system="exasol">
 <td>Q05</td>
 <td>exasol</td>
+<td class="perf-excellent">111.30</td>
 <td>7</td>
-<td class="perf-good">63.10</td>
-<td class="perf-good">63.20</td>
-<td class="perf-excellent">0.50</td>
-<td class="perf-good">62.40</td>
-<td class="perf-good">63.70</td>
+<td class="perf-excellent">60.00</td>
+<td class="perf-excellent">59.90</td>
+<td class="perf-excellent">0.60</td>
+<td class="perf-excellent">59.30</td>
+<td class="perf-excellent">61.20</td>
 </tr>
 <tr data-query-start="true" data-query-group="even" data-query="Q06" data-system="clickhouse">
 <td>Q06</td>
 <td>clickhouse</td>
+<td class="perf-excellent">111.30</td>
 <td>7</td>
-<td class="perf-excellent">53.40</td>
-<td class="perf-excellent">54.40</td>
-<td class="perf-good">1.80</td>
-<td class="perf-excellent">52.70</td>
-<td class="perf-excellent">57.30</td>
+<td class="perf-excellent">58.30</td>
+<td class="perf-excellent">58.80</td>
+<td class="perf-good">2.60</td>
+<td class="perf-excellent">56.60</td>
+<td class="perf-excellent">64.20</td>
+</tr>
+<tr data-query-group="even" data-query="Q06" data-system="clickhouse_stat">
+<td>Q06</td>
+<td>clickhouse_stat</td>
+<td class="perf-excellent">103.90</td>
+<td>7</td>
+<td class="perf-excellent">55.40</td>
+<td class="perf-excellent">57.10</td>
+<td class="perf-good">7.00</td>
+<td class="perf-excellent">52.80</td>
+<td class="perf-excellent">72.70</td>
+</tr>
+<tr data-query-group="even" data-query="Q06" data-system="clickhouse_tuned">
+<td>Q06</td>
+<td>clickhouse_tuned</td>
+<td class="perf-excellent">106.40</td>
+<td>7</td>
+<td class="perf-excellent">55.70</td>
+<td class="perf-excellent">58.00</td>
+<td class="perf-good">3.60</td>
+<td class="perf-excellent">55.20</td>
+<td class="perf-excellent">64.80</td>
 </tr>
 <tr data-query-group="even" data-query="Q06" data-system="exasol">
 <td>Q06</td>
 <td>exasol</td>
+<td class="perf-excellent">14.00</td>
 <td>7</td>
-<td class="perf-excellent">15.40</td>
-<td class="perf-excellent">15.40</td>
+<td class="perf-excellent">13.70</td>
+<td class="perf-excellent">13.70</td>
 <td class="perf-excellent">0.10</td>
-<td class="perf-excellent">15.20</td>
-<td class="perf-excellent">15.60</td>
+<td class="perf-excellent">13.60</td>
+<td class="perf-excellent">13.80</td>
 </tr>
 <tr data-query-start="true" data-query-group="odd" data-query="Q07" data-system="clickhouse">
 <td>Q07</td>
 <td>clickhouse</td>
+<td class="perf-poor">844.70</td>
 <td>7</td>
-<td class="perf-poor">814.80</td>
-<td class="perf-poor">815.50</td>
-<td class="perf-poor">15.40</td>
-<td class="perf-poor">796.00</td>
-<td class="perf-poor">836.00</td>
+<td class="perf-poor">824.50</td>
+<td class="perf-poor">839.90</td>
+<td class="perf-poor">48.40</td>
+<td class="perf-poor">805.10</td>
+<td class="perf-poor">946.50</td>
+</tr>
+<tr data-query-group="odd" data-query="Q07" data-system="clickhouse_stat">
+<td>Q07</td>
+<td>clickhouse_stat</td>
+<td class="perf-poor">845.00</td>
+<td>7</td>
+<td class="perf-poor">828.50</td>
+<td class="perf-poor">845.50</td>
+<td class="perf-poor">33.20</td>
+<td class="perf-poor">817.10</td>
+<td class="perf-poor">908.70</td>
+</tr>
+<tr data-query-group="odd" data-query="Q07" data-system="clickhouse_tuned">
+<td>Q07</td>
+<td>clickhouse_tuned</td>
+<td class="perf-poor">895.70</td>
+<td>7</td>
+<td class="perf-poor">848.00</td>
+<td class="perf-poor">848.50</td>
+<td class="perf-poor">20.30</td>
+<td class="perf-poor">823.00</td>
+<td class="perf-poor">871.40</td>
 </tr>
 <tr data-query-group="odd" data-query="Q07" data-system="exasol">
 <td>Q07</td>
 <td>exasol</td>
+<td class="perf-excellent">73.10</td>
 <td>7</td>
-<td class="perf-good">72.90</td>
-<td class="perf-good">73.00</td>
-<td class="perf-excellent">0.60</td>
-<td class="perf-good">72.20</td>
-<td class="perf-good">74.00</td>
+<td class="perf-excellent">68.90</td>
+<td class="perf-excellent">68.80</td>
+<td class="perf-excellent">0.70</td>
+<td class="perf-excellent">67.70</td>
+<td class="perf-excellent">69.70</td>
 </tr>
 <tr data-query-start="true" data-query-group="even" data-query="Q08" data-system="clickhouse">
 <td>Q08</td>
 <td>clickhouse</td>
+<td class="perf-poor">1,669.60</td>
 <td>7</td>
-<td class="perf-poor">1,582.30</td>
-<td class="perf-poor">1,613.00</td>
-<td class="perf-poor">54.20</td>
-<td class="perf-poor">1,578.20</td>
-<td class="perf-poor">1,726.50</td>
+<td class="perf-poor">1,629.40</td>
+<td class="perf-poor">1,636.50</td>
+<td class="perf-poor">31.10</td>
+<td class="perf-poor">1,611.10</td>
+<td class="perf-poor">1,705.30</td>
+</tr>
+<tr data-query-group="even" data-query="Q08" data-system="clickhouse_stat">
+<td>Q08</td>
+<td>clickhouse_stat</td>
+<td class="perf-average">364.30</td>
+<td>7</td>
+<td class="perf-average">353.70</td>
+<td class="perf-average">355.20</td>
+<td class="perf-good">6.60</td>
+<td class="perf-average">347.70</td>
+<td class="perf-average">366.90</td>
+</tr>
+<tr data-query-group="even" data-query="Q08" data-system="clickhouse_tuned">
+<td>Q08</td>
+<td>clickhouse_tuned</td>
+<td class="perf-poor">1,686.40</td>
+<td>7</td>
+<td class="perf-poor">1,705.30</td>
+<td class="perf-poor">1,700.80</td>
+<td class="perf-poor">27.10</td>
+<td class="perf-poor">1,652.10</td>
+<td class="perf-poor">1,731.50</td>
 </tr>
 <tr data-query-group="even" data-query="Q08" data-system="exasol">
 <td>Q08</td>
 <td>exasol</td>
+<td class="perf-excellent">32.40</td>
 <td>7</td>
-<td class="perf-excellent">33.50</td>
-<td class="perf-excellent">37.50</td>
-<td class="perf-average">10.70</td>
-<td class="perf-excellent">32.60</td>
-<td class="perf-good">61.70</td>
+<td class="perf-excellent">30.70</td>
+<td class="perf-excellent">33.90</td>
+<td class="perf-average">8.10</td>
+<td class="perf-excellent">30.40</td>
+<td class="perf-excellent">52.30</td>
 </tr>
 <tr data-query-start="true" data-query-group="odd" data-query="Q09" data-system="clickhouse">
 <td>Q09</td>
 <td>clickhouse</td>
+<td class="perf-poor">2,305.80</td>
 <td>7</td>
-<td class="perf-poor">2,071.40</td>
-<td class="perf-poor">2,074.70</td>
-<td class="perf-poor">16.00</td>
-<td class="perf-poor">2,052.00</td>
-<td class="perf-poor">2,099.90</td>
+<td class="perf-poor">2,108.70</td>
+<td class="perf-poor">2,099.00</td>
+<td class="perf-poor">23.80</td>
+<td class="perf-poor">2,070.20</td>
+<td class="perf-poor">2,124.60</td>
+</tr>
+<tr data-query-group="odd" data-query="Q09" data-system="clickhouse_stat">
+<td>Q09</td>
+<td>clickhouse_stat</td>
+<td class="perf-poor">988.20</td>
+<td>7</td>
+<td class="perf-poor">897.80</td>
+<td class="perf-poor">895.90</td>
+<td class="perf-poor">26.80</td>
+<td class="perf-poor">860.10</td>
+<td class="perf-poor">933.30</td>
+</tr>
+<tr data-query-group="odd" data-query="Q09" data-system="clickhouse_tuned">
+<td>Q09</td>
+<td>clickhouse_tuned</td>
+<td class="perf-poor">2,261.10</td>
+<td>7</td>
+<td class="perf-poor">2,158.90</td>
+<td class="perf-poor">2,169.10</td>
+<td class="perf-poor">28.00</td>
+<td class="perf-poor">2,128.70</td>
+<td class="perf-poor">2,205.00</td>
 </tr>
 <tr data-query-group="odd" data-query="Q09" data-system="exasol">
 <td>Q09</td>
 <td>exasol</td>
+<td class="perf-good">183.30</td>
 <td>7</td>
-<td class="perf-average">187.20</td>
-<td class="perf-average">187.00</td>
-<td class="perf-good">0.80</td>
-<td class="perf-average">185.50</td>
-<td class="perf-average">187.80</td>
+<td class="perf-good">174.50</td>
+<td class="perf-good">174.50</td>
+<td class="perf-excellent">0.50</td>
+<td class="perf-good">174.00</td>
+<td class="perf-good">175.40</td>
 </tr>
 <tr data-query-start="true" data-query-group="even" data-query="Q10" data-system="clickhouse">
 <td>Q10</td>
 <td>clickhouse</td>
+<td class="perf-average">609.20</td>
 <td>7</td>
-<td class="perf-average">508.20</td>
-<td class="perf-average">509.30</td>
-<td class="perf-average">5.70</td>
-<td class="perf-average">504.80</td>
-<td class="perf-average">521.30</td>
+<td class="perf-average">515.10</td>
+<td class="perf-average">517.00</td>
+<td class="perf-average">9.60</td>
+<td class="perf-average">508.50</td>
+<td class="perf-average">537.70</td>
+</tr>
+<tr data-query-group="even" data-query="Q10" data-system="clickhouse_stat">
+<td>Q10</td>
+<td>clickhouse_stat</td>
+<td class="perf-average">547.20</td>
+<td>7</td>
+<td class="perf-average">524.40</td>
+<td class="perf-average">532.30</td>
+<td class="perf-average">16.10</td>
+<td class="perf-average">518.10</td>
+<td class="perf-average">556.40</td>
+</tr>
+<tr data-query-group="even" data-query="Q10" data-system="clickhouse_tuned">
+<td>Q10</td>
+<td>clickhouse_tuned</td>
+<td class="perf-average">629.90</td>
+<td>7</td>
+<td class="perf-average">538.20</td>
+<td class="perf-average">535.40</td>
+<td class="perf-average">13.70</td>
+<td class="perf-average">511.00</td>
+<td class="perf-average">551.40</td>
 </tr>
 <tr data-query-group="even" data-query="Q10" data-system="exasol">
 <td>Q10</td>
 <td>exasol</td>
+<td class="perf-good">167.20</td>
 <td>7</td>
-<td class="perf-average">169.10</td>
-<td class="perf-average">166.60</td>
-<td class="perf-average">6.30</td>
-<td class="perf-average">158.20</td>
-<td class="perf-average">174.10</td>
+<td class="perf-good">165.10</td>
+<td class="perf-good">165.30</td>
+<td class="perf-good">7.00</td>
+<td class="perf-good">153.20</td>
+<td class="perf-good">176.20</td>
 </tr>
 <tr data-query-start="true" data-query-group="odd" data-query="Q11" data-system="clickhouse">
 <td>Q11</td>
 <td>clickhouse</td>
+<td class="perf-good">180.30</td>
 <td>7</td>
-<td class="perf-good">136.60</td>
-<td class="perf-good">137.50</td>
-<td class="perf-good">3.20</td>
-<td class="perf-good">134.70</td>
-<td class="perf-good">144.40</td>
+<td class="perf-good">139.00</td>
+<td class="perf-good">140.30</td>
+<td class="perf-good">2.30</td>
+<td class="perf-good">138.20</td>
+<td class="perf-good">143.80</td>
+</tr>
+<tr data-query-group="odd" data-query="Q11" data-system="clickhouse_stat">
+<td>Q11</td>
+<td>clickhouse_stat</td>
+<td class="perf-good">182.90</td>
+<td>7</td>
+<td class="perf-good">144.90</td>
+<td class="perf-good">145.10</td>
+<td class="perf-excellent">1.20</td>
+<td class="perf-good">143.40</td>
+<td class="perf-good">147.00</td>
+</tr>
+<tr data-query-group="odd" data-query="Q11" data-system="clickhouse_tuned">
+<td>Q11</td>
+<td>clickhouse_tuned</td>
+<td class="perf-good">184.50</td>
+<td>7</td>
+<td class="perf-good">141.00</td>
+<td class="perf-good">143.60</td>
+<td class="perf-good">6.70</td>
+<td class="perf-good">137.30</td>
+<td class="perf-good">155.30</td>
 </tr>
 <tr data-query-group="odd" data-query="Q11" data-system="exasol">
 <td>Q11</td>
 <td>exasol</td>
+<td class="perf-excellent">53.40</td>
 <td>7</td>
-<td class="perf-good">54.90</td>
-<td class="perf-good">54.80</td>
-<td class="perf-good">0.80</td>
-<td class="perf-good">53.80</td>
-<td class="perf-excellent">56.00</td>
+<td class="perf-excellent">52.20</td>
+<td class="perf-excellent">51.50</td>
+<td class="perf-excellent">1.10</td>
+<td class="perf-excellent">50.10</td>
+<td class="perf-excellent">52.50</td>
 </tr>
 <tr data-query-start="true" data-query-group="even" data-query="Q12" data-system="clickhouse">
 <td>Q12</td>
 <td>clickhouse</td>
+<td class="perf-average">300.40</td>
 <td>7</td>
-<td class="perf-average">176.90</td>
-<td class="perf-average">180.00</td>
-<td class="perf-average">7.00</td>
-<td class="perf-average">173.00</td>
-<td class="perf-average">190.20</td>
+<td class="perf-good">193.60</td>
+<td class="perf-good">192.00</td>
+<td class="perf-good">7.10</td>
+<td class="perf-good">181.70</td>
+<td class="perf-good">200.60</td>
+</tr>
+<tr data-query-group="even" data-query="Q12" data-system="clickhouse_stat">
+<td>Q12</td>
+<td>clickhouse_stat</td>
+<td class="perf-good">237.90</td>
+<td>7</td>
+<td class="perf-good">199.80</td>
+<td class="perf-good">200.50</td>
+<td class="perf-average">10.00</td>
+<td class="perf-good">185.60</td>
+<td class="perf-good">218.80</td>
+</tr>
+<tr data-query-group="even" data-query="Q12" data-system="clickhouse_tuned">
+<td>Q12</td>
+<td>clickhouse_tuned</td>
+<td class="perf-average">336.50</td>
+<td>7</td>
+<td class="perf-good">181.60</td>
+<td class="perf-good">182.70</td>
+<td class="perf-average">8.00</td>
+<td class="perf-good">175.90</td>
+<td class="perf-good">199.00</td>
 </tr>
 <tr data-query-group="even" data-query="Q12" data-system="exasol">
 <td>Q12</td>
 <td>exasol</td>
+<td class="perf-excellent">42.20</td>
 <td>7</td>
-<td class="perf-excellent">28.60</td>
-<td class="perf-excellent">28.80</td>
-<td class="perf-excellent">0.40</td>
-<td class="perf-excellent">28.40</td>
-<td class="perf-excellent">29.50</td>
+<td class="perf-excellent">27.30</td>
+<td class="perf-excellent">27.30</td>
+<td class="perf-excellent">0.50</td>
+<td class="perf-excellent">26.80</td>
+<td class="perf-excellent">28.20</td>
 </tr>
 <tr data-query-start="true" data-query-group="odd" data-query="Q13" data-system="clickhouse">
 <td>Q13</td>
 <td>clickhouse</td>
+<td class="perf-average">791.60</td>
 <td>7</td>
-<td class="perf-poor">721.10</td>
-<td class="perf-poor">718.30</td>
-<td class="perf-poor">38.40</td>
-<td class="perf-poor">657.50</td>
-<td class="perf-poor">772.70</td>
+<td class="perf-average">760.70</td>
+<td class="perf-average">754.30</td>
+<td class="perf-poor">31.60</td>
+<td class="perf-average">685.70</td>
+<td class="perf-average">780.00</td>
+</tr>
+<tr data-query-group="odd" data-query="Q13" data-system="clickhouse_stat">
+<td>Q13</td>
+<td>clickhouse_stat</td>
+<td class="perf-average">779.40</td>
+<td>7</td>
+<td class="perf-average">745.60</td>
+<td class="perf-average">753.50</td>
+<td class="perf-average">13.50</td>
+<td class="perf-poor">738.20</td>
+<td class="perf-average">771.80</td>
+</tr>
+<tr data-query-group="odd" data-query="Q13" data-system="clickhouse_tuned">
+<td>Q13</td>
+<td>clickhouse_tuned</td>
+<td class="perf-average">792.90</td>
+<td>7</td>
+<td class="perf-poor">770.70</td>
+<td class="perf-poor">762.60</td>
+<td class="perf-poor">30.40</td>
+<td class="perf-average">708.90</td>
+<td class="perf-poor">808.60</td>
 </tr>
 <tr data-query-group="odd" data-query="Q13" data-system="exasol">
 <td>Q13</td>
 <td>exasol</td>
+<td class="perf-good">148.40</td>
 <td>7</td>
-<td class="perf-average">155.10</td>
-<td class="perf-average">155.00</td>
-<td class="perf-good">0.70</td>
-<td class="perf-average">154.00</td>
-<td class="perf-good">156.00</td>
+<td class="perf-good">148.80</td>
+<td class="perf-good">148.60</td>
+<td class="perf-excellent">0.60</td>
+<td class="perf-good">147.80</td>
+<td class="perf-good">149.40</td>
 </tr>
 <tr data-query-start="true" data-query-group="even" data-query="Q14" data-system="clickhouse">
 <td>Q14</td>
 <td>clickhouse</td>
-<td>7</td>
-<td class="perf-excellent">53.30</td>
-<td class="perf-excellent">54.10</td>
-<td class="perf-good">1.90</td>
-<td class="perf-excellent">52.50</td>
 <td class="perf-excellent">57.80</td>
+<td>7</td>
+<td class="perf-excellent">55.00</td>
+<td class="perf-excellent">55.10</td>
+<td class="perf-excellent">1.00</td>
+<td class="perf-excellent">53.40</td>
+<td class="perf-excellent">56.80</td>
+</tr>
+<tr data-query-group="even" data-query="Q14" data-system="clickhouse_stat">
+<td>Q14</td>
+<td>clickhouse_stat</td>
+<td class="perf-excellent">70.80</td>
+<td>7</td>
+<td class="perf-excellent">71.30</td>
+<td class="perf-excellent">72.30</td>
+<td class="perf-good">2.40</td>
+<td class="perf-excellent">69.80</td>
+<td class="perf-excellent">75.50</td>
+</tr>
+<tr data-query-group="even" data-query="Q14" data-system="clickhouse_tuned">
+<td>Q14</td>
+<td>clickhouse_tuned</td>
+<td class="perf-excellent">65.00</td>
+<td>7</td>
+<td class="perf-excellent">57.30</td>
+<td class="perf-excellent">56.90</td>
+<td class="perf-good">2.60</td>
+<td class="perf-excellent">54.10</td>
+<td class="perf-excellent">61.30</td>
 </tr>
 <tr data-query-group="even" data-query="Q14" data-system="exasol">
 <td>Q14</td>
 <td>exasol</td>
+<td class="perf-excellent">29.30</td>
 <td>7</td>
-<td class="perf-excellent">24.90</td>
-<td class="perf-excellent">24.90</td>
-<td class="perf-excellent">0.30</td>
-<td class="perf-excellent">24.60</td>
-<td class="perf-excellent">25.40</td>
+<td class="perf-excellent">23.20</td>
+<td class="perf-excellent">23.20</td>
+<td class="perf-excellent">0.10</td>
+<td class="perf-excellent">23.10</td>
+<td class="perf-excellent">23.50</td>
 </tr>
 <tr data-query-start="true" data-query-group="odd" data-query="Q15" data-system="clickhouse">
 <td>Q15</td>
 <td>clickhouse</td>
+<td class="perf-excellent">103.50</td>
 <td>7</td>
-<td class="perf-good">91.80</td>
-<td class="perf-good">91.70</td>
+<td class="perf-excellent">93.50</td>
+<td class="perf-excellent">93.40</td>
 <td class="perf-excellent">0.50</td>
-<td class="perf-good">91.20</td>
-<td class="perf-good">92.70</td>
+<td class="perf-excellent">92.70</td>
+<td class="perf-excellent">94.20</td>
+</tr>
+<tr data-query-group="odd" data-query="Q15" data-system="clickhouse_stat">
+<td>Q15</td>
+<td>clickhouse_stat</td>
+<td class="perf-excellent">111.30</td>
+<td>7</td>
+<td class="perf-good">100.90</td>
+<td class="perf-good">101.40</td>
+<td class="perf-excellent">0.90</td>
+<td class="perf-good">100.30</td>
+<td class="perf-good">102.80</td>
+</tr>
+<tr data-query-group="odd" data-query="Q15" data-system="clickhouse_tuned">
+<td>Q15</td>
+<td>clickhouse_tuned</td>
+<td class="perf-good">127.70</td>
+<td>7</td>
+<td class="perf-good">103.50</td>
+<td class="perf-good">103.60</td>
+<td class="perf-good">3.30</td>
+<td class="perf-good">97.90</td>
+<td class="perf-good">108.70</td>
 </tr>
 <tr data-query-group="odd" data-query="Q15" data-system="exasol">
 <td>Q15</td>
 <td>exasol</td>
+<td class="perf-excellent">78.60</td>
 <td>7</td>
-<td class="perf-good">82.70</td>
-<td class="perf-good">82.70</td>
-<td class="perf-good">1.00</td>
-<td class="perf-good">81.80</td>
-<td class="perf-good">84.50</td>
+<td class="perf-excellent">76.60</td>
+<td class="perf-excellent">77.00</td>
+<td class="perf-excellent">1.40</td>
+<td class="perf-excellent">75.50</td>
+<td class="perf-excellent">79.00</td>
 </tr>
 <tr data-query-start="true" data-query-group="even" data-query="Q16" data-system="clickhouse">
 <td>Q16</td>
 <td>clickhouse</td>
+<td class="perf-good">197.20</td>
 <td>7</td>
-<td class="perf-average">185.20</td>
-<td class="perf-average">188.30</td>
-<td class="perf-average">7.70</td>
-<td class="perf-average">182.90</td>
-<td class="perf-average">204.60</td>
+<td class="perf-good">192.70</td>
+<td class="perf-good">192.60</td>
+<td class="perf-good">2.40</td>
+<td class="perf-good">188.70</td>
+<td class="perf-good">196.80</td>
+</tr>
+<tr data-query-group="even" data-query="Q16" data-system="clickhouse_stat">
+<td>Q16</td>
+<td>clickhouse_stat</td>
+<td class="perf-good">194.90</td>
+<td>7</td>
+<td class="perf-good">191.40</td>
+<td class="perf-good">193.70</td>
+<td class="perf-good">7.20</td>
+<td class="perf-good">188.90</td>
+<td class="perf-good">209.20</td>
+</tr>
+<tr data-query-group="even" data-query="Q16" data-system="clickhouse_tuned">
+<td>Q16</td>
+<td>clickhouse_tuned</td>
+<td class="perf-good">246.20</td>
+<td>7</td>
+<td class="perf-average">220.10</td>
+<td class="perf-average">221.90</td>
+<td class="perf-good">4.80</td>
+<td class="perf-average">215.30</td>
+<td class="perf-average">227.90</td>
 </tr>
 <tr data-query-group="even" data-query="Q16" data-system="exasol">
 <td>Q16</td>
 <td>exasol</td>
+<td class="perf-good">230.00</td>
 <td>7</td>
-<td class="perf-average">232.10</td>
-<td class="perf-average">235.50</td>
-<td class="perf-average">8.90</td>
-<td class="perf-average">230.10</td>
-<td class="perf-average">255.10</td>
+<td class="perf-average">222.70</td>
+<td class="perf-average">225.50</td>
+<td class="perf-good">7.20</td>
+<td class="perf-average">218.90</td>
+<td class="perf-average">241.00</td>
 </tr>
 <tr data-query-start="true" data-query-group="odd" data-query="Q17" data-system="clickhouse">
 <td>Q17</td>
 <td>clickhouse</td>
+<td class="perf-average">805.80</td>
 <td>7</td>
-<td class="perf-poor">719.90</td>
-<td class="perf-poor">724.70</td>
-<td class="perf-poor">16.50</td>
-<td class="perf-poor">710.10</td>
-<td class="perf-poor">757.80</td>
+<td class="perf-average">732.10</td>
+<td class="perf-average">734.30</td>
+<td class="perf-good">7.20</td>
+<td class="perf-average">727.80</td>
+<td class="perf-average">749.70</td>
+</tr>
+<tr data-query-group="odd" data-query="Q17" data-system="clickhouse_stat">
+<td>Q17</td>
+<td>clickhouse_stat</td>
+<td class="perf-poor">830.70</td>
+<td>7</td>
+<td class="perf-average">733.70</td>
+<td class="perf-average">737.10</td>
+<td class="perf-average">9.40</td>
+<td class="perf-average">729.50</td>
+<td class="perf-average">757.00</td>
+</tr>
+<tr data-query-group="odd" data-query="Q17" data-system="clickhouse_tuned">
+<td>Q17</td>
+<td>clickhouse_tuned</td>
+<td class="perf-average">255.80</td>
+<td>7</td>
+<td class="perf-average">331.10</td>
+<td class="perf-average">331.30</td>
+<td class="perf-good">3.10</td>
+<td class="perf-average">327.30</td>
+<td class="perf-average">335.30</td>
 </tr>
 <tr data-query-group="odd" data-query="Q17" data-system="exasol">
 <td>Q17</td>
 <td>exasol</td>
+<td class="perf-excellent">15.50</td>
 <td>7</td>
-<td class="perf-excellent">16.20</td>
-<td class="perf-excellent">16.20</td>
-<td class="perf-excellent">0.30</td>
-<td class="perf-excellent">15.90</td>
-<td class="perf-excellent">16.70</td>
+<td class="perf-excellent">13.90</td>
+<td class="perf-excellent">13.90</td>
+<td class="perf-excellent">0.20</td>
+<td class="perf-excellent">13.60</td>
+<td class="perf-excellent">14.20</td>
 </tr>
 <tr data-query-start="true" data-query-group="even" data-query="Q18" data-system="clickhouse">
 <td>Q18</td>
 <td>clickhouse</td>
+<td class="perf-average">825.20</td>
 <td>7</td>
-<td class="perf-poor">701.60</td>
-<td class="perf-poor">727.30</td>
-<td class="perf-poor">75.10</td>
-<td class="perf-poor">685.40</td>
-<td class="perf-poor">895.60</td>
+<td class="perf-average">719.70</td>
+<td class="perf-average">721.40</td>
+<td class="perf-average">15.50</td>
+<td class="perf-average">705.60</td>
+<td class="perf-average">751.40</td>
+</tr>
+<tr data-query-group="even" data-query="Q18" data-system="clickhouse_stat">
+<td>Q18</td>
+<td>clickhouse_stat</td>
+<td class="perf-average">781.60</td>
+<td>7</td>
+<td class="perf-average">745.90</td>
+<td class="perf-average">750.20</td>
+<td class="perf-average">16.80</td>
+<td class="perf-average">730.10</td>
+<td class="perf-average">772.80</td>
+</tr>
+<tr data-query-group="even" data-query="Q18" data-system="clickhouse_tuned">
+<td>Q18</td>
+<td>clickhouse_tuned</td>
+<td class="perf-poor">2,396.00</td>
+<td>7</td>
+<td class="perf-poor">1,941.10</td>
+<td class="perf-poor">1,944.30</td>
+<td class="perf-poor">46.40</td>
+<td class="perf-poor">1,888.20</td>
+<td class="perf-poor">2,010.40</td>
 </tr>
 <tr data-query-group="even" data-query="Q18" data-system="exasol">
 <td>Q18</td>
 <td>exasol</td>
+<td class="perf-good">145.40</td>
 <td>7</td>
-<td class="perf-average">152.00</td>
-<td class="perf-average">153.10</td>
-<td class="perf-good">2.30</td>
-<td class="perf-average">150.90</td>
-<td class="perf-average">157.00</td>
+<td class="perf-good">146.50</td>
+<td class="perf-good">146.00</td>
+<td class="perf-excellent">0.90</td>
+<td class="perf-good">144.90</td>
+<td class="perf-good">147.00</td>
 </tr>
 <tr data-query-start="true" data-query-group="odd" data-query="Q19" data-system="clickhouse">
 <td>Q19</td>
 <td>clickhouse</td>
+<td class="perf-average">545.20</td>
 <td>7</td>
-<td class="perf-poor">531.80</td>
-<td class="perf-poor">535.20</td>
-<td class="perf-average">6.00</td>
-<td class="perf-poor">528.80</td>
-<td class="perf-poor">545.30</td>
+<td class="perf-average">547.80</td>
+<td class="perf-average">550.40</td>
+<td class="perf-average">7.40</td>
+<td class="perf-average">543.70</td>
+<td class="perf-average">566.10</td>
+</tr>
+<tr data-query-group="odd" data-query="Q19" data-system="clickhouse_stat">
+<td>Q19</td>
+<td>clickhouse_stat</td>
+<td class="perf-poor">834.80</td>
+<td>7</td>
+<td class="perf-poor">821.10</td>
+<td class="perf-poor">823.50</td>
+<td class="perf-poor">22.10</td>
+<td class="perf-poor">792.50</td>
+<td class="perf-poor">863.70</td>
+</tr>
+<tr data-query-group="odd" data-query="Q19" data-system="clickhouse_tuned">
+<td>Q19</td>
+<td>clickhouse_tuned</td>
+<td class="perf-poor">1,450.40</td>
+<td>7</td>
+<td class="perf-poor">1,362.10</td>
+<td class="perf-poor">1,367.40</td>
+<td class="perf-poor">17.70</td>
+<td class="perf-poor">1,351.70</td>
+<td class="perf-poor">1,401.90</td>
 </tr>
 <tr data-query-group="odd" data-query="Q19" data-system="exasol">
 <td>Q19</td>
 <td>exasol</td>
+<td class="perf-excellent">14.60</td>
 <td>7</td>
-<td class="perf-excellent">14.00</td>
-<td class="perf-excellent">14.00</td>
-<td class="perf-excellent">0.20</td>
-<td class="perf-excellent">13.80</td>
-<td class="perf-excellent">14.40</td>
+<td class="perf-excellent">11.90</td>
+<td class="perf-excellent">12.10</td>
+<td class="perf-excellent">0.50</td>
+<td class="perf-excellent">11.60</td>
+<td class="perf-excellent">13.10</td>
 </tr>
 <tr data-query-start="true" data-query-group="even" data-query="Q20" data-system="clickhouse">
 <td>Q20</td>
 <td>clickhouse</td>
+<td class="perf-good">125.80</td>
 <td>7</td>
-<td class="perf-good">110.80</td>
-<td class="perf-good">110.90</td>
-<td class="perf-average">4.10</td>
-<td class="perf-good">106.00</td>
-<td class="perf-good">116.60</td>
+<td class="perf-good">114.00</td>
+<td class="perf-good">113.70</td>
+<td class="perf-good">3.30</td>
+<td class="perf-good">108.50</td>
+<td class="perf-good">118.00</td>
+</tr>
+<tr data-query-group="even" data-query="Q20" data-system="clickhouse_stat">
+<td>Q20</td>
+<td>clickhouse_stat</td>
+<td class="perf-good">140.40</td>
+<td>7</td>
+<td class="perf-good">125.60</td>
+<td class="perf-good">127.70</td>
+<td class="perf-good">4.80</td>
+<td class="perf-good">122.20</td>
+<td class="perf-good">134.80</td>
+</tr>
+<tr data-query-group="even" data-query="Q20" data-system="clickhouse_tuned">
+<td>Q20</td>
+<td>clickhouse_tuned</td>
+<td class="perf-average">475.30</td>
+<td>7</td>
+<td class="perf-average">335.40</td>
+<td class="perf-average">329.90</td>
+<td class="perf-average">9.20</td>
+<td class="perf-average">316.30</td>
+<td class="perf-average">338.20</td>
 </tr>
 <tr data-query-group="even" data-query="Q20" data-system="exasol">
 <td>Q20</td>
 <td>exasol</td>
+<td class="perf-excellent">66.40</td>
 <td>7</td>
-<td class="perf-good">72.70</td>
-<td class="perf-good">74.90</td>
-<td class="perf-good">3.00</td>
-<td class="perf-good">72.10</td>
-<td class="perf-good">78.70</td>
+<td class="perf-excellent">67.40</td>
+<td class="perf-excellent">67.30</td>
+<td class="perf-excellent">0.90</td>
+<td class="perf-excellent">66.00</td>
+<td class="perf-excellent">68.50</td>
 </tr>
 <tr data-query-start="true" data-query-group="odd" data-query="Q21" data-system="clickhouse">
 <td>Q21</td>
 <td>clickhouse</td>
+<td class="perf-poor">6,334.80</td>
 <td>7</td>
-<td class="perf-poor">6,071.50</td>
-<td class="perf-poor">6,035.00</td>
-<td class="perf-poor">78.90</td>
-<td class="perf-poor">5,874.00</td>
-<td class="perf-poor">6,098.90</td>
+<td class="perf-poor">6,315.80</td>
+<td class="perf-poor">6,332.20</td>
+<td class="perf-poor">203.30</td>
+<td class="perf-poor">6,003.20</td>
+<td class="perf-poor">6,578.90</td>
+</tr>
+<tr data-query-group="odd" data-query="Q21" data-system="clickhouse_stat">
+<td>Q21</td>
+<td>clickhouse_stat</td>
+<td class="perf-poor">6,232.60</td>
+<td>7</td>
+<td class="perf-poor">6,283.70</td>
+<td class="perf-poor">6,234.70</td>
+<td class="perf-poor">85.50</td>
+<td class="perf-poor">6,130.20</td>
+<td class="perf-poor">6,319.00</td>
+</tr>
+<tr data-query-group="odd" data-query="Q21" data-system="clickhouse_tuned">
+<td>Q21</td>
+<td>clickhouse_tuned</td>
+<td class="perf-poor">3,861.50</td>
+<td>7</td>
+<td class="perf-poor">3,001.60</td>
+<td class="perf-poor">3,004.90</td>
+<td class="perf-poor">48.50</td>
+<td class="perf-poor">2,932.10</td>
+<td class="perf-poor">3,074.90</td>
 </tr>
 <tr data-query-group="odd" data-query="Q21" data-system="exasol">
 <td>Q21</td>
 <td>exasol</td>
+<td class="perf-excellent">103.40</td>
 <td>7</td>
-<td class="perf-good">108.20</td>
-<td class="perf-good">114.20</td>
-<td class="perf-poor">16.00</td>
-<td class="perf-good">105.90</td>
-<td class="perf-good">150.20</td>
+<td class="perf-good">106.70</td>
+<td class="perf-good">111.10</td>
+<td class="perf-average">14.50</td>
+<td class="perf-good">102.60</td>
+<td class="perf-good">143.30</td>
 </tr>
 <tr data-query-start="true" data-query-group="even" data-query="Q22" data-system="clickhouse">
 <td>Q22</td>
 <td>clickhouse</td>
+<td class="perf-good">157.10</td>
 <td>7</td>
-<td class="perf-good">129.20</td>
-<td class="perf-good">135.10</td>
-<td class="perf-average">12.30</td>
-<td class="perf-good">125.40</td>
-<td class="perf-average">160.50</td>
+<td class="perf-good">141.40</td>
+<td class="perf-good">144.30</td>
+<td class="perf-average">7.40</td>
+<td class="perf-good">137.80</td>
+<td class="perf-good">158.50</td>
+</tr>
+<tr data-query-group="even" data-query="Q22" data-system="clickhouse_stat">
+<td>Q22</td>
+<td>clickhouse_stat</td>
+<td class="perf-good">153.20</td>
+<td>7</td>
+<td class="perf-good">135.60</td>
+<td class="perf-good">138.00</td>
+<td class="perf-average">7.30</td>
+<td class="perf-good">130.80</td>
+<td class="perf-good">150.50</td>
+</tr>
+<tr data-query-group="even" data-query="Q22" data-system="clickhouse_tuned">
+<td>Q22</td>
+<td>clickhouse_tuned</td>
+<td class="perf-good">171.10</td>
+<td>7</td>
+<td class="perf-good">124.90</td>
+<td class="perf-good">124.20</td>
+<td class="perf-average">7.90</td>
+<td class="perf-good">114.50</td>
+<td class="perf-good">135.90</td>
 </tr>
 <tr data-query-group="even" data-query="Q22" data-system="exasol">
 <td>Q22</td>
 <td>exasol</td>
+<td class="perf-excellent">34.70</td>
 <td>7</td>
-<td class="perf-excellent">35.20</td>
-<td class="perf-excellent">35.30</td>
+<td class="perf-excellent">33.60</td>
+<td class="perf-excellent">33.60</td>
 <td class="perf-excellent">0.30</td>
-<td class="perf-excellent">35.00</td>
-<td class="perf-excellent">35.90</td>
+<td class="perf-excellent">33.10</td>
+<td class="perf-excellent">34.00</td>
 </tr>
 </tbody>
 </table>
@@ -1366,16 +2416,48 @@ SELECT &#39;Table optimization completed for ClickHouse&#39;;
                         
                         
                         <tr>
-                            <td><strong>Clickhouse</strong></td>
-                            <td>160.83s</td>
+                            <td><strong>Clickhouse_tuned</strong></td>
+                            <td>143.99s</td>
                             <td>
                                 
-                                32.48s
+                                33.96s
                                 
                             </td>
                             <td>
                                 
-                                193.31s
+                                177.95s
+                                
+                            </td>
+                        </tr>
+                        
+                        
+                        <tr>
+                            <td><strong>Clickhouse_stat</strong></td>
+                            <td>143.99s</td>
+                            <td>
+                                
+                                34.60s
+                                
+                            </td>
+                            <td>
+                                
+                                178.59s
+                                
+                            </td>
+                        </tr>
+                        
+                        
+                        <tr>
+                            <td><strong>Clickhouse</strong></td>
+                            <td>143.99s</td>
+                            <td>
+                                
+                                36.32s
+                                
+                            </td>
+                            <td>
+                                
+                                180.31s
                                 
                             </td>
                         </tr>
@@ -1383,15 +2465,15 @@ SELECT &#39;Table optimization completed for ClickHouse&#39;;
                         
                         <tr>
                             <td><strong>Exasol</strong></td>
-                            <td>160.83s</td>
+                            <td>143.99s</td>
                             <td>
                                 
-                                551.61s
+                                539.43s
                                 
                             </td>
                             <td>
                                 
-                                712.44s
+                                683.42s
                                 
                             </td>
                         </tr>
@@ -1401,7 +2483,7 @@ SELECT &#39;Table optimization completed for ClickHouse&#39;;
             </div>
 
             <div class="timing-notes">
-                <p><strong>Infrastructure Provisioning:</strong> 160.83s</p>
+                <p><strong>Infrastructure Provisioning:</strong> 143.99s</p>
                 
                 <p>Cloud instances were provisioned (VMs created, networking configured)</p>
                 
@@ -1420,10 +2502,18 @@ SELECT &#39;Table optimization completed for ClickHouse&#39;;
                 
                 
                 
+                
+                
+                
+                
+                
+                
+                
+                
                 <p><strong>Software Installation Comparison:</strong></p>
                 <ul>
-                    <li>Clickhouse had the fastest software installation at 32.48s</li>
-                    <li>Exasol took 551.61s to install (17.0x slower)</li>
+                    <li>Clickhouse_tuned had the fastest software installation at 33.96s</li>
+                    <li>Exasol took 539.43s to install (15.9x slower)</li>
                 </ul>
                 
                 
@@ -1458,12 +2548,12 @@ SELECT &#39;Table optimization completed for ClickHouse&#39;;
     <h4>Storage Setup</h4>
     <pre><code class="language-bash"># Stop existing RAID array at /dev/md0 if present
 sudo mdadm --stop /dev/md0 2&gt;/dev/null || true
-# Clear RAID superblock on /dev/nvme2n1
-sudo mdadm --zero-superblock /dev/nvme2n1 2&gt;/dev/null || true
 # Clear RAID superblock on /dev/nvme1n1
 sudo mdadm --zero-superblock /dev/nvme1n1 2&gt;/dev/null || true
+# Clear RAID superblock on /dev/nvme2n1
+sudo mdadm --zero-superblock /dev/nvme2n1 2&gt;/dev/null || true
 # Create RAID0 array from 2 devices
-yes | sudo mdadm --create /dev/md0 --level=0 --raid-devices=2 /dev/nvme2n1 /dev/nvme1n1
+yes | sudo mdadm --create /dev/md0 --level=0 --raid-devices=2 /dev/nvme1n1 /dev/nvme2n1
 # Wait for RAID array /dev/md0 to be ready
 sudo mdadm --wait /dev/md0 2&gt;/dev/null || true
 # Create mdadm configuration directory
@@ -1661,7 +2751,205 @@ confd_client db_start db_name: Exasol
             
             <details class="setup-details">
                 <summary>
-                    <h3>Clickhouse 25.9.3.48 Setup</h3>
+                    <h3>Clickhouse_tuned 25.9.4.58 Setup</h3>
+                </summary>
+
+                
+                
+
+    
+    
+    
+    
+    
+    
+        
+            
+            
+<div class="code-section">
+    <h4>Storage Setup</h4>
+    <pre><code class="language-bash"># Stop existing RAID array at /dev/md0 if present
+sudo mdadm --stop /dev/md0 2&gt;/dev/null || true
+# Clear RAID superblock on /dev/nvme2n1
+sudo mdadm --zero-superblock /dev/nvme2n1 2&gt;/dev/null || true
+# Clear RAID superblock on /dev/nvme1n1
+sudo mdadm --zero-superblock /dev/nvme1n1 2&gt;/dev/null || true
+# Create RAID0 array from 2 devices
+yes | sudo mdadm --create /dev/md0 --level=0 --raid-devices=2 /dev/nvme2n1 /dev/nvme1n1
+# Wait for RAID array /dev/md0 to be ready
+sudo mdadm --wait /dev/md0 2&gt;/dev/null || true
+# Create mdadm configuration directory
+sudo mkdir -p /etc/mdadm
+# Save RAID configuration
+sudo mdadm --detail --scan | sudo tee -a /etc/mdadm/mdadm.conf
+# Format /dev/md0 with ext4 filesystem
+sudo mkfs.ext4 -F /dev/md0
+# Create mount point /data
+sudo mkdir -p /data
+# Mount /dev/md0 to /data
+sudo mount /dev/md0 /data
+# Set ownership of /data to ubuntu:ubuntu
+sudo chown -R ubuntu:ubuntu /data
+# Create ClickHouse data directory under /data
+sudo mkdir -p /data/clickhouse
+# Set ownership of /data/clickhouse to clickhouse:clickhouse
+sudo chown -R clickhouse:clickhouse /data/clickhouse
+</code></pre>
+</div>
+
+        
+    
+        
+            
+            
+<div class="code-section">
+    <h4>Prerequisites</h4>
+    <pre><code class="language-bash"># Update package lists
+sudo apt-get update
+# Install prerequisite packages for secure repository access
+sudo apt-get install -y apt-transport-https ca-certificates curl gnupg
+</code></pre>
+</div>
+
+        
+    
+        
+            
+            
+<div class="code-section">
+    <h4>Repository Setup</h4>
+    <pre><code class="language-bash"># Add ClickHouse GPG key to system keyring
+curl -fsSL &#39;https://packages.clickhouse.com/rpm/lts/repodata/repomd.xml.key&#39; | sudo gpg --dearmor -o /usr/share/keyrings/clickhouse-keyring.gpg
+# Add ClickHouse official repository to APT sources
+ARCH=$(dpkg --print-architecture) &amp;&amp; echo &#34;deb [signed-by=/usr/share/keyrings/clickhouse-keyring.gpg arch=${ARCH}] https://packages.clickhouse.com/deb stable main&#34; | sudo tee /etc/apt/sources.list.d/clickhouse.list
+# Update package lists with ClickHouse repository
+sudo apt-get update
+</code></pre>
+</div>
+
+        
+    
+        
+            
+            
+<div class="code-section">
+    <h4>Installation</h4>
+    <pre><code class="language-bash"># Install ClickHouse server and client version &lt;PUBLIC_IP&gt;
+sudo apt-get install -y clickhouse-server=25.9.4.58 clickhouse-client=25.9.4.58
+</code></pre>
+</div>
+
+        
+    
+        
+            
+            
+<div class="code-section">
+    <h4>Configuration</h4>
+    <pre><code class="language-bash"># Create custom ClickHouse configuration file
+sudo tee /etc/clickhouse-server/config.d/benchmark.xml &gt; /dev/null &lt;&lt; &#39;EOF&#39;
+&lt;clickhouse&gt;
+    &lt;listen_host&gt;::&lt;/listen_host&gt;
+    &lt;path&gt;/data/clickhouse&lt;/path&gt;
+    &lt;tmp_path&gt;/data/clickhouse/tmp&lt;/tmp_path&gt;
+    &lt;max_server_memory_usage&gt;106897742233&lt;/max_server_memory_usage&gt;
+    &lt;max_concurrent_queries&gt;8&lt;/max_concurrent_queries&gt;
+    &lt;background_pool_size&gt;16&lt;/background_pool_size&gt;
+    &lt;background_schedule_pool_size&gt;16&lt;/background_schedule_pool_size&gt;
+    &lt;max_table_size_to_drop&gt;50000000000&lt;/max_table_size_to_drop&gt;
+&lt;/clickhouse&gt;
+EOF
+</code></pre>
+</div>
+
+        
+    
+        
+            
+            
+<div class="code-section">
+    <h4>User Configuration</h4>
+    <pre><code class="language-bash"># Configure ClickHouse user profile with password and query settings
+sudo tee /etc/clickhouse-server/users.d/benchmark.xml &gt; /dev/null &lt;&lt; &#39;EOF&#39;
+&lt;clickhouse&gt;
+    &lt;users&gt;
+        &lt;default replace=&#34;true&#34;&gt;
+            &lt;password_sha256_hex&gt;2cca9d8714615f4132390a3db9296d39ec051b3faff87be7ea5f7fe0e2de14c9&lt;/password_sha256_hex&gt;
+            &lt;networks&gt;
+                &lt;ip&gt;::/0&lt;/ip&gt;
+            &lt;/networks&gt;
+        &lt;/default&gt;
+    &lt;/users&gt;
+    &lt;profiles&gt;
+        &lt;default&gt;
+            &lt;max_threads&gt;16&lt;/max_threads&gt;
+            &lt;max_memory_usage&gt;45000000000&lt;/max_memory_usage&gt;
+            &lt;max_bytes_before_external_sort&gt;73492197785&lt;/max_bytes_before_external_sort&gt;
+            &lt;max_bytes_before_external_group_by&gt;73492197785&lt;/max_bytes_before_external_group_by&gt;
+            &lt;join_use_nulls&gt;1&lt;/join_use_nulls&gt;
+            &lt;allow_experimental_correlated_subqueries&gt;1&lt;/allow_experimental_correlated_subqueries&gt;
+            &lt;optimize_read_in_order&gt;1&lt;/optimize_read_in_order&gt;
+            &lt;max_insert_threads&gt;8&lt;/max_insert_threads&gt;
+        &lt;/default&gt;
+    &lt;/profiles&gt;
+&lt;/clickhouse&gt;
+EOF
+</code></pre>
+</div>
+
+        
+    
+        
+            
+            
+<div class="code-section">
+    <h4>Service Management</h4>
+    <pre><code class="language-bash"># Start ClickHouse server service
+sudo systemctl start clickhouse-server
+# Enable ClickHouse server to start on boot
+sudo systemctl enable clickhouse-server
+</code></pre>
+</div>
+
+        
+    
+
+
+
+    
+    
+    <div class="tuning-parameters">
+        <h4>Tuning Parameters</h4>
+        <ul>
+            
+            
+            
+            <li><code>memory_limit</code>: 48g</li>
+            <li><code>max_threads</code>: 16</li>
+            
+                
+                
+                    
+                
+                <li><code>max_memory_usage</code>: 45.0GB</li>
+            
+        </ul>
+    </div>
+    
+
+
+
+<div class="data-directory">
+    <strong>Data Directory:</strong> <code>/data/clickhouse</code>
+</div>
+
+
+                
+            </details>
+            
+            <details class="setup-details">
+                <summary>
+                    <h3>Clickhouse 25.9.4.58 Setup</h3>
                 </summary>
 
                 
@@ -1745,7 +3033,7 @@ sudo apt-get update
 <div class="code-section">
     <h4>Installation</h4>
     <pre><code class="language-bash"># Install ClickHouse server and client version &lt;PUBLIC_IP&gt;
-sudo apt-get install -y clickhouse-server=25.9.3.48 clickhouse-client=25.9.3.48
+sudo apt-get install -y clickhouse-server=25.9.4.58 clickhouse-client=25.9.4.58
 </code></pre>
 </div>
 
@@ -1761,6 +3049,205 @@ sudo tee /etc/clickhouse-server/config.d/benchmark.xml &gt; /dev/null &lt;&lt; &
 &lt;clickhouse&gt;
     &lt;listen_host&gt;::&lt;/listen_host&gt;
     &lt;path&gt;/data/clickhouse&lt;/path&gt;
+    &lt;tmp_path&gt;/data/clickhouse/tmp&lt;/tmp_path&gt;
+    &lt;max_server_memory_usage&gt;106897748787&lt;/max_server_memory_usage&gt;
+    &lt;max_concurrent_queries&gt;8&lt;/max_concurrent_queries&gt;
+    &lt;background_pool_size&gt;16&lt;/background_pool_size&gt;
+    &lt;background_schedule_pool_size&gt;16&lt;/background_schedule_pool_size&gt;
+    &lt;max_table_size_to_drop&gt;50000000000&lt;/max_table_size_to_drop&gt;
+&lt;/clickhouse&gt;
+EOF
+</code></pre>
+</div>
+
+        
+    
+        
+            
+            
+<div class="code-section">
+    <h4>User Configuration</h4>
+    <pre><code class="language-bash"># Configure ClickHouse user profile with password and query settings
+sudo tee /etc/clickhouse-server/users.d/benchmark.xml &gt; /dev/null &lt;&lt; &#39;EOF&#39;
+&lt;clickhouse&gt;
+    &lt;users&gt;
+        &lt;default replace=&#34;true&#34;&gt;
+            &lt;password_sha256_hex&gt;2cca9d8714615f4132390a3db9296d39ec051b3faff87be7ea5f7fe0e2de14c9&lt;/password_sha256_hex&gt;
+            &lt;networks&gt;
+                &lt;ip&gt;::/0&lt;/ip&gt;
+            &lt;/networks&gt;
+        &lt;/default&gt;
+    &lt;/users&gt;
+    &lt;profiles&gt;
+        &lt;default&gt;
+            &lt;max_threads&gt;16&lt;/max_threads&gt;
+            &lt;max_memory_usage&gt;45000000000&lt;/max_memory_usage&gt;
+            &lt;max_bytes_before_external_sort&gt;73492202291&lt;/max_bytes_before_external_sort&gt;
+            &lt;max_bytes_before_external_group_by&gt;73492202291&lt;/max_bytes_before_external_group_by&gt;
+            &lt;join_use_nulls&gt;1&lt;/join_use_nulls&gt;
+            &lt;allow_experimental_correlated_subqueries&gt;1&lt;/allow_experimental_correlated_subqueries&gt;
+            &lt;optimize_read_in_order&gt;1&lt;/optimize_read_in_order&gt;
+            &lt;max_insert_threads&gt;8&lt;/max_insert_threads&gt;
+        &lt;/default&gt;
+    &lt;/profiles&gt;
+&lt;/clickhouse&gt;
+EOF
+</code></pre>
+</div>
+
+        
+    
+        
+            
+            
+<div class="code-section">
+    <h4>Service Management</h4>
+    <pre><code class="language-bash"># Start ClickHouse server service
+sudo systemctl start clickhouse-server
+# Enable ClickHouse server to start on boot
+sudo systemctl enable clickhouse-server
+</code></pre>
+</div>
+
+        
+    
+
+
+
+    
+    
+    <div class="tuning-parameters">
+        <h4>Tuning Parameters</h4>
+        <ul>
+            
+            
+            
+            <li><code>memory_limit</code>: 48g</li>
+            <li><code>max_threads</code>: 16</li>
+            
+                
+                
+                    
+                
+                <li><code>max_memory_usage</code>: 45.0GB</li>
+            
+        </ul>
+    </div>
+    
+
+
+
+<div class="data-directory">
+    <strong>Data Directory:</strong> <code>/data/clickhouse</code>
+</div>
+
+
+                
+            </details>
+            
+            <details class="setup-details">
+                <summary>
+                    <h3>Clickhouse_stat 25.9.4.58 Setup</h3>
+                </summary>
+
+                
+                
+
+    
+    
+    
+    
+    
+    
+        
+            
+            
+<div class="code-section">
+    <h4>Storage Setup</h4>
+    <pre><code class="language-bash"># Stop existing RAID array at /dev/md0 if present
+sudo mdadm --stop /dev/md0 2&gt;/dev/null || true
+# Clear RAID superblock on /dev/nvme2n1
+sudo mdadm --zero-superblock /dev/nvme2n1 2&gt;/dev/null || true
+# Clear RAID superblock on /dev/nvme1n1
+sudo mdadm --zero-superblock /dev/nvme1n1 2&gt;/dev/null || true
+# Create RAID0 array from 2 devices
+yes | sudo mdadm --create /dev/md0 --level=0 --raid-devices=2 /dev/nvme2n1 /dev/nvme1n1
+# Wait for RAID array /dev/md0 to be ready
+sudo mdadm --wait /dev/md0 2&gt;/dev/null || true
+# Create mdadm configuration directory
+sudo mkdir -p /etc/mdadm
+# Save RAID configuration
+sudo mdadm --detail --scan | sudo tee -a /etc/mdadm/mdadm.conf
+# Format /dev/md0 with ext4 filesystem
+sudo mkfs.ext4 -F /dev/md0
+# Create mount point /data
+sudo mkdir -p /data
+# Mount /dev/md0 to /data
+sudo mount /dev/md0 /data
+# Set ownership of /data to ubuntu:ubuntu
+sudo chown -R ubuntu:ubuntu /data
+# Create ClickHouse data directory under /data
+sudo mkdir -p /data/clickhouse
+# Set ownership of /data/clickhouse to clickhouse:clickhouse
+sudo chown -R clickhouse:clickhouse /data/clickhouse
+</code></pre>
+</div>
+
+        
+    
+        
+            
+            
+<div class="code-section">
+    <h4>Prerequisites</h4>
+    <pre><code class="language-bash"># Update package lists
+sudo apt-get update
+# Install prerequisite packages for secure repository access
+sudo apt-get install -y apt-transport-https ca-certificates curl gnupg
+</code></pre>
+</div>
+
+        
+    
+        
+            
+            
+<div class="code-section">
+    <h4>Repository Setup</h4>
+    <pre><code class="language-bash"># Add ClickHouse GPG key to system keyring
+curl -fsSL &#39;https://packages.clickhouse.com/rpm/lts/repodata/repomd.xml.key&#39; | sudo gpg --dearmor -o /usr/share/keyrings/clickhouse-keyring.gpg
+# Add ClickHouse official repository to APT sources
+ARCH=$(dpkg --print-architecture) &amp;&amp; echo &#34;deb [signed-by=/usr/share/keyrings/clickhouse-keyring.gpg arch=${ARCH}] https://packages.clickhouse.com/deb stable main&#34; | sudo tee /etc/apt/sources.list.d/clickhouse.list
+# Update package lists with ClickHouse repository
+sudo apt-get update
+</code></pre>
+</div>
+
+        
+    
+        
+            
+            
+<div class="code-section">
+    <h4>Installation</h4>
+    <pre><code class="language-bash"># Install ClickHouse server and client version &lt;PUBLIC_IP&gt;
+sudo apt-get install -y clickhouse-server=25.9.4.58 clickhouse-client=25.9.4.58
+</code></pre>
+</div>
+
+        
+    
+        
+            
+            
+<div class="code-section">
+    <h4>Configuration</h4>
+    <pre><code class="language-bash"># Create custom ClickHouse configuration file
+sudo tee /etc/clickhouse-server/config.d/benchmark.xml &gt; /dev/null &lt;&lt; &#39;EOF&#39;
+&lt;clickhouse&gt;
+    &lt;listen_host&gt;::&lt;/listen_host&gt;
+    &lt;path&gt;/data/clickhouse&lt;/path&gt;
+    &lt;tmp_path&gt;/data/clickhouse/tmp&lt;/tmp_path&gt;
     &lt;max_server_memory_usage&gt;106897735680&lt;/max_server_memory_usage&gt;
     &lt;max_concurrent_queries&gt;8&lt;/max_concurrent_queries&gt;
     &lt;background_pool_size&gt;16&lt;/background_pool_size&gt;
@@ -1799,6 +3286,8 @@ sudo tee /etc/clickhouse-server/users.d/benchmark.xml &gt; /dev/null &lt;&lt; &#
             &lt;allow_experimental_correlated_subqueries&gt;1&lt;/allow_experimental_correlated_subqueries&gt;
             &lt;optimize_read_in_order&gt;1&lt;/optimize_read_in_order&gt;
             &lt;max_insert_threads&gt;8&lt;/max_insert_threads&gt;
+            &lt;allow_experimental_statistics&gt;1&lt;/allow_experimental_statistics&gt;
+            &lt;allow_statistics_optimize&gt;1&lt;/allow_statistics_optimize&gt;
         &lt;/default&gt;
     &lt;/profiles&gt;
 &lt;/clickhouse&gt;
@@ -1885,6 +3374,24 @@ sudo systemctl enable clickhouse-server
                     
 <div class="download-card">
     <div class="download-icon">💻</div>
+    <h4>Clickhouse_stat System Information</h4>
+    <p>Hardware specifications captured during the benchmark (JSON)</p>
+    <a href="attachments/system_clickhouse_stat.json" class="btn btn-download" download>Download</a>
+</div>
+
+                    
+                    
+<div class="download-card">
+    <div class="download-icon">💻</div>
+    <h4>Clickhouse_tuned System Information</h4>
+    <p>Hardware specifications captured during the benchmark (JSON)</p>
+    <a href="attachments/system_clickhouse_tuned.json" class="btn btn-download" download>Download</a>
+</div>
+
+                    
+                    
+<div class="download-card">
+    <div class="download-icon">💻</div>
     <h4>Clickhouse System Information</h4>
     <p>Hardware specifications captured during the benchmark (JSON)</p>
     <a href="attachments/system_clickhouse.json" class="btn btn-download" download>Download</a>
@@ -1917,7 +3424,7 @@ sudo systemctl enable clickhouse-server
 
         <!-- Footer -->
         <footer class="footer">
-            <p>Generated by BenchKit | 2025-10-09 08:58:59</p>
+            <p>Generated by BenchKit | 2025-10-24 14:55:06</p>
         </footer>
     </div>
 
@@ -1948,7 +3455,11 @@ sudo systemctl enable clickhouse-server
                 
                 "exasol": "attachments/queries/exasol/Q01.sql",
                 
-                "clickhouse": "attachments/queries/clickhouse/Q01.sql"
+                "clickhouse": "attachments/queries/clickhouse/Q01.sql",
+                
+                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q01.sql",
+                
+                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q01.sql"
                 
             },
             
@@ -1956,7 +3467,11 @@ sudo systemctl enable clickhouse-server
                 
                 "exasol": "attachments/queries/exasol/Q02.sql",
                 
-                "clickhouse": "attachments/queries/clickhouse/Q02.sql"
+                "clickhouse": "attachments/queries/clickhouse/Q02.sql",
+                
+                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q02.sql",
+                
+                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q02.sql"
                 
             },
             
@@ -1964,7 +3479,11 @@ sudo systemctl enable clickhouse-server
                 
                 "exasol": "attachments/queries/exasol/Q03.sql",
                 
-                "clickhouse": "attachments/queries/clickhouse/Q03.sql"
+                "clickhouse": "attachments/queries/clickhouse/Q03.sql",
+                
+                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q03.sql",
+                
+                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q03.sql"
                 
             },
             
@@ -1972,7 +3491,11 @@ sudo systemctl enable clickhouse-server
                 
                 "exasol": "attachments/queries/exasol/Q04.sql",
                 
-                "clickhouse": "attachments/queries/clickhouse/Q04.sql"
+                "clickhouse": "attachments/queries/clickhouse/Q04.sql",
+                
+                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q04.sql",
+                
+                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q04.sql"
                 
             },
             
@@ -1980,7 +3503,11 @@ sudo systemctl enable clickhouse-server
                 
                 "exasol": "attachments/queries/exasol/Q05.sql",
                 
-                "clickhouse": "attachments/queries/clickhouse/Q05.sql"
+                "clickhouse": "attachments/queries/clickhouse/Q05.sql",
+                
+                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q05.sql",
+                
+                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q05.sql"
                 
             },
             
@@ -1988,7 +3515,11 @@ sudo systemctl enable clickhouse-server
                 
                 "exasol": "attachments/queries/exasol/Q06.sql",
                 
-                "clickhouse": "attachments/queries/clickhouse/Q06.sql"
+                "clickhouse": "attachments/queries/clickhouse/Q06.sql",
+                
+                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q06.sql",
+                
+                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q06.sql"
                 
             },
             
@@ -1996,7 +3527,11 @@ sudo systemctl enable clickhouse-server
                 
                 "exasol": "attachments/queries/exasol/Q07.sql",
                 
-                "clickhouse": "attachments/queries/clickhouse/Q07.sql"
+                "clickhouse": "attachments/queries/clickhouse/Q07.sql",
+                
+                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q07.sql",
+                
+                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q07.sql"
                 
             },
             
@@ -2004,7 +3539,11 @@ sudo systemctl enable clickhouse-server
                 
                 "exasol": "attachments/queries/exasol/Q08.sql",
                 
-                "clickhouse": "attachments/queries/clickhouse/Q08.sql"
+                "clickhouse": "attachments/queries/clickhouse/Q08.sql",
+                
+                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q08.sql",
+                
+                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q08.sql"
                 
             },
             
@@ -2012,7 +3551,11 @@ sudo systemctl enable clickhouse-server
                 
                 "exasol": "attachments/queries/exasol/Q09.sql",
                 
-                "clickhouse": "attachments/queries/clickhouse/Q09.sql"
+                "clickhouse": "attachments/queries/clickhouse/Q09.sql",
+                
+                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q09.sql",
+                
+                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q09.sql"
                 
             },
             
@@ -2020,7 +3563,11 @@ sudo systemctl enable clickhouse-server
                 
                 "exasol": "attachments/queries/exasol/Q10.sql",
                 
-                "clickhouse": "attachments/queries/clickhouse/Q10.sql"
+                "clickhouse": "attachments/queries/clickhouse/Q10.sql",
+                
+                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q10.sql",
+                
+                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q10.sql"
                 
             },
             
@@ -2028,7 +3575,11 @@ sudo systemctl enable clickhouse-server
                 
                 "exasol": "attachments/queries/exasol/Q11.sql",
                 
-                "clickhouse": "attachments/queries/clickhouse/Q11.sql"
+                "clickhouse": "attachments/queries/clickhouse/Q11.sql",
+                
+                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q11.sql",
+                
+                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q11.sql"
                 
             },
             
@@ -2036,7 +3587,11 @@ sudo systemctl enable clickhouse-server
                 
                 "exasol": "attachments/queries/exasol/Q12.sql",
                 
-                "clickhouse": "attachments/queries/clickhouse/Q12.sql"
+                "clickhouse": "attachments/queries/clickhouse/Q12.sql",
+                
+                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q12.sql",
+                
+                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q12.sql"
                 
             },
             
@@ -2044,7 +3599,11 @@ sudo systemctl enable clickhouse-server
                 
                 "exasol": "attachments/queries/exasol/Q13.sql",
                 
-                "clickhouse": "attachments/queries/clickhouse/Q13.sql"
+                "clickhouse": "attachments/queries/clickhouse/Q13.sql",
+                
+                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q13.sql",
+                
+                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q13.sql"
                 
             },
             
@@ -2052,7 +3611,11 @@ sudo systemctl enable clickhouse-server
                 
                 "exasol": "attachments/queries/exasol/Q14.sql",
                 
-                "clickhouse": "attachments/queries/clickhouse/Q14.sql"
+                "clickhouse": "attachments/queries/clickhouse/Q14.sql",
+                
+                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q14.sql",
+                
+                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q14.sql"
                 
             },
             
@@ -2060,7 +3623,11 @@ sudo systemctl enable clickhouse-server
                 
                 "exasol": "attachments/queries/exasol/Q15.sql",
                 
-                "clickhouse": "attachments/queries/clickhouse/Q15.sql"
+                "clickhouse": "attachments/queries/clickhouse/Q15.sql",
+                
+                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q15.sql",
+                
+                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q15.sql"
                 
             },
             
@@ -2068,7 +3635,11 @@ sudo systemctl enable clickhouse-server
                 
                 "exasol": "attachments/queries/exasol/Q16.sql",
                 
-                "clickhouse": "attachments/queries/clickhouse/Q16.sql"
+                "clickhouse": "attachments/queries/clickhouse/Q16.sql",
+                
+                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q16.sql",
+                
+                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q16.sql"
                 
             },
             
@@ -2076,7 +3647,11 @@ sudo systemctl enable clickhouse-server
                 
                 "exasol": "attachments/queries/exasol/Q17.sql",
                 
-                "clickhouse": "attachments/queries/clickhouse/Q17.sql"
+                "clickhouse": "attachments/queries/clickhouse/Q17.sql",
+                
+                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q17.sql",
+                
+                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q17.sql"
                 
             },
             
@@ -2084,7 +3659,11 @@ sudo systemctl enable clickhouse-server
                 
                 "exasol": "attachments/queries/exasol/Q18.sql",
                 
-                "clickhouse": "attachments/queries/clickhouse/Q18.sql"
+                "clickhouse": "attachments/queries/clickhouse/Q18.sql",
+                
+                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q18.sql",
+                
+                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q18.sql"
                 
             },
             
@@ -2092,7 +3671,11 @@ sudo systemctl enable clickhouse-server
                 
                 "exasol": "attachments/queries/exasol/Q19.sql",
                 
-                "clickhouse": "attachments/queries/clickhouse/Q19.sql"
+                "clickhouse": "attachments/queries/clickhouse/Q19.sql",
+                
+                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q19.sql",
+                
+                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q19.sql"
                 
             },
             
@@ -2100,7 +3683,11 @@ sudo systemctl enable clickhouse-server
                 
                 "exasol": "attachments/queries/exasol/Q20.sql",
                 
-                "clickhouse": "attachments/queries/clickhouse/Q20.sql"
+                "clickhouse": "attachments/queries/clickhouse/Q20.sql",
+                
+                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q20.sql",
+                
+                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q20.sql"
                 
             },
             
@@ -2108,7 +3695,11 @@ sudo systemctl enable clickhouse-server
                 
                 "exasol": "attachments/queries/exasol/Q21.sql",
                 
-                "clickhouse": "attachments/queries/clickhouse/Q21.sql"
+                "clickhouse": "attachments/queries/clickhouse/Q21.sql",
+                
+                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q21.sql",
+                
+                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q21.sql"
                 
             },
             
@@ -2116,7 +3707,11 @@ sudo systemctl enable clickhouse-server
                 
                 "exasol": "attachments/queries/exasol/Q22.sql",
                 
-                "clickhouse": "attachments/queries/clickhouse/Q22.sql"
+                "clickhouse": "attachments/queries/clickhouse/Q22.sql",
+                
+                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q22.sql",
+                
+                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q22.sql"
                 
             }
             

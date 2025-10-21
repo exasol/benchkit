@@ -21,6 +21,10 @@ class TPCH(Workload):
     def __init__(self, config: dict[str, Any]):
         super().__init__(config)
         self.data_format = config.get("data_format", "tbl")  # TPC-H standard format
+        self.variant = config.get("variant", "official")  # Query variant to use
+        self.system_variants = (
+            config.get("system_variants") or {}
+        )  # Per-system variant overrides
 
         # Determine which queries to include based on include/exclude logic
         queries_config = config.get("queries", {})
@@ -301,7 +305,7 @@ class TPCH(Workload):
         return True
 
     def get_queries(self, system: SystemUnderTest | None = None) -> dict[str, str]:
-        """Get TPC-H queries with templates resolved for the target system."""
+        """Get TPC-H queries with templates and variants resolved for the target system."""
         # Use provided system or stored system
         target_system = system or self._current_system
         if target_system is None:
@@ -311,6 +315,11 @@ class TPCH(Workload):
 
         # Store system for future template resolution
         self._current_system = target_system
+
+        # Get and log the variant being used for this system
+        variant = self._get_query_variant_for_system(target_system)
+        if variant != "official":
+            print(f"Loading '{variant}' variant queries for {target_system.kind}")
 
         queries = {}
         for query_name in self.get_all_query_names():
@@ -325,13 +334,27 @@ class TPCH(Workload):
         query_names: list[str],
         runs_per_query: int = 3,
         warmup_runs: int = 1,
-    ) -> list[dict[str, Any]]:
+    ) -> dict[str, list[dict[str, Any]]]:
         """Execute the TPC-H workload with system context for template resolution."""
         # Store system context for template resolution
         self._current_system = system
 
+        # Determine the variant used for this system
+        variant_for_system = self._get_query_variant_for_system(system)
+
         # Call parent implementation
-        return super().run_workload(system, query_names, runs_per_query, warmup_runs)
+        result_dict = super().run_workload(
+            system, query_names, runs_per_query, warmup_runs
+        )
+
+        # Override variant with the actual variant used for this system
+        # (parent uses global config, but we may have per-system overrides)
+        for result in result_dict["measured"]:
+            result["variant"] = variant_for_system
+        for result in result_dict["warmup"]:
+            result["variant"] = variant_for_system
+
+        return result_dict
 
     def run_query(
         self, system: SystemUnderTest, query_name: str, query_sql: str
@@ -515,10 +538,14 @@ class TPCH(Workload):
         for script_name in ["create_tables", "create_indexes", "analyze_tables"]:
             try:
                 template = self.template_env.get_template(f"{script_name}.sql")
+                system_extra = {}
+                if hasattr(system, "setup_config"):
+                    system_extra = system.setup_config.get("extra", {})
                 rendered = template.render(
                     system_kind=system.kind,
                     scale_factor=self.scale_factor,
                     schema=self.get_schema_name(),
+                    system_extra=system_extra,
                 )
                 scripts[script_name] = rendered
             except Exception as e:
@@ -533,16 +560,70 @@ class TPCH(Workload):
 
     # Note: Table DDLs are now handled by templated setup scripts
 
+    def _get_query_variant_for_system(self, system: SystemUnderTest) -> str:
+        """
+        Determine which query variant to use for a given system.
+
+        Args:
+            system: System under test
+
+        Returns:
+            Variant name to use for this system
+        """
+        # Check if system has a specific variant override
+        if self.system_variants and system.name in self.system_variants:
+            return str(self.system_variants[system.name])
+        # Otherwise use global variant
+        return str(self.variant)
+
     def _get_query_sql(self, query_name: str, system: SystemUnderTest) -> str:
-        """Get SQL text for a specific TPC-H query with templates resolved."""
+        """
+        Get SQL text for a specific TPC-H query with variant and templates resolved.
+
+        Priority order for loading queries:
+        1. variants/{variant}/{system_kind}/{query_name}.sql (system-specific variant)
+        2. variants/{variant}/{query_name}.sql (generic variant)
+        3. {query_name}.sql (default/official with inline conditionals)
+        """
         try:
-            # Load and render the query template
-            template = self.template_env.get_template(f"{query_name}.sql")
+            variant = self._get_query_variant_for_system(system)
+
+            # Build priority-ordered list of query paths
+            query_paths = [
+                f"variants/{variant}/{system.kind}/{query_name}.sql",
+                f"variants/{variant}/{query_name}.sql",
+                f"{query_name}.sql",
+            ]
+
+            template = None
+
+            # Try each path in order until one succeeds
+            for path in query_paths:
+                try:
+                    template = self.template_env.get_template(path)
+                    break
+                except Exception:
+                    continue
+
+            if template is None:
+                raise FileNotFoundError(
+                    f"Query {query_name} not found in any variant path"
+                )
+
+            # Get system extra config for conditional features
+            system_extra = {}
+            if hasattr(system, "setup_config"):
+                system_extra = system.setup_config.get("extra", {})
+
+            # Render template with variant context
             rendered_sql = template.render(
                 system_kind=system.kind,
                 scale_factor=self.scale_factor,
                 schema=self.get_schema_name(),
+                variant=variant,
+                system_extra=system_extra,
             )
+
             return rendered_sql
 
         except Exception as e:

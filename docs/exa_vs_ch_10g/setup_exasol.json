@@ -17,18 +17,6 @@
         "category": "storage_setup"
       },
       {
-        "command": "sudo mdadm --zero-superblock /dev/nvme2n1 2>/dev/null || true",
-        "success": true,
-        "description": "Clear RAID superblock on /dev/nvme2n1",
-        "category": "storage_setup"
-      },
-      {
-        "command": "sudo mdadm --zero-superblock /dev/nvme2n1 2>/dev/null || true",
-        "success": true,
-        "description": "Execute sudo command on remote system",
-        "category": "storage_setup"
-      },
-      {
         "command": "sudo mdadm --zero-superblock /dev/nvme1n1 2>/dev/null || true",
         "success": true,
         "description": "Clear RAID superblock on /dev/nvme1n1",
@@ -41,13 +29,25 @@
         "category": "storage_setup"
       },
       {
-        "command": "yes | sudo mdadm --create /dev/md0 --level=0 --raid-devices=2 /dev/nvme2n1 /dev/nvme1n1",
+        "command": "sudo mdadm --zero-superblock /dev/nvme2n1 2>/dev/null || true",
+        "success": true,
+        "description": "Clear RAID superblock on /dev/nvme2n1",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mdadm --zero-superblock /dev/nvme2n1 2>/dev/null || true",
+        "success": true,
+        "description": "Execute sudo command on remote system",
+        "category": "storage_setup"
+      },
+      {
+        "command": "yes | sudo mdadm --create /dev/md0 --level=0 --raid-devices=2 /dev/nvme1n1 /dev/nvme2n1",
         "success": true,
         "description": "Create RAID0 array from 2 devices",
         "category": "storage_setup"
       },
       {
-        "command": "yes | sudo mdadm --create /dev/md0 --level=0 --raid-devices=2 /dev/nvme2n1 /dev/nvme1n1",
+        "command": "yes | sudo mdadm --create /dev/md0 --level=0 --raid-devices=2 /dev/nvme1n1 /dev/nvme2n1",
         "success": true,
         "description": "Execute yes command on remote system",
         "category": "storage_setup"
@@ -299,7 +299,7 @@
     "Admin UI will be available (if enabled)",
     "Waiting for Exasol cluster to be ready for connections...",
     "\u2713 Exasol cluster is ready and accepting connections",
-    "Found cluster play ID: a48ee808",
+    "Found cluster play ID: 79ddbace",
     "Installing Exasol license...",
     "Warning: License installation failed: UsageError: license_upload: Parameter 'license' has wrong type '<class 'dict'>'\nError: in connect.(*UniversalConnector).ConnectWithPS: : non-zero exit code 1\nError: in connect.(*UniversalConnector).ConnectWithPS: : non-zero exit code 1\n",
     "Configuring Exasol database parameters...",

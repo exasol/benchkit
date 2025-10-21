@@ -2,7 +2,7 @@
 
 **Author:** Oleksandr Kozachuk, Principal Architect at Exasol AG
 **Environment:** aws / eu-west-1 / r5d.4xlarge
-**Date:** 2025-10-09 09:48:49
+**Date:** 2025-10-24 15:46:50
 
 
 > **Note:** Sensitive information (passwords, IP addresses) has been sanitized for security reasons. Placeholders like `<EXASOL_DB_PASSWORD>`, `<PRIVATE_IP>`, and `<PUBLIC_IP>` are used throughout this document.
@@ -15,9 +15,9 @@ We conducted performance testing of **clickhouse** against **exasol** using the 
 
 ## The Baseline: Exasol
 
-Exasol achieved a median query runtime of **164.3ms** across all TPC-H queries, establishing a competitive performance baseline for analytical workload processing.
+Exasol achieved a median query runtime of **165.9ms** across all TPC-H queries, establishing a competitive performance baseline for analytical workload processing.
 
-## Clickhouse 25.9.3.48 - System Under Test
+## Clickhouse 25.9.4.58 - System Under Test
 
 **Hardware Specifications:**
 - **Cloud Provider:** AWS
@@ -28,7 +28,7 @@ Exasol achieved a median query runtime of **164.3ms** across all TPC-H queries, 
 - **Memory:** 124.4GB RAM
 
 **Software Configuration:**
-- **Database:** clickhouse 25.9.3.48
+- **Database:** clickhouse 25.9.4.58
 - **Setup Method:** native
 - **Data Directory:** /data/clickhouse
 
@@ -42,14 +42,14 @@ The following steps were performed to install and configure Clickhouse:
 # Stop existing RAID array at /dev/md0 if present
 sudo mdadm --stop /dev/md0 2&gt;/dev/null || true
 
-# Clear RAID superblock on /dev/nvme2n1
-sudo mdadm --zero-superblock /dev/nvme2n1 2&gt;/dev/null || true
-
 # Clear RAID superblock on /dev/nvme1n1
 sudo mdadm --zero-superblock /dev/nvme1n1 2&gt;/dev/null || true
 
+# Clear RAID superblock on /dev/nvme2n1
+sudo mdadm --zero-superblock /dev/nvme2n1 2&gt;/dev/null || true
+
 # Create RAID0 array from 2 devices
-yes | sudo mdadm --create /dev/md0 --level=0 --raid-devices=2 /dev/nvme2n1 /dev/nvme1n1
+yes | sudo mdadm --create /dev/md0 --level=0 --raid-devices=2 /dev/nvme1n1 /dev/nvme2n1
 
 # Wait for RAID array /dev/md0 to be ready
 sudo mdadm --wait /dev/md0 2&gt;/dev/null || true
@@ -106,7 +106,7 @@ sudo apt-get update
 **Installation:**
 ```bash
 # Install ClickHouse server and client version &lt;SERVER_IP&gt;
-sudo apt-get install -y clickhouse-server=25.9.3.48 clickhouse-client=25.9.3.48
+sudo apt-get install -y clickhouse-server=25.9.4.58 clickhouse-client=25.9.4.58
 
 ```
 
@@ -117,7 +117,8 @@ sudo tee /etc/clickhouse-server/config.d/benchmark.xml &gt; /dev/null &lt;&lt; &
 &lt;clickhouse&gt;
     &lt;listen_host&gt;::&lt;/listen_host&gt;
     &lt;path&gt;/data/clickhouse&lt;/path&gt;
-    &lt;max_server_memory_usage&gt;106897729126&lt;/max_server_memory_usage&gt;
+    &lt;tmp_path&gt;/data/clickhouse/tmp&lt;/tmp_path&gt;
+    &lt;max_server_memory_usage&gt;106897745510&lt;/max_server_memory_usage&gt;
     &lt;max_concurrent_queries&gt;8&lt;/max_concurrent_queries&gt;
     &lt;background_pool_size&gt;16&lt;/background_pool_size&gt;
     &lt;background_schedule_pool_size&gt;16&lt;/background_schedule_pool_size&gt;
@@ -144,8 +145,8 @@ sudo tee /etc/clickhouse-server/users.d/benchmark.xml &gt; /dev/null &lt;&lt; &#
         &lt;default&gt;
             &lt;max_threads&gt;16&lt;/max_threads&gt;
             &lt;max_memory_usage&gt;60000000000&lt;/max_memory_usage&gt;
-            &lt;max_bytes_before_external_sort&gt;73492188774&lt;/max_bytes_before_external_sort&gt;
-            &lt;max_bytes_before_external_group_by&gt;73492188774&lt;/max_bytes_before_external_group_by&gt;
+            &lt;max_bytes_before_external_sort&gt;73492200038&lt;/max_bytes_before_external_sort&gt;
+            &lt;max_bytes_before_external_group_by&gt;73492200038&lt;/max_bytes_before_external_group_by&gt;
             &lt;join_use_nulls&gt;1&lt;/join_use_nulls&gt;
             &lt;allow_experimental_correlated_subqueries&gt;1&lt;/allow_experimental_correlated_subqueries&gt;
             &lt;optimize_read_in_order&gt;1&lt;/optimize_read_in_order&gt;
@@ -185,10 +186,10 @@ sudo systemctl enable clickhouse-server
 
 | Metric | Clickhouse | Exasol | Difference |
 |--------|--------------------|------------|------------|
-| Median Runtime | 1592.7ms | 164.3ms | 9.7× slower |
-| Average Runtime | 2775.7ms | 207.5ms | 13.4× slower |
-| Fastest Query | 121.5ms | 19.2ms | 6.3× slower |
-| Slowest Query | 20866.1ms | 660.7ms | 31.6× slower |
+| Median Runtime | 1608.8ms | 165.9ms | 9.7× slower |
+| Average Runtime | 2794.5ms | 214.4ms | 13.0× slower |
+| Fastest Query | 122.7ms | 20.7ms | 5.9× slower |
+| Slowest Query | 21093.3ms | 699.5ms | 30.2× slower |
 
 
 ### Selected Query Highlights
@@ -197,14 +198,14 @@ The following queries demonstrate the performance characteristics observed durin
 
 **Queries with Largest Performance Gaps:**
 
-- **Q17**: Clickhouse 2567.9ms vs Exasol 20.1ms (127.8× slower)
-- **Q08**: Clickhouse 5668.4ms vs Exasol 57.5ms (98.6× slower)
-- **Q21**: Clickhouse 20754.4ms vs Exasol 253.2ms (82.0× slower)
+- **Q17**: Clickhouse 2589.9ms vs Exasol 21.6ms (119.9× slower)
+- **Q08**: Clickhouse 5646.5ms vs Exasol 60.7ms (93.0× slower)
+- **Q21**: Clickhouse 20869.6ms vs Exasol 261.9ms (79.7× slower)
 
 **Queries with Competitive Performance:**
 
-- **Q15**: Clickhouse 155.3ms vs Exasol 200.3ms (0.8× slower)
-- **Q16**: Clickhouse 334.6ms vs Exasol 369.8ms (0.9× slower)
+- **Q15**: Clickhouse 182.0ms vs Exasol 205.9ms (0.9× slower)
+- **Q16**: Clickhouse 338.3ms vs Exasol 377.5ms (0.9× slower)
 
 ## Analysis & Optimization Opportunities
 

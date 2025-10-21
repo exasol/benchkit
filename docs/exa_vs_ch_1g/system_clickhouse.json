@@ -1,25 +1,25 @@
 {
-  "timestamp": 1759997891.4399056,
-  "hostname": "ip-10-0-1-134",
+  "timestamp": 1761315069.8316274,
+  "hostname": "ip-10-0-1-163",
   "cpu_model": "Intel(R) Xeon(R) Platinum 8259CL CPU @ 2.50GHz",
   "cpu_vendor": "GenuineIntel",
   "cpu_count_logical": 16,
   "cpu_count_physical": 1,
-  "cpu_mhz": 2499.998,
-  "memory_total_kb": 130490412,
+  "cpu_mhz": 2500.006,
+  "memory_total_kb": 130490404,
   "memory_total_gb": 124.4,
   "system_info": {
-    "hostname": "ip-10-0-1-134",
+    "hostname": "ip-10-0-1-163",
     "system": "Linux",
-    "release": "6.8.0-1039-aws",
-    "version": "#41~22.04.1-Ubuntu SMP Thu Sep 11 10:54:48 UTC 2025",
+    "release": "6.8.0-1040-aws",
+    "version": "#42~22.04.1-Ubuntu SMP Wed Sep 24 10:26:57 UTC 2025",
     "machine": "x86_64",
     "processor": "x86_64",
-    "uptime_seconds": 115.68,
+    "uptime_seconds": 107.25,
     "load_average": [
-      0.52099609375,
-      0.25244140625,
-      0.0947265625
+      0.638671875,
+      0.28515625,
+      0.10595703125
     ]
   },
   "cpu_info": {
@@ -30,18 +30,18 @@
     "model_name": "Intel(R) Xeon(R) Platinum 8259CL CPU @ 2.50GHz",
     "stepping": 7,
     "microcode": "0x5003901",
-    "cpu_mhz": 2499.998,
+    "cpu_mhz": 2500.006,
     "cache_size": "36608 KB",
     "count_logical": 16,
     "count_physical": 1
   },
   "memory_info": {
-    "total_kb": 130490412,
+    "total_kb": 130490404,
     "total_gb": 124.4,
-    "free_kb": 127992944,
-    "available_kb": 128913080,
-    "buffers_kb": 60628,
-    "cached_kb": 1868360
+    "free_kb": 128245716,
+    "available_kb": 128923828,
+    "buffers_kb": 59468,
+    "cached_kb": 1628684
   },
   "disk_info": {
     "root_filesystem": {
@@ -89,11 +89,11 @@
           "name": "loop3",
           "maj:min": "7:3",
           "rm": false,
-          "size": "89.4M",
+          "size": "91.4M",
           "ro": true,
           "type": "loop",
           "mountpoints": [
-            "/snap/lxd/31333"
+            "/snap/lxd/35819"
           ]
         },
         {
@@ -108,19 +108,8 @@
           ]
         },
         {
-          "name": "nvme1n1",
-          "maj:min": "259:0",
-          "rm": false,
-          "size": "279.4G",
-          "ro": false,
-          "type": "disk",
-          "mountpoints": [
-            null
-          ]
-        },
-        {
           "name": "nvme0n1",
-          "maj:min": "259:1",
+          "maj:min": "259:0",
           "rm": false,
           "size": "50G",
           "ro": false,
@@ -162,6 +151,17 @@
                 "/boot/efi"
               ]
             }
+          ]
+        },
+        {
+          "name": "nvme1n1",
+          "maj:min": "259:1",
+          "rm": false,
+          "size": "279.4G",
+          "ro": false,
+          "type": "disk",
+          "mountpoints": [
+            null
           ]
         },
         {
@@ -231,7 +231,7 @@
         "group": "default",
         "txqlen": 1000,
         "link_type": "ether",
-        "address": "02:73:d7:fd:66:cf",
+        "address": "02:94:22:06:19:cf",
         "broadcast": "ff:ff:ff:ff:ff:ff",
         "altnames": [
           "enp0s5"
@@ -239,19 +239,19 @@
         "addr_info": [
           {
             "family": "inet",
-            "local": "10.0.1.134",
+            "local": "10.0.1.163",
             "prefixlen": 24,
             "metric": 100,
             "broadcast": "10.0.1.255",
             "scope": "global",
             "dynamic": true,
             "label": "ens5",
-            "valid_life_time": 3518,
-            "preferred_life_time": 3518
+            "valid_life_time": 3499,
+            "preferred_life_time": 3499
           },
           {
             "family": "inet6",
-            "local": "fe80::73:d7ff:fefd:66cf",
+            "local": "fe80::94:22ff:fe06:19cf",
             "prefixlen": 64,
             "scope": "link",
             "valid_life_time": 4294967295,
@@ -273,7 +273,7 @@
         "operstate": "DOWN",
         "group": "default",
         "link_type": "ether",
-        "address": "46:58:ef:f9:6f:86",
+        "address": "b2:93:56:ad:1b:40",
         "broadcast": "ff:ff:ff:ff:ff:ff",
         "addr_info": [
           {

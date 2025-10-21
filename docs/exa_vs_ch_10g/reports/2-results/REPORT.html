@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Exasol vs ClickHouse Performance Comparison on TPC-H - Detailed Query Results">
-    <title>Exasol vs ClickHouse Performance Comparison on TPC-H | Detailed Query Results</title>
+    <meta name="description" content="Exasol vs ClickHouse Performance Comparison on TPC-H SF10 - Detailed Query Results">
+    <title>Exasol vs ClickHouse Performance Comparison on TPC-H SF10 | Detailed Query Results</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,13 +15,13 @@
         <!-- Header -->
         <header class="header">
             <div class="header-badge">📊 Detailed Query Results</div>
-            <h1>Exasol vs ClickHouse Performance Comparison on TPC-H</h1>
+            <h1>Exasol vs ClickHouse Performance Comparison on TPC-H SF10</h1>
             <div class="metadata">
                 <span class="meta-item">
                     <strong>Author:</strong> Oleksandr Kozachuk, Principal Architect at Exasol AG
                 </span>
                 <span class="meta-item">
-                    <strong>Date:</strong> 2025-10-09 08:58:59
+                    <strong>Date:</strong> 2025-10-24 14:55:06
                 </span>
                 <span class="meta-item">
                     <strong>Environment:</strong>
@@ -34,7 +34,7 @@
         <!-- Overview -->
         <section class="section">
             <h2>Overview</h2>
-            <p>This report presents the complete query-by-query performance results for <strong>2 database systems</strong> tested using the TPC-H benchmark at scale factor 10.</p>
+            <p>This report presents the complete query-by-query performance results for <strong>4 database systems</strong> tested using the TPC-H benchmark at scale factor 10.</p>
         </section>
 
         <!-- Systems Under Test -->
@@ -61,7 +61,7 @@
                     </div>
                 </div>
                 <div class="system-card">
-                    <h3>Clickhouse 25.9.3.48</h3>
+                    <h3>Clickhouse 25.9.4.58</h3>
 
                     <div class="system-specs">
                         <h4>Environment & Hardware</h4>
@@ -74,13 +74,48 @@
 
                         <h4>Software</h4>
                         <ul>
-                            <li><strong>Database:</strong> clickhouse 25.9.3.48</li>
+                            <li><strong>Database:</strong> clickhouse 25.9.4.58</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="system-card">
+                    <h3>Clickhouse_tuned 25.9.4.58</h3>
+
+                    <div class="system-specs">
+                        <h4>Environment & Hardware</h4>
+                        <ul>
+                            <li><strong>Cloud:</strong> AWS eu-west-1</li>
+                            <li><strong>Instance:</strong> r5d.4xlarge</li>
+                            <li><strong>CPU:</strong> Intel(R) Xeon(R) Platinum 8259CL CPU @ 2.50GHz (16 vCPUs)</li>
+                            <li><strong>Memory:</strong> 124.4GB RAM</li>
+                        </ul>
+
+                        <h4>Software</h4>
+                        <ul>
+                            <li><strong>Database:</strong> clickhouse 25.9.4.58</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="system-card">
+                    <h3>Clickhouse_stat 25.9.4.58</h3>
+
+                    <div class="system-specs">
+                        <h4>Environment & Hardware</h4>
+                        <ul>
+                            <li><strong>Cloud:</strong> AWS eu-west-1</li>
+                            <li><strong>Instance:</strong> r5d.4xlarge</li>
+                            <li><strong>CPU:</strong> Intel(R) Xeon(R) Platinum 8259CL CPU @ 2.50GHz (16 vCPUs)</li>
+                            <li><strong>Memory:</strong> 124.4GB RAM</li>
+                        </ul>
+
+                        <h4>Software</h4>
+                        <ul>
+                            <li><strong>Database:</strong> clickhouse 25.9.4.58</li>
                         </ul>
                     </div>
                 </div>
             </div>
         </section>
-
 
         <!-- Performance Summary -->
         <section class="section">
@@ -90,27 +125,13 @@
             <div class="key-findings">
                 <h3>Key Findings</h3>
                 <ul>
-                    <li><strong>exasol</strong> was the fastest overall with <strong>67.9ms</strong> median runtime</li>
-                    <li><strong>clickhouse</strong> was <strong>7.7×</strong> slower</li>
-                    <li>Tested <strong>308</strong> total query executions across 22 different query types</li>
+                    <li><strong>exasol</strong> was the fastest overall with <strong>63.6ms</strong> median runtime</li>
+                    <li><strong>clickhouse_tuned</strong> was <strong>8.7×</strong> slower</li>
+                    <li>Tested <strong>616</strong> total query executions across 22 different query types</li>
                 </ul>
             </div>
 
-            <h3>Summary Statistics</h3>
-            
-        </section>
-
-        <!-- Query Results -->
-        <section class="section">
-            <h2>Query-by-Query Results</h2>
-            <p>The following table shows the median execution time for each query across all systems:</p>
-            
-        </section>
-
-        <!-- Visualizations -->
-        <section class="section">
-            <h2>Performance Visualizations</h2>
-
+            <h3>Performance Visualizations</h3>
             <div class="chart-container">
                 <iframe src="attachments/figures/system_performance_overview.html" width="100%" height="550" frameborder="0"></iframe>
             </div>
@@ -138,7 +159,1706 @@
                 <li><strong>Complex analytical queries</strong> (<a href="#" class="query-link" data-query="Q03">Q03</a>, <a href="#" class="query-link" data-query="Q04">Q04</a>, <a href="#" class="query-link" data-query="Q07">Q07</a>, <a href="#" class="query-link" data-query="Q13">Q13</a>, <a href="#" class="query-link" data-query="Q16">Q16</a>, <a href="#" class="query-link" data-query="Q17">Q17</a>, <a href="#" class="query-link" data-query="Q18">Q18</a>): Combine multiple operations</li>
             </ul>
 
-            <p>The performance patterns observed across these query types provide insights into each system's optimization strategies and architectural trade-offs.</p>
+            <p>The following table shows the median performance for each query category across all systems:</p>
+            <table  class="query-type-table">
+<thead><tr>
+<th>Query Type</th>
+<th>clickhouse</th>
+<th>clickhouse_stat</th>
+<th>clickhouse_tuned</th>
+<th>exasol</th>
+<th>Winner</th>
+</tr></thead>
+<tbody>
+<tr >
+<td>Aggregation</td>
+<td class="perf-excellent">114.00</td>
+<td class="perf-excellent">125.60</td>
+<td class="perf-excellent">181.60</td>
+<td class="perf-excellent">27.30</td>
+<td>exasol</td>
+</tr>
+<tr >
+<td>Join-Heavy</td>
+<td class="perf-poor">1,016.40</td>
+<td class="perf-good">442.50</td>
+<td class="perf-poor">1,054.40</td>
+<td class="perf-good">55.90</td>
+<td>exasol</td>
+</tr>
+<tr >
+<td>Complex Analytical</td>
+<td class="perf-good">732.10</td>
+<td class="perf-poor">745.20</td>
+<td class="perf-good">825.70</td>
+<td class="perf-poor">95.30</td>
+<td>exasol</td>
+</tr>
+</tbody>
+</table>
+
+            <h3>Query-by-Query Results</h3>
+            <p>The following table shows the median execution time for each query across all systems:</p>
+            <table  class="comparison-table">
+<thead><tr>
+<th>query</th>
+<th>baseline_system</th>
+<th>comparison_system</th>
+<th>baseline_ms</th>
+<th>comparison_ms</th>
+<th>ratio</th>
+<th>speedup</th>
+<th>faster</th>
+</tr></thead>
+<tbody>
+<tr data-query-start="true" data-query-group="odd" data-query="Q01">
+<td>Q01</td>
+<td>exasol</td>
+<td>clickhouse_tuned</td>
+<td class="perf-poor">207.00</td>
+<td class="perf-average">563.60</td>
+<td>2.72</td>
+<td class="perf-excellent">0.37</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q02">
+<td>Q02</td>
+<td>exasol</td>
+<td>clickhouse_tuned</td>
+<td class="perf-good">31.30</td>
+<td class="perf-good">252.30</td>
+<td>8.06</td>
+<td class="perf-average">0.12</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q03">
+<td>Q03</td>
+<td>exasol</td>
+<td>clickhouse_tuned</td>
+<td class="perf-average">95.30</td>
+<td class="perf-poor">827.70</td>
+<td>8.69</td>
+<td class="perf-average">0.12</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q04">
+<td>Q04</td>
+<td>exasol</td>
+<td>clickhouse_tuned</td>
+<td class="perf-excellent">20.80</td>
+<td class="perf-poor">1,179.40</td>
+<td>56.70</td>
+<td class="perf-poor">0.02</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q05">
+<td>Q05</td>
+<td>exasol</td>
+<td>clickhouse_tuned</td>
+<td class="perf-good">60.00</td>
+<td class="perf-poor">1,587.90</td>
+<td>26.46</td>
+<td class="perf-poor">0.04</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q06">
+<td>Q06</td>
+<td>exasol</td>
+<td>clickhouse_tuned</td>
+<td class="perf-excellent">13.70</td>
+<td class="perf-excellent">55.70</td>
+<td>4.07</td>
+<td class="perf-good">0.25</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q07">
+<td>Q07</td>
+<td>exasol</td>
+<td>clickhouse_tuned</td>
+<td class="perf-average">68.90</td>
+<td class="perf-poor">848.00</td>
+<td>12.31</td>
+<td class="perf-average">0.08</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q08">
+<td>Q08</td>
+<td>exasol</td>
+<td>clickhouse_tuned</td>
+<td class="perf-good">30.70</td>
+<td class="perf-poor">1,705.30</td>
+<td>55.55</td>
+<td class="perf-poor">0.02</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q09">
+<td>Q09</td>
+<td>exasol</td>
+<td>clickhouse_tuned</td>
+<td class="perf-poor">174.50</td>
+<td class="perf-poor">2,158.90</td>
+<td>12.37</td>
+<td class="perf-average">0.08</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q10">
+<td>Q10</td>
+<td>exasol</td>
+<td>clickhouse_tuned</td>
+<td class="perf-poor">165.10</td>
+<td class="perf-average">538.20</td>
+<td>3.26</td>
+<td class="perf-good">0.31</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q11">
+<td>Q11</td>
+<td>exasol</td>
+<td>clickhouse_tuned</td>
+<td class="perf-good">52.20</td>
+<td class="perf-excellent">141.00</td>
+<td>2.70</td>
+<td class="perf-excellent">0.37</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q12">
+<td>Q12</td>
+<td>exasol</td>
+<td>clickhouse_tuned</td>
+<td class="perf-excellent">27.30</td>
+<td class="perf-good">181.60</td>
+<td>6.65</td>
+<td class="perf-average">0.15</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q13">
+<td>Q13</td>
+<td>exasol</td>
+<td>clickhouse_tuned</td>
+<td class="perf-poor">148.80</td>
+<td class="perf-average">770.70</td>
+<td>5.18</td>
+<td class="perf-good">0.19</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q14">
+<td>Q14</td>
+<td>exasol</td>
+<td>clickhouse_tuned</td>
+<td class="perf-excellent">23.20</td>
+<td class="perf-excellent">57.30</td>
+<td>2.47</td>
+<td class="perf-excellent">0.40</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q15">
+<td>Q15</td>
+<td>exasol</td>
+<td>clickhouse_tuned</td>
+<td class="perf-average">76.60</td>
+<td class="perf-excellent">103.50</td>
+<td>1.35</td>
+<td class="perf-excellent">0.74</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q16">
+<td>Q16</td>
+<td>exasol</td>
+<td>clickhouse_tuned</td>
+<td class="perf-poor">222.70</td>
+<td class="perf-good">220.10</td>
+<td>0.99</td>
+<td class="perf-excellent">1.01</td>
+<td>1</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q17">
+<td>Q17</td>
+<td>exasol</td>
+<td>clickhouse_tuned</td>
+<td class="perf-excellent">13.90</td>
+<td class="perf-good">331.10</td>
+<td>23.82</td>
+<td class="perf-poor">0.04</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q18">
+<td>Q18</td>
+<td>exasol</td>
+<td>clickhouse_tuned</td>
+<td class="perf-average">146.50</td>
+<td class="perf-poor">1,941.10</td>
+<td>13.25</td>
+<td class="perf-average">0.08</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q19">
+<td>Q19</td>
+<td>exasol</td>
+<td>clickhouse_tuned</td>
+<td class="perf-excellent">11.90</td>
+<td class="perf-poor">1,362.10</td>
+<td>114.46</td>
+<td class="perf-poor">0.01</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q20">
+<td>Q20</td>
+<td>exasol</td>
+<td>clickhouse_tuned</td>
+<td class="perf-average">67.40</td>
+<td class="perf-good">335.40</td>
+<td>4.98</td>
+<td class="perf-good">0.20</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q21">
+<td>Q21</td>
+<td>exasol</td>
+<td>clickhouse_tuned</td>
+<td class="perf-average">106.70</td>
+<td class="perf-poor">3,001.60</td>
+<td>28.13</td>
+<td class="perf-poor">0.04</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q22">
+<td>Q22</td>
+<td>exasol</td>
+<td>clickhouse_tuned</td>
+<td class="perf-good">33.60</td>
+<td class="perf-excellent">124.90</td>
+<td>3.72</td>
+<td class="perf-good">0.27</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q01">
+<td>Q01</td>
+<td>exasol</td>
+<td>clickhouse</td>
+<td class="perf-poor">207.00</td>
+<td class="perf-average">556.90</td>
+<td>2.69</td>
+<td class="perf-excellent">0.37</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q02">
+<td>Q02</td>
+<td>exasol</td>
+<td>clickhouse</td>
+<td class="perf-good">31.30</td>
+<td class="perf-good">256.70</td>
+<td>8.20</td>
+<td class="perf-average">0.12</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q03">
+<td>Q03</td>
+<td>exasol</td>
+<td>clickhouse</td>
+<td class="perf-average">95.30</td>
+<td class="perf-average">802.10</td>
+<td>8.42</td>
+<td class="perf-average">0.12</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q04">
+<td>Q04</td>
+<td>exasol</td>
+<td>clickhouse</td>
+<td class="perf-excellent">20.80</td>
+<td class="perf-good">411.70</td>
+<td>19.79</td>
+<td class="perf-poor">0.05</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q05">
+<td>Q05</td>
+<td>exasol</td>
+<td>clickhouse</td>
+<td class="perf-good">60.00</td>
+<td class="perf-poor">1,531.30</td>
+<td>25.52</td>
+<td class="perf-poor">0.04</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q06">
+<td>Q06</td>
+<td>exasol</td>
+<td>clickhouse</td>
+<td class="perf-excellent">13.70</td>
+<td class="perf-excellent">58.30</td>
+<td>4.26</td>
+<td class="perf-good">0.23</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q07">
+<td>Q07</td>
+<td>exasol</td>
+<td>clickhouse</td>
+<td class="perf-average">68.90</td>
+<td class="perf-average">824.50</td>
+<td>11.97</td>
+<td class="perf-average">0.08</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q08">
+<td>Q08</td>
+<td>exasol</td>
+<td>clickhouse</td>
+<td class="perf-good">30.70</td>
+<td class="perf-poor">1,629.40</td>
+<td>53.07</td>
+<td class="perf-poor">0.02</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q09">
+<td>Q09</td>
+<td>exasol</td>
+<td>clickhouse</td>
+<td class="perf-poor">174.50</td>
+<td class="perf-poor">2,108.70</td>
+<td>12.08</td>
+<td class="perf-average">0.08</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q10">
+<td>Q10</td>
+<td>exasol</td>
+<td>clickhouse</td>
+<td class="perf-poor">165.10</td>
+<td class="perf-good">515.10</td>
+<td>3.12</td>
+<td class="perf-good">0.32</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q11">
+<td>Q11</td>
+<td>exasol</td>
+<td>clickhouse</td>
+<td class="perf-good">52.20</td>
+<td class="perf-excellent">139.00</td>
+<td>2.66</td>
+<td class="perf-excellent">0.38</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q12">
+<td>Q12</td>
+<td>exasol</td>
+<td>clickhouse</td>
+<td class="perf-excellent">27.30</td>
+<td class="perf-good">193.60</td>
+<td>7.09</td>
+<td class="perf-average">0.14</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q13">
+<td>Q13</td>
+<td>exasol</td>
+<td>clickhouse</td>
+<td class="perf-poor">148.80</td>
+<td class="perf-average">760.70</td>
+<td>5.11</td>
+<td class="perf-good">0.20</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q14">
+<td>Q14</td>
+<td>exasol</td>
+<td>clickhouse</td>
+<td class="perf-excellent">23.20</td>
+<td class="perf-excellent">55.00</td>
+<td>2.37</td>
+<td class="perf-excellent">0.42</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q15">
+<td>Q15</td>
+<td>exasol</td>
+<td>clickhouse</td>
+<td class="perf-average">76.60</td>
+<td class="perf-excellent">93.50</td>
+<td>1.22</td>
+<td class="perf-excellent">0.82</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q16">
+<td>Q16</td>
+<td>exasol</td>
+<td>clickhouse</td>
+<td class="perf-poor">222.70</td>
+<td class="perf-good">192.70</td>
+<td>0.87</td>
+<td class="perf-excellent">1.16</td>
+<td>1</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q17">
+<td>Q17</td>
+<td>exasol</td>
+<td>clickhouse</td>
+<td class="perf-excellent">13.90</td>
+<td class="perf-average">732.10</td>
+<td>52.67</td>
+<td class="perf-poor">0.02</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q18">
+<td>Q18</td>
+<td>exasol</td>
+<td>clickhouse</td>
+<td class="perf-average">146.50</td>
+<td class="perf-average">719.70</td>
+<td>4.91</td>
+<td class="perf-good">0.20</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q19">
+<td>Q19</td>
+<td>exasol</td>
+<td>clickhouse</td>
+<td class="perf-excellent">11.90</td>
+<td class="perf-average">547.80</td>
+<td>46.03</td>
+<td class="perf-poor">0.02</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q20">
+<td>Q20</td>
+<td>exasol</td>
+<td>clickhouse</td>
+<td class="perf-average">67.40</td>
+<td class="perf-excellent">114.00</td>
+<td>1.69</td>
+<td class="perf-excellent">0.59</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q21">
+<td>Q21</td>
+<td>exasol</td>
+<td>clickhouse</td>
+<td class="perf-average">106.70</td>
+<td class="perf-poor">6,315.80</td>
+<td>59.19</td>
+<td class="perf-poor">0.02</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q22">
+<td>Q22</td>
+<td>exasol</td>
+<td>clickhouse</td>
+<td class="perf-good">33.60</td>
+<td class="perf-excellent">141.40</td>
+<td>4.21</td>
+<td class="perf-good">0.24</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q01">
+<td>Q01</td>
+<td>exasol</td>
+<td>clickhouse_stat</td>
+<td class="perf-poor">207.00</td>
+<td class="perf-average">535.10</td>
+<td>2.59</td>
+<td class="perf-excellent">0.39</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q02">
+<td>Q02</td>
+<td>exasol</td>
+<td>clickhouse_stat</td>
+<td class="perf-good">31.30</td>
+<td class="perf-good">210.40</td>
+<td>6.72</td>
+<td class="perf-average">0.15</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q03">
+<td>Q03</td>
+<td>exasol</td>
+<td>clickhouse_stat</td>
+<td class="perf-average">95.30</td>
+<td class="perf-average">808.10</td>
+<td>8.48</td>
+<td class="perf-average">0.12</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q04">
+<td>Q04</td>
+<td>exasol</td>
+<td>clickhouse_stat</td>
+<td class="perf-excellent">20.80</td>
+<td class="perf-good">402.10</td>
+<td>19.33</td>
+<td class="perf-poor">0.05</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q05">
+<td>Q05</td>
+<td>exasol</td>
+<td>clickhouse_stat</td>
+<td class="perf-good">60.00</td>
+<td class="perf-poor">1,531.90</td>
+<td>25.53</td>
+<td class="perf-poor">0.04</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q06">
+<td>Q06</td>
+<td>exasol</td>
+<td>clickhouse_stat</td>
+<td class="perf-excellent">13.70</td>
+<td class="perf-excellent">55.40</td>
+<td>4.04</td>
+<td class="perf-good">0.25</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q07">
+<td>Q07</td>
+<td>exasol</td>
+<td>clickhouse_stat</td>
+<td class="perf-average">68.90</td>
+<td class="perf-poor">828.50</td>
+<td>12.02</td>
+<td class="perf-average">0.08</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q08">
+<td>Q08</td>
+<td>exasol</td>
+<td>clickhouse_stat</td>
+<td class="perf-good">30.70</td>
+<td class="perf-good">353.70</td>
+<td>11.52</td>
+<td class="perf-average">0.09</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q09">
+<td>Q09</td>
+<td>exasol</td>
+<td>clickhouse_stat</td>
+<td class="perf-poor">174.50</td>
+<td class="perf-poor">897.80</td>
+<td>5.14</td>
+<td class="perf-good">0.19</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q10">
+<td>Q10</td>
+<td>exasol</td>
+<td>clickhouse_stat</td>
+<td class="perf-poor">165.10</td>
+<td class="perf-good">524.40</td>
+<td>3.18</td>
+<td class="perf-good">0.31</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q11">
+<td>Q11</td>
+<td>exasol</td>
+<td>clickhouse_stat</td>
+<td class="perf-good">52.20</td>
+<td class="perf-excellent">144.90</td>
+<td>2.78</td>
+<td class="perf-excellent">0.36</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q12">
+<td>Q12</td>
+<td>exasol</td>
+<td>clickhouse_stat</td>
+<td class="perf-excellent">27.30</td>
+<td class="perf-good">199.80</td>
+<td>7.32</td>
+<td class="perf-average">0.14</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q13">
+<td>Q13</td>
+<td>exasol</td>
+<td>clickhouse_stat</td>
+<td class="perf-poor">148.80</td>
+<td class="perf-average">745.60</td>
+<td>5.01</td>
+<td class="perf-good">0.20</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q14">
+<td>Q14</td>
+<td>exasol</td>
+<td>clickhouse_stat</td>
+<td class="perf-excellent">23.20</td>
+<td class="perf-excellent">71.30</td>
+<td>3.07</td>
+<td class="perf-excellent">0.33</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q15">
+<td>Q15</td>
+<td>exasol</td>
+<td>clickhouse_stat</td>
+<td class="perf-average">76.60</td>
+<td class="perf-excellent">100.90</td>
+<td>1.32</td>
+<td class="perf-excellent">0.76</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q16">
+<td>Q16</td>
+<td>exasol</td>
+<td>clickhouse_stat</td>
+<td class="perf-poor">222.70</td>
+<td class="perf-good">191.40</td>
+<td>0.86</td>
+<td class="perf-excellent">1.16</td>
+<td>1</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q17">
+<td>Q17</td>
+<td>exasol</td>
+<td>clickhouse_stat</td>
+<td class="perf-excellent">13.90</td>
+<td class="perf-average">733.70</td>
+<td>52.78</td>
+<td class="perf-poor">0.02</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q18">
+<td>Q18</td>
+<td>exasol</td>
+<td>clickhouse_stat</td>
+<td class="perf-average">146.50</td>
+<td class="perf-average">745.90</td>
+<td>5.09</td>
+<td class="perf-good">0.20</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q19">
+<td>Q19</td>
+<td>exasol</td>
+<td>clickhouse_stat</td>
+<td class="perf-excellent">11.90</td>
+<td class="perf-average">821.10</td>
+<td>69.00</td>
+<td class="perf-poor">0.01</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q20">
+<td>Q20</td>
+<td>exasol</td>
+<td>clickhouse_stat</td>
+<td class="perf-average">67.40</td>
+<td class="perf-excellent">125.60</td>
+<td>1.86</td>
+<td class="perf-excellent">0.54</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q21">
+<td>Q21</td>
+<td>exasol</td>
+<td>clickhouse_stat</td>
+<td class="perf-average">106.70</td>
+<td class="perf-poor">6,283.70</td>
+<td>58.89</td>
+<td class="perf-poor">0.02</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q22">
+<td>Q22</td>
+<td>exasol</td>
+<td>clickhouse_stat</td>
+<td class="perf-good">33.60</td>
+<td class="perf-excellent">135.60</td>
+<td>4.04</td>
+<td class="perf-good">0.25</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+
+            <h3>Detailed Statistics</h3>
+            <p>The complete performance statistics for all queries and systems:</p>
+            <table  class="summary-table">
+<thead><tr>
+<th>query</th>
+<th>system</th>
+<th>warmup</th>
+<th>runs</th>
+<th>median_ms</th>
+<th>mean_ms</th>
+<th>std_ms</th>
+<th>min_ms</th>
+<th>max_ms</th>
+</tr></thead>
+<tbody>
+<tr data-query-start="true" data-query-group="odd" data-query="Q01" data-system="clickhouse">
+<td>Q01</td>
+<td>clickhouse</td>
+<td class="perf-average">556.80</td>
+<td>7</td>
+<td class="perf-average">556.90</td>
+<td class="perf-average">559.10</td>
+<td class="perf-average">7.40</td>
+<td class="perf-average">551.00</td>
+<td class="perf-average">573.30</td>
+</tr>
+<tr data-query-group="odd" data-query="Q01" data-system="clickhouse_stat">
+<td>Q01</td>
+<td>clickhouse_stat</td>
+<td class="perf-average">534.70</td>
+<td>7</td>
+<td class="perf-average">535.10</td>
+<td class="perf-average">536.60</td>
+<td class="perf-good">6.00</td>
+<td class="perf-average">531.40</td>
+<td class="perf-average">548.50</td>
+</tr>
+<tr data-query-group="odd" data-query="Q01" data-system="clickhouse_tuned">
+<td>Q01</td>
+<td>clickhouse_tuned</td>
+<td class="perf-average">565.20</td>
+<td>7</td>
+<td class="perf-average">563.60</td>
+<td class="perf-average">566.60</td>
+<td class="perf-average">10.00</td>
+<td class="perf-average">554.70</td>
+<td class="perf-average">580.30</td>
+</tr>
+<tr data-query-group="odd" data-query="Q01" data-system="exasol">
+<td>Q01</td>
+<td>exasol</td>
+<td class="perf-good">209.10</td>
+<td>7</td>
+<td class="perf-good">207.00</td>
+<td class="perf-good">207.30</td>
+<td class="perf-excellent">1.10</td>
+<td class="perf-good">206.30</td>
+<td class="perf-good">209.50</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q02" data-system="clickhouse">
+<td>Q02</td>
+<td>clickhouse</td>
+<td class="perf-average">302.40</td>
+<td>7</td>
+<td class="perf-average">256.70</td>
+<td class="perf-average">255.20</td>
+<td class="perf-good">3.70</td>
+<td class="perf-average">249.50</td>
+<td class="perf-average">259.80</td>
+</tr>
+<tr data-query-group="even" data-query="Q02" data-system="clickhouse_stat">
+<td>Q02</td>
+<td>clickhouse_stat</td>
+<td class="perf-good">229.00</td>
+<td>7</td>
+<td class="perf-good">210.40</td>
+<td class="perf-good">210.20</td>
+<td class="perf-good">6.10</td>
+<td class="perf-good">203.70</td>
+<td class="perf-good">220.00</td>
+</tr>
+<tr data-query-group="even" data-query="Q02" data-system="clickhouse_tuned">
+<td>Q02</td>
+<td>clickhouse_tuned</td>
+<td class="perf-average">302.50</td>
+<td>7</td>
+<td class="perf-average">252.30</td>
+<td class="perf-average">251.40</td>
+<td class="perf-good">3.80</td>
+<td class="perf-average">246.60</td>
+<td class="perf-average">256.50</td>
+</tr>
+<tr data-query-group="even" data-query="Q02" data-system="exasol">
+<td>Q02</td>
+<td>exasol</td>
+<td class="perf-excellent">81.80</td>
+<td>7</td>
+<td class="perf-excellent">31.30</td>
+<td class="perf-excellent">31.30</td>
+<td class="perf-excellent">0.50</td>
+<td class="perf-excellent">30.60</td>
+<td class="perf-excellent">31.90</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q03" data-system="clickhouse">
+<td>Q03</td>
+<td>clickhouse</td>
+<td class="perf-poor">855.20</td>
+<td>7</td>
+<td class="perf-poor">802.10</td>
+<td class="perf-poor">807.80</td>
+<td class="perf-poor">17.90</td>
+<td class="perf-poor">787.30</td>
+<td class="perf-poor">840.50</td>
+</tr>
+<tr data-query-group="odd" data-query="Q03" data-system="clickhouse_stat">
+<td>Q03</td>
+<td>clickhouse_stat</td>
+<td class="perf-poor">889.60</td>
+<td>7</td>
+<td class="perf-poor">808.10</td>
+<td class="perf-poor">805.70</td>
+<td class="perf-average">15.40</td>
+<td class="perf-poor">787.40</td>
+<td class="perf-poor">829.00</td>
+</tr>
+<tr data-query-group="odd" data-query="Q03" data-system="clickhouse_tuned">
+<td>Q03</td>
+<td>clickhouse_tuned</td>
+<td class="perf-poor">891.80</td>
+<td>7</td>
+<td class="perf-poor">827.70</td>
+<td class="perf-poor">827.90</td>
+<td class="perf-poor">18.10</td>
+<td class="perf-poor">801.30</td>
+<td class="perf-poor">849.30</td>
+</tr>
+<tr data-query-group="odd" data-query="Q03" data-system="exasol">
+<td>Q03</td>
+<td>exasol</td>
+<td class="perf-excellent">100.50</td>
+<td>7</td>
+<td class="perf-excellent">95.30</td>
+<td class="perf-excellent">95.90</td>
+<td class="perf-excellent">1.80</td>
+<td class="perf-excellent">93.20</td>
+<td class="perf-excellent">98.20</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q04" data-system="clickhouse">
+<td>Q04</td>
+<td>clickhouse</td>
+<td class="perf-average">458.00</td>
+<td>7</td>
+<td class="perf-average">411.70</td>
+<td class="perf-average">414.50</td>
+<td class="perf-average">8.70</td>
+<td class="perf-average">405.60</td>
+<td class="perf-average">428.40</td>
+</tr>
+<tr data-query-group="even" data-query="Q04" data-system="clickhouse_stat">
+<td>Q04</td>
+<td>clickhouse_stat</td>
+<td class="perf-average">451.10</td>
+<td>7</td>
+<td class="perf-average">402.10</td>
+<td class="perf-average">402.00</td>
+<td class="perf-good">2.60</td>
+<td class="perf-average">398.80</td>
+<td class="perf-average">406.20</td>
+</tr>
+<tr data-query-group="even" data-query="Q04" data-system="clickhouse_tuned">
+<td>Q04</td>
+<td>clickhouse_tuned</td>
+<td class="perf-poor">1,290.20</td>
+<td>7</td>
+<td class="perf-poor">1,179.40</td>
+<td class="perf-poor">1,168.20</td>
+<td class="perf-poor">165.50</td>
+<td class="perf-poor">963.60</td>
+<td class="perf-poor">1,486.50</td>
+</tr>
+<tr data-query-group="even" data-query="Q04" data-system="exasol">
+<td>Q04</td>
+<td>exasol</td>
+<td class="perf-excellent">23.10</td>
+<td>7</td>
+<td class="perf-excellent">20.80</td>
+<td class="perf-excellent">20.80</td>
+<td class="perf-excellent">0.20</td>
+<td class="perf-excellent">20.50</td>
+<td class="perf-excellent">21.10</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q05" data-system="clickhouse">
+<td>Q05</td>
+<td>clickhouse</td>
+<td class="perf-poor">1,734.30</td>
+<td>7</td>
+<td class="perf-poor">1,531.30</td>
+<td class="perf-poor">1,534.10</td>
+<td class="perf-poor">28.90</td>
+<td class="perf-poor">1,495.10</td>
+<td class="perf-poor">1,570.90</td>
+</tr>
+<tr data-query-group="odd" data-query="Q05" data-system="clickhouse_stat">
+<td>Q05</td>
+<td>clickhouse_stat</td>
+<td class="perf-poor">1,688.60</td>
+<td>7</td>
+<td class="perf-poor">1,531.90</td>
+<td class="perf-poor">1,537.90</td>
+<td class="perf-poor">30.80</td>
+<td class="perf-poor">1,512.30</td>
+<td class="perf-poor">1,604.30</td>
+</tr>
+<tr data-query-group="odd" data-query="Q05" data-system="clickhouse_tuned">
+<td>Q05</td>
+<td>clickhouse_tuned</td>
+<td class="perf-poor">1,790.40</td>
+<td>7</td>
+<td class="perf-poor">1,587.90</td>
+<td class="perf-poor">1,596.20</td>
+<td class="perf-poor">45.20</td>
+<td class="perf-poor">1,557.40</td>
+<td class="perf-poor">1,685.40</td>
+</tr>
+<tr data-query-group="odd" data-query="Q05" data-system="exasol">
+<td>Q05</td>
+<td>exasol</td>
+<td class="perf-excellent">111.30</td>
+<td>7</td>
+<td class="perf-excellent">60.00</td>
+<td class="perf-excellent">59.90</td>
+<td class="perf-excellent">0.60</td>
+<td class="perf-excellent">59.30</td>
+<td class="perf-excellent">61.20</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q06" data-system="clickhouse">
+<td>Q06</td>
+<td>clickhouse</td>
+<td class="perf-excellent">111.30</td>
+<td>7</td>
+<td class="perf-excellent">58.30</td>
+<td class="perf-excellent">58.80</td>
+<td class="perf-good">2.60</td>
+<td class="perf-excellent">56.60</td>
+<td class="perf-excellent">64.20</td>
+</tr>
+<tr data-query-group="even" data-query="Q06" data-system="clickhouse_stat">
+<td>Q06</td>
+<td>clickhouse_stat</td>
+<td class="perf-excellent">103.90</td>
+<td>7</td>
+<td class="perf-excellent">55.40</td>
+<td class="perf-excellent">57.10</td>
+<td class="perf-good">7.00</td>
+<td class="perf-excellent">52.80</td>
+<td class="perf-excellent">72.70</td>
+</tr>
+<tr data-query-group="even" data-query="Q06" data-system="clickhouse_tuned">
+<td>Q06</td>
+<td>clickhouse_tuned</td>
+<td class="perf-excellent">106.40</td>
+<td>7</td>
+<td class="perf-excellent">55.70</td>
+<td class="perf-excellent">58.00</td>
+<td class="perf-good">3.60</td>
+<td class="perf-excellent">55.20</td>
+<td class="perf-excellent">64.80</td>
+</tr>
+<tr data-query-group="even" data-query="Q06" data-system="exasol">
+<td>Q06</td>
+<td>exasol</td>
+<td class="perf-excellent">14.00</td>
+<td>7</td>
+<td class="perf-excellent">13.70</td>
+<td class="perf-excellent">13.70</td>
+<td class="perf-excellent">0.10</td>
+<td class="perf-excellent">13.60</td>
+<td class="perf-excellent">13.80</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q07" data-system="clickhouse">
+<td>Q07</td>
+<td>clickhouse</td>
+<td class="perf-poor">844.70</td>
+<td>7</td>
+<td class="perf-poor">824.50</td>
+<td class="perf-poor">839.90</td>
+<td class="perf-poor">48.40</td>
+<td class="perf-poor">805.10</td>
+<td class="perf-poor">946.50</td>
+</tr>
+<tr data-query-group="odd" data-query="Q07" data-system="clickhouse_stat">
+<td>Q07</td>
+<td>clickhouse_stat</td>
+<td class="perf-poor">845.00</td>
+<td>7</td>
+<td class="perf-poor">828.50</td>
+<td class="perf-poor">845.50</td>
+<td class="perf-poor">33.20</td>
+<td class="perf-poor">817.10</td>
+<td class="perf-poor">908.70</td>
+</tr>
+<tr data-query-group="odd" data-query="Q07" data-system="clickhouse_tuned">
+<td>Q07</td>
+<td>clickhouse_tuned</td>
+<td class="perf-poor">895.70</td>
+<td>7</td>
+<td class="perf-poor">848.00</td>
+<td class="perf-poor">848.50</td>
+<td class="perf-poor">20.30</td>
+<td class="perf-poor">823.00</td>
+<td class="perf-poor">871.40</td>
+</tr>
+<tr data-query-group="odd" data-query="Q07" data-system="exasol">
+<td>Q07</td>
+<td>exasol</td>
+<td class="perf-excellent">73.10</td>
+<td>7</td>
+<td class="perf-excellent">68.90</td>
+<td class="perf-excellent">68.80</td>
+<td class="perf-excellent">0.70</td>
+<td class="perf-excellent">67.70</td>
+<td class="perf-excellent">69.70</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q08" data-system="clickhouse">
+<td>Q08</td>
+<td>clickhouse</td>
+<td class="perf-poor">1,669.60</td>
+<td>7</td>
+<td class="perf-poor">1,629.40</td>
+<td class="perf-poor">1,636.50</td>
+<td class="perf-poor">31.10</td>
+<td class="perf-poor">1,611.10</td>
+<td class="perf-poor">1,705.30</td>
+</tr>
+<tr data-query-group="even" data-query="Q08" data-system="clickhouse_stat">
+<td>Q08</td>
+<td>clickhouse_stat</td>
+<td class="perf-average">364.30</td>
+<td>7</td>
+<td class="perf-average">353.70</td>
+<td class="perf-average">355.20</td>
+<td class="perf-good">6.60</td>
+<td class="perf-average">347.70</td>
+<td class="perf-average">366.90</td>
+</tr>
+<tr data-query-group="even" data-query="Q08" data-system="clickhouse_tuned">
+<td>Q08</td>
+<td>clickhouse_tuned</td>
+<td class="perf-poor">1,686.40</td>
+<td>7</td>
+<td class="perf-poor">1,705.30</td>
+<td class="perf-poor">1,700.80</td>
+<td class="perf-poor">27.10</td>
+<td class="perf-poor">1,652.10</td>
+<td class="perf-poor">1,731.50</td>
+</tr>
+<tr data-query-group="even" data-query="Q08" data-system="exasol">
+<td>Q08</td>
+<td>exasol</td>
+<td class="perf-excellent">32.40</td>
+<td>7</td>
+<td class="perf-excellent">30.70</td>
+<td class="perf-excellent">33.90</td>
+<td class="perf-average">8.10</td>
+<td class="perf-excellent">30.40</td>
+<td class="perf-excellent">52.30</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q09" data-system="clickhouse">
+<td>Q09</td>
+<td>clickhouse</td>
+<td class="perf-poor">2,305.80</td>
+<td>7</td>
+<td class="perf-poor">2,108.70</td>
+<td class="perf-poor">2,099.00</td>
+<td class="perf-poor">23.80</td>
+<td class="perf-poor">2,070.20</td>
+<td class="perf-poor">2,124.60</td>
+</tr>
+<tr data-query-group="odd" data-query="Q09" data-system="clickhouse_stat">
+<td>Q09</td>
+<td>clickhouse_stat</td>
+<td class="perf-poor">988.20</td>
+<td>7</td>
+<td class="perf-poor">897.80</td>
+<td class="perf-poor">895.90</td>
+<td class="perf-poor">26.80</td>
+<td class="perf-poor">860.10</td>
+<td class="perf-poor">933.30</td>
+</tr>
+<tr data-query-group="odd" data-query="Q09" data-system="clickhouse_tuned">
+<td>Q09</td>
+<td>clickhouse_tuned</td>
+<td class="perf-poor">2,261.10</td>
+<td>7</td>
+<td class="perf-poor">2,158.90</td>
+<td class="perf-poor">2,169.10</td>
+<td class="perf-poor">28.00</td>
+<td class="perf-poor">2,128.70</td>
+<td class="perf-poor">2,205.00</td>
+</tr>
+<tr data-query-group="odd" data-query="Q09" data-system="exasol">
+<td>Q09</td>
+<td>exasol</td>
+<td class="perf-good">183.30</td>
+<td>7</td>
+<td class="perf-good">174.50</td>
+<td class="perf-good">174.50</td>
+<td class="perf-excellent">0.50</td>
+<td class="perf-good">174.00</td>
+<td class="perf-good">175.40</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q10" data-system="clickhouse">
+<td>Q10</td>
+<td>clickhouse</td>
+<td class="perf-average">609.20</td>
+<td>7</td>
+<td class="perf-average">515.10</td>
+<td class="perf-average">517.00</td>
+<td class="perf-average">9.60</td>
+<td class="perf-average">508.50</td>
+<td class="perf-average">537.70</td>
+</tr>
+<tr data-query-group="even" data-query="Q10" data-system="clickhouse_stat">
+<td>Q10</td>
+<td>clickhouse_stat</td>
+<td class="perf-average">547.20</td>
+<td>7</td>
+<td class="perf-average">524.40</td>
+<td class="perf-average">532.30</td>
+<td class="perf-average">16.10</td>
+<td class="perf-average">518.10</td>
+<td class="perf-average">556.40</td>
+</tr>
+<tr data-query-group="even" data-query="Q10" data-system="clickhouse_tuned">
+<td>Q10</td>
+<td>clickhouse_tuned</td>
+<td class="perf-average">629.90</td>
+<td>7</td>
+<td class="perf-average">538.20</td>
+<td class="perf-average">535.40</td>
+<td class="perf-average">13.70</td>
+<td class="perf-average">511.00</td>
+<td class="perf-average">551.40</td>
+</tr>
+<tr data-query-group="even" data-query="Q10" data-system="exasol">
+<td>Q10</td>
+<td>exasol</td>
+<td class="perf-good">167.20</td>
+<td>7</td>
+<td class="perf-good">165.10</td>
+<td class="perf-good">165.30</td>
+<td class="perf-good">7.00</td>
+<td class="perf-good">153.20</td>
+<td class="perf-good">176.20</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q11" data-system="clickhouse">
+<td>Q11</td>
+<td>clickhouse</td>
+<td class="perf-good">180.30</td>
+<td>7</td>
+<td class="perf-good">139.00</td>
+<td class="perf-good">140.30</td>
+<td class="perf-good">2.30</td>
+<td class="perf-good">138.20</td>
+<td class="perf-good">143.80</td>
+</tr>
+<tr data-query-group="odd" data-query="Q11" data-system="clickhouse_stat">
+<td>Q11</td>
+<td>clickhouse_stat</td>
+<td class="perf-good">182.90</td>
+<td>7</td>
+<td class="perf-good">144.90</td>
+<td class="perf-good">145.10</td>
+<td class="perf-excellent">1.20</td>
+<td class="perf-good">143.40</td>
+<td class="perf-good">147.00</td>
+</tr>
+<tr data-query-group="odd" data-query="Q11" data-system="clickhouse_tuned">
+<td>Q11</td>
+<td>clickhouse_tuned</td>
+<td class="perf-good">184.50</td>
+<td>7</td>
+<td class="perf-good">141.00</td>
+<td class="perf-good">143.60</td>
+<td class="perf-good">6.70</td>
+<td class="perf-good">137.30</td>
+<td class="perf-good">155.30</td>
+</tr>
+<tr data-query-group="odd" data-query="Q11" data-system="exasol">
+<td>Q11</td>
+<td>exasol</td>
+<td class="perf-excellent">53.40</td>
+<td>7</td>
+<td class="perf-excellent">52.20</td>
+<td class="perf-excellent">51.50</td>
+<td class="perf-excellent">1.10</td>
+<td class="perf-excellent">50.10</td>
+<td class="perf-excellent">52.50</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q12" data-system="clickhouse">
+<td>Q12</td>
+<td>clickhouse</td>
+<td class="perf-average">300.40</td>
+<td>7</td>
+<td class="perf-good">193.60</td>
+<td class="perf-good">192.00</td>
+<td class="perf-good">7.10</td>
+<td class="perf-good">181.70</td>
+<td class="perf-good">200.60</td>
+</tr>
+<tr data-query-group="even" data-query="Q12" data-system="clickhouse_stat">
+<td>Q12</td>
+<td>clickhouse_stat</td>
+<td class="perf-good">237.90</td>
+<td>7</td>
+<td class="perf-good">199.80</td>
+<td class="perf-good">200.50</td>
+<td class="perf-average">10.00</td>
+<td class="perf-good">185.60</td>
+<td class="perf-good">218.80</td>
+</tr>
+<tr data-query-group="even" data-query="Q12" data-system="clickhouse_tuned">
+<td>Q12</td>
+<td>clickhouse_tuned</td>
+<td class="perf-average">336.50</td>
+<td>7</td>
+<td class="perf-good">181.60</td>
+<td class="perf-good">182.70</td>
+<td class="perf-average">8.00</td>
+<td class="perf-good">175.90</td>
+<td class="perf-good">199.00</td>
+</tr>
+<tr data-query-group="even" data-query="Q12" data-system="exasol">
+<td>Q12</td>
+<td>exasol</td>
+<td class="perf-excellent">42.20</td>
+<td>7</td>
+<td class="perf-excellent">27.30</td>
+<td class="perf-excellent">27.30</td>
+<td class="perf-excellent">0.50</td>
+<td class="perf-excellent">26.80</td>
+<td class="perf-excellent">28.20</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q13" data-system="clickhouse">
+<td>Q13</td>
+<td>clickhouse</td>
+<td class="perf-average">791.60</td>
+<td>7</td>
+<td class="perf-average">760.70</td>
+<td class="perf-average">754.30</td>
+<td class="perf-poor">31.60</td>
+<td class="perf-average">685.70</td>
+<td class="perf-average">780.00</td>
+</tr>
+<tr data-query-group="odd" data-query="Q13" data-system="clickhouse_stat">
+<td>Q13</td>
+<td>clickhouse_stat</td>
+<td class="perf-average">779.40</td>
+<td>7</td>
+<td class="perf-average">745.60</td>
+<td class="perf-average">753.50</td>
+<td class="perf-average">13.50</td>
+<td class="perf-poor">738.20</td>
+<td class="perf-average">771.80</td>
+</tr>
+<tr data-query-group="odd" data-query="Q13" data-system="clickhouse_tuned">
+<td>Q13</td>
+<td>clickhouse_tuned</td>
+<td class="perf-average">792.90</td>
+<td>7</td>
+<td class="perf-poor">770.70</td>
+<td class="perf-poor">762.60</td>
+<td class="perf-poor">30.40</td>
+<td class="perf-average">708.90</td>
+<td class="perf-poor">808.60</td>
+</tr>
+<tr data-query-group="odd" data-query="Q13" data-system="exasol">
+<td>Q13</td>
+<td>exasol</td>
+<td class="perf-good">148.40</td>
+<td>7</td>
+<td class="perf-good">148.80</td>
+<td class="perf-good">148.60</td>
+<td class="perf-excellent">0.60</td>
+<td class="perf-good">147.80</td>
+<td class="perf-good">149.40</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q14" data-system="clickhouse">
+<td>Q14</td>
+<td>clickhouse</td>
+<td class="perf-excellent">57.80</td>
+<td>7</td>
+<td class="perf-excellent">55.00</td>
+<td class="perf-excellent">55.10</td>
+<td class="perf-excellent">1.00</td>
+<td class="perf-excellent">53.40</td>
+<td class="perf-excellent">56.80</td>
+</tr>
+<tr data-query-group="even" data-query="Q14" data-system="clickhouse_stat">
+<td>Q14</td>
+<td>clickhouse_stat</td>
+<td class="perf-excellent">70.80</td>
+<td>7</td>
+<td class="perf-excellent">71.30</td>
+<td class="perf-excellent">72.30</td>
+<td class="perf-good">2.40</td>
+<td class="perf-excellent">69.80</td>
+<td class="perf-excellent">75.50</td>
+</tr>
+<tr data-query-group="even" data-query="Q14" data-system="clickhouse_tuned">
+<td>Q14</td>
+<td>clickhouse_tuned</td>
+<td class="perf-excellent">65.00</td>
+<td>7</td>
+<td class="perf-excellent">57.30</td>
+<td class="perf-excellent">56.90</td>
+<td class="perf-good">2.60</td>
+<td class="perf-excellent">54.10</td>
+<td class="perf-excellent">61.30</td>
+</tr>
+<tr data-query-group="even" data-query="Q14" data-system="exasol">
+<td>Q14</td>
+<td>exasol</td>
+<td class="perf-excellent">29.30</td>
+<td>7</td>
+<td class="perf-excellent">23.20</td>
+<td class="perf-excellent">23.20</td>
+<td class="perf-excellent">0.10</td>
+<td class="perf-excellent">23.10</td>
+<td class="perf-excellent">23.50</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q15" data-system="clickhouse">
+<td>Q15</td>
+<td>clickhouse</td>
+<td class="perf-excellent">103.50</td>
+<td>7</td>
+<td class="perf-excellent">93.50</td>
+<td class="perf-excellent">93.40</td>
+<td class="perf-excellent">0.50</td>
+<td class="perf-excellent">92.70</td>
+<td class="perf-excellent">94.20</td>
+</tr>
+<tr data-query-group="odd" data-query="Q15" data-system="clickhouse_stat">
+<td>Q15</td>
+<td>clickhouse_stat</td>
+<td class="perf-excellent">111.30</td>
+<td>7</td>
+<td class="perf-good">100.90</td>
+<td class="perf-good">101.40</td>
+<td class="perf-excellent">0.90</td>
+<td class="perf-good">100.30</td>
+<td class="perf-good">102.80</td>
+</tr>
+<tr data-query-group="odd" data-query="Q15" data-system="clickhouse_tuned">
+<td>Q15</td>
+<td>clickhouse_tuned</td>
+<td class="perf-good">127.70</td>
+<td>7</td>
+<td class="perf-good">103.50</td>
+<td class="perf-good">103.60</td>
+<td class="perf-good">3.30</td>
+<td class="perf-good">97.90</td>
+<td class="perf-good">108.70</td>
+</tr>
+<tr data-query-group="odd" data-query="Q15" data-system="exasol">
+<td>Q15</td>
+<td>exasol</td>
+<td class="perf-excellent">78.60</td>
+<td>7</td>
+<td class="perf-excellent">76.60</td>
+<td class="perf-excellent">77.00</td>
+<td class="perf-excellent">1.40</td>
+<td class="perf-excellent">75.50</td>
+<td class="perf-excellent">79.00</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q16" data-system="clickhouse">
+<td>Q16</td>
+<td>clickhouse</td>
+<td class="perf-good">197.20</td>
+<td>7</td>
+<td class="perf-good">192.70</td>
+<td class="perf-good">192.60</td>
+<td class="perf-good">2.40</td>
+<td class="perf-good">188.70</td>
+<td class="perf-good">196.80</td>
+</tr>
+<tr data-query-group="even" data-query="Q16" data-system="clickhouse_stat">
+<td>Q16</td>
+<td>clickhouse_stat</td>
+<td class="perf-good">194.90</td>
+<td>7</td>
+<td class="perf-good">191.40</td>
+<td class="perf-good">193.70</td>
+<td class="perf-good">7.20</td>
+<td class="perf-good">188.90</td>
+<td class="perf-good">209.20</td>
+</tr>
+<tr data-query-group="even" data-query="Q16" data-system="clickhouse_tuned">
+<td>Q16</td>
+<td>clickhouse_tuned</td>
+<td class="perf-good">246.20</td>
+<td>7</td>
+<td class="perf-average">220.10</td>
+<td class="perf-average">221.90</td>
+<td class="perf-good">4.80</td>
+<td class="perf-average">215.30</td>
+<td class="perf-average">227.90</td>
+</tr>
+<tr data-query-group="even" data-query="Q16" data-system="exasol">
+<td>Q16</td>
+<td>exasol</td>
+<td class="perf-good">230.00</td>
+<td>7</td>
+<td class="perf-average">222.70</td>
+<td class="perf-average">225.50</td>
+<td class="perf-good">7.20</td>
+<td class="perf-average">218.90</td>
+<td class="perf-average">241.00</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q17" data-system="clickhouse">
+<td>Q17</td>
+<td>clickhouse</td>
+<td class="perf-average">805.80</td>
+<td>7</td>
+<td class="perf-average">732.10</td>
+<td class="perf-average">734.30</td>
+<td class="perf-good">7.20</td>
+<td class="perf-average">727.80</td>
+<td class="perf-average">749.70</td>
+</tr>
+<tr data-query-group="odd" data-query="Q17" data-system="clickhouse_stat">
+<td>Q17</td>
+<td>clickhouse_stat</td>
+<td class="perf-poor">830.70</td>
+<td>7</td>
+<td class="perf-average">733.70</td>
+<td class="perf-average">737.10</td>
+<td class="perf-average">9.40</td>
+<td class="perf-average">729.50</td>
+<td class="perf-average">757.00</td>
+</tr>
+<tr data-query-group="odd" data-query="Q17" data-system="clickhouse_tuned">
+<td>Q17</td>
+<td>clickhouse_tuned</td>
+<td class="perf-average">255.80</td>
+<td>7</td>
+<td class="perf-average">331.10</td>
+<td class="perf-average">331.30</td>
+<td class="perf-good">3.10</td>
+<td class="perf-average">327.30</td>
+<td class="perf-average">335.30</td>
+</tr>
+<tr data-query-group="odd" data-query="Q17" data-system="exasol">
+<td>Q17</td>
+<td>exasol</td>
+<td class="perf-excellent">15.50</td>
+<td>7</td>
+<td class="perf-excellent">13.90</td>
+<td class="perf-excellent">13.90</td>
+<td class="perf-excellent">0.20</td>
+<td class="perf-excellent">13.60</td>
+<td class="perf-excellent">14.20</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q18" data-system="clickhouse">
+<td>Q18</td>
+<td>clickhouse</td>
+<td class="perf-average">825.20</td>
+<td>7</td>
+<td class="perf-average">719.70</td>
+<td class="perf-average">721.40</td>
+<td class="perf-average">15.50</td>
+<td class="perf-average">705.60</td>
+<td class="perf-average">751.40</td>
+</tr>
+<tr data-query-group="even" data-query="Q18" data-system="clickhouse_stat">
+<td>Q18</td>
+<td>clickhouse_stat</td>
+<td class="perf-average">781.60</td>
+<td>7</td>
+<td class="perf-average">745.90</td>
+<td class="perf-average">750.20</td>
+<td class="perf-average">16.80</td>
+<td class="perf-average">730.10</td>
+<td class="perf-average">772.80</td>
+</tr>
+<tr data-query-group="even" data-query="Q18" data-system="clickhouse_tuned">
+<td>Q18</td>
+<td>clickhouse_tuned</td>
+<td class="perf-poor">2,396.00</td>
+<td>7</td>
+<td class="perf-poor">1,941.10</td>
+<td class="perf-poor">1,944.30</td>
+<td class="perf-poor">46.40</td>
+<td class="perf-poor">1,888.20</td>
+<td class="perf-poor">2,010.40</td>
+</tr>
+<tr data-query-group="even" data-query="Q18" data-system="exasol">
+<td>Q18</td>
+<td>exasol</td>
+<td class="perf-good">145.40</td>
+<td>7</td>
+<td class="perf-good">146.50</td>
+<td class="perf-good">146.00</td>
+<td class="perf-excellent">0.90</td>
+<td class="perf-good">144.90</td>
+<td class="perf-good">147.00</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q19" data-system="clickhouse">
+<td>Q19</td>
+<td>clickhouse</td>
+<td class="perf-average">545.20</td>
+<td>7</td>
+<td class="perf-average">547.80</td>
+<td class="perf-average">550.40</td>
+<td class="perf-average">7.40</td>
+<td class="perf-average">543.70</td>
+<td class="perf-average">566.10</td>
+</tr>
+<tr data-query-group="odd" data-query="Q19" data-system="clickhouse_stat">
+<td>Q19</td>
+<td>clickhouse_stat</td>
+<td class="perf-poor">834.80</td>
+<td>7</td>
+<td class="perf-poor">821.10</td>
+<td class="perf-poor">823.50</td>
+<td class="perf-poor">22.10</td>
+<td class="perf-poor">792.50</td>
+<td class="perf-poor">863.70</td>
+</tr>
+<tr data-query-group="odd" data-query="Q19" data-system="clickhouse_tuned">
+<td>Q19</td>
+<td>clickhouse_tuned</td>
+<td class="perf-poor">1,450.40</td>
+<td>7</td>
+<td class="perf-poor">1,362.10</td>
+<td class="perf-poor">1,367.40</td>
+<td class="perf-poor">17.70</td>
+<td class="perf-poor">1,351.70</td>
+<td class="perf-poor">1,401.90</td>
+</tr>
+<tr data-query-group="odd" data-query="Q19" data-system="exasol">
+<td>Q19</td>
+<td>exasol</td>
+<td class="perf-excellent">14.60</td>
+<td>7</td>
+<td class="perf-excellent">11.90</td>
+<td class="perf-excellent">12.10</td>
+<td class="perf-excellent">0.50</td>
+<td class="perf-excellent">11.60</td>
+<td class="perf-excellent">13.10</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q20" data-system="clickhouse">
+<td>Q20</td>
+<td>clickhouse</td>
+<td class="perf-good">125.80</td>
+<td>7</td>
+<td class="perf-good">114.00</td>
+<td class="perf-good">113.70</td>
+<td class="perf-good">3.30</td>
+<td class="perf-good">108.50</td>
+<td class="perf-good">118.00</td>
+</tr>
+<tr data-query-group="even" data-query="Q20" data-system="clickhouse_stat">
+<td>Q20</td>
+<td>clickhouse_stat</td>
+<td class="perf-good">140.40</td>
+<td>7</td>
+<td class="perf-good">125.60</td>
+<td class="perf-good">127.70</td>
+<td class="perf-good">4.80</td>
+<td class="perf-good">122.20</td>
+<td class="perf-good">134.80</td>
+</tr>
+<tr data-query-group="even" data-query="Q20" data-system="clickhouse_tuned">
+<td>Q20</td>
+<td>clickhouse_tuned</td>
+<td class="perf-average">475.30</td>
+<td>7</td>
+<td class="perf-average">335.40</td>
+<td class="perf-average">329.90</td>
+<td class="perf-average">9.20</td>
+<td class="perf-average">316.30</td>
+<td class="perf-average">338.20</td>
+</tr>
+<tr data-query-group="even" data-query="Q20" data-system="exasol">
+<td>Q20</td>
+<td>exasol</td>
+<td class="perf-excellent">66.40</td>
+<td>7</td>
+<td class="perf-excellent">67.40</td>
+<td class="perf-excellent">67.30</td>
+<td class="perf-excellent">0.90</td>
+<td class="perf-excellent">66.00</td>
+<td class="perf-excellent">68.50</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q21" data-system="clickhouse">
+<td>Q21</td>
+<td>clickhouse</td>
+<td class="perf-poor">6,334.80</td>
+<td>7</td>
+<td class="perf-poor">6,315.80</td>
+<td class="perf-poor">6,332.20</td>
+<td class="perf-poor">203.30</td>
+<td class="perf-poor">6,003.20</td>
+<td class="perf-poor">6,578.90</td>
+</tr>
+<tr data-query-group="odd" data-query="Q21" data-system="clickhouse_stat">
+<td>Q21</td>
+<td>clickhouse_stat</td>
+<td class="perf-poor">6,232.60</td>
+<td>7</td>
+<td class="perf-poor">6,283.70</td>
+<td class="perf-poor">6,234.70</td>
+<td class="perf-poor">85.50</td>
+<td class="perf-poor">6,130.20</td>
+<td class="perf-poor">6,319.00</td>
+</tr>
+<tr data-query-group="odd" data-query="Q21" data-system="clickhouse_tuned">
+<td>Q21</td>
+<td>clickhouse_tuned</td>
+<td class="perf-poor">3,861.50</td>
+<td>7</td>
+<td class="perf-poor">3,001.60</td>
+<td class="perf-poor">3,004.90</td>
+<td class="perf-poor">48.50</td>
+<td class="perf-poor">2,932.10</td>
+<td class="perf-poor">3,074.90</td>
+</tr>
+<tr data-query-group="odd" data-query="Q21" data-system="exasol">
+<td>Q21</td>
+<td>exasol</td>
+<td class="perf-excellent">103.40</td>
+<td>7</td>
+<td class="perf-good">106.70</td>
+<td class="perf-good">111.10</td>
+<td class="perf-average">14.50</td>
+<td class="perf-good">102.60</td>
+<td class="perf-good">143.30</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q22" data-system="clickhouse">
+<td>Q22</td>
+<td>clickhouse</td>
+<td class="perf-good">157.10</td>
+<td>7</td>
+<td class="perf-good">141.40</td>
+<td class="perf-good">144.30</td>
+<td class="perf-average">7.40</td>
+<td class="perf-good">137.80</td>
+<td class="perf-good">158.50</td>
+</tr>
+<tr data-query-group="even" data-query="Q22" data-system="clickhouse_stat">
+<td>Q22</td>
+<td>clickhouse_stat</td>
+<td class="perf-good">153.20</td>
+<td>7</td>
+<td class="perf-good">135.60</td>
+<td class="perf-good">138.00</td>
+<td class="perf-average">7.30</td>
+<td class="perf-good">130.80</td>
+<td class="perf-good">150.50</td>
+</tr>
+<tr data-query-group="even" data-query="Q22" data-system="clickhouse_tuned">
+<td>Q22</td>
+<td>clickhouse_tuned</td>
+<td class="perf-good">171.10</td>
+<td>7</td>
+<td class="perf-good">124.90</td>
+<td class="perf-good">124.20</td>
+<td class="perf-average">7.90</td>
+<td class="perf-good">114.50</td>
+<td class="perf-good">135.90</td>
+</tr>
+<tr data-query-group="even" data-query="Q22" data-system="exasol">
+<td>Q22</td>
+<td>exasol</td>
+<td class="perf-excellent">34.70</td>
+<td>7</td>
+<td class="perf-excellent">33.60</td>
+<td class="perf-excellent">33.60</td>
+<td class="perf-excellent">0.30</td>
+<td class="perf-excellent">33.10</td>
+<td class="perf-excellent">34.00</td>
+</tr>
+</tbody>
+</table>
 
             <h3>System Rankings</h3>
             <p>Based on median query execution time:</p>
@@ -158,16 +1878,30 @@
                         <tr>
                             <td><strong>1</strong></td>
                             <td>Exasol</td>
-                            <td>67.9ms</td>
-                            <td>86.6ms</td>
-                            <td>13.8ms - 255.1ms</td>
+                            <td>63.6ms</td>
+                            <td>82.2ms</td>
+                            <td>11.6ms - 241.0ms</td>
                         </tr>
                         <tr>
                             <td><strong>2</strong></td>
+                            <td>Clickhouse_stat</td>
+                            <td>462.1ms</td>
+                            <td>748.0ms</td>
+                            <td>52.8ms - 6319.0ms</td>
+                        </tr>
+                        <tr>
+                            <td><strong>3</strong></td>
                             <td>Clickhouse</td>
-                            <td>525.0ms</td>
-                            <td>827.4ms</td>
-                            <td>52.5ms - 6098.9ms</td>
+                            <td>540.7ms</td>
+                            <td>852.1ms</td>
+                            <td>53.4ms - 6578.9ms</td>
+                        </tr>
+                        <tr>
+                            <td><strong>4</strong></td>
+                            <td>Clickhouse_tuned</td>
+                            <td>553.0ms</td>
+                            <td>831.6ms</td>
+                            <td>54.1ms - 3074.9ms</td>
                         </tr>
                     </tbody>
                 </table>
@@ -209,7 +1943,7 @@
         <section class="section">
             <h2>Conclusion</h2>
 
-            <p>This benchmark provides a detailed, query-level comparison of 2 database systems on analytical workloads. The results demonstrate the performance characteristics and trade-offs of each system when processing TPC-H queries.</p>
+            <p>This benchmark provides a detailed, query-level comparison of 4 database systems on analytical workloads. The results demonstrate the performance characteristics and trade-offs of each system when processing TPC-H queries.</p>
 
             <p>While <strong>exasol</strong> demonstrated the strongest overall performance in this test, the optimal choice for a specific use case depends on multiple factors including workload characteristics, operational requirements, and system integration needs.</p>
         </section>
@@ -243,28 +1977,43 @@
         // Query data embedded from workload
         const queryData = {
             "Q01": {
-                "exasol": "attachments/queries/exasol/Q01.sql",                "clickhouse": "attachments/queries/clickhouse/Q01.sql"            },            "Q02": {
-                "exasol": "attachments/queries/exasol/Q02.sql",                "clickhouse": "attachments/queries/clickhouse/Q02.sql"            },            "Q03": {
-                "exasol": "attachments/queries/exasol/Q03.sql",                "clickhouse": "attachments/queries/clickhouse/Q03.sql"            },            "Q04": {
-                "exasol": "attachments/queries/exasol/Q04.sql",                "clickhouse": "attachments/queries/clickhouse/Q04.sql"            },            "Q05": {
-                "exasol": "attachments/queries/exasol/Q05.sql",                "clickhouse": "attachments/queries/clickhouse/Q05.sql"            },            "Q06": {
-                "exasol": "attachments/queries/exasol/Q06.sql",                "clickhouse": "attachments/queries/clickhouse/Q06.sql"            },            "Q07": {
-                "exasol": "attachments/queries/exasol/Q07.sql",                "clickhouse": "attachments/queries/clickhouse/Q07.sql"            },            "Q08": {
-                "exasol": "attachments/queries/exasol/Q08.sql",                "clickhouse": "attachments/queries/clickhouse/Q08.sql"            },            "Q09": {
-                "exasol": "attachments/queries/exasol/Q09.sql",                "clickhouse": "attachments/queries/clickhouse/Q09.sql"            },            "Q10": {
-                "exasol": "attachments/queries/exasol/Q10.sql",                "clickhouse": "attachments/queries/clickhouse/Q10.sql"            },            "Q11": {
-                "exasol": "attachments/queries/exasol/Q11.sql",                "clickhouse": "attachments/queries/clickhouse/Q11.sql"            },            "Q12": {
-                "exasol": "attachments/queries/exasol/Q12.sql",                "clickhouse": "attachments/queries/clickhouse/Q12.sql"            },            "Q13": {
-                "exasol": "attachments/queries/exasol/Q13.sql",                "clickhouse": "attachments/queries/clickhouse/Q13.sql"            },            "Q14": {
-                "exasol": "attachments/queries/exasol/Q14.sql",                "clickhouse": "attachments/queries/clickhouse/Q14.sql"            },            "Q15": {
-                "exasol": "attachments/queries/exasol/Q15.sql",                "clickhouse": "attachments/queries/clickhouse/Q15.sql"            },            "Q16": {
-                "exasol": "attachments/queries/exasol/Q16.sql",                "clickhouse": "attachments/queries/clickhouse/Q16.sql"            },            "Q17": {
-                "exasol": "attachments/queries/exasol/Q17.sql",                "clickhouse": "attachments/queries/clickhouse/Q17.sql"            },            "Q18": {
-                "exasol": "attachments/queries/exasol/Q18.sql",                "clickhouse": "attachments/queries/clickhouse/Q18.sql"            },            "Q19": {
-                "exasol": "attachments/queries/exasol/Q19.sql",                "clickhouse": "attachments/queries/clickhouse/Q19.sql"            },            "Q20": {
-                "exasol": "attachments/queries/exasol/Q20.sql",                "clickhouse": "attachments/queries/clickhouse/Q20.sql"            },            "Q21": {
-                "exasol": "attachments/queries/exasol/Q21.sql",                "clickhouse": "attachments/queries/clickhouse/Q21.sql"            },            "Q22": {
-                "exasol": "attachments/queries/exasol/Q22.sql",                "clickhouse": "attachments/queries/clickhouse/Q22.sql"            }        };
+                "exasol": "attachments/queries/exasol/Q01.sql",                "clickhouse": "attachments/queries/clickhouse/Q01.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q01.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q01.sql"            },            "Q02": {
+                "exasol": "attachments/queries/exasol/Q02.sql",                "clickhouse": "attachments/queries/clickhouse/Q02.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q02.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q02.sql"            },            "Q03": {
+                "exasol": "attachments/queries/exasol/Q03.sql",                "clickhouse": "attachments/queries/clickhouse/Q03.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q03.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q03.sql"            },            "Q04": {
+                "exasol": "attachments/queries/exasol/Q04.sql",                "clickhouse": "attachments/queries/clickhouse/Q04.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q04.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q04.sql"            },            "Q05": {
+                "exasol": "attachments/queries/exasol/Q05.sql",                "clickhouse": "attachments/queries/clickhouse/Q05.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q05.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q05.sql"            },            "Q06": {
+                "exasol": "attachments/queries/exasol/Q06.sql",                "clickhouse": "attachments/queries/clickhouse/Q06.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q06.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q06.sql"            },            "Q07": {
+                "exasol": "attachments/queries/exasol/Q07.sql",                "clickhouse": "attachments/queries/clickhouse/Q07.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q07.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q07.sql"            },            "Q08": {
+                "exasol": "attachments/queries/exasol/Q08.sql",                "clickhouse": "attachments/queries/clickhouse/Q08.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q08.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q08.sql"            },            "Q09": {
+                "exasol": "attachments/queries/exasol/Q09.sql",                "clickhouse": "attachments/queries/clickhouse/Q09.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q09.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q09.sql"            },            "Q10": {
+                "exasol": "attachments/queries/exasol/Q10.sql",                "clickhouse": "attachments/queries/clickhouse/Q10.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q10.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q10.sql"            },            "Q11": {
+                "exasol": "attachments/queries/exasol/Q11.sql",                "clickhouse": "attachments/queries/clickhouse/Q11.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q11.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q11.sql"            },            "Q12": {
+                "exasol": "attachments/queries/exasol/Q12.sql",                "clickhouse": "attachments/queries/clickhouse/Q12.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q12.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q12.sql"            },            "Q13": {
+                "exasol": "attachments/queries/exasol/Q13.sql",                "clickhouse": "attachments/queries/clickhouse/Q13.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q13.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q13.sql"            },            "Q14": {
+                "exasol": "attachments/queries/exasol/Q14.sql",                "clickhouse": "attachments/queries/clickhouse/Q14.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q14.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q14.sql"            },            "Q15": {
+                "exasol": "attachments/queries/exasol/Q15.sql",                "clickhouse": "attachments/queries/clickhouse/Q15.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q15.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q15.sql"            },            "Q16": {
+                "exasol": "attachments/queries/exasol/Q16.sql",                "clickhouse": "attachments/queries/clickhouse/Q16.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q16.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q16.sql"            },            "Q17": {
+                "exasol": "attachments/queries/exasol/Q17.sql",                "clickhouse": "attachments/queries/clickhouse/Q17.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q17.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q17.sql"            },            "Q18": {
+                "exasol": "attachments/queries/exasol/Q18.sql",                "clickhouse": "attachments/queries/clickhouse/Q18.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q18.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q18.sql"            },            "Q19": {
+                "exasol": "attachments/queries/exasol/Q19.sql",                "clickhouse": "attachments/queries/clickhouse/Q19.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q19.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q19.sql"            },            "Q20": {
+                "exasol": "attachments/queries/exasol/Q20.sql",                "clickhouse": "attachments/queries/clickhouse/Q20.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q20.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q20.sql"            },            "Q21": {
+                "exasol": "attachments/queries/exasol/Q21.sql",                "clickhouse": "attachments/queries/clickhouse/Q21.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q21.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q21.sql"            },            "Q22": {
+                "exasol": "attachments/queries/exasol/Q22.sql",                "clickhouse": "attachments/queries/clickhouse/Q22.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q22.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q22.sql"            }        };
+
+        // Add click handlers to summary table rows
+        document.addEventListener('DOMContentLoaded', function() {
+            const summaryTable = document.querySelector('.summary-table');
+            if (summaryTable) {
+                const rows = summaryTable.querySelectorAll('tbody tr[data-query]');
+                rows.forEach(row => {
+                    row.addEventListener('click', function() {
+                        const query = this.dataset.query;
+                        const system = this.dataset.system;
+                        showQueryModal(query, system);
+                    });
+                });
+            }
+        });
 
         // Add click handlers to query links
         document.addEventListener('DOMContentLoaded', function() {

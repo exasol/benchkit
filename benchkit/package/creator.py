@@ -684,6 +684,7 @@ def execute_workload(config: dict[str, Any], output_dir: Path, force: bool = Fal
         return
 
     all_results = []
+    all_warmup_results = []
 
     for system_config in config["systems"]:
         system_name = system_config["name"]
@@ -741,8 +742,12 @@ def execute_workload(config: dict[str, Any], output_dir: Path, force: bool = Fal
         # Execute workload
         console.print(f"[dim]Running queries...[/dim]")
         try:
-            results = workload.run_workload(system, query_names, runs_per_query, warmup_runs)
-            all_results.extend(results)
+            result_dict = workload.run_workload(system, query_names, runs_per_query, warmup_runs)
+            # Handle dict return format (measured and warmup results)
+            measured_results = result_dict.get("measured", result_dict if isinstance(result_dict, list) else [])
+            warmup_results = result_dict.get("warmup", [])
+            all_results.extend(measured_results)
+            all_warmup_results.extend(warmup_results)
             console.print(f"[green]✓ Completed workload on {system_name}[/]")
         except Exception as e:
             console.print(f"[red]✗ Failed to run workload on {system_name}: {e}[/]")
@@ -758,6 +763,13 @@ def execute_workload(config: dict[str, Any], output_dir: Path, force: bool = Fal
         console.print(f"[green]✓ Results saved to {runs_file}[/]")
     else:
         console.print(f"[yellow]No results to save[/]")
+
+    # Save warmup results if present
+    if all_warmup_results:
+        warmup_file = output_dir / "runs_warmup.csv"
+        warmup_df = pd.DataFrame(all_warmup_results)
+        warmup_df.to_csv(warmup_file, index=False)
+        console.print(f"[green]✓ Warmup results saved to {warmup_file}[/]")
 '''
 
         runner_file = self.package_dir / "benchkit" / "workload_runner.py"

@@ -1,11 +1,17 @@
 {
-  "infrastructure_provisioning_s": 160.83356448700033,
+  "infrastructure_provisioning_s": 143.98835607699948,
   "systems": {
+    "clickhouse_tuned": {
+      "installation_s": 33.96150812599808
+    },
+    "clickhouse_stat": {
+      "installation_s": 34.599924915000884
+    },
     "clickhouse": {
-      "installation_s": 32.478809727000225
+      "installation_s": 36.322642649000045
     },
     "exasol": {
-      "installation_s": 551.6098705219993
+      "installation_s": 539.4304515660006
     }
   }
 }

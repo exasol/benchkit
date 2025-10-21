@@ -1,0 +1,184 @@
+{
+  "system_name": "clickhouse_tuned",
+  "system_kind": "clickhouse",
+  "system_version": "25.9.4.58",
+  "commands": {
+    "storage_setup": [
+      {
+        "command": "sudo mkfs.ext4 -F /dev/nvme1n1",
+        "success": true,
+        "description": "Format /dev/nvme1n1 with ext4 filesystem",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mkfs.ext4 -F /dev/nvme1n1",
+        "success": true,
+        "description": "Execute sudo command on remote system",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mkdir -p /data",
+        "success": true,
+        "description": "Create mount point /data",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mkdir -p /data",
+        "success": true,
+        "description": "Execute sudo command on remote system",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mount /dev/nvme1n1 /data",
+        "success": true,
+        "description": "Mount /dev/nvme1n1 to /data",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mount /dev/nvme1n1 /data",
+        "success": true,
+        "description": "Execute sudo command on remote system",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo chown -R ubuntu:ubuntu /data",
+        "success": true,
+        "description": "Set ownership of /data to ubuntu:ubuntu",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo chown -R ubuntu:ubuntu /data",
+        "success": true,
+        "description": "Execute sudo command on remote system",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mkdir -p /data/clickhouse",
+        "success": true,
+        "description": "Create ClickHouse data directory under /data",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mkdir -p /data/clickhouse",
+        "success": true,
+        "description": "Execute sudo command on remote system",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo chown -R clickhouse:clickhouse /data/clickhouse",
+        "success": true,
+        "description": "Set ownership of /data/clickhouse to clickhouse:clickhouse",
+        "category": "storage_setup"
+      }
+    ],
+    "prerequisites": [
+      {
+        "command": "sudo apt-get update",
+        "success": true,
+        "description": "Update package lists",
+        "category": "prerequisites"
+      },
+      {
+        "command": "sudo apt-get install -y apt-transport-https ca-certificates curl gnupg",
+        "success": true,
+        "description": "Install prerequisite packages for secure repository access",
+        "category": "prerequisites"
+      }
+    ],
+    "repository_setup": [
+      {
+        "command": "curl -fsSL 'https://packages.clickhouse.com/rpm/lts/repodata/repomd.xml.key' | sudo gpg --dearmor -o /usr/share/keyrings/clickhouse-keyring.gpg",
+        "success": true,
+        "description": "Add ClickHouse GPG key to system keyring",
+        "category": "repository_setup"
+      },
+      {
+        "command": "ARCH=$(dpkg --print-architecture) && echo \"deb [signed-by=/usr/share/keyrings/clickhouse-keyring.gpg arch=${ARCH}] https://packages.clickhouse.com/deb stable main\" | sudo tee /etc/apt/sources.list.d/clickhouse.list",
+        "success": true,
+        "description": "Add ClickHouse official repository to APT sources",
+        "category": "repository_setup"
+      },
+      {
+        "command": "sudo apt-get update",
+        "success": true,
+        "description": "Update package lists with ClickHouse repository",
+        "category": "repository_setup"
+      }
+    ],
+    "installation": [
+      {
+        "command": "sudo apt-get install -y clickhouse-server=25.9.4.58 clickhouse-client=25.9.4.58",
+        "success": true,
+        "description": "Install ClickHouse server and client version <PUBLIC_IP>",
+        "category": "installation"
+      }
+    ],
+    "configuration": [
+      {
+        "command": "sudo tee /etc/clickhouse-server/config.d/benchmark.xml > /dev/null << 'EOF'\n<clickhouse>\n    <listen_host>::</listen_host>\n    <path>/data/clickhouse</path>\n    <tmp_path>/data/clickhouse/tmp</tmp_path>\n    <max_server_memory_usage>212792564121</max_server_memory_usage>\n    <max_concurrent_queries>16</max_concurrent_queries>\n    <background_pool_size>32</background_pool_size>\n    <background_schedule_pool_size>32</background_schedule_pool_size>\n    <max_table_size_to_drop>50000000000</max_table_size_to_drop>\n</clickhouse>\nEOF",
+        "success": true,
+        "description": "Create custom ClickHouse configuration file",
+        "category": "configuration"
+      }
+    ],
+    "user_configuration": [
+      {
+        "command": "sudo tee /etc/clickhouse-server/users.d/benchmark.xml > /dev/null << 'EOF'\n<clickhouse>\n    <users>\n        <default replace=\"true\">\n            <password_sha256_hex>2cca9d8714615f4132390a3db9296d39ec051b3faff87be7ea5f7fe0e2de14c9</password_sha256_hex>\n            <networks>\n                <ip>::/0</ip>\n            </networks>\n        </default>\n    </users>\n    <profiles>\n        <default>\n            <max_threads>32</max_threads>\n            <max_memory_usage>200000000000</max_memory_usage>\n            <max_bytes_before_external_sort>100000000000</max_bytes_before_external_sort>\n            <max_bytes_before_external_group_by>100000000000</max_bytes_before_external_group_by>\n            <join_use_nulls>1</join_use_nulls>\n            <allow_experimental_correlated_subqueries>1</allow_experimental_correlated_subqueries>\n            <optimize_read_in_order>1</optimize_read_in_order>\n            <max_insert_threads>8</max_insert_threads>\n        </default>\n    </profiles>\n</clickhouse>\nEOF",
+        "success": true,
+        "description": "Configure ClickHouse user profile with password and query settings",
+        "category": "user_configuration"
+      }
+    ],
+    "service_management": [
+      {
+        "command": "sudo systemctl start clickhouse-server",
+        "success": true,
+        "description": "Start ClickHouse server service",
+        "category": "service_management"
+      },
+      {
+        "command": "sudo systemctl enable clickhouse-server",
+        "success": true,
+        "description": "Enable ClickHouse server to start on boot",
+        "category": "service_management"
+      }
+    ]
+  },
+  "installation_notes": [
+    "Storage device /dev/nvme1n1 mounted at /data",
+    "ClickHouse data directory: /data/clickhouse",
+    "Installing ClickHouse using official APT repository",
+    "ClickHouse configuration file created: /etc/clickhouse-server/config.d/benchmark.xml",
+    "ClickHouse user profile configured with optimized settings",
+    "Waiting for ClickHouse server to be ready for connections...",
+    "ClickHouse server is ready and accepting connections",
+    "ClickHouse configuration applied:",
+    "  Hardware-detected settings (CPU cores: 32, RAM: 247.7GB)",
+    "  max_threads: 32",
+    "  max_memory_usage: 200.0GB",
+    "  max_bytes_before_external_sort: 100.0GB",
+    "  max_bytes_before_external_group_by: 100.0GB",
+    "  max_server_memory_usage: 212.8GB",
+    "  max_concurrent_queries: 16",
+    "  background_pool_size: 32",
+    "  background_schedule_pool_size: 32",
+    "  max_table_size_to_drop: 50.0GB",
+    "  memory_limit: 230g"
+  ],
+  "config_parameters": {
+    "use_additional_disk": true,
+    "data_dir": "/data/clickhouse",
+    "host": "<PUBLIC_IP>",
+    "port": 8123,
+    "username": "default",
+    "password": "<DATABASE_PASSWORD>",
+    "extra": {
+      "memory_limit": "230g",
+      "max_threads": "32",
+      "max_memory_usage": "200000000000",
+      "max_bytes_before_external_group_by": "100000000000",
+      "max_bytes_before_external_sort": "100000000000"
+    }
+  },
+  "data_directory": "/data/clickhouse"
+}

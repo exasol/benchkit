@@ -79,27 +79,6 @@
             </div>
         </section>
 
-        {% if setup_summaries %}
-        <section class="section">
-            <h2>Installation &amp; Configuration</h2>
-
-            {% for system_config in cfg.systems %}
-            {% set setup_summary = setup_summaries.get(system_config.name) %}
-            {% if setup_summary %}
-            <details class="setup-details">
-                <summary>
-                    <strong>{{ setup_summary.system_name | title }} {{ setup_summary.system_version }}</strong>
-                    {% if preparation_timings and system_config.name in preparation_timings %}
-                    <span class="setup-timing">({{ preparation_timings[system_config.name].elapsed_s | format_duration }})</span>
-                    {% endif %}
-                </summary>
-                {{ render_setup_sections_html(setup_summary) }}
-            </details>
-            {% endif %}
-            {% endfor %}
-        </section>
-        {% endif %}
-
         <!-- Performance Summary -->
         <section class="section">
             <h2>Performance Summary</h2>
@@ -120,23 +99,8 @@
             </div>
             {% endif %}
 
-            <h3>Summary Statistics</h3>
-            {{ tables.summary_table }}
-            {% endif %}
-        </section>
-
-        <!-- Query Results -->
-        <section class="section">
-            <h2>Query-by-Query Results</h2>
-            <p>The following table shows the median execution time for each query across all systems:</p>
-            {{ tables.comparison_table }}
-        </section>
-
-        <!-- Visualizations -->
-        {% if figures %}
-        <section class="section">
-            <h2>Performance Visualizations</h2>
-
+            <h3>Performance Visualizations</h3>
+            {% if figures %}
             {% for fig_name, fig_path in figures.items() %}
             {% if 'performance' in fig_name or 'comparison' in fig_name %}
             <div class="chart-container">
@@ -144,8 +108,9 @@
             </div>
             {% endif %}
             {% endfor %}
+            {% endif %}
+            {% endif %}
         </section>
-        {% endif %}
 
         <!-- Detailed Analysis -->
         <section class="section">
@@ -163,8 +128,17 @@
             </ul>
             {% endif %}
 
-            <p>The performance patterns observed across these query types provide insights into each system's optimization strategies and architectural trade-offs.</p>
+            <p>The following table shows the median performance for each query category across all systems:</p>
+            {{ tables.query_type_performance | safe }}
             {% endif %}
+
+            <h3>Query-by-Query Results</h3>
+            <p>The following table shows the median execution time for each query across all systems:</p>
+            {{ tables.comparison | safe }}
+
+            <h3>Detailed Statistics</h3>
+            <p>The complete performance statistics for all queries and systems:</p>
+            {{ tables.summary | safe }}
 
             <h3>System Rankings</h3>
             {% if data.summary.per_system and data.summary.per_system | length > 1 %}
@@ -241,11 +215,6 @@
             <p>While <strong>{{ fastest[0] }}</strong> demonstrated the strongest overall performance in this test, the optimal choice for a specific use case depends on multiple factors including workload characteristics, operational requirements, and system integration needs.</p>
             {% endif %}
         </section>
-
-        <!-- Footer -->
-        <footer class="footer">
-            <p><em>All benchmark data, figures, and configuration files are available in the attachments directory for independent analysis and verification.</em></p>
-        </footer>
     </div>
 
     <!-- Query Modal -->
@@ -280,6 +249,21 @@
             {% endfor %}
             {% endif %}
         };
+
+        // Add click handlers to summary table rows
+        document.addEventListener('DOMContentLoaded', function() {
+            const summaryTable = document.querySelector('.summary-table');
+            if (summaryTable) {
+                const rows = summaryTable.querySelectorAll('tbody tr[data-query]');
+                rows.forEach(row => {
+                    row.addEventListener('click', function() {
+                        const query = this.dataset.query;
+                        const system = this.dataset.system;
+                        showQueryModal(query, system);
+                    });
+                });
+            }
+        });
 
         // Add click handlers to query links
         document.addEventListener('DOMContentLoaded', function() {

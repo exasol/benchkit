@@ -398,7 +398,8 @@ class InfraManager:
         """Collect all required ports from systems used in this benchmark."""
         from ..systems import create_system
 
-        all_ports = {}
+        # First collect all ports with their descriptions
+        port_descriptions: dict[int, list[str]] = {}
 
         # Get systems configuration from the benchmark config
         systems_config = self.config.get("systems", [])
@@ -409,13 +410,14 @@ class InfraManager:
                 system_class = create_system(system_config).__class__
                 required_ports = system_class.get_required_ports()
 
-                # Merge ports with descriptive names to avoid conflicts
+                # Group ports by port number to handle duplicates
                 for desc, port in required_ports.items():
-                    # Create a unique key combining system name and description
-                    port_key = (
+                    if port not in port_descriptions:
+                        port_descriptions[port] = []
+                    # Add system name and description to the list
+                    port_descriptions[port].append(
                         f"{system_config['name']}_{desc.replace(' ', '_').lower()}"
                     )
-                    all_ports[port_key] = port
 
             except Exception as e:
                 # If system creation fails, skip port collection for this system
@@ -423,6 +425,14 @@ class InfraManager:
                     f"Warning: Could not collect ports for {system_config.get('name', 'unknown')}: {e}"
                 )
                 continue
+
+        # Create deduplicated port map with combined descriptions
+        all_ports = {}
+        for port, descriptions in port_descriptions.items():
+            # Use the first description as the key (they all map to the same port anyway)
+            # If multiple systems use the same port, just use one key
+            port_key = descriptions[0]
+            all_ports[port_key] = port
 
         return all_ports
 

@@ -27,6 +27,8 @@ class WorkloadConfig(BaseModel):
     warmup_runs: int = 1
     data_format: str = "csv"
     generator: str = "dbgen"
+    variant: str = "official"  # Query variant to use (official, tuned, custom, etc.)
+    system_variants: dict[str, str] | None = None  # Per-system variant overrides
 
 
 class EnvironmentConfig(BaseModel):

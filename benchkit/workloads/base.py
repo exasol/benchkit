@@ -163,7 +163,7 @@ class Workload(ABC):
         query_names: list[str],
         runs_per_query: int = 3,
         warmup_runs: int = 1,
-    ) -> list[dict[str, Any]]:
+    ) -> dict[str, list[dict[str, Any]]]:
         """
         Execute the full workload against a system.
 
@@ -174,10 +174,11 @@ class Workload(ABC):
             warmup_runs: Number of warmup runs per query
 
         Returns:
-            List of query execution results
+            Dictionary with 'measured' and 'warmup' keys containing lists of query execution results
         """
         all_queries = self.get_queries()
-        results = []
+        measured_results = []
+        warmup_results = []
 
         for query_name in query_names:
             if query_name not in all_queries:
@@ -190,7 +191,19 @@ class Workload(ABC):
             # Warmup runs
             for warmup in range(warmup_runs):
                 print(f"  Warmup {warmup + 1}/{warmup_runs}")
-                self.run_query(system, f"{query_name}_warmup_{warmup + 1}", query_sql)
+                result = self.run_query(
+                    system, f"{query_name}_warmup_{warmup + 1}", query_sql
+                )
+                result.update(
+                    {
+                        "run_number": warmup + 1,
+                        "system": system.name,
+                        "workload": self.name,
+                        "scale_factor": self.scale_factor,
+                        "variant": self.config.get("variant", "official"),
+                    }
+                )
+                warmup_results.append(result)
 
             # Measured runs
             for run in range(runs_per_query):
@@ -202,11 +215,12 @@ class Workload(ABC):
                         "system": system.name,
                         "workload": self.name,
                         "scale_factor": self.scale_factor,
+                        "variant": self.config.get("variant", "official"),
                     }
                 )
-                results.append(result)
+                measured_results.append(result)
 
-        return results
+        return {"measured": measured_results, "warmup": warmup_results}
 
     def get_schema_name(self) -> str:
         """Get the schema name for this workload."""

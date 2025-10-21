@@ -732,9 +732,9 @@ class BenchmarkRunner:
             else:
                 console.print(f"[red]❌ {system_name} workload failed[/red]")
 
-        # Save results
         if all_results:
-            self._save_benchmark_results(all_results)
+            warmup_results = getattr(self, "_all_warmup_results", [])
+            self._save_benchmark_results(all_results, warmup_results)
             console.print(f"[green]✅ Results saved to: {self.output_dir}[/green]")
             return True
         else:
@@ -800,9 +800,9 @@ class BenchmarkRunner:
             else:
                 console.print(f"[red]❌ {system_name} workload failed[/red]")
 
-        # Save results (single-threaded after parallel execution)
         if all_results:
-            self._save_benchmark_results(all_results)
+            warmup_results = getattr(self, "_all_warmup_results", [])
+            self._save_benchmark_results(all_results, warmup_results)
             console.print(f"[green]✅ Results saved to: {self.output_dir}[/green]")
             return True
         else:
@@ -836,8 +836,9 @@ class BenchmarkRunner:
                 console.print(f"[red]✗ {system_config['name']} failed: {e}[/red]")
                 failed_systems.append(system_config["name"])
 
-        # Save results
-        self._save_benchmark_results(all_results)
+        # Save results (including warmup results if any were collected)
+        warmup_results = getattr(self, "_all_warmup_results", [])
+        self._save_benchmark_results(all_results, warmup_results)
 
         # Summary
         success_count = len(self.config["systems"]) - len(failed_systems)
@@ -899,7 +900,12 @@ class BenchmarkRunner:
 
             # Run benchmark queries
             console.print("  Executing queries...")
-            results = self._execute_queries(system, workload)
+            measured_results, warmup_results = self._execute_queries(system, workload)
+
+            # Store warmup results for later saving (use instance variable to preserve across systems)
+            if not hasattr(self, "_all_warmup_results"):
+                self._all_warmup_results = []
+            self._all_warmup_results.extend(warmup_results)
 
             # Get system metrics
             console.print("  Collecting system metrics...")
@@ -910,7 +916,7 @@ class BenchmarkRunner:
             setup_summary = system.get_setup_summary()
             self._save_setup_summary(system.name, setup_summary)
 
-            return results
+            return measured_results
 
         finally:
             # Cleanup only if not preserving systems for manual rerun
@@ -928,23 +934,33 @@ class BenchmarkRunner:
                 except Exception as e:
                     console.print(f"  [yellow]Warning: cleanup failed: {e}[/yellow]")
 
-    def _execute_queries(self, system: Any, workload: Any) -> list[dict[str, Any]]:
+    def _execute_queries(
+        self, system: Any, workload: Any
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         """Execute benchmark queries with timing and monitoring."""
         query_names = self.config["workload"]["queries"]["include"]
         runs_per_query = self.config["workload"]["runs_per_query"]
         warmup_runs = self.config["workload"]["warmup_runs"]
 
         # Execute queries
-        results = workload.run_workload(
+        result_dict = workload.run_workload(
             system=system,
             query_names=query_names,
             runs_per_query=runs_per_query,
             warmup_runs=warmup_runs,
         )
 
-        return results  # type: ignore
+        # Extract measured and warmup results
+        measured_results = result_dict.get("measured", [])
+        warmup_results = result_dict.get("warmup", [])
 
-    def _save_benchmark_results(self, results: list[dict[str, Any]]) -> None:
+        return measured_results, warmup_results
+
+    def _save_benchmark_results(
+        self,
+        results: list[dict[str, Any]],
+        warmup_results: list[dict[str, Any]] | None = None,
+    ) -> None:
         """Save benchmark results to files."""
         if not results:
             console.print("[yellow]No results to save[/yellow]")
@@ -957,12 +973,20 @@ class BenchmarkRunner:
 
         console.print(f"Results saved to: {csv_path}")
 
+        # Save warmup results if present
+        warmup_df = None
+        if warmup_results:
+            warmup_df = normalize_runs(warmup_results)
+            warmup_csv_path = self.output_dir / "runs_warmup.csv"
+            warmup_df.to_csv(warmup_csv_path, index=False)
+            console.print(f"Warmup results saved to: {warmup_csv_path}")
+
         # Save raw results as JSON
         json_path = self.output_dir / "raw_results.json"
         save_json(results, json_path)
 
-        # Create summary statistics
-        summary = self._create_summary_stats(df)
+        # Create summary statistics (pass warmup_df and config)
+        summary = self._create_summary_stats(df, warmup_df, self.config)
         summary_path = self.output_dir / "summary.json"
         save_json(summary, summary_path)
 
@@ -1016,7 +1040,12 @@ class BenchmarkRunner:
                     system_name,
                 )
 
-    def _create_summary_stats(self, df: pd.DataFrame) -> dict[str, Any]:
+    def _create_summary_stats(
+        self,
+        df: pd.DataFrame,
+        warmup_df: pd.DataFrame | None = None,
+        config: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Create summary statistics from results."""
         summary = {
             "total_queries": len(df),
@@ -1024,6 +1053,16 @@ class BenchmarkRunner:
             "query_names": df["query"].unique().tolist(),
             "run_date": time.strftime("%Y-%m-%d %H:%M:%S"),
         }
+
+        # Add variant information from config
+        if config and "workload" in config:
+            workload_config = config["workload"]
+            summary["variant"] = workload_config.get("variant", "official")
+            if (
+                "system_variants" in workload_config
+                and workload_config["system_variants"]
+            ):
+                summary["system_variants"] = workload_config["system_variants"]
 
         # Per-system statistics
         summary["per_system"] = {}
@@ -1058,6 +1097,50 @@ class BenchmarkRunner:
                 "systems": systems,
                 "per_system": per_system_stats,
             }
+
+        # Add warmup statistics if available
+        if warmup_df is not None and len(warmup_df) > 0:
+            summary["warmup_statistics"] = {
+                "total_warmup_queries": len(warmup_df),
+                "per_system": {},
+                "per_query": {},
+            }
+
+            # Warmup per-system statistics
+            for system in warmup_df["system"].unique():
+                system_warmup_df = warmup_df[warmup_df["system"] == system]
+                summary["warmup_statistics"]["per_system"][system] = {
+                    "total_queries": len(system_warmup_df),
+                    "avg_runtime_ms": float(system_warmup_df["elapsed_ms"].mean()),
+                    "median_runtime_ms": float(system_warmup_df["elapsed_ms"].median()),
+                    "min_runtime_ms": float(system_warmup_df["elapsed_ms"].min()),
+                    "max_runtime_ms": float(system_warmup_df["elapsed_ms"].max()),
+                }
+
+            # Warmup per-query statistics (aggregated across warmup runs)
+            normalized_warmup_df = warmup_df.copy()
+            normalized_warmup_df["base_query"] = normalized_warmup_df["query"].apply(
+                lambda name: (
+                    name.rsplit("_warmup_", 1)[0] if "_warmup_" in name else name
+                )
+            )
+
+            for base_query in normalized_warmup_df["base_query"].unique():
+                query_warmup_df = normalized_warmup_df[
+                    normalized_warmup_df["base_query"] == base_query
+                ]
+                summary["warmup_statistics"]["per_query"][base_query] = {}
+
+                for system in query_warmup_df["system"].unique():
+                    system_query_warmup_df = query_warmup_df[
+                        query_warmup_df["system"] == system
+                    ]
+                    summary["warmup_statistics"]["per_query"][base_query][system] = {
+                        "total_runs": int(len(system_query_warmup_df)),
+                        "avg_runtime_ms": float(
+                            system_query_warmup_df["elapsed_ms"].mean()
+                        ),
+                    }
 
         return summary
 
@@ -1532,6 +1615,35 @@ class BenchmarkRunner:
             console.print(f"[yellow]⚠️ Service cleanup failed: {e}[/yellow]")
             return False
 
+    def _get_workload_execution_timeout(self) -> int:
+        """
+        Calculate appropriate timeout for workload execution based on scale factor.
+
+        Returns timeout in seconds. Can be overridden via config.
+
+        Default timeouts based on scale factor:
+        - SF <= 10: 3600s (1 hour)
+        - SF 30: 7200s (2 hours)
+        - SF 100: 14400s (4 hours)
+        - SF 300+: 21600s (6 hours)
+        """
+        # Check if timeout explicitly configured
+        workload_config = self.config.get("workload", {})
+        if "execution_timeout" in workload_config:
+            return int(workload_config["execution_timeout"])
+
+        # Calculate based on scale factor
+        scale_factor = workload_config.get("scale_factor", 1)
+
+        if scale_factor <= 10:
+            return 3600  # 1 hour
+        elif scale_factor <= 30:
+            return 7200  # 2 hours
+        elif scale_factor <= 100:
+            return 14400  # 4 hours
+        else:
+            return 21600  # 6 hours
+
     def _create_workload_package(self) -> Path | None:
         """Create a package containing workload execution components."""
         try:
@@ -1565,9 +1677,13 @@ class BenchmarkRunner:
             ):
                 return None
 
+            # Calculate appropriate timeout based on scale factor
+            execution_timeout = self._get_workload_execution_timeout()
+            timeout_hours = execution_timeout / 3600
+
             # Execute workload
             self._log_output(
-                f"🚀 Executing workload on {system_name}...",
+                f"🚀 Executing workload on {system_name} (timeout: {timeout_hours:.1f}h)...",
                 executor,
                 system_name,
             )
@@ -1579,17 +1695,67 @@ class BenchmarkRunner:
 
             workload_result = instance_manager.run_remote_command(
                 f"cd /home/ubuntu/{project_id} && ./execute_workload.sh {system_name}",
-                timeout=3600,  # 1 hour timeout
+                timeout=execution_timeout,
                 debug=True,
                 stream_callback=stream_remote_output,
             )
 
-            if workload_result.get("success"):
-                # Collect results
+            command_success = workload_result.get("success")
+            returncode = workload_result.get("returncode", -1)
+
+            # Check if command timed out
+            timed_out = returncode == -1 and not command_success
+
+            if command_success:
+                # Normal successful completion
                 return self._collect_workload_results(
-                    instance_manager, project_id, system_name
+                    instance_manager, project_id, system_name, executor
                 )
+            elif timed_out:
+                # Command timed out, but workload may have completed successfully
+                # Check the output for completion marker
+                stdout = workload_result.get("stdout", "")
+                if (
+                    "Completed workload" in stdout
+                    or "✓ Workload execution completed" in stdout
+                ):
+                    self._log_output(
+                        f"[yellow]⚠️ SSH command timed out after {timeout_hours:.1f}h, but workload appears to have completed[/yellow]",
+                        executor,
+                        system_name,
+                    )
+                    self._log_output(
+                        f"[yellow]Attempting to collect results from {system_name}...[/yellow]",
+                        executor,
+                        system_name,
+                    )
+                    # Attempt to collect results despite timeout
+                    results = self._collect_workload_results(
+                        instance_manager, project_id, system_name, executor
+                    )
+                    if results:
+                        self._log_output(
+                            f"[green]✅ Successfully recovered results from {system_name} after timeout[/green]",
+                            executor,
+                            system_name,
+                        )
+                        return results
+                    else:
+                        self._log_output(
+                            f"[red]❌ Failed to collect results from {system_name} after timeout[/red]",
+                            executor,
+                            system_name,
+                        )
+                        return None
+                else:
+                    self._log_output(
+                        f"[red]❌ Workload execution timed out on {system_name} after {timeout_hours:.1f}h[/red]",
+                        executor,
+                        system_name,
+                    )
+                    return None
             else:
+                # Command failed for reasons other than timeout
                 self._log_output(
                     f"[red]Workload execution failed on {system_name}[/red]",
                     executor,
@@ -1636,21 +1802,27 @@ class BenchmarkRunner:
             return False
 
     def _collect_workload_results(
-        self, instance_manager: Any, project_id: str, system_name: str
+        self,
+        instance_manager: Any,
+        project_id: str,
+        system_name: str,
+        executor: "ParallelExecutor | None" = None,
     ) -> list[dict[str, Any]] | None:
         """Collect workload results from remote instance."""
         try:
             # Copy results file
             remote_results = f"/home/ubuntu/{project_id}/results/{project_id}/runs.csv"
             local_results = self.output_dir / f"runs_{system_name}.csv"
+            remote_warmup = (
+                f"/home/ubuntu/{project_id}/results/{project_id}/runs_warmup.csv"
+            )
+            local_warmup = self.output_dir / f"runs_{system_name}_warmup.csv"
 
             # Also collect preparation timings
             remote_prep = f"/home/ubuntu/{project_id}/results/{project_id}/preparation_{system_name}.json"
             local_prep = self.output_dir / f"preparation_{system_name}.json"
 
             if instance_manager.copy_file_from_instance(remote_results, local_results):
-                import pandas as pd
-
                 # Load CSV results and convert to list of dicts
                 df = pd.read_csv(local_results)
                 results = []
@@ -1660,25 +1832,60 @@ class BenchmarkRunner:
                         dat[str(k)] = v
                     results.append(dat)
 
+                # Try to collect warmup results (optional)
+                warmup_records: list[dict[str, Any]] = []
+                if instance_manager.copy_file_from_instance(
+                    remote_warmup, local_warmup
+                ):
+                    warmup_df = pd.read_csv(local_warmup)
+                    for rec in warmup_df.to_dict("records"):
+                        warmup_records.append({str(k): v for k, v in rec.items()})
+
+                    if warmup_records:
+                        if not hasattr(self, "_all_warmup_results"):
+                            self._all_warmup_results = []
+                        self._all_warmup_results.extend(warmup_records)
+                        self._log_output(
+                            f"✅ Warmup results collected from {system_name}",
+                            executor,
+                            system_name,
+                        )
+                else:
+                    self._log_output(
+                        f"[dim]No warmup results from {system_name}[/dim]",
+                        executor,
+                        system_name,
+                    )
+
                 # Try to collect preparation timings (may not exist if skipped)
                 if instance_manager.copy_file_from_instance(remote_prep, local_prep):
-                    console.print(
-                        f"✅ Results and preparation timings collected from {system_name}"
+                    self._log_output(
+                        f"✅ Results and preparation timings collected from {system_name}",
+                        executor,
+                        system_name,
                     )
                 else:
-                    console.print(
-                        f"✅ Results collected from {system_name} (no preparation timings)"
+                    self._log_output(
+                        f"✅ Results collected from {system_name} (no preparation timings)",
+                        executor,
+                        system_name,
                     )
 
                 return results
             else:
-                console.print(
-                    f"[red]Failed to collect results from {system_name}[/red]"
+                self._log_output(
+                    f"[red]Failed to collect results from {system_name}[/red]",
+                    executor,
+                    system_name,
                 )
                 return None
 
         except Exception as e:
-            console.print(f"[red]Result collection failed: {e}[/red]")
+            self._log_output(
+                f"[red]Result collection failed: {e}[/red]",
+                executor,
+                system_name,
+            )
             return None
 
     def set_cloud_instance_managers(self, instance_managers: dict[str, Any]) -> None:

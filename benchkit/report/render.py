@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, cast
 
@@ -97,11 +98,25 @@ class ReportRenderer:
             }
         )
 
+    def _get_baseline_system(self) -> str | None:
+        """Get the baseline system from config (first system in systems list)."""
+        systems = self.config.get("systems", [])
+        if systems and len(systems) > 0:
+            return str(systems[0]["name"])
+        return None
+
     def render_report(self) -> str:
         """Render the complete report from results and templates."""
+        # Extract system names from config to filter results
+        system_names = [s["name"] for s in self.config.get("systems", [])]
+
         # Load benchmark data
         results_dir = Path("results") / self.project_id
         data = self._load_benchmark_data(results_dir)
+
+        # Filter data to only include systems from config
+        if system_names:
+            data = self._filter_data_for_systems(data, system_names)
 
         # Generate figures
         figures = self._generate_figures(data, results_dir)
@@ -109,17 +124,21 @@ class ReportRenderer:
         # Create tables
         tables = self._generate_tables(data)
 
-        # Load system information
-        system_info = self._load_system_info(results_dir)
+        # Load system information (filtered by system_names)
+        system_info = self._load_system_info(results_dir, system_names=system_names)
 
-        # Load setup summaries for actual commands used
-        setup_summaries = self._load_setup_summaries(results_dir)
+        # Load setup summaries for actual commands used (filtered by system_names)
+        setup_summaries = self._load_setup_summaries(
+            results_dir, system_names=system_names
+        )
 
         # Extract sensitive values from config and setup summaries for sanitization
         self._extract_sensitive_values(setup_summaries)
 
-        # Load preparation timings
-        preparation_timings = self._load_preparation_timings(results_dir)
+        # Load preparation timings (filtered by system_names)
+        preparation_timings = self._load_preparation_timings(
+            results_dir, system_names=system_names
+        )
 
         # Load infrastructure setup timings
         infrastructure_timings = self._load_infrastructure_timings(results_dir)
@@ -153,7 +172,7 @@ class ReportRenderer:
         Save rendered report and create self-contained report directory.
 
         Generates 3 reports:
-        1. Short report (focus on second+ systems with installation)
+        1. Short report (compares first two systems with installation details)
         2. Results report (all systems, query-focused, no installation)
         3. Full benchmark report (complete with all details)
         """
@@ -164,7 +183,7 @@ class ReportRenderer:
         ensure_directory(report_base_dir)
 
         # Generate Report 1: Short
-        print("Generating Report 1: Short (second+ systems with installation)...")
+        print("Generating Report 1: Short (first two systems with installation)...")
         short_dir = self._generate_short_report(report_base_dir)
 
         # Generate Report 2: Results
@@ -181,8 +200,9 @@ class ReportRenderer:
         with open(report_file, "w", encoding="utf-8") as f:
             f.write(content)
 
-        # Copy all result files as attachments
-        self._copy_attachments(full_report_dir)
+        # Copy all result files as attachments (filtered by systems in config)
+        system_names = [s["name"] for s in self.config.get("systems", [])]
+        self._copy_attachments(full_report_dir, system_names=system_names)
 
         # Generate and save HTML version if enabled
         if self.report_config.get("generate_html", True):
@@ -211,24 +231,35 @@ class ReportRenderer:
 
     def _render_and_save_html(self, report_dir: Path) -> None:
         """Render and save HTML version of the report."""
+        # Extract system names from config to filter results
+        system_names = [s["name"] for s in self.config.get("systems", [])]
+
         # Load benchmark data
         results_dir = Path("results") / self.project_id
         data = self._load_benchmark_data(results_dir)
 
+        # Filter data to only include systems from config
+        if system_names:
+            data = self._filter_data_for_systems(data, system_names)
+
         # Generate HTML-specific tables
         html_tables = self._generate_html_tables(data)
 
-        # Load system information
-        system_info = self._load_system_info(results_dir)
+        # Load system information (filtered by system_names)
+        system_info = self._load_system_info(results_dir, system_names=system_names)
 
-        # Load setup summaries
-        setup_summaries = self._load_setup_summaries(results_dir)
+        # Load setup summaries (filtered by system_names)
+        setup_summaries = self._load_setup_summaries(
+            results_dir, system_names=system_names
+        )
 
         # Extract sensitive values
         self._extract_sensitive_values(setup_summaries)
 
-        # Load preparation timings
-        preparation_timings = self._load_preparation_timings(results_dir)
+        # Load preparation timings (filtered by system_names)
+        preparation_timings = self._load_preparation_timings(
+            results_dir, system_names=system_names
+        )
 
         # Load infrastructure timings
         infrastructure_timings = self._load_infrastructure_timings(results_dir)
@@ -301,8 +332,15 @@ class ReportRenderer:
 
         return data
 
-    def _load_system_info(self, results_dir: Path) -> dict[str, Any]:
-        """Load system information and compare across instances."""
+    def _load_system_info(
+        self, results_dir: Path, system_names: list[str] | None = None
+    ) -> dict[str, Any]:
+        """Load system information and compare across instances.
+
+        Args:
+            results_dir: Directory containing result files
+            system_names: Optional list of system names to filter by. If None, loads all systems.
+        """
         from ..gather.system_probe import compare_system_configurations
 
         system_info = {}
@@ -321,6 +359,11 @@ class ReportRenderer:
             for sys_file in system_files:
                 # Extract system name from filename
                 system_name = sys_file.stem.replace("system_", "")
+
+                # Filter by system_names if provided
+                if system_names is not None and system_name not in system_names:
+                    continue
+
                 system_data = load_json(sys_file)
                 system_info["per_system"][system_name] = system_data
                 all_systems_data.append(system_data)
@@ -389,8 +432,15 @@ class ReportRenderer:
 
         return ", ".join(parts) if parts else "System configuration available"
 
-    def _load_setup_summaries(self, results_dir: Path) -> dict[str, Any]:
-        """Load setup summaries for all systems."""
+    def _load_setup_summaries(
+        self, results_dir: Path, system_names: list[str] | None = None
+    ) -> dict[str, Any]:
+        """Load setup summaries for all systems.
+
+        Args:
+            results_dir: Directory containing result files
+            system_names: Optional list of system names to filter by. If None, loads all systems.
+        """
         setup_summaries = {}
 
         # Find all setup_*.json files
@@ -399,12 +449,24 @@ class ReportRenderer:
         for setup_file in setup_files:
             # Extract system name from filename (setup_systemname.json -> systemname)
             system_name = setup_file.stem.replace("setup_", "")
+
+            # Filter by system_names if provided
+            if system_names is not None and system_name not in system_names:
+                continue
+
             setup_summaries[system_name] = load_json(setup_file)
 
         return setup_summaries
 
-    def _load_preparation_timings(self, results_dir: Path) -> dict[str, Any]:
-        """Load workload preparation timings for all systems."""
+    def _load_preparation_timings(
+        self, results_dir: Path, system_names: list[str] | None = None
+    ) -> dict[str, Any]:
+        """Load workload preparation timings for all systems.
+
+        Args:
+            results_dir: Directory containing result files
+            system_names: Optional list of system names to filter by. If None, loads all systems.
+        """
         preparation_timings = {}
 
         # Find all preparation_*.json files
@@ -413,6 +475,11 @@ class ReportRenderer:
         for prep_file in prep_files:
             # Extract system name from filename (preparation_systemname.json -> systemname)
             system_name = prep_file.stem.replace("preparation_", "")
+
+            # Filter by system_names if provided
+            if system_names is not None and system_name not in system_names:
+                continue
+
             preparation_timings[system_name] = load_json(prep_file)
 
         return preparation_timings
@@ -465,10 +532,12 @@ class ReportRenderer:
         ):
             from .figures import create_speedup_plot
 
-            baseline_system = runs_df["system"].unique()[0]
-            figures["speedup"] = create_speedup_plot(
-                runs_df, baseline_system, figures_dir
-            )
+            # Get baseline from config (first system), not from CSV order
+            baseline_system = self._get_baseline_system()
+            if baseline_system is not None:
+                figures["speedup"] = create_speedup_plot(
+                    runs_df, baseline_system, figures_dir
+                )
 
         # Generate all-systems comparison plot for full report (Post 3)
         if len(runs_df["system"].unique()) > 1:
@@ -497,13 +566,22 @@ class ReportRenderer:
 
         # Summary table
         if not runs_df.empty:
-            summary_df = summary_table(runs_df)
+            summary_df = summary_table(runs_df, data.get("summary"))
             tables["summary"] = format_table_markdown(summary_df)
 
         # Comparison table
         if len(runs_df["system"].unique()) > 1:
-            comparison_df = create_comparison_table(runs_df)
+            baseline_system = self._get_baseline_system()
+            comparison_df = create_comparison_table(runs_df, baseline_system)
             tables["comparison"] = format_table_markdown(comparison_df)
+
+        # Query type performance table
+        if not runs_df.empty:
+            from .tables import create_query_type_performance_table
+
+            query_type_df = create_query_type_performance_table(runs_df)
+            if not query_type_df.empty:
+                tables["query_type_performance"] = format_table_markdown(query_type_df)
 
         return tables
 
@@ -517,11 +595,22 @@ class ReportRenderer:
 
         # Summary table
         if not runs_df.empty:
-            tables["summary"] = create_summary_table_html(runs_df)
+            tables["summary"] = create_summary_table_html(runs_df, data.get("summary"))
 
         # Comparison table
         if len(runs_df["system"].unique()) > 1:
-            tables["comparison"] = create_comparison_table_html(runs_df)
+            baseline_system = self._get_baseline_system()
+            tables["comparison"] = create_comparison_table_html(
+                runs_df, baseline_system
+            )
+
+        # Query type performance table
+        if not runs_df.empty:
+            from .tables import create_query_type_performance_table_html
+
+            tables["query_type_performance"] = create_query_type_performance_table_html(
+                runs_df
+            )
 
         # Ranking table
         if len(runs_df["system"].unique()) > 1:
@@ -818,15 +907,55 @@ class ReportRenderer:
         """Filter setup summaries to only include specified systems."""
         return {k: v for k, v in setup_summaries.items() if k in system_names}
 
-    def _copy_attachments(self, post_dir: Path) -> None:
-        """Copy all result files and figures as attachments."""
+    def _copy_attachments(
+        self, post_dir: Path, system_names: list[str] | None = None
+    ) -> None:
+        """Copy all result files and figures as attachments.
+
+        Args:
+            post_dir: Directory to copy attachments to
+            system_names: Optional list of system names to filter by. If None, copies all systems.
+        """
         results_dir = Path("results") / self.project_id
         attachments_dir = post_dir / "attachments"
+
+        # Clear attachments directory if it exists to remove stale files
+        if attachments_dir.exists():
+            shutil.rmtree(attachments_dir)
         ensure_directory(attachments_dir)
 
-        # Copy data files
-        data_files = ["runs.csv", "summary.json", "system.json", "raw_results.json"]
-        for filename in data_files:
+        # Copy and filter data files
+        # For runs.csv and summary.json, filter by systems if system_names is provided
+        if system_names is not None:
+            # Filter and copy runs.csv
+            runs_file = results_dir / "runs.csv"
+            if runs_file.exists():
+                runs_df = pd.read_csv(runs_file)
+                filtered_runs = runs_df[runs_df["system"].isin(system_names)]
+                filtered_runs.to_csv(attachments_dir / "runs.csv", index=False)
+
+            # Filter and copy summary.json
+            summary_file = results_dir / "summary.json"
+            if summary_file.exists():
+                summary = load_json(summary_file)
+                if "per_system" in summary:
+                    summary["per_system"] = {
+                        k: v
+                        for k, v in summary["per_system"].items()
+                        if k in system_names
+                    }
+                summary["systems"] = system_names
+                with open(attachments_dir / "summary.json", "w") as f:
+                    json.dump(summary, f, indent=2)
+        else:
+            # Copy without filtering
+            for filename in ["runs.csv", "summary.json"]:
+                src_file = results_dir / filename
+                if src_file.exists():
+                    shutil.copy2(src_file, attachments_dir / filename)
+
+        # Copy system.json and raw_results.json (not system-specific)
+        for filename in ["system.json", "raw_results.json"]:
             src_file = results_dir / filename
             if src_file.exists():
                 shutil.copy2(src_file, attachments_dir / filename)
@@ -834,6 +963,10 @@ class ReportRenderer:
         # Copy per-system probe outputs to preserve environment details
         system_probe_files = sorted(results_dir.glob("system_*.json"))
         for system_file in system_probe_files:
+            system_name = system_file.stem.replace("system_", "")
+            # Filter by system_names if provided
+            if system_names is not None and system_name not in system_names:
+                continue
             shutil.copy2(system_file, attachments_dir / system_file.name)
 
         # Create a consolidated system.json when only per-system probes exist
@@ -850,6 +983,10 @@ class ReportRenderer:
         # Copy setup summaries (setup_*.json files)
         setup_files = list(results_dir.glob("setup_*.json"))
         for setup_file in setup_files:
+            system_name = setup_file.stem.replace("setup_", "")
+            # Filter by system_names if provided
+            if system_names is not None and system_name not in system_names:
+                continue
             shutil.copy2(setup_file, attachments_dir / setup_file.name)
 
         # Copy figures
@@ -859,7 +996,7 @@ class ReportRenderer:
             shutil.copytree(figures_src, figures_dst, dirs_exist_ok=True)
 
         # Generate and save system-specific query files for clickable table functionality
-        self._generate_query_files(attachments_dir)
+        self._generate_query_files(attachments_dir, system_names=system_names)
 
         # Copy configuration file
         config_file = Path(f"configs/{self.project_id}.yaml")
@@ -977,22 +1114,21 @@ class ReportRenderer:
             note_file.write_text(f"Failed to create workload package: {e}")
 
     def _generate_short_report(self, report_base_dir: Path) -> Path | None:
-        """Generate Report 1: Short focusing on second+ systems with installation."""
+        """Generate Report 1: Short comparing first two systems with installation details."""
         # Load benchmark data
         results_dir = Path("results") / self.project_id
         data = self._load_benchmark_data(results_dir)
 
-        # Rank systems by performance
-        ranked_systems = self._rank_systems_by_performance(data)
-        if len(ranked_systems) < 2:
+        # Use config order (not performance ranking) to determine baseline and tested systems
+        # Baseline is always the first system in config
+        # Short report compares only first two systems for clarity
+        config_systems = [s["name"] for s in self.config.get("systems", [])]
+        if len(config_systems) < 2:
             print("Need at least 2 systems for short report generation")
             return None
 
-        winner_system = ranked_systems[0]
-        tested_systems = ranked_systems[1:]  # All systems except the winner
-        if not tested_systems:
-            print("No secondary systems available for short report; skipping.")
-            return None
+        winner_system = config_systems[0]  # First system in config is baseline
+        tested_systems = [config_systems[1]]  # Only the second system for short report
 
         summary: dict[str, Any] = cast(dict[str, Any], data.get("summary") or {})
         per_system: dict[str, Any] = cast(
@@ -1024,18 +1160,22 @@ class ReportRenderer:
         # Filter data to tested systems only
         filtered_data = self._filter_data_for_systems(data, tested_systems)
 
-        # Load system info and setup summaries
-        system_info = self._load_system_info(results_dir)
-        setup_summaries = self._load_setup_summaries(results_dir)
+        # Load system info and setup summaries (filtered to tested systems only)
+        system_info = self._load_system_info(results_dir, system_names=tested_systems)
+        setup_summaries = self._load_setup_summaries(
+            results_dir, system_names=tested_systems
+        )
 
-        # Filter setup summaries to tested systems only
+        # Filter setup summaries to tested systems only (already filtered by load, but keep for clarity)
         filtered_setup = self._filter_setup_for_systems(setup_summaries, tested_systems)
 
         # Extract sensitive values
         self._extract_sensitive_values(filtered_setup)
 
-        # Load preparation timings
-        preparation_timings = self._load_preparation_timings(results_dir)
+        # Load preparation timings (filtered to tested systems only)
+        preparation_timings = self._load_preparation_timings(
+            results_dir, system_names=tested_systems
+        )
 
         # Get tested system configs
         tested_system_configs = [
@@ -1179,9 +1319,16 @@ class ReportRenderer:
 
     def _generate_results_report(self, report_base_dir: Path) -> Path:
         """Generate Report 2: Detailed results for all systems without installation."""
+        # Extract system names from config to filter results
+        system_names = [s["name"] for s in self.config.get("systems", [])]
+
         # Load benchmark data
         results_dir = Path("results") / self.project_id
         data = self._load_benchmark_data(results_dir)
+
+        # Filter data to only include systems from config
+        if system_names:
+            data = self._filter_data_for_systems(data, system_names)
 
         # Generate figures
         figures_dir = Path(self.report_config["figures_dir"])
@@ -1194,8 +1341,8 @@ class ReportRenderer:
         # Generate tables
         tables = self._generate_tables(data)
 
-        # Load system info (but no setup summaries - no installation)
-        system_info = self._load_system_info(results_dir)
+        # Load system info (but no setup summaries - no installation) - filtered by system_names
+        system_info = self._load_system_info(results_dir, system_names=system_names)
 
         # Generate workload metadata
         workload_metadata = self._generate_workload_metadata()
@@ -1317,8 +1464,44 @@ class ReportRenderer:
 
         scale_factor = workload_config.get("scale_factor")
         if scale_factor is not None:
-            label = f"Scale Factor {scale_factor}"
-            add_tag(f"scale-factor-{scale_factor}", label, "workload")
+            sf_value = self._format_scale_factor_value(scale_factor)
+            if sf_value:
+                label = f"SF{sf_value}"
+                add_tag(f"sf{sf_value}", label, "workload")
+
+        # Add variant tags (global and per-system)
+        variant_values: set[str] = set()
+        configured_variant = workload_config.get("variant")
+        normalized_variant = self._normalize_variant_value(configured_variant)
+        if normalized_variant:
+            variant_values.add(normalized_variant)
+
+        system_variants = workload_config.get("system_variants") or {}
+        for sys_variant in system_variants.values():
+            normalized = self._normalize_variant_value(sys_variant)
+            if normalized:
+                variant_values.add(normalized)
+
+        for variant_value in sorted(variant_values):
+            variant_label = self._format_display_name(variant_value) or variant_value
+            add_tag(
+                f"variant-{variant_value}",
+                f"{variant_label}",
+                "variant",
+            )
+
+        for system_name, sys_variant in system_variants.items():
+            system_key = (system_name or "").strip()
+            if not system_key:
+                continue
+            variant_value = self._normalize_variant_value(sys_variant) or "official"
+            variant_label = self._format_display_name(variant_value) or variant_value
+            system_label = self._format_display_name(system_key) or system_key
+            add_tag(
+                f"{system_key}-{variant_value}",
+                f"{variant_label}",
+                "variant",
+            )
 
         for system_config in self.config.get("systems", []):
             system_name = system_config.get("name", "")
@@ -1428,6 +1611,8 @@ class ReportRenderer:
                 "runs_per_query": workload_config.get("runs_per_query"),
                 "warmup_runs": workload_config.get("warmup_runs"),
                 "queries": included_queries,
+                "variant": workload_config.get("variant", "official"),
+                "system_variants": workload_config.get("system_variants"),
             },
             "reports": report_entries,
         }
@@ -1460,6 +1645,39 @@ class ReportRenderer:
         normalized = normalized.replace("#", "")
         normalized = "-".join(normalized.split())
         return normalized
+
+    def _format_scale_factor_value(self, scale_factor: Any) -> str:
+        """Return a compact string representation of the scale factor."""
+        if scale_factor is None:
+            return ""
+
+        if isinstance(scale_factor, int):
+            return str(scale_factor)
+
+        if isinstance(scale_factor, float):
+            if scale_factor.is_integer():
+                return str(int(scale_factor))
+            return str(scale_factor).rstrip("0").rstrip(".")
+
+        # Attempt to normalise numeric strings using Decimal
+        try:
+            decimal_value = Decimal(str(scale_factor))
+        except (InvalidOperation, ValueError):
+            return str(scale_factor).strip()
+
+        if decimal_value == decimal_value.to_integral():
+            return str(int(decimal_value))
+
+        normalized = format(decimal_value.normalize(), "f")
+        return normalized.rstrip("0").rstrip(".") or normalized
+
+    def _normalize_variant_value(self, variant: Any) -> str:
+        """Normalize variant names, defaulting to 'official' when unset."""
+        if variant is None:
+            return "official"
+
+        value = str(variant).strip()
+        return value or "official"
 
     def _format_display_name(self, value: str | None) -> str:
         """Format identifiers for human-friendly display."""

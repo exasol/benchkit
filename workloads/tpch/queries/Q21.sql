@@ -1,4 +1,6 @@
 -- TPC-H Query 21: Suppliers Who Kept Orders Waiting
+-- Official TPC-H specification query
+
 SELECT
     s_name,
     COUNT(*) AS numwait

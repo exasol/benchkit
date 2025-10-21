@@ -7,12 +7,15 @@ import pandas as pd
 from tabulate import tabulate
 
 
-def summary_table(df: pd.DataFrame) -> pd.DataFrame:
+def summary_table(
+    df: pd.DataFrame, summary_data: dict[str, Any] | None = None
+) -> pd.DataFrame:
     """
     Create a summary table with basic statistics per system and query.
 
     Args:
         df: DataFrame with benchmark results
+        summary_data: Optional summary data containing warmup statistics
 
     Returns:
         DataFrame with summary statistics (sorted by query, then system)
@@ -42,6 +45,31 @@ def summary_table(df: pd.DataFrame) -> pd.DataFrame:
             "max": "max_ms",
         }
     )
+
+    # Add warmup timing column if summary_data is provided
+    if summary_data and "warmup_statistics" in summary_data:
+        warmup_per_query = summary_data["warmup_statistics"].get("per_query", {})
+        warmup_values = []
+
+        for _, row in summary.iterrows():
+            query = row["query"]
+            system = row["system"]
+
+            # Look up warmup timing for this query/system combination
+            warmup_timing = None
+            if query in warmup_per_query:
+                query_warmup = warmup_per_query[query]
+                if system in query_warmup:
+                    warmup_timing = query_warmup[system].get("avg_runtime_ms")
+
+            # Round to 1 decimal if available
+            if warmup_timing is not None:
+                warmup_values.append(round(warmup_timing, 1))
+            else:
+                warmup_values.append(None)
+
+        # Insert warmup column after runs and before median_ms
+        summary.insert(2, "warmup", warmup_values)
 
     # Sort by query first (natural sort for Q01, Q02, etc.), then system
     # This ensures queries are grouped together for easy comparison
@@ -447,23 +475,27 @@ def create_aggregated_performance_table_html(df: pd.DataFrame) -> str:
     )
 
 
-def create_summary_table_html(df: pd.DataFrame) -> str:
+def create_summary_table_html(
+    df: pd.DataFrame, summary_data: dict[str, Any] | None = None
+) -> str:
     """
     Create an HTML summary table with color-coded performance metrics.
 
     Args:
         df: DataFrame with benchmark results
+        summary_data: Optional summary data containing warmup statistics
 
     Returns:
         HTML table string with color coding
     """
-    summary_df = summary_table(df)
+    summary_df = summary_table(df, summary_data)
 
     if summary_df.empty:
         return "<p><em>No summary data available</em></p>"
 
     # Define which columns should be color-coded
     color_columns = {
+        "warmup": True,  # Lower is better
         "median_ms": True,  # Lower is better
         "mean_ms": True,  # Lower is better
         "std_ms": True,  # Lower is better
@@ -475,4 +507,99 @@ def create_summary_table_html(df: pd.DataFrame) -> str:
         summary_df,
         color_columns=color_columns,
         css_classes="summary-table",
+    )
+
+
+def create_query_type_performance_table(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Create aggregated performance table by TPC-H query category.
+
+    Args:
+        df: DataFrame with benchmark results
+
+    Returns:
+        DataFrame with performance stats by query type and system
+    """
+    if df.empty:
+        return pd.DataFrame()
+
+    # TPC-H query categorization
+    query_categories = {
+        "Aggregation": ["Q01", "Q06", "Q12", "Q14", "Q15", "Q19", "Q20"],
+        "Join-Heavy": ["Q02", "Q05", "Q08", "Q09", "Q10", "Q11", "Q21", "Q22"],
+        "Complex Analytical": ["Q03", "Q04", "Q07", "Q13", "Q16", "Q17", "Q18"],
+    }
+
+    # Add query type column
+    def get_query_type(query):
+        for qtype, queries in query_categories.items():
+            if query in queries:
+                return qtype
+        return "Other"
+
+    df_with_type = df.copy()
+    df_with_type["query_type"] = df_with_type["query"].apply(get_query_type)
+
+    # Calculate median runtime per system per query type
+    type_stats = (
+        df_with_type.groupby(["query_type", "system"])["elapsed_ms"]
+        .agg(["median", "count"])
+        .reset_index()
+    )
+
+    # Pivot to get systems as columns
+    pivot_table = type_stats.pivot(
+        index="query_type", columns="system", values="median"
+    ).reset_index()
+
+    # Round values
+    for col in pivot_table.columns:
+        if col != "query_type":
+            pivot_table[col] = pivot_table[col].round(1)
+
+    # Add winner column (system with lowest median)
+    systems = [col for col in pivot_table.columns if col != "query_type"]
+    if len(systems) > 1:
+        pivot_table["Winner"] = pivot_table[systems].idxmin(axis=1)
+
+    # Order query types consistently
+    type_order = ["Aggregation", "Join-Heavy", "Complex Analytical", "Other"]
+    pivot_table["sort_key"] = pivot_table["query_type"].apply(
+        lambda x: type_order.index(x) if x in type_order else len(type_order)
+    )
+    pivot_table = pivot_table.sort_values("sort_key").drop("sort_key", axis=1)
+
+    # Rename column for display
+    pivot_table = pivot_table.rename(columns={"query_type": "Query Type"})
+
+    return pivot_table
+
+
+def create_query_type_performance_table_html(df: pd.DataFrame) -> str:
+    """
+    Create HTML table showing performance by query type with color coding.
+
+    Args:
+        df: DataFrame with benchmark results
+
+    Returns:
+        HTML table string with performance by query type
+    """
+    perf_df = create_query_type_performance_table(df)
+
+    if perf_df.empty:
+        return "<p><em>No query type performance data available</em></p>"
+
+    # Identify system columns (exclude "Query Type" and "Winner")
+    system_cols = [
+        col
+        for col in perf_df.columns
+        if col not in ["Query Type", "Winner", "sort_key"]
+    ]
+
+    # Color code performance columns (lower is better)
+    color_columns = {col: True for col in system_cols}
+
+    return format_table_html_with_colors(
+        perf_df, color_columns=color_columns, css_classes="query-type-table"
     )

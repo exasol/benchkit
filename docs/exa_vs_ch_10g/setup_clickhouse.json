@@ -1,7 +1,7 @@
 {
   "system_name": "clickhouse",
   "system_kind": "clickhouse",
-  "system_version": "25.9.3.48",
+  "system_version": "25.9.4.58",
   "commands": {
     "storage_setup": [
       {
@@ -191,7 +191,7 @@
     ],
     "installation": [
       {
-        "command": "sudo apt-get install -y clickhouse-server=25.9.3.48 clickhouse-client=25.9.3.48",
+        "command": "sudo apt-get install -y clickhouse-server=25.9.4.58 clickhouse-client=25.9.4.58",
         "success": true,
         "description": "Install ClickHouse server and client version <PUBLIC_IP>",
         "category": "installation"
@@ -199,7 +199,7 @@
     ],
     "configuration": [
       {
-        "command": "sudo tee /etc/clickhouse-server/config.d/benchmark.xml > /dev/null << 'EOF'\n<clickhouse>\n    <listen_host>::</listen_host>\n    <path>/data/clickhouse</path>\n    <max_server_memory_usage>106897735680</max_server_memory_usage>\n    <max_concurrent_queries>8</max_concurrent_queries>\n    <background_pool_size>16</background_pool_size>\n    <background_schedule_pool_size>16</background_schedule_pool_size>\n    <max_table_size_to_drop>50000000000</max_table_size_to_drop>\n</clickhouse>\nEOF",
+        "command": "sudo tee /etc/clickhouse-server/config.d/benchmark.xml > /dev/null << 'EOF'\n<clickhouse>\n    <listen_host>::</listen_host>\n    <path>/data/clickhouse</path>\n    <tmp_path>/data/clickhouse/tmp</tmp_path>\n    <max_server_memory_usage>106897748787</max_server_memory_usage>\n    <max_concurrent_queries>8</max_concurrent_queries>\n    <background_pool_size>16</background_pool_size>\n    <background_schedule_pool_size>16</background_schedule_pool_size>\n    <max_table_size_to_drop>50000000000</max_table_size_to_drop>\n</clickhouse>\nEOF",
         "success": true,
         "description": "Create custom ClickHouse configuration file",
         "category": "configuration"
@@ -207,7 +207,7 @@
     ],
     "user_configuration": [
       {
-        "command": "sudo tee /etc/clickhouse-server/users.d/benchmark.xml > /dev/null << 'EOF'\n<clickhouse>\n    <users>\n        <default replace=\"true\">\n            <password_sha256_hex>2cca9d8714615f4132390a3db9296d39ec051b3faff87be7ea5f7fe0e2de14c9</password_sha256_hex>\n            <networks>\n                <ip>::/0</ip>\n            </networks>\n        </default>\n    </users>\n    <profiles>\n        <default>\n            <max_threads>16</max_threads>\n            <max_memory_usage>45000000000</max_memory_usage>\n            <max_bytes_before_external_sort>73492193280</max_bytes_before_external_sort>\n            <max_bytes_before_external_group_by>73492193280</max_bytes_before_external_group_by>\n            <join_use_nulls>1</join_use_nulls>\n            <allow_experimental_correlated_subqueries>1</allow_experimental_correlated_subqueries>\n            <optimize_read_in_order>1</optimize_read_in_order>\n            <max_insert_threads>8</max_insert_threads>\n        </default>\n    </profiles>\n</clickhouse>\nEOF",
+        "command": "sudo tee /etc/clickhouse-server/users.d/benchmark.xml > /dev/null << 'EOF'\n<clickhouse>\n    <users>\n        <default replace=\"true\">\n            <password_sha256_hex>2cca9d8714615f4132390a3db9296d39ec051b3faff87be7ea5f7fe0e2de14c9</password_sha256_hex>\n            <networks>\n                <ip>::/0</ip>\n            </networks>\n        </default>\n    </users>\n    <profiles>\n        <default>\n            <max_threads>16</max_threads>\n            <max_memory_usage>45000000000</max_memory_usage>\n            <max_bytes_before_external_sort>73492202291</max_bytes_before_external_sort>\n            <max_bytes_before_external_group_by>73492202291</max_bytes_before_external_group_by>\n            <join_use_nulls>1</join_use_nulls>\n            <allow_experimental_correlated_subqueries>1</allow_experimental_correlated_subqueries>\n            <optimize_read_in_order>1</optimize_read_in_order>\n            <max_insert_threads>8</max_insert_threads>\n        </default>\n    </profiles>\n</clickhouse>\nEOF",
         "success": true,
         "description": "Configure ClickHouse user profile with password and query settings",
         "category": "user_configuration"
@@ -247,7 +247,8 @@
     "  max_concurrent_queries: 8",
     "  background_pool_size: 16",
     "  background_schedule_pool_size: 16",
-    "  max_table_size_to_drop: 50.0GB"
+    "  max_table_size_to_drop: 50.0GB",
+    "  memory_limit: 48g"
   ],
   "config_parameters": {
     "use_additional_disk": true,

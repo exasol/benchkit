@@ -144,7 +144,7 @@
                             <tr><td>Cloud Provider</td><td><span class="badge badge-cloud">{{ cfg.env.mode | upper }}</span></td></tr>
                             <tr><td>Region</td><td>{{ cfg.env.region | default('N/A') }}</td></tr>
                             {% if cfg.env.instances and system_config.name in cfg.env.instances %}
-                            <tr><td>Instance Type</td><td><strong>{{ cfg.env.instances[system_config.name].instance_type }}</strong></td></tr>
+                            <tr><td>Instance Type</td><td><strong>{{ cfg.env.instances[system_config.name].instance_type | default('N/A') }}</strong></td></tr>
                             {% endif %}
                             {% endif %}
                             {% if sys_probe.cpu_model %}

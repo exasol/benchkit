@@ -299,7 +299,7 @@
     "Admin UI will be available (if enabled)",
     "Waiting for Exasol cluster to be ready for connections...",
     "\u2713 Exasol cluster is ready and accepting connections",
-    "Found cluster play ID: a23d54ae",
+    "Found cluster play ID: c91afef9",
     "Installing Exasol license...",
     "Warning: License installation failed: UsageError: license_upload: Parameter 'license' has wrong type '<class 'dict'>'\nError: in connect.(*UniversalConnector).ConnectWithPS: : non-zero exit code 1\nError: in connect.(*UniversalConnector).ConnectWithPS: : non-zero exit code 1\n",
     "Configuring Exasol database parameters...",

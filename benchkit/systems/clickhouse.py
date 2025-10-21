@@ -532,6 +532,9 @@ class ClickHouseSystem(SystemUnderTest):
         # Handle custom data directory
         if str(self.data_dir) != "/var/lib/clickhouse":
             config_changes.append(f"    <path>{self.data_dir}</path>")
+            # CRITICAL: Also set tmp_path to use the same fast storage
+            # This is where external sorts/aggregations spill when exceeding memory limits
+            config_changes.append(f"    <tmp_path>{self.data_dir}/tmp</tmp_path>")
 
         # Make sure the ownership is set correctly
         self._set_ownership(str(self.data_dir), owner="clickhouse:clickhouse")

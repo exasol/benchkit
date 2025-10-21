@@ -1,8 +1,8 @@
-# Exasol vs ClickHouse Performance Comparison on TPC-H - Initial Performance Assessment
+# Exasol vs ClickHouse Performance Comparison on TPC-H SF1 - Initial Performance Assessment
 
 **Author:** Oleksandr Kozachuk, Principal Architect at Exasol AG
 **Environment:** aws / eu-west-1 / r5d.4xlarge
-**Date:** 2025-10-09 08:31:14
+**Date:** 2025-10-24 14:26:01
 
 
 > **Note:** Sensitive information (passwords, IP addresses) has been sanitized for security reasons. Placeholders like `<EXASOL_DB_PASSWORD>`, `<PRIVATE_IP>`, and `<PUBLIC_IP>` are used throughout this document.
@@ -11,13 +11,13 @@
 
 We conducted performance testing of **clickhouse** against **exasol** using the TPC-H benchmark at scale factor .
 
-**Key Finding:** Clickhouse demonstrated 3.8× slower median query performance compared to Exasol, highlighting significant optimization opportunities.
+**Key Finding:** Clickhouse demonstrated 4.3× slower median query performance compared to Exasol, highlighting significant optimization opportunities.
 
 ## The Baseline: Exasol
 
-Exasol achieved a median query runtime of **22.3ms** across all TPC-H queries, establishing a competitive performance baseline for analytical workload processing.
+Exasol achieved a median query runtime of **19.9ms** across all TPC-H queries, establishing a competitive performance baseline for analytical workload processing.
 
-## Clickhouse 25.9.3.48 - System Under Test
+## Clickhouse 25.9.4.58 - System Under Test
 
 **Hardware Specifications:**
 - **Cloud Provider:** AWS
@@ -28,7 +28,7 @@ Exasol achieved a median query runtime of **22.3ms** across all TPC-H queries, e
 - **Memory:** 124.4GB RAM
 
 **Software Configuration:**
-- **Database:** clickhouse 25.9.3.48
+- **Database:** clickhouse 25.9.4.58
 - **Setup Method:** native
 - **Data Directory:** /data/clickhouse
 
@@ -106,7 +106,7 @@ sudo apt-get update
 **Installation:**
 ```bash
 # Install ClickHouse server and client version &lt;SERVER_IP&gt;
-sudo apt-get install -y clickhouse-server=25.9.3.48 clickhouse-client=25.9.3.48
+sudo apt-get install -y clickhouse-server=25.9.4.58 clickhouse-client=25.9.4.58
 
 ```
 
@@ -117,7 +117,8 @@ sudo tee /etc/clickhouse-server/config.d/benchmark.xml &gt; /dev/null &lt;&lt; &
 &lt;clickhouse&gt;
     &lt;listen_host&gt;::&lt;/listen_host&gt;
     &lt;path&gt;/data/clickhouse&lt;/path&gt;
-    &lt;max_server_memory_usage&gt;106897745510&lt;/max_server_memory_usage&gt;
+    &lt;tmp_path&gt;/data/clickhouse/tmp&lt;/tmp_path&gt;
+    &lt;max_server_memory_usage&gt;106897738956&lt;/max_server_memory_usage&gt;
     &lt;max_concurrent_queries&gt;8&lt;/max_concurrent_queries&gt;
     &lt;background_pool_size&gt;16&lt;/background_pool_size&gt;
     &lt;background_schedule_pool_size&gt;16&lt;/background_schedule_pool_size&gt;
@@ -144,8 +145,8 @@ sudo tee /etc/clickhouse-server/users.d/benchmark.xml &gt; /dev/null &lt;&lt; &#
         &lt;default&gt;
             &lt;max_threads&gt;16&lt;/max_threads&gt;
             &lt;max_memory_usage&gt;30000000000&lt;/max_memory_usage&gt;
-            &lt;max_bytes_before_external_sort&gt;73492200038&lt;/max_bytes_before_external_sort&gt;
-            &lt;max_bytes_before_external_group_by&gt;73492200038&lt;/max_bytes_before_external_group_by&gt;
+            &lt;max_bytes_before_external_sort&gt;73492195532&lt;/max_bytes_before_external_sort&gt;
+            &lt;max_bytes_before_external_group_by&gt;73492195532&lt;/max_bytes_before_external_group_by&gt;
             &lt;join_use_nulls&gt;1&lt;/join_use_nulls&gt;
             &lt;allow_experimental_correlated_subqueries&gt;1&lt;/allow_experimental_correlated_subqueries&gt;
             &lt;optimize_read_in_order&gt;1&lt;/optimize_read_in_order&gt;
@@ -185,10 +186,10 @@ sudo systemctl enable clickhouse-server
 
 | Metric | Clickhouse | Exasol | Difference |
 |--------|--------------------|------------|------------|
-| Median Runtime | 84.9ms | 22.3ms | 3.8× slower |
-| Average Runtime | 102.7ms | 25.7ms | 4.0× slower |
-| Fastest Query | 21.1ms | 7.3ms | 2.9× slower |
-| Slowest Query | 560.8ms | 116.8ms | 4.8× slower |
+| Median Runtime | 86.2ms | 19.9ms | 4.3× slower |
+| Average Runtime | 106.5ms | 23.5ms | 4.5× slower |
+| Fastest Query | 21.7ms | 5.7ms | 3.8× slower |
+| Slowest Query | 581.7ms | 109.5ms | 5.3× slower |
 
 
 ### Selected Query Highlights
@@ -197,14 +198,14 @@ The following queries demonstrate the performance characteristics observed durin
 
 **Queries with Largest Performance Gaps:**
 
-- **Q21**: Clickhouse 522.2ms vs Exasol 24.0ms (21.8× slower)
-- **Q05**: Clickhouse 182.8ms vs Exasol 22.4ms (8.2× slower)
-- **Q19**: Clickhouse 85.3ms vs Exasol 11.2ms (7.6× slower)
+- **Q21**: Clickhouse 552.6ms vs Exasol 22.5ms (24.6× slower)
+- **Q05**: Clickhouse 183.5ms vs Exasol 19.2ms (9.6× slower)
+- **Q17**: Clickhouse 94.4ms vs Exasol 10.6ms (8.9× slower)
 
 **Queries with Competitive Performance:**
 
-- **Q16**: Clickhouse 84.0ms vs Exasol 94.3ms (0.9× slower)
-- **Q15**: Clickhouse 31.3ms vs Exasol 20.9ms (1.5× slower)
+- **Q16**: Clickhouse 84.7ms vs Exasol 92.2ms (0.9× slower)
+- **Q15**: Clickhouse 32.0ms vs Exasol 18.3ms (1.7× slower)
 
 ## Analysis & Optimization Opportunities
 

@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Exasol vs ClickHouse Performance Comparison on TPC-H - Initial Performance Assessment">
-    <title>Exasol vs ClickHouse Performance Comparison on TPC-H | Initial Performance Assessment</title>
+    <meta name="description" content="Exasol vs ClickHouse Performance Comparison on TPC-H SF1 - Initial Performance Assessment">
+    <title>Exasol vs ClickHouse Performance Comparison on TPC-H SF1 | Initial Performance Assessment</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,13 +15,13 @@
         <!-- Header -->
         <header class="header">
             <div class="header-badge">📊 Initial Performance Assessment</div>
-            <h1>Exasol vs ClickHouse Performance Comparison on TPC-H</h1>
+            <h1>Exasol vs ClickHouse Performance Comparison on TPC-H SF1</h1>
             <div class="metadata">
                 <span class="meta-item">
                     <strong>Author:</strong> Oleksandr Kozachuk, Principal Architect at Exasol AG
                 </span>
                 <span class="meta-item">
-                    <strong>Date:</strong> 2025-10-09 08:31:14
+                    <strong>Date:</strong> 2025-10-24 14:26:01
                 </span>
                 <span class="meta-item">
                     <strong>Environment:</strong>
@@ -44,7 +44,7 @@
                 <p>We conducted performance testing of <strong>clickhouse</strong> against <strong>exasol</strong> using the TPC-H benchmark at scale factor 1.</p>
 
                 <div class="callout callout-info">
-                    <strong>Key Finding:</strong> Clickhouse demonstrated <strong>4× slower</strong> median query performance compared to Exasol, highlighting significant optimization opportunities.
+                    <strong>Key Finding:</strong> Clickhouse demonstrated <strong>5× slower</strong> median query performance compared to Exasol, highlighting significant optimization opportunities.
                 </div>
             </div>
         </section>
@@ -52,12 +52,12 @@
         <!-- Baseline System -->
         <section class="section">
             <h2>The Baseline: Exasol</h2>
-            <p>Exasol achieved a median query runtime of <strong>22.3ms</strong> across all TPC-H queries, establishing a competitive performance baseline for analytical workload processing.</p>
+            <p>Exasol achieved a median query runtime of <strong>19.9ms</strong> across all TPC-H queries, establishing a competitive performance baseline for analytical workload processing.</p>
         </section>
 
         <!-- Tested System Details -->
         <section class="section">
-            <h2>Clickhouse 25.9.3.48 - System Under Test</h2>
+            <h2>Clickhouse 25.9.4.58 - System Under Test</h2>
 
             <div class="specs-grid">
                 <div class="spec-card">
@@ -75,7 +75,7 @@
                 <div class="spec-card">
                     <h3>Software Configuration</h3>
                     <ul>
-                        <li><strong>Database:</strong> clickhouse 25.9.3.48</li>
+                        <li><strong>Database:</strong> clickhouse 25.9.4.58</li>
                         <li><strong>Setup Method:</strong> native</li>
                         <li><strong>Data Directory:</strong> /data/clickhouse</li>
                     </ul>
@@ -87,7 +87,7 @@
 
             <details class="setup-details">
                 <summary>
-                    <strong>Clickhouse 25.9.3.48</strong> &nbsp;&nbsp; Installation Steps
+                    <strong>Clickhouse 25.9.4.58</strong> &nbsp;&nbsp; Installation Steps
                 </summary>
 
                 <div class="setup-section">
@@ -145,7 +145,7 @@ sudo apt-get update
             <div class="code-section">
     <h4>Installation</h4>
     <pre><code class="language-bash"># Install ClickHouse server and client version &lt;SERVER_IP&gt;
-sudo apt-get install -y clickhouse-server=25.9.3.48 clickhouse-client=25.9.3.48
+sudo apt-get install -y clickhouse-server=25.9.4.58 clickhouse-client=25.9.4.58
 </code></pre>
 </div>
 
@@ -156,7 +156,8 @@ sudo tee /etc/clickhouse-server/config.d/benchmark.xml &gt; /dev/null &lt;&lt; &
 &lt;clickhouse&gt;
     &lt;listen_host&gt;::&lt;/listen_host&gt;
     &lt;path&gt;/data/clickhouse&lt;/path&gt;
-    &lt;max_server_memory_usage&gt;106897745510&lt;/max_server_memory_usage&gt;
+    &lt;tmp_path&gt;/data/clickhouse/tmp&lt;/tmp_path&gt;
+    &lt;max_server_memory_usage&gt;106897738956&lt;/max_server_memory_usage&gt;
     &lt;max_concurrent_queries&gt;8&lt;/max_concurrent_queries&gt;
     &lt;background_pool_size&gt;16&lt;/background_pool_size&gt;
     &lt;background_schedule_pool_size&gt;16&lt;/background_schedule_pool_size&gt;
@@ -183,8 +184,8 @@ sudo tee /etc/clickhouse-server/users.d/benchmark.xml &gt; /dev/null &lt;&lt; &#
         &lt;default&gt;
             &lt;max_threads&gt;16&lt;/max_threads&gt;
             &lt;max_memory_usage&gt;30000000000&lt;/max_memory_usage&gt;
-            &lt;max_bytes_before_external_sort&gt;73492200038&lt;/max_bytes_before_external_sort&gt;
-            &lt;max_bytes_before_external_group_by&gt;73492200038&lt;/max_bytes_before_external_group_by&gt;
+            &lt;max_bytes_before_external_sort&gt;73492195532&lt;/max_bytes_before_external_sort&gt;
+            &lt;max_bytes_before_external_group_by&gt;73492195532&lt;/max_bytes_before_external_group_by&gt;
             &lt;join_use_nulls&gt;1&lt;/join_use_nulls&gt;
             &lt;allow_experimental_correlated_subqueries&gt;1&lt;/allow_experimental_correlated_subqueries&gt;
             &lt;optimize_read_in_order&gt;1&lt;/optimize_read_in_order&gt;
@@ -241,27 +242,27 @@ sudo systemctl enable clickhouse-server
                     <tbody>
                         <tr>
                             <td><strong>Median Runtime</strong></td>
-                            <td>84.9ms</td>
-                            <td>22.3ms</td>
-                            <td class="metric-slow">4× slower</td>
+                            <td>86.2ms</td>
+                            <td>19.9ms</td>
+                            <td class="metric-slow">5× slower</td>
                         </tr>
                         <tr>
                             <td><strong>Average Runtime</strong></td>
-                            <td>102.7ms</td>
-                            <td>25.7ms</td>
+                            <td>106.5ms</td>
+                            <td>23.5ms</td>
                             <td class="metric-slow">5× slower</td>
                         </tr>
                         <tr>
                             <td><strong>Fastest Query</strong></td>
-                            <td>21.1ms</td>
-                            <td>7.3ms</td>
-                            <td class="metric-slow">2.9× slower</td>
+                            <td>21.7ms</td>
+                            <td>5.7ms</td>
+                            <td class="metric-slow">3.8× slower</td>
                         </tr>
                         <tr>
                             <td><strong>Slowest Query</strong></td>
-                            <td>560.8ms</td>
-                            <td>116.8ms</td>
-                            <td class="metric-slow">4.8× slower</td>
+                            <td>581.7ms</td>
+                            <td>109.5ms</td>
+                            <td class="metric-slow">5.3× slower</td>
                         </tr>
                     </tbody>
                 </table>
@@ -276,21 +277,21 @@ sudo systemctl enable clickhouse-server
                     <ul>
                         <li>
                             <strong><a href="#" class="query-link" data-query="Q21" data-system="clickhouse">Q21</a>:</strong>
-                            Clickhouse <span class="metric-value">522.2ms</span>
-                            vs Exasol <span class="metric-value">24.0ms</span>
-                            <span class="metric-slow">(22× slower)</span>
+                            Clickhouse <span class="metric-value">552.6ms</span>
+                            vs Exasol <span class="metric-value">22.5ms</span>
+                            <span class="metric-slow">(25× slower)</span>
                         </li>
                         <li>
                             <strong><a href="#" class="query-link" data-query="Q05" data-system="clickhouse">Q05</a>:</strong>
-                            Clickhouse <span class="metric-value">182.8ms</span>
-                            vs Exasol <span class="metric-value">22.4ms</span>
-                            <span class="metric-slow">(9× slower)</span>
+                            Clickhouse <span class="metric-value">183.5ms</span>
+                            vs Exasol <span class="metric-value">19.2ms</span>
+                            <span class="metric-slow">(10× slower)</span>
                         </li>
                         <li>
-                            <strong><a href="#" class="query-link" data-query="Q19" data-system="clickhouse">Q19</a>:</strong>
-                            Clickhouse <span class="metric-value">85.3ms</span>
-                            vs Exasol <span class="metric-value">11.2ms</span>
-                            <span class="metric-slow">(8× slower)</span>
+                            <strong><a href="#" class="query-link" data-query="Q17" data-system="clickhouse">Q17</a>:</strong>
+                            Clickhouse <span class="metric-value">94.4ms</span>
+                            vs Exasol <span class="metric-value">10.6ms</span>
+                            <span class="metric-slow">(9× slower)</span>
                         </li>
                     </ul>
                 </div>
@@ -300,15 +301,15 @@ sudo systemctl enable clickhouse-server
                     <ul>
                         <li>
                             <strong><a href="#" class="query-link" data-query="Q16" data-system="clickhouse">Q16</a>:</strong>
-                            Clickhouse <span class="metric-value">84.0ms</span>
-                            vs Exasol <span class="metric-value">94.3ms</span>
-                            <span class="metric-neutral">(0.9× slower)</span>
+                            Clickhouse <span class="metric-value">84.7ms</span>
+                            vs Exasol <span class="metric-value">92.2ms</span>
+                            <span class="metric-neutral">(~1.0× slower)</span>
                         </li>
                         <li>
                             <strong><a href="#" class="query-link" data-query="Q15" data-system="clickhouse">Q15</a>:</strong>
-                            Clickhouse <span class="metric-value">31.3ms</span>
-                            vs Exasol <span class="metric-value">20.9ms</span>
-                            <span class="metric-neutral">(1.5× slower)</span>
+                            Clickhouse <span class="metric-value">32.0ms</span>
+                            vs Exasol <span class="metric-value">18.3ms</span>
+                            <span class="metric-neutral">(1.7× slower)</span>
                         </li>
                     </ul>
                 </div>
@@ -416,28 +417,28 @@ sudo systemctl enable clickhouse-server
         // Query data embedded from workload
         const queryData = {
             "Q01": {
-                "exasol": "attachments/queries/exasol/Q01.sql",                "clickhouse": "attachments/queries/clickhouse/Q01.sql"            },            "Q02": {
-                "exasol": "attachments/queries/exasol/Q02.sql",                "clickhouse": "attachments/queries/clickhouse/Q02.sql"            },            "Q03": {
-                "exasol": "attachments/queries/exasol/Q03.sql",                "clickhouse": "attachments/queries/clickhouse/Q03.sql"            },            "Q04": {
-                "exasol": "attachments/queries/exasol/Q04.sql",                "clickhouse": "attachments/queries/clickhouse/Q04.sql"            },            "Q05": {
-                "exasol": "attachments/queries/exasol/Q05.sql",                "clickhouse": "attachments/queries/clickhouse/Q05.sql"            },            "Q06": {
-                "exasol": "attachments/queries/exasol/Q06.sql",                "clickhouse": "attachments/queries/clickhouse/Q06.sql"            },            "Q07": {
-                "exasol": "attachments/queries/exasol/Q07.sql",                "clickhouse": "attachments/queries/clickhouse/Q07.sql"            },            "Q08": {
-                "exasol": "attachments/queries/exasol/Q08.sql",                "clickhouse": "attachments/queries/clickhouse/Q08.sql"            },            "Q09": {
-                "exasol": "attachments/queries/exasol/Q09.sql",                "clickhouse": "attachments/queries/clickhouse/Q09.sql"            },            "Q10": {
-                "exasol": "attachments/queries/exasol/Q10.sql",                "clickhouse": "attachments/queries/clickhouse/Q10.sql"            },            "Q11": {
-                "exasol": "attachments/queries/exasol/Q11.sql",                "clickhouse": "attachments/queries/clickhouse/Q11.sql"            },            "Q12": {
-                "exasol": "attachments/queries/exasol/Q12.sql",                "clickhouse": "attachments/queries/clickhouse/Q12.sql"            },            "Q13": {
-                "exasol": "attachments/queries/exasol/Q13.sql",                "clickhouse": "attachments/queries/clickhouse/Q13.sql"            },            "Q14": {
-                "exasol": "attachments/queries/exasol/Q14.sql",                "clickhouse": "attachments/queries/clickhouse/Q14.sql"            },            "Q15": {
-                "exasol": "attachments/queries/exasol/Q15.sql",                "clickhouse": "attachments/queries/clickhouse/Q15.sql"            },            "Q16": {
-                "exasol": "attachments/queries/exasol/Q16.sql",                "clickhouse": "attachments/queries/clickhouse/Q16.sql"            },            "Q17": {
-                "exasol": "attachments/queries/exasol/Q17.sql",                "clickhouse": "attachments/queries/clickhouse/Q17.sql"            },            "Q18": {
-                "exasol": "attachments/queries/exasol/Q18.sql",                "clickhouse": "attachments/queries/clickhouse/Q18.sql"            },            "Q19": {
-                "exasol": "attachments/queries/exasol/Q19.sql",                "clickhouse": "attachments/queries/clickhouse/Q19.sql"            },            "Q20": {
-                "exasol": "attachments/queries/exasol/Q20.sql",                "clickhouse": "attachments/queries/clickhouse/Q20.sql"            },            "Q21": {
-                "exasol": "attachments/queries/exasol/Q21.sql",                "clickhouse": "attachments/queries/clickhouse/Q21.sql"            },            "Q22": {
-                "exasol": "attachments/queries/exasol/Q22.sql",                "clickhouse": "attachments/queries/clickhouse/Q22.sql"            }        };
+                "exasol": "attachments/queries/exasol/Q01.sql",                "clickhouse": "attachments/queries/clickhouse/Q01.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q01.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q01.sql"            },            "Q02": {
+                "exasol": "attachments/queries/exasol/Q02.sql",                "clickhouse": "attachments/queries/clickhouse/Q02.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q02.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q02.sql"            },            "Q03": {
+                "exasol": "attachments/queries/exasol/Q03.sql",                "clickhouse": "attachments/queries/clickhouse/Q03.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q03.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q03.sql"            },            "Q04": {
+                "exasol": "attachments/queries/exasol/Q04.sql",                "clickhouse": "attachments/queries/clickhouse/Q04.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q04.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q04.sql"            },            "Q05": {
+                "exasol": "attachments/queries/exasol/Q05.sql",                "clickhouse": "attachments/queries/clickhouse/Q05.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q05.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q05.sql"            },            "Q06": {
+                "exasol": "attachments/queries/exasol/Q06.sql",                "clickhouse": "attachments/queries/clickhouse/Q06.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q06.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q06.sql"            },            "Q07": {
+                "exasol": "attachments/queries/exasol/Q07.sql",                "clickhouse": "attachments/queries/clickhouse/Q07.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q07.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q07.sql"            },            "Q08": {
+                "exasol": "attachments/queries/exasol/Q08.sql",                "clickhouse": "attachments/queries/clickhouse/Q08.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q08.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q08.sql"            },            "Q09": {
+                "exasol": "attachments/queries/exasol/Q09.sql",                "clickhouse": "attachments/queries/clickhouse/Q09.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q09.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q09.sql"            },            "Q10": {
+                "exasol": "attachments/queries/exasol/Q10.sql",                "clickhouse": "attachments/queries/clickhouse/Q10.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q10.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q10.sql"            },            "Q11": {
+                "exasol": "attachments/queries/exasol/Q11.sql",                "clickhouse": "attachments/queries/clickhouse/Q11.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q11.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q11.sql"            },            "Q12": {
+                "exasol": "attachments/queries/exasol/Q12.sql",                "clickhouse": "attachments/queries/clickhouse/Q12.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q12.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q12.sql"            },            "Q13": {
+                "exasol": "attachments/queries/exasol/Q13.sql",                "clickhouse": "attachments/queries/clickhouse/Q13.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q13.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q13.sql"            },            "Q14": {
+                "exasol": "attachments/queries/exasol/Q14.sql",                "clickhouse": "attachments/queries/clickhouse/Q14.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q14.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q14.sql"            },            "Q15": {
+                "exasol": "attachments/queries/exasol/Q15.sql",                "clickhouse": "attachments/queries/clickhouse/Q15.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q15.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q15.sql"            },            "Q16": {
+                "exasol": "attachments/queries/exasol/Q16.sql",                "clickhouse": "attachments/queries/clickhouse/Q16.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q16.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q16.sql"            },            "Q17": {
+                "exasol": "attachments/queries/exasol/Q17.sql",                "clickhouse": "attachments/queries/clickhouse/Q17.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q17.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q17.sql"            },            "Q18": {
+                "exasol": "attachments/queries/exasol/Q18.sql",                "clickhouse": "attachments/queries/clickhouse/Q18.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q18.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q18.sql"            },            "Q19": {
+                "exasol": "attachments/queries/exasol/Q19.sql",                "clickhouse": "attachments/queries/clickhouse/Q19.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q19.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q19.sql"            },            "Q20": {
+                "exasol": "attachments/queries/exasol/Q20.sql",                "clickhouse": "attachments/queries/clickhouse/Q20.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q20.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q20.sql"            },            "Q21": {
+                "exasol": "attachments/queries/exasol/Q21.sql",                "clickhouse": "attachments/queries/clickhouse/Q21.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q21.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q21.sql"            },            "Q22": {
+                "exasol": "attachments/queries/exasol/Q22.sql",                "clickhouse": "attachments/queries/clickhouse/Q22.sql",                "clickhouse_tuned": "attachments/queries/clickhouse_tuned/Q22.sql",                "clickhouse_stat": "attachments/queries/clickhouse_stat/Q22.sql"            }        };
 
         // Add click handlers to query links
         document.addEventListener('DOMContentLoaded', function() {

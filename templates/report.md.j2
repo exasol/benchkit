@@ -94,7 +94,9 @@ This benchmark was executed on the following infrastructure:
 - **Cloud Provider:** {{ cfg.env.mode | upper }}
 - **Region:** {{ cfg.env.region | default('N/A') }}
 {% for system_config in cfg.systems %}
+{% if cfg.env.instances and system_config.name in cfg.env.instances %}
 - **{{ system_config.name | title }} Instance:** {{ cfg.env.instances[system_config.name].instance_type | default('N/A') }}
+{% endif %}
 {% endfor %}
 {% else %}
 - **CPU:** Multi-core processor (8+ cores recommended)

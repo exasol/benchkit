@@ -1,7 +1,8 @@
 """Figure generation for benchmark reports using Plotly."""
 
+from itertools import cycle
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 import numpy as np
 import pandas as pd
@@ -9,8 +10,9 @@ import plotly.express as px  # type: ignore[import-untyped]
 import plotly.graph_objects as go  # type: ignore[import-untyped]
 from plotly.subplots import make_subplots  # type: ignore[import-untyped]
 
-# Modern tech-focused color palette
-TECH_COLORS = ["#2E86AB", "#A23B72", "#F18F01", "#C73E1D", "#6A994E", "#7209B7"]
+# Modern tech-focused color palette for non-Exasol systems
+TECH_COLORS = ["#2E86AB", "#A23B72", "#F18F01", "#C73E1D", "#577590", "#7209B7"]
+EXASOL_COLOR = "#2ECC71"  # Friendly green accent for Exasol visuals
 
 # Plotly layout template for consistent styling
 PLOTLY_TEMPLATE = {
@@ -32,6 +34,38 @@ def _apply_template(fig: go.Figure, **custom_layout: Any) -> None:
     # Merge template with custom layout (custom layout takes precedence)
     layout = {**PLOTLY_TEMPLATE, **custom_layout}
     fig.update_layout(**layout)
+
+
+def _build_system_color_map(systems: Sequence[str]) -> dict[str, str]:
+    """Return consistent colors per system, ensuring Exasol uses green."""
+    unique_norms: list[str] = []
+    for system in systems:
+        norm = system.strip().lower()
+        if norm not in unique_norms:
+            unique_norms.append(norm)
+
+    palette = cycle(TECH_COLORS)
+    color_map: dict[str, str] = {}
+    for norm in unique_norms:
+        if "exasol" in norm:
+            color_map[norm] = EXASOL_COLOR
+        else:
+            color = next(palette)
+            while color.lower() == EXASOL_COLOR.lower():
+                color = next(palette)
+            color_map[norm] = color
+    return color_map
+
+
+def _color_for_system(system: str, color_map: dict[str, str]) -> str:
+    """Fetch the assigned color for a system, defaulting to palette head."""
+    norm = system.strip().lower()
+    return color_map.get(norm, TECH_COLORS[0])
+
+
+def _format_system_label(system: str) -> str:
+    """Pretty label for system names when shown in charts."""
+    return system.replace("_", " ").title()
 
 
 def create_performance_plots(
@@ -86,9 +120,10 @@ def _create_boxplot(df: pd.DataFrame, output_dir: Path) -> str:
     fig = go.Figure()
 
     systems = df["system"].unique()
+    color_map = _build_system_color_map(systems)
 
     # Create box plot for each system
-    for i, system in enumerate(systems):
+    for system in systems:
         system_data = df[df["system"] == system]
 
         # Add trace for this system across all queries
@@ -96,8 +131,8 @@ def _create_boxplot(df: pd.DataFrame, output_dir: Path) -> str:
             go.Box(
                 x=[f"{row['query']}" for _, row in system_data.iterrows()],
                 y=system_data["elapsed_ms"],
-                name=system.title(),
-                marker_color=TECH_COLORS[i % len(TECH_COLORS)],
+                name=_format_system_label(system),
+                marker_color=_color_for_system(system, color_map),
                 boxmean="sd",  # Show mean and standard deviation
             )
         )
@@ -126,22 +161,31 @@ def _create_bar_chart(df: pd.DataFrame, output_dir: Path) -> str:
     # Calculate median runtimes
     medians = df.groupby(["system", "query"])["elapsed_ms"].median().reset_index()
 
-    # Capitalize system names
-    medians["system"] = medians["system"].str.title()
+    systems = df["system"].unique()
+    color_map = _build_system_color_map(systems)
+
+    medians["system_label"] = medians["system"].apply(_format_system_label)
+    color_discrete_map = {
+        _format_system_label(system): _color_for_system(system, color_map)
+        for system in systems
+    }
 
     fig = px.bar(
         medians,
         x="query",
         y="elapsed_ms",
-        color="system",
+        color="system_label",
         barmode="group",
         labels={
             "elapsed_ms": "Median Runtime (ms)",
             "query": "Query",
-            "system": "System",
+            "system_label": "System",
         },
         title="Median Query Runtimes by System",
-        color_discrete_sequence=TECH_COLORS,
+        color_discrete_map=color_discrete_map,
+        category_orders={
+            "system_label": [_format_system_label(system) for system in systems]
+        },
     )
 
     _apply_template(fig)
@@ -161,8 +205,9 @@ def _create_cdf_plot(df: pd.DataFrame, output_dir: Path) -> str:
     fig = go.Figure()
 
     systems = df["system"].unique()
+    color_map = _build_system_color_map(systems)
 
-    for i, system in enumerate(systems):
+    for system in systems:
         system_data = df[df["system"] == system]["elapsed_ms"].sort_values()
         n = len(system_data)
         y = np.arange(1, n + 1) / n
@@ -172,8 +217,8 @@ def _create_cdf_plot(df: pd.DataFrame, output_dir: Path) -> str:
                 x=system_data,
                 y=y,
                 mode="lines",
-                name=system.title(),
-                line={"color": TECH_COLORS[i % len(TECH_COLORS)], "width": 2},
+                name=_format_system_label(system),
+                line={"color": _color_for_system(system, color_map), "width": 2},
             )
         )
 
@@ -239,9 +284,11 @@ def create_speedup_plot(
         baseline_system = pivot_data.columns[0]
 
     fig = go.Figure()
+    systems = list(pivot_data.columns)
+    color_map = _build_system_color_map(systems)
 
     # Add speedup traces for each system
-    for i, system in enumerate(pivot_data.columns):
+    for system in pivot_data.columns:
         if system == baseline_system:
             continue
 
@@ -251,8 +298,8 @@ def create_speedup_plot(
             go.Bar(
                 x=pivot_data.index,
                 y=speedups,
-                name=f"{system.title()} vs {baseline_system.title()}",
-                marker_color=TECH_COLORS[i % len(TECH_COLORS)],
+                name=f"{_format_system_label(system)} vs {_format_system_label(baseline_system)}",
+                marker_color=_color_for_system(system, color_map),
                 text=[f"{v:.2f}x" for v in speedups],
                 textposition="outside",
             )
@@ -265,7 +312,7 @@ def create_speedup_plot(
 
     _apply_template(
         fig,
-        title=f"Query Speedup Compared to {baseline_system.title()}",
+        title=f"Query Speedup Compared to {_format_system_label(baseline_system)}",
         xaxis_title="Query",
         yaxis_title="Speedup Factor",
         barmode="group",
@@ -289,17 +336,16 @@ def create_all_systems_comparison_plot(df: pd.DataFrame, output_dir: Path) -> st
     # Calculate median runtimes for each system/query
     medians = df.groupby(["system", "query"])["elapsed_ms"].median().reset_index()
 
-    # Capitalize system names for display
-    medians["system"] = medians["system"].str.title()
-
     fig = go.Figure()
 
     # Get unique systems and queries
     systems = medians["system"].unique()
+    color_map = _build_system_color_map(systems)
+    system_labels = {system: _format_system_label(system) for system in systems}
     queries = sorted(medians["query"].unique())
 
     # Add bar trace for each system
-    for i, system in enumerate(systems):
+    for system in systems:
         system_data = medians[medians["system"] == system]
 
         # Create mapping of query to runtime
@@ -314,8 +360,8 @@ def create_all_systems_comparison_plot(df: pd.DataFrame, output_dir: Path) -> st
             go.Bar(
                 x=queries,
                 y=y_values,
-                name=system,
-                marker_color=TECH_COLORS[i % len(TECH_COLORS)],
+                name=system_labels[system],
+                marker_color=_color_for_system(system, color_map),
                 text=[f"{v:.0f}ms" if v is not None else "" for v in y_values],
                 textposition="outside",
                 textangle=0,
@@ -356,8 +402,12 @@ def create_system_overview_plot(df: pd.DataFrame, output_dir: Path) -> str:
         .reset_index()
     )
 
-    # Capitalize system names
-    system_stats["system"] = system_stats["system"].str.title()
+    systems = system_stats["system"].tolist()
+    color_map = _build_system_color_map(systems)
+    system_stats["system_label"] = system_stats["system"].apply(_format_system_label)
+    colors_list = [
+        _color_for_system(system, color_map) for system in system_stats["system"]
+    ]
 
     # Create 1x3 subplot (removed "Number of Queries")
     fig = make_subplots(
@@ -370,13 +420,13 @@ def create_system_overview_plot(df: pd.DataFrame, output_dir: Path) -> str:
         ),
     )
 
-    systems = system_stats["system"]
-    colors_list = [TECH_COLORS[i % len(TECH_COLORS)] for i in range(len(systems))]
-
     # 1. Total runtime
     fig.add_trace(
         go.Bar(
-            x=systems, y=system_stats["sum"], marker_color=colors_list, name="Total"
+            x=system_stats["system_label"],
+            y=system_stats["sum"],
+            marker_color=colors_list,
+            name="Total",
         ),
         row=1,
         col=1,
@@ -385,7 +435,10 @@ def create_system_overview_plot(df: pd.DataFrame, output_dir: Path) -> str:
     # 2. Average runtime
     fig.add_trace(
         go.Bar(
-            x=systems, y=system_stats["mean"], marker_color=colors_list, name="Average"
+            x=system_stats["system_label"],
+            y=system_stats["mean"],
+            marker_color=colors_list,
+            name="Average",
         ),
         row=1,
         col=2,
@@ -394,7 +447,11 @@ def create_system_overview_plot(df: pd.DataFrame, output_dir: Path) -> str:
     # 3. Coefficient of variation (moved to col 3)
     cv = (system_stats["std"] / system_stats["mean"]) * 100
     fig.add_trace(
-        go.Bar(x=systems, y=cv, marker_color=colors_list, name="CV"), row=1, col=3
+        go.Bar(
+            x=system_stats["system_label"], y=cv, marker_color=colors_list, name="CV"
+        ),
+        row=1,
+        col=3,
     )
 
     fig.update_yaxes(title_text="Runtime (ms)", row=1, col=1)

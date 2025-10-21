@@ -18,7 +18,7 @@
 
 ## Overview
 
-This report presents the complete query-by-query performance results for {{ data.summary.systems | length }} database systems tested using the TPC-H benchmark at scale factor {{ workload_metadata.scale_factor }}.
+This report presents the complete query-by-query performance results for {{ data.summary.systems | length }} database systems tested using the TPC-H benchmark at scale factor {{ workload_metadata.info.scale_factor }}.
 
 **Systems Compared:**
 {% for system in data.summary.systems %}
@@ -52,21 +52,6 @@ This report presents the complete query-by-query performance results for {{ data
 
 {% endfor %}
 
-## Database Configuration
-
-{% if setup_summaries %}
-The following commands were **actually executed** during the benchmark setup. You can copy and paste these to reproduce the installation:
-
-{% for system_name, setup_summary in setup_summaries.items() %}
-### {{ setup_summary.system_name | title }} {{ setup_summary.system_version }} Setup
-
-{{ setup_macros.render_setup_sections_md(setup_summary) }}
-
-{% endfor %}
-{% else %}
-No setup details were captured for this benchmark run.
-{% endif %}
-
 ## Performance Summary
 
 {% if data.summary.per_system %}
@@ -81,29 +66,16 @@ No setup details were captured for this benchmark run.
 - Tested **{{ data.summary.total_queries }}** total query executions across {{ cfg.workload.queries.include | length if cfg.workload.queries and cfg.workload.queries.include else '22' }} different query types
 {% endif %}
 
-### Summary Statistics
-
-{{ tables.summary_table }}
-
-{% endif %}
-
-## Query-by-Query Results
-
-The following table shows the median execution time for each query across all systems:
-
-{{ tables.comparison_table }}
-
-## Performance Visualizations
+### Performance Visualizations
 
 {% if figures %}
-### Query Performance Comparison
-
 {% for fig_name, fig_path in figures.items() %}
 {% if 'performance' in fig_name or 'comparison' in fig_name %}
 ![{{ fig_name | title | replace('_', ' ') }}]({{ fig_path }})
 
 {% endif %}
 {% endfor %}
+{% endif %}
 {% endif %}
 
 ## Detailed Analysis
@@ -119,8 +91,24 @@ The benchmark results reveal distinct performance characteristics across differe
 - **Complex analytical queries** (Q03, Q04, Q07, Q13, Q16, Q17, Q18): Combine multiple operations
 {% endif %}
 
-The performance patterns observed across these query types provide insights into each system's optimization strategies and architectural trade-offs.
+The following table shows the median performance for each query category across all systems:
+
+{% if tables.query_type_performance %}
+{{ tables.query_type_performance }}
 {% endif %}
+{% endif %}
+
+### Query-by-Query Results
+
+The following table shows the median execution time for each query across all systems:
+
+{{ tables.comparison }}
+
+### Detailed Statistics
+
+The complete performance statistics for all queries and systems:
+
+{{ tables.summary }}
 
 ### System Rankings
 
@@ -142,7 +130,7 @@ Based on median query execution time:
 ### Workload Configuration
 
 **TPC-H Benchmark:**
-- **Scale Factor:** {{ workload_metadata.scale_factor }}
+- **Scale Factor:** {{ workload_metadata.info.scale_factor }}
 - **Data Format:** {{ cfg.workload.data_format | upper }}
 - **Data Generator:** {{ cfg.workload.generator }}
 

@@ -1,25 +1,25 @@
 {
-  "timestamp": 1759997893.679449,
-  "hostname": "ip-10-0-1-169",
+  "timestamp": 1761315076.8251364,
+  "hostname": "ip-10-0-1-232",
   "cpu_model": "Intel(R) Xeon(R) Platinum 8259CL CPU @ 2.50GHz",
   "cpu_vendor": "GenuineIntel",
   "cpu_count_logical": 16,
   "cpu_count_physical": 1,
-  "cpu_mhz": 3100.96,
-  "memory_total_kb": 130490408,
+  "cpu_mhz": 2499.998,
+  "memory_total_kb": 130490412,
   "memory_total_gb": 124.4,
   "system_info": {
-    "hostname": "ip-10-0-1-169",
+    "hostname": "ip-10-0-1-232",
     "system": "Linux",
-    "release": "6.8.0-1039-aws",
-    "version": "#41~22.04.1-Ubuntu SMP Thu Sep 11 10:54:48 UTC 2025",
+    "release": "6.8.0-1040-aws",
+    "version": "#42~22.04.1-Ubuntu SMP Wed Sep 24 10:26:57 UTC 2025",
     "machine": "x86_64",
     "processor": "x86_64",
-    "uptime_seconds": 117.34,
+    "uptime_seconds": 115.24,
     "load_average": [
-      0.6787109375,
-      0.33154296875,
-      0.12646484375
+      0.7509765625,
+      0.404296875,
+      0.1552734375
     ]
   },
   "cpu_info": {
@@ -30,18 +30,18 @@
     "model_name": "Intel(R) Xeon(R) Platinum 8259CL CPU @ 2.50GHz",
     "stepping": 7,
     "microcode": "0x5003901",
-    "cpu_mhz": 3100.96,
+    "cpu_mhz": 2499.998,
     "cache_size": "36608 KB",
     "count_logical": 16,
     "count_physical": 1
   },
   "memory_info": {
-    "total_kb": 130490408,
+    "total_kb": 130490412,
     "total_gb": 124.4,
-    "free_kb": 128014116,
-    "available_kb": 128934672,
-    "buffers_kb": 60320,
-    "cached_kb": 1869216
+    "free_kb": 128242740,
+    "available_kb": 128924320,
+    "buffers_kb": 59516,
+    "cached_kb": 1631960
   },
   "disk_info": {
     "root_filesystem": {
@@ -89,11 +89,11 @@
           "name": "loop3",
           "maj:min": "7:3",
           "rm": false,
-          "size": "89.4M",
+          "size": "91.4M",
           "ro": true,
           "type": "loop",
           "mountpoints": [
-            "/snap/lxd/31333"
+            "/snap/lxd/35819"
           ]
         },
         {
@@ -231,7 +231,7 @@
         "group": "default",
         "txqlen": 1000,
         "link_type": "ether",
-        "address": "02:69:a4:7a:71:33",
+        "address": "02:37:99:cd:c3:a3",
         "broadcast": "ff:ff:ff:ff:ff:ff",
         "altnames": [
           "enp0s5"
@@ -239,19 +239,19 @@
         "addr_info": [
           {
             "family": "inet",
-            "local": "10.0.1.169",
+            "local": "10.0.1.232",
             "prefixlen": 24,
             "metric": 100,
             "broadcast": "10.0.1.255",
             "scope": "global",
             "dynamic": true,
             "label": "ens5",
-            "valid_life_time": 3522,
-            "preferred_life_time": 3522
+            "valid_life_time": 3491,
+            "preferred_life_time": 3491
           },
           {
             "family": "inet6",
-            "local": "fe80::69:a4ff:fe7a:7133",
+            "local": "fe80::37:99ff:fecd:c3a3",
             "prefixlen": 64,
             "scope": "link",
             "valid_life_time": 4294967295,
@@ -273,7 +273,7 @@
         "operstate": "DOWN",
         "group": "default",
         "link_type": "ether",
-        "address": "fe:00:a8:07:ce:d8",
+        "address": "46:38:80:b8:da:16",
         "broadcast": "ff:ff:ff:ff:ff:ff",
         "addr_info": [
           {

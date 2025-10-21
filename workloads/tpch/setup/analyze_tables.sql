@@ -68,7 +68,9 @@ ALTER TABLE {{ schema }}.region MATERIALIZE STATISTICS r_regionkey, r_name;
 -- Statistics are disabled - using basic optimization only
 {% endif %}
 
--- Optimize tables to merge data parts and materialize skip indexes
+-- Optimize tables to merge data parts and improve compression
+-- OPTIMIZE TABLE FINAL merges all data parts into a single optimized part
+-- This improves query performance by reducing the number of parts to scan
 OPTIMIZE TABLE {{ schema }}.nation FINAL;
 OPTIMIZE TABLE {{ schema }}.region FINAL;
 OPTIMIZE TABLE {{ schema }}.part FINAL;
