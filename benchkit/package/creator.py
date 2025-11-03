@@ -736,13 +736,28 @@ def execute_workload(config: dict[str, Any], output_dir: Path, force: bool = Fal
         runs_per_query = workload_config.get("runs_per_query", 3)
         warmup_runs = workload_config.get("warmup_runs", 1)
 
+        # Get multiuser configuration
+        multiuser_config = workload_config.get("multiuser") or {}
+        num_streams = 1
+        randomize = False
+        random_seed = None
+
+        if multiuser_config.get("enabled", False):
+            num_streams = multiuser_config.get("num_streams", 1)
+            randomize = multiuser_config.get("randomize", False)
+            random_seed = multiuser_config.get("random_seed", None)
+            console.print(f"[dim]Multiuser mode: {num_streams} streams, randomize={randomize}, seed={random_seed}[/dim]")
+
         # Get query names from workload object (which handles include/exclude logic)
         query_names = workload.queries_to_include if hasattr(workload, 'queries_to_include') else []
 
         # Execute workload
         console.print(f"[dim]Running queries...[/dim]")
         try:
-            result_dict = workload.run_workload(system, query_names, runs_per_query, warmup_runs)
+            result_dict = workload.run_workload(
+                system, query_names, runs_per_query, warmup_runs,
+                num_streams, randomize, random_seed
+            )
             # Handle dict return format (measured and warmup results)
             measured_results = result_dict.get("measured", result_dict if isinstance(result_dict, list) else [])
             warmup_results = result_dict.get("warmup", [])

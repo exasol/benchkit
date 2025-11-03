@@ -95,6 +95,9 @@
                     <li><strong>{{ fastest_system[0] }}</strong> was the fastest overall with <strong>{{ fastest_system[1].median_runtime_ms | format_number }}ms</strong> median runtime</li>
                     <li><strong>{{ slowest_system[0] }}</strong> was <strong>{{ (slowest_system[1].median_runtime_ms / fastest_system[1].median_runtime_ms) | format_number(1) }}×</strong> slower</li>
                     <li>Tested <strong>{{ data.summary.total_queries }}</strong> total query executions across {{ cfg.workload.queries.include | length if cfg.workload.queries and cfg.workload.queries.include else '22' }} different query types</li>
+                    {% if data.summary.execution_mode == "multiuser" and data.summary.multiuser %}
+                    <li><strong>Execution mode:</strong> Multiuser with <strong>{{ data.summary.multiuser.num_streams }} concurrent streams</strong> ({% if data.summary.multiuser.randomize %}randomized distribution{% else %}round-robin distribution{% endif %})</li>
+                    {% endif %}
                 </ul>
             </div>
             {% endif %}
@@ -170,6 +173,65 @@
                 </table>
             </div>
             {% endif %}
+
+            {% if data.summary.execution_mode == "multiuser" and data.summary.per_stream %}
+            <h3>Per-Stream Performance Analysis</h3>
+            <div class="notice notice-info">
+                <p>This benchmark was executed using <strong>{{ data.summary.multiuser.num_streams }} concurrent streams</strong> to simulate multi-user workload. The following tables show how queries were distributed and performed across each stream for each system:</p>
+            </div>
+
+            {% for system_name, streams in data.summary.per_stream.items() | sort %}
+            <h4>{{ system_name | title }} - Stream Performance</h4>
+            <div class="comparison-table">
+                <table class="styled-table">
+                    <thead>
+                        <tr>
+                            <th>Stream ID</th>
+                            <th>Queries Executed</th>
+                            <th>Avg Runtime (ms)</th>
+                            <th>Median Runtime (ms)</th>
+                            <th>Min Runtime (ms)</th>
+                            <th>Max Runtime (ms)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for stream_id, stats in streams.items() | sort %}
+                        <tr>
+                            <td><strong>{{ stream_id }}</strong></td>
+                            <td>{{ stats.queries_executed }}</td>
+                            <td>{{ stats.avg_runtime_ms | format_number }}</td>
+                            <td>{{ stats.median_runtime_ms | format_number }}</td>
+                            <td>{{ stats.min_runtime_ms | format_number }}</td>
+                            <td>{{ stats.max_runtime_ms | format_number }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="key-findings">
+                <h5>Stream Performance Analysis for {{ system_name | title }}</h5>
+                {% set stream_stats = streams.values() | list %}
+                {% set fastest_stream = stream_stats | min(attribute='median_runtime_ms') %}
+                {% set slowest_stream = stream_stats | max(attribute='median_runtime_ms') %}
+                <ul>
+                    <li><strong>Best stream median:</strong> {{ fastest_stream.median_runtime_ms | format_number }}ms</li>
+                    <li><strong>Worst stream median:</strong> {{ slowest_stream.median_runtime_ms | format_number }}ms</li>
+                    <li><strong>Performance variance:</strong> {{ ((slowest_stream.median_runtime_ms / fastest_stream.median_runtime_ms - 1) * 100) | format_number(1) }}% difference between fastest and slowest streams</li>
+                </ul>
+                <p>This demonstrates {{ system_name | title }}'s ability to handle concurrent query loads with {% if ((slowest_stream.median_runtime_ms / fastest_stream.median_runtime_ms - 1) * 100) < 20 %}<strong>consistent</strong>{% else %}<strong>varying</strong>{% endif %} performance across streams.</p>
+            </div>
+            {% endfor %}
+
+            <div class="notice notice-info">
+                <h5>Query Distribution Method</h5>
+                {% if data.summary.multiuser.randomize %}
+                <p>Query distribution was <strong>randomized</strong> (seed: {{ data.summary.multiuser.random_seed }}) for realistic concurrent user simulation</p>
+                {% else %}
+                <p>Query distribution was <strong>round-robin</strong> across streams</p>
+                {% endif %}
+            </div>
+            {% endif %}
         </section>
 
         <!-- Methodology -->
@@ -192,6 +254,12 @@
                     <ul>
                         <li><strong>Warmup Runs:</strong> {{ cfg.workload.warmup_runs }}</li>
                         <li><strong>Measured Runs:</strong> {{ cfg.workload.runs_per_query }}</li>
+                        {% if cfg.workload.multiuser and cfg.workload.multiuser.enabled %}
+                        <li><strong>Execution Mode:</strong> Multiuser ({{ cfg.workload.multiuser.num_streams }} concurrent streams)</li>
+                        <li><strong>Query Distribution:</strong> {% if cfg.workload.multiuser.randomize %}Randomized{% if cfg.workload.multiuser.random_seed %} (seed: {{ cfg.workload.multiuser.random_seed }}){% endif %}{% else %}Round-robin{% endif %}</li>
+                        {% else %}
+                        <li><strong>Execution Mode:</strong> Sequential (single connection)</li>
+                        {% endif %}
                         <li><strong>Metric Reported:</strong> Median execution time</li>
                     </ul>
                 </div>

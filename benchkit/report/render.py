@@ -1496,7 +1496,6 @@ class ReportRenderer:
                 continue
             variant_value = self._normalize_variant_value(sys_variant) or "official"
             variant_label = self._format_display_name(variant_value) or variant_value
-            system_label = self._format_display_name(system_key) or system_key
             add_tag(
                 f"{system_key}-{variant_value}",
                 f"{variant_label}",
@@ -1613,6 +1612,7 @@ class ReportRenderer:
                 "queries": included_queries,
                 "variant": workload_config.get("variant", "official"),
                 "system_variants": workload_config.get("system_variants"),
+                "multiuser": workload_config.get("multiuser"),
             },
             "reports": report_entries,
         }

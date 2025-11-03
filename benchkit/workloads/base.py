@@ -1,6 +1,10 @@
 """Base classes for benchmark workloads."""
 
+import random
+import threading
 from abc import ABC, abstractmethod
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -163,6 +167,9 @@ class Workload(ABC):
         query_names: list[str],
         runs_per_query: int = 3,
         warmup_runs: int = 1,
+        num_streams: int = 1,
+        randomize: bool = False,
+        random_seed: int | None = None,
     ) -> dict[str, list[dict[str, Any]]]:
         """
         Execute the full workload against a system.
@@ -172,9 +179,47 @@ class Workload(ABC):
             query_names: List of query names to execute
             runs_per_query: Number of measured runs per query
             warmup_runs: Number of warmup runs per query
+            num_streams: Number of concurrent execution streams (1 = sequential)
+            randomize: Whether to randomize query execution order across streams
+            random_seed: Optional random seed for reproducibility
 
         Returns:
             Dictionary with 'measured' and 'warmup' keys containing lists of query execution results
+        """
+        # Decision logic: single-stream (sequential) or multi-stream (concurrent)
+        if num_streams <= 1:
+            return self._run_workload_sequential(
+                system, query_names, runs_per_query, warmup_runs
+            )
+        else:
+            return self._run_workload_multiuser(
+                system,
+                query_names,
+                runs_per_query,
+                warmup_runs,
+                num_streams,
+                randomize,
+                random_seed,
+            )
+
+    def _run_workload_sequential(
+        self,
+        system: SystemUnderTest,
+        query_names: list[str],
+        runs_per_query: int,
+        warmup_runs: int,
+    ) -> dict[str, list[dict[str, Any]]]:
+        """
+        Execute workload sequentially on a single connection.
+
+        Args:
+            system: System under test
+            query_names: List of query names to execute
+            runs_per_query: Number of measured runs per query
+            warmup_runs: Number of warmup runs per query
+
+        Returns:
+            Dictionary with 'measured' and 'warmup' keys containing results
         """
         all_queries = self.get_queries()
         measured_results = []
@@ -188,7 +233,7 @@ class Workload(ABC):
             query_sql = all_queries[query_name]
             print(f"Running {query_name}...")
 
-            # Warmup runs
+            # Warmup runs (sequential)
             for warmup in range(warmup_runs):
                 print(f"  Warmup {warmup + 1}/{warmup_runs}")
                 result = self.run_query(
@@ -201,11 +246,12 @@ class Workload(ABC):
                         "workload": self.name,
                         "scale_factor": self.scale_factor,
                         "variant": self.config.get("variant", "official"),
+                        "stream_id": None,  # Sequential execution has no stream
                     }
                 )
                 warmup_results.append(result)
 
-            # Measured runs
+            # Measured runs (sequential)
             for run in range(runs_per_query):
                 print(f"  Run {run + 1}/{runs_per_query}")
                 result = self.run_query(system, query_name, query_sql)
@@ -216,11 +262,209 @@ class Workload(ABC):
                         "workload": self.name,
                         "scale_factor": self.scale_factor,
                         "variant": self.config.get("variant", "official"),
+                        "stream_id": None,  # Sequential execution has no stream
                     }
                 )
                 measured_results.append(result)
 
         return {"measured": measured_results, "warmup": warmup_results}
+
+    def _run_workload_multiuser(
+        self,
+        system: SystemUnderTest,
+        query_names: list[str],
+        runs_per_query: int,
+        warmup_runs: int,
+        num_streams: int,
+        randomize: bool,
+        random_seed: int | None,
+    ) -> dict[str, list[dict[str, Any]]]:
+        """
+        Execute workload with multiple concurrent streams.
+
+        Args:
+            system: System under test
+            query_names: List of query names to execute
+            runs_per_query: Number of measured runs per query
+            warmup_runs: Number of warmup runs per query
+            num_streams: Number of concurrent execution streams
+            randomize: Whether to randomize query execution order
+            random_seed: Optional random seed for reproducibility
+
+        Returns:
+            Dictionary with 'measured' and 'warmup' keys containing results
+        """
+        all_queries = self.get_queries()
+        warmup_results = []
+
+        print(f"Running multiuser workload with {num_streams} concurrent streams")
+        print(f"Randomize: {randomize}, Seed: {random_seed}")
+
+        # Phase 1: Warmup runs (sequential, single connection)
+        print("\nPhase 1: Warmup runs (sequential)")
+        for query_name in query_names:
+            if query_name not in all_queries:
+                print(f"Warning: Query {query_name} not found in workload")
+                continue
+
+            query_sql = all_queries[query_name]
+            print(f"Running {query_name} warmup...")
+
+            for warmup in range(warmup_runs):
+                print(f"  Warmup {warmup + 1}/{warmup_runs}")
+                result = self.run_query(
+                    system, f"{query_name}_warmup_{warmup + 1}", query_sql
+                )
+                result.update(
+                    {
+                        "run_number": warmup + 1,
+                        "system": system.name,
+                        "workload": self.name,
+                        "scale_factor": self.scale_factor,
+                        "variant": self.config.get("variant", "official"),
+                        "stream_id": None,  # Warmup is sequential
+                    }
+                )
+                warmup_results.append(result)
+
+        # Phase 2: Measured runs (multiuser with concurrent streams)
+        print(f"\nPhase 2: Measured runs ({num_streams} concurrent streams)")
+
+        # Build list of all query executions: [(query_name, run_number), ...]
+        query_executions = []
+        for query_name in query_names:
+            if query_name not in all_queries:
+                continue
+            for run in range(1, runs_per_query + 1):
+                query_executions.append((query_name, run))
+
+        total_executions = len(query_executions)
+        print(
+            f"Total query executions: {total_executions} "
+            f"({len(query_names)} queries × {runs_per_query} runs)"
+        )
+
+        # Randomize if requested
+        if randomize:
+            rng = random.Random(random_seed)
+            rng.shuffle(query_executions)
+            print(f"Query execution order randomized (seed: {random_seed})")
+        else:
+            print("Query execution order: round-robin")
+
+        # Distribute query executions across streams
+        stream_assignments: list[list[tuple[str, int]]] = [
+            [] for _ in range(num_streams)
+        ]
+        for idx, query_exec in enumerate(query_executions):
+            stream_id = idx % num_streams
+            stream_assignments[stream_id].append(query_exec)
+
+        # Print distribution
+        for stream_id, assignments in enumerate(stream_assignments):
+            print(f"  Stream {stream_id}: {len(assignments)} queries")
+
+        # Execute queries concurrently using ThreadPoolExecutor
+        measured_results = []
+        results_lock = threading.Lock()
+
+        def collect_result(result: dict[str, Any]) -> None:
+            """Thread-safe result collection."""
+            with results_lock:
+                measured_results.append(result)
+
+        with ThreadPoolExecutor(max_workers=num_streams) as executor:
+            # Submit all streams
+            futures = []
+            for stream_id, assignments in enumerate(stream_assignments):
+                future = executor.submit(
+                    self._execute_stream,
+                    stream_id,
+                    assignments,
+                    all_queries,
+                    system,
+                    collect_result,
+                )
+                futures.append(future)
+
+            # Wait for all streams to complete
+            for future in as_completed(futures):
+                try:
+                    stream_id, queries_executed = future.result()
+                    print(f"  Stream {stream_id} completed: {queries_executed} queries")
+                except Exception as e:
+                    print(f"  Stream execution failed: {e}")
+
+        print(f"\nCompleted: {len(measured_results)} total query executions")
+
+        return {"measured": measured_results, "warmup": warmup_results}
+
+    def _execute_stream(
+        self,
+        stream_id: int,
+        query_assignments: list[tuple[str, int]],
+        all_queries: dict[str, str],
+        system: SystemUnderTest,
+        result_callback: Callable[[dict[str, Any]], None],
+    ) -> tuple[int, int]:
+        """
+        Execute queries for a single stream.
+
+        Args:
+            stream_id: ID of this stream (0-based)
+            query_assignments: List of (query_name, run_number) tuples to execute
+            all_queries: Dictionary of all available queries
+            system: System under test
+            result_callback: Callback function to collect results (thread-safe)
+
+        Returns:
+            Tuple of (stream_id, number_of_queries_executed)
+        """
+        queries_executed = 0
+
+        for query_name, run_number in query_assignments:
+            query_sql = all_queries[query_name]
+
+            try:
+                # Execute query
+                result = self.run_query(system, query_name, query_sql)
+
+                # Add metadata
+                result.update(
+                    {
+                        "run_number": run_number,
+                        "system": system.name,
+                        "workload": self.name,
+                        "scale_factor": self.scale_factor,
+                        "variant": self.config.get("variant", "official"),
+                        "stream_id": stream_id,
+                    }
+                )
+
+                # Collect result via thread-safe callback
+                result_callback(result)
+                queries_executed += 1
+
+            except Exception as e:
+                # Log error but continue with other queries
+                print(f"  Stream {stream_id}: Error executing {query_name}: {e}")
+
+                # Record failed execution
+                error_result = {
+                    "query": query_name,
+                    "elapsed_ms": 0,
+                    "success": False,
+                    "error": str(e),
+                    "run_number": run_number,
+                    "system": system.name,
+                    "workload": self.name,
+                    "scale_factor": self.scale_factor,
+                    "variant": self.config.get("variant", "official"),
+                    "stream_id": stream_id,
+                }
+                result_callback(error_result)
+
+        return stream_id, queries_executed
 
     def get_schema_name(self) -> str:
         """Get the schema name for this workload."""

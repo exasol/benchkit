@@ -140,10 +140,13 @@ class ExasolSystem(SystemUnderTest):
 
     def _resolve_ip_address(self, var_name: str) -> str | None:
         """Resolve IP address from configuration or infrastructure state."""
+        from typing import cast
+
         from benchkit.infra.manager import InfraManager
 
         # Use infrastructure manager to resolve IP addresses
-        return InfraManager.resolve_ip_from_infrastructure(var_name, self.name)
+        result = InfraManager.resolve_ip_from_infrastructure(var_name, self.name)
+        return cast(str | None, result)
 
     def _connect_with_fingerprint_retry(
         self, dsn: str, user: str, password: str, **kwargs: Any

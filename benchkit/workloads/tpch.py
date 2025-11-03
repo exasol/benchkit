@@ -334,6 +334,9 @@ class TPCH(Workload):
         query_names: list[str],
         runs_per_query: int = 3,
         warmup_runs: int = 1,
+        num_streams: int = 1,
+        randomize: bool = False,
+        random_seed: int | None = None,
     ) -> dict[str, list[dict[str, Any]]]:
         """Execute the TPC-H workload with system context for template resolution."""
         # Store system context for template resolution
@@ -344,7 +347,13 @@ class TPCH(Workload):
 
         # Call parent implementation
         result_dict = super().run_workload(
-            system, query_names, runs_per_query, warmup_runs
+            system,
+            query_names,
+            runs_per_query,
+            warmup_runs,
+            num_streams,
+            randomize,
+            random_seed,
         )
 
         # Override variant with the actual variant used for this system

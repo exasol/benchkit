@@ -1,8 +1,9 @@
 """Figure generation for benchmark reports using Plotly."""
 
+from collections.abc import Sequence
 from itertools import cycle
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -120,7 +121,7 @@ def _create_boxplot(df: pd.DataFrame, output_dir: Path) -> str:
     fig = go.Figure()
 
     systems = df["system"].unique()
-    color_map = _build_system_color_map(systems)
+    color_map = _build_system_color_map(systems.tolist())
 
     # Create box plot for each system
     for system in systems:
@@ -162,7 +163,7 @@ def _create_bar_chart(df: pd.DataFrame, output_dir: Path) -> str:
     medians = df.groupby(["system", "query"])["elapsed_ms"].median().reset_index()
 
     systems = df["system"].unique()
-    color_map = _build_system_color_map(systems)
+    color_map = _build_system_color_map(systems.tolist())
 
     medians["system_label"] = medians["system"].apply(_format_system_label)
     color_discrete_map = {
@@ -205,7 +206,7 @@ def _create_cdf_plot(df: pd.DataFrame, output_dir: Path) -> str:
     fig = go.Figure()
 
     systems = df["system"].unique()
-    color_map = _build_system_color_map(systems)
+    color_map = _build_system_color_map(systems.tolist())
 
     for system in systems:
         system_data = df[df["system"] == system]["elapsed_ms"].sort_values()
@@ -340,7 +341,7 @@ def create_all_systems_comparison_plot(df: pd.DataFrame, output_dir: Path) -> st
 
     # Get unique systems and queries
     systems = medians["system"].unique()
-    color_map = _build_system_color_map(systems)
+    color_map = _build_system_color_map(systems.tolist())
     system_labels = {system: _format_system_label(system) for system in systems}
     queries = sorted(medians["query"].unique())
 

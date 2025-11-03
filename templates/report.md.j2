@@ -38,6 +38,9 @@ We compared {{ data.summary.systems | length }} database systems:
 {% else %}
 - Tested {{ data.summary.total_queries }} total query executions across 22 different TPC-H queries
 {% endif %}
+{% if data.summary.execution_mode == "multiuser" and data.summary.multiuser %}
+- **Execution mode:** Multiuser with {{ data.summary.multiuser.num_streams }} concurrent streams ({% if data.summary.multiuser.randomize %}randomized distribution{% else %}round-robin distribution{% endif %})
+{% endif %}
 {% endif %}
 {% endif %}
 
@@ -152,6 +155,12 @@ The following commands were **actually executed** during the benchmark setup. Yo
 {% endif %}
 - **Warmup runs per query:** {{ cfg.workload.warmup_runs }}
 - **Measured runs per query:** {{ cfg.workload.runs_per_query }}
+{% if cfg.workload.multiuser and cfg.workload.multiuser.enabled %}
+- **Execution mode:** Multiuser ({{ cfg.workload.multiuser.num_streams }} concurrent streams)
+- **Query distribution:** {% if cfg.workload.multiuser.randomize %}Randomized{% if cfg.workload.multiuser.random_seed %} (seed: {{ cfg.workload.multiuser.random_seed }}){% endif %}{% else %}Round-robin{% endif %}
+{% else %}
+- **Execution mode:** Sequential (single connection)
+{% endif %}
 
 ### Execution Command
 
@@ -260,6 +269,40 @@ The following table shows the time taken for data generation, schema creation, a
 ### System Comparison
 
 {{ tables.comparison }}
+{% endif %}
+
+{% if data.summary.execution_mode == "multiuser" and data.summary.per_stream %}
+### Per-Stream Statistics
+
+This benchmark was executed using **{{ data.summary.multiuser.num_streams }} concurrent streams** to simulate multi-user workload. The following tables show the performance distribution across streams for each system:
+
+{% for system_name, streams in data.summary.per_stream.items() | sort %}
+#### {{ system_name | title }}
+
+| Stream ID | Queries Executed | Avg Runtime (ms) | Median Runtime (ms) | Min Runtime (ms) | Max Runtime (ms) |
+|-----------|------------------|------------------|---------------------|------------------|------------------|
+{% for stream_id, stats in streams.items() | sort %}
+| {{ stream_id }} | {{ stats.queries_executed }} | {{ stats.avg_runtime_ms | format_number }} | {{ stats.median_runtime_ms | format_number }} | {{ stats.min_runtime_ms | format_number }} | {{ stats.max_runtime_ms | format_number }} |
+{% endfor %}
+
+**Performance Analysis for {{ system_name | title }}:**
+{% set stream_stats = streams.values() | list %}
+{% set fastest_stream = stream_stats | min(attribute='median_runtime_ms') %}
+{% set slowest_stream = stream_stats | max(attribute='median_runtime_ms') %}
+- Fastest stream median: {{ fastest_stream.median_runtime_ms | format_number }}ms
+- Slowest stream median: {{ slowest_stream.median_runtime_ms | format_number }}ms
+- Stream performance variation: {{ ((slowest_stream.median_runtime_ms / fastest_stream.median_runtime_ms - 1) * 100) | format_number(1) }}% difference between fastest and slowest streams
+- This demonstrates {% if ((slowest_stream.median_runtime_ms / fastest_stream.median_runtime_ms - 1) * 100) < 20 %}**consistent** performance{% else %}**varying** performance{% endif %} across concurrent streams
+
+{% endfor %}
+
+**Query Distribution Method:**
+{% if data.summary.multiuser.randomize %}
+- Queries were randomized across streams (seed: {{ data.summary.multiuser.random_seed }}) for realistic multi-user simulation
+{% else %}
+- Queries were distributed round-robin across streams
+{% endif %}
+
 {% endif %}
 
 ### Visualizations
@@ -388,8 +431,11 @@ The exact configuration used for this benchmark is available at:
 - Consistent resource allocation and container limits
 
 **Execution Protocol:**
-- {{ cfg.workload.warmup_runs }} warmup run(s) per query (results discarded)
+- {{ cfg.workload.warmup_runs }} warmup run(s) per query (sequential, results discarded)
 - {{ cfg.workload.runs_per_query }} measured runs per query (results recorded)
+{% if cfg.workload.multiuser and cfg.workload.multiuser.enabled %}
+- Measured runs executed across {{ cfg.workload.multiuser.num_streams }} concurrent streams ({% if cfg.workload.multiuser.randomize %}randomized distribution{% else %}round-robin distribution{% endif %})
+{% endif %}
 - Wall-clock time measured by benchmark client
 - Database processes restarted between test runs for consistency
 

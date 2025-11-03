@@ -64,6 +64,9 @@ This report presents the complete query-by-query performance results for {{ data
 - **{{ fastest_system[0] }}** was the fastest overall with **{{ fastest_system[1].median_runtime_ms | format_number }}ms** median runtime
 - **{{ slowest_system[0] }}** was **{{ (slowest_system[1].median_runtime_ms / fastest_system[1].median_runtime_ms) | format_number(1) }}×** slower
 - Tested **{{ data.summary.total_queries }}** total query executions across {{ cfg.workload.queries.include | length if cfg.workload.queries and cfg.workload.queries.include else '22' }} different query types
+{% if data.summary.execution_mode == "multiuser" and data.summary.multiuser %}
+- **Execution mode:** Multiuser with **{{ data.summary.multiuser.num_streams }} concurrent streams** ({% if data.summary.multiuser.randomize %}randomized distribution{% else %}round-robin distribution{% endif %})
+{% endif %}
 {% endif %}
 
 ### Performance Visualizations
@@ -125,6 +128,40 @@ Based on median query execution time:
 {% endfor %}
 {% endif %}
 
+{% if data.summary.execution_mode == "multiuser" and data.summary.per_stream %}
+### Per-Stream Performance Analysis
+
+This benchmark was executed using **{{ data.summary.multiuser.num_streams }} concurrent streams** to simulate multi-user workload. The following tables show how queries were distributed and performed across each stream for each system:
+
+{% for system_name, streams in data.summary.per_stream.items() | sort %}
+#### {{ system_name | title }} - Stream Performance
+
+| Stream ID | Queries Executed | Avg Runtime (ms) | Median Runtime (ms) | Min Runtime (ms) | Max Runtime (ms) |
+|-----------|------------------|------------------|---------------------|------------------|------------------|
+{% for stream_id, stats in streams.items() | sort %}
+| {{ stream_id }} | {{ stats.queries_executed }} | {{ stats.avg_runtime_ms | format_number }} | {{ stats.median_runtime_ms | format_number }} | {{ stats.min_runtime_ms | format_number }} | {{ stats.max_runtime_ms | format_number }} |
+{% endfor %}
+
+**Stream Performance Analysis for {{ system_name | title }}:**
+{% set stream_stats = streams.values() | list %}
+{% set fastest_stream = stream_stats | min(attribute='median_runtime_ms') %}
+{% set slowest_stream = stream_stats | max(attribute='median_runtime_ms') %}
+- **Best stream median:** {{ fastest_stream.median_runtime_ms | format_number }}ms
+- **Worst stream median:** {{ slowest_stream.median_runtime_ms | format_number }}ms
+- **Performance variance:** {{ ((slowest_stream.median_runtime_ms / fastest_stream.median_runtime_ms - 1) * 100) | format_number(1) }}% difference between fastest and slowest streams
+- This demonstrates {{ system_name | title }}'s ability to handle concurrent query loads with {% if ((slowest_stream.median_runtime_ms / fastest_stream.median_runtime_ms - 1) * 100) < 20 %}**consistent**{% else %}**varying**{% endif %} performance across streams
+
+{% endfor %}
+
+**Query Distribution Method:**
+{% if data.summary.multiuser.randomize %}
+- Query distribution was **randomized** (seed: {{ data.summary.multiuser.random_seed }}) for realistic concurrent user simulation
+{% else %}
+- Query distribution was **round-robin** across streams
+{% endif %}
+
+{% endif %}
+
 ## Benchmark Methodology
 
 ### Workload Configuration
@@ -137,6 +174,12 @@ Based on median query execution time:
 **Execution Parameters:**
 - **Warmup Runs:** {{ cfg.workload.warmup_runs }}
 - **Measured Runs:** {{ cfg.workload.runs_per_query }}
+{% if cfg.workload.multiuser and cfg.workload.multiuser.enabled %}
+- **Execution Mode:** Multiuser ({{ cfg.workload.multiuser.num_streams }} concurrent streams)
+- **Query Distribution:** {% if cfg.workload.multiuser.randomize %}Randomized{% if cfg.workload.multiuser.random_seed %} (seed: {{ cfg.workload.multiuser.random_seed }}){% endif %}{% else %}Round-robin{% endif %}
+{% else %}
+- **Execution Mode:** Sequential (single connection)
+{% endif %}
 - **Metric Reported:** Median execution time
 
 ### Performance Measurement

@@ -531,7 +531,7 @@ def create_query_type_performance_table(df: pd.DataFrame) -> pd.DataFrame:
     }
 
     # Add query type column
-    def get_query_type(query):
+    def get_query_type(query: str) -> str:
         for qtype, queries in query_categories.items():
             if query in queries:
                 return qtype
@@ -598,7 +598,7 @@ def create_query_type_performance_table_html(df: pd.DataFrame) -> str:
     ]
 
     # Color code performance columns (lower is better)
-    color_columns = {col: True for col in system_cols}
+    color_columns = dict.fromkeys(system_cols, True)
 
     return format_table_html_with_colors(
         perf_df, color_columns=color_columns, css_classes="query-type-table"

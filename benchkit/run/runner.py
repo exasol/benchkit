@@ -942,12 +942,26 @@ class BenchmarkRunner:
         runs_per_query = self.config["workload"]["runs_per_query"]
         warmup_runs = self.config["workload"]["warmup_runs"]
 
+        # Extract multiuser configuration
+        multiuser_config = self.config["workload"].get("multiuser") or {}
+        num_streams = 1
+        randomize = False
+        random_seed = None
+
+        if multiuser_config.get("enabled", False):
+            num_streams = multiuser_config.get("num_streams", 1)
+            randomize = multiuser_config.get("randomize", False)
+            random_seed = multiuser_config.get("random_seed", None)
+
         # Execute queries
         result_dict = workload.run_workload(
             system=system,
             query_names=query_names,
             runs_per_query=runs_per_query,
             warmup_runs=warmup_runs,
+            num_streams=num_streams,
+            randomize=randomize,
+            random_seed=random_seed,
         )
 
         # Extract measured and warmup results
@@ -1064,6 +1078,18 @@ class BenchmarkRunner:
             ):
                 summary["system_variants"] = workload_config["system_variants"]
 
+            # Add multiuser configuration
+            multiuser_config = workload_config.get("multiuser") or {}
+            if multiuser_config.get("enabled", False):
+                summary["execution_mode"] = "multiuser"
+                summary["multiuser"] = {
+                    "num_streams": multiuser_config.get("num_streams", 1),
+                    "randomize": multiuser_config.get("randomize", False),
+                    "random_seed": multiuser_config.get("random_seed"),
+                }
+            else:
+                summary["execution_mode"] = "sequential"
+
         # Per-system statistics
         summary["per_system"] = {}
         for system in df["system"].unique():
@@ -1097,6 +1123,25 @@ class BenchmarkRunner:
                 "systems": systems,
                 "per_system": per_system_stats,
             }
+
+        # Add per-stream statistics if multiuser execution was used
+        # Calculate per-stream stats for each system separately
+        if "stream_id" in df.columns and df["stream_id"].notna().any():
+            summary["per_stream"] = {}
+
+            for system in df["system"].unique():
+                system_df = df[df["system"] == system]
+                summary["per_stream"][system] = {}
+
+                for stream_id in sorted(system_df["stream_id"].dropna().unique()):
+                    stream_df = system_df[system_df["stream_id"] == stream_id]
+                    summary["per_stream"][system][int(stream_id)] = {
+                        "queries_executed": len(stream_df),
+                        "avg_runtime_ms": float(stream_df["elapsed_ms"].mean()),
+                        "median_runtime_ms": float(stream_df["elapsed_ms"].median()),
+                        "min_runtime_ms": float(stream_df["elapsed_ms"].min()),
+                        "max_runtime_ms": float(stream_df["elapsed_ms"].max()),
+                    }
 
         # Add warmup statistics if available
         if warmup_df is not None and len(warmup_df) > 0:

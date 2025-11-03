@@ -29,6 +29,7 @@ class WorkloadConfig(BaseModel):
     generator: str = "dbgen"
     variant: str = "official"  # Query variant to use (official, tuned, custom, etc.)
     system_variants: dict[str, str] | None = None  # Per-system variant overrides
+    multiuser: dict[str, Any] | None = None  # Multiuser execution configuration
 
 
 class EnvironmentConfig(BaseModel):
@@ -142,8 +143,10 @@ def load_config(path: str | Path) -> dict[str, Any]:
 
     # Validate using Pydantic model
     try:
+        from typing import cast
+
         validated_config = BenchmarkConfig(**raw_config)
-        return validated_config.dict()
+        return cast(dict[str, Any], validated_config.dict())
     except Exception as e:
         raise ValueError(f"Invalid configuration: {e}") from e
 

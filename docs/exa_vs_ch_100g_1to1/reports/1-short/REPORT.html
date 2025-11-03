@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Exasol vs ClickHouse Performance Comparison on TPC-H SF100 - Initial Performance Assessment">
+    <title>Exasol vs ClickHouse Performance Comparison on TPC-H SF100 | Initial Performance Assessment</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-badge">📊 Initial Performance Assessment</div>
+            <h1>Exasol vs ClickHouse Performance Comparison on TPC-H SF100</h1>
+            <div class="metadata">
+                <span class="meta-item">
+                    <strong>Author:</strong> Oleksandr Kozachuk, Principal Architect at Exasol AG
+                </span>
+                <span class="meta-item">
+                    <strong>Date:</strong> 2025-10-31 12:15:42
+                </span>
+                <span class="meta-item">
+                    <strong>Environment:</strong>
+                    <span class="badge badge-cloud">AWS</span>
+                    eu-west-1
+                </span>
+            </div>
+
+            <div class="notice notice-security">
+                <strong>🔒 Security Note:</strong> Sensitive information (passwords, IP addresses) has been sanitized.
+                Placeholders like <code>&lt;EXASOL_DB_PASSWORD&gt;</code>, <code>&lt;PRIVATE_IP&gt;</code>, and <code>&lt;PUBLIC_IP&gt;</code>
+                are used throughout. Substitute with your actual credentials when reproducing.
+            </div>
+        </header>
+
+        <!-- Overview -->
+        <section class="section">
+            <h2>Overview</h2>
+            <div class="summary-intro">
+                <p>We conducted performance testing of <strong>clickhouse</strong> against <strong>exasol</strong> using the TPC-H benchmark at scale factor 100.</p>
+
+                <div class="callout callout-info">
+                    <strong>Key Finding:</strong> Clickhouse demonstrated <strong>11× slower</strong> median query performance compared to Exasol, highlighting significant optimization opportunities.
+                </div>
+            </div>
+        </section>
+
+        <!-- Baseline System -->
+        <section class="section">
+            <h2>The Baseline: Exasol</h2>
+            <p>Exasol achieved a median query runtime of <strong>238.1ms</strong> across all TPC-H queries, establishing a competitive performance baseline for analytical workload processing.</p>
+        </section>
+
+        <!-- Tested System Details -->
+        <section class="section">
+            <h2>Clickhouse 25.9.5.21 - System Under Test</h2>
+
+            <div class="specs-grid">
+                <div class="spec-card">
+                    <h3>Hardware Specifications</h3>
+                    <ul>
+                        <li><strong>Cloud Provider:</strong> AWS</li>
+                        <li><strong>Region:</strong> eu-west-1</li>
+                        <li><strong>Instance Type:</strong> r6id.8xlarge</li>
+                        <li><strong>CPU:</strong> Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz</li>
+                        <li><strong>CPU Cores:</strong> 32 vCPUs</li>
+                        <li><strong>Memory:</strong> 247.7GB RAM</li>
+                    </ul>
+                </div>
+
+                <div class="spec-card">
+                    <h3>Software Configuration</h3>
+                    <ul>
+                        <li><strong>Database:</strong> clickhouse 25.9.5.21</li>
+                        <li><strong>Setup Method:</strong> native</li>
+                        <li><strong>Data Directory:</strong> /data/clickhouse</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Installation -->
+            <h3>Installation & Configuration</h3>
+
+            <details class="setup-details">
+                <summary>
+                    <strong>Clickhouse 25.9.5.21</strong> &nbsp;&nbsp; Installation Steps
+                </summary>
+
+                <div class="setup-section">
+                                <div class="code-section">
+    <h4>Storage Configuration</h4>
+    <pre><code class="language-bash"># Format /dev/nvme1n1 with ext4 filesystem
+sudo mkfs.ext4 -F /dev/nvme1n1
+# Create mount point /data
+sudo mkdir -p /data
+# Mount /dev/nvme1n1 to /data
+sudo mount /dev/nvme1n1 /data
+# Set ownership of /data to ubuntu:ubuntu
+sudo chown -R ubuntu:ubuntu /data
+# Create ClickHouse data directory under /data
+sudo mkdir -p /data/clickhouse
+# Set ownership of /data/clickhouse to clickhouse:clickhouse
+sudo chown -R clickhouse:clickhouse /data/clickhouse
+</code></pre>
+</div>
+
+            <div class="code-section">
+    <h4>Prerequisites</h4>
+    <pre><code class="language-bash"># Update package lists
+sudo apt-get update
+# Install prerequisite packages for secure repository access
+sudo apt-get install -y apt-transport-https ca-certificates curl gnupg
+</code></pre>
+</div>
+
+            <div class="code-section">
+    <h4>Repository Setup</h4>
+    <pre><code class="language-bash"># Add ClickHouse GPG key to system keyring
+curl -fsSL &#39;https://packages.clickhouse.com/rpm/lts/repodata/repomd.xml.key&#39; | sudo gpg --dearmor -o /usr/share/keyrings/clickhouse-keyring.gpg
+# Add ClickHouse official repository to APT sources
+ARCH=$(dpkg --print-architecture) &amp;&amp; echo &#34;deb [signed-by=/usr/share/keyrings/clickhouse-keyring.gpg arch=${ARCH}] https://packages.clickhouse.com/deb stable main&#34; | sudo tee /etc/apt/sources.list.d/clickhouse.list
+# Update package lists with ClickHouse repository
+sudo apt-get update
+</code></pre>
+</div>
+
+            <div class="code-section">
+    <h4>Installation</h4>
+    <pre><code class="language-bash"># Install ClickHouse server and client version &lt;SERVER_IP&gt;
+sudo apt-get install -y clickhouse-server=25.9.5.21 clickhouse-client=25.9.5.21
+</code></pre>
+</div>
+
+            <div class="code-section">
+    <h4>Configuration</h4>
+    <pre><code class="language-bash"># Create custom ClickHouse configuration file
+sudo tee /etc/clickhouse-server/config.d/benchmark.xml &gt; /dev/null &lt;&lt; &#39;EOF&#39;
+&lt;clickhouse&gt;
+    &lt;listen_host&gt;::&lt;/listen_host&gt;
+    &lt;path&gt;/data/clickhouse&lt;/path&gt;
+    &lt;tmp_path&gt;/data/clickhouse/tmp&lt;/tmp_path&gt;
+    &lt;max_server_memory_usage&gt;212792573952&lt;/max_server_memory_usage&gt;
+    &lt;max_concurrent_queries&gt;16&lt;/max_concurrent_queries&gt;
+    &lt;background_pool_size&gt;32&lt;/background_pool_size&gt;
+    &lt;background_schedule_pool_size&gt;32&lt;/background_schedule_pool_size&gt;
+    &lt;max_table_size_to_drop&gt;50000000000&lt;/max_table_size_to_drop&gt;
+&lt;/clickhouse&gt;
+EOF
+</code></pre>
+</div>
+
+            <div class="code-section">
+    <h4>User Configuration</h4>
+    <pre><code class="language-bash"># Configure ClickHouse user profile with password and query settings
+sudo tee /etc/clickhouse-server/users.d/benchmark.xml &gt; /dev/null &lt;&lt; &#39;EOF&#39;
+&lt;clickhouse&gt;
+    &lt;users&gt;
+        &lt;default replace=&#34;true&#34;&gt;
+            &lt;password_sha256_hex&gt;2cca9d8714615f4132390a3db9296d39ec051b3faff87be7ea5f7fe0e2de14c9&lt;/password_sha256_hex&gt;
+            &lt;networks&gt;
+                &lt;ip&gt;::/0&lt;/ip&gt;
+            &lt;/networks&gt;
+        &lt;/default&gt;
+    &lt;/users&gt;
+    &lt;profiles&gt;
+        &lt;default&gt;
+            &lt;max_threads&gt;32&lt;/max_threads&gt;
+            &lt;max_memory_usage&gt;200000000000&lt;/max_memory_usage&gt;
+            &lt;max_bytes_before_external_sort&gt;100000000000&lt;/max_bytes_before_external_sort&gt;
+            &lt;max_bytes_before_external_group_by&gt;100000000000&lt;/max_bytes_before_external_group_by&gt;
+            &lt;join_use_nulls&gt;1&lt;/join_use_nulls&gt;
+            &lt;allow_experimental_correlated_subqueries&gt;1&lt;/allow_experimental_correlated_subqueries&gt;
+            &lt;optimize_read_in_order&gt;1&lt;/optimize_read_in_order&gt;
+            &lt;max_insert_threads&gt;8&lt;/max_insert_threads&gt;
+        &lt;/default&gt;
+    &lt;/profiles&gt;
+&lt;/clickhouse&gt;
+EOF
+</code></pre>
+</div>
+
+            <div class="code-section">
+    <h4>Service Management</h4>
+    <pre><code class="language-bash"># Start ClickHouse server service
+sudo systemctl start clickhouse-server
+# Enable ClickHouse server to start on boot
+sudo systemctl enable clickhouse-server
+</code></pre>
+</div>
+
+
+    <div class="tuning-parameters">
+        <h4>Tuning Parameters</h4>
+        <ul>
+<li><code>memory_limit</code>: 230g</li><li><code>max_threads</code>: 32</li>                <li><code>max_memory_usage</code>: 200.0GB</li>
+        </ul>
+    </div>
+
+<div class="data-directory">
+    <strong>Data Directory:</strong> <code>/data/clickhouse</code>
+</div>
+
+                </div>
+            </details>
+        </section>
+
+        <!-- Performance Results -->
+        <section class="section">
+            <h2>Performance Results</h2>
+
+            <h3>Overall Performance Summary</h3>
+
+
+            <div class="comparison-table">
+                <table class="styled-table">
+                    <thead>
+                        <tr>
+                            <th>Metric</th>
+                            <th>Clickhouse</th>
+                            <th>Exasol</th>
+                            <th>Difference</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Median Runtime</strong></td>
+                            <td>2546.6ms</td>
+                            <td>238.1ms</td>
+                            <td class="metric-slow">11× slower</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Average Runtime</strong></td>
+                            <td>5378.4ms</td>
+                            <td>301.1ms</td>
+                            <td class="metric-slow">18× slower</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Fastest Query</strong></td>
+                            <td>162.6ms</td>
+                            <td>25.2ms</td>
+                            <td class="metric-slow">6.5× slower</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Slowest Query</strong></td>
+                            <td>47984.7ms</td>
+                            <td>946.5ms</td>
+                            <td class="metric-slow">50.7× slower</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h3>Selected Query Highlights</h3>
+            <p>The following queries demonstrate the performance characteristics observed during testing:</p>
+
+            <div class="query-highlights">
+                <div class="highlight-section">
+                    <h4>Queries with Largest Performance Gaps</h4>
+                    <ul>
+                        <li>
+                            <strong><a href="#" class="query-link" data-query="Q17" data-system="clickhouse">Q17</a>:</strong>
+                            Clickhouse <span class="metric-value">5821.7ms</span>
+                            vs Exasol <span class="metric-value">28.0ms</span>
+                            <span class="metric-slow">(208× slower)</span>
+                        </li>
+                        <li>
+                            <strong><a href="#" class="query-link" data-query="Q21" data-system="clickhouse">Q21</a>:</strong>
+                            Clickhouse <span class="metric-value">46707.2ms</span>
+                            vs Exasol <span class="metric-value">384.5ms</span>
+                            <span class="metric-slow">(122× slower)</span>
+                        </li>
+                        <li>
+                            <strong><a href="#" class="query-link" data-query="Q08" data-system="clickhouse">Q08</a>:</strong>
+                            Clickhouse <span class="metric-value">7908.5ms</span>
+                            vs Exasol <span class="metric-value">73.7ms</span>
+                            <span class="metric-slow">(108× slower)</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="highlight-section">
+                    <h4>Queries with Competitive Performance</h4>
+                    <ul>
+                        <li>
+                            <strong><a href="#" class="query-link" data-query="Q15" data-system="clickhouse">Q15</a>:</strong>
+                            Clickhouse <span class="metric-value">346.4ms</span>
+                            vs Exasol <span class="metric-value">379.6ms</span>
+                            <span class="metric-neutral">(~1.0× slower)</span>
+                        </li>
+                        <li>
+                            <strong><a href="#" class="query-link" data-query="Q16" data-system="clickhouse">Q16</a>:</strong>
+                            Clickhouse <span class="metric-value">517.5ms</span>
+                            vs Exasol <span class="metric-value">457.7ms</span>
+                            <span class="metric-neutral">(1.1× slower)</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- Analysis -->
+        <section class="section">
+            <h2>Analysis & Optimization Opportunities</h2>
+
+            <p>Based on these initial results, several areas for investigation and potential optimization emerge:</p>
+
+            <div class="optimization-list">
+                <div class="optimization-item">
+                    <h4>1. Query Execution Planning</h4>
+                    <p>The significant performance variance across different query types suggests opportunities for query optimizer tuning and execution strategy refinement.</p>
+                </div>
+
+                <div class="optimization-item">
+                    <h4>2. Resource Utilization</h4>
+                    <p>Analyzing memory allocation, CPU utilization patterns, and I/O characteristics could reveal bottlenecks limiting performance on analytical workloads.</p>
+                </div>
+
+                <div class="optimization-item">
+                    <h4>3. Configuration Tuning</h4>
+                    <p>Database-specific parameters, cache settings, and parallelism configurations warrant detailed examination to maximize hardware utilization.</p>
+                </div>
+
+                <div class="optimization-item">
+                    <h4>4. Data Structure Optimization</h4>
+                    <p>Table layout, partitioning strategies, and index usage patterns may offer substantial performance improvements for specific query patterns.</p>
+                </div>
+            </div>
+
+            <h3>Key Questions</h3>
+            <ul class="questions-list">
+                <li>What specific query execution patterns lead to the largest performance differences?</li>
+                <li>How do different query types (aggregations, joins, scans) perform comparatively?</li>
+                <li>What configuration changes could narrow the performance gap?</li>
+                <li>Are there workload-specific tuning opportunities that weren't explored in this initial assessment?</li>
+            </ul>
+        </section>
+
+	<!-- Download Section -->
+        <section class="section">
+            <h2>Download Data</h2>
+            <div class="download-grid">
+                <div class="download-card">
+    <div class="download-icon">📊</div>
+    <h4>Query Results (Tested Systems)</h4>
+    <p>Raw benchmark results for tested systems (CSV format)</p>
+    <a href="attachments/runs_tested.csv" class="btn btn-download" download>Download</a>
+</div>
+
+                <div class="download-card">
+    <div class="download-icon">📈</div>
+    <h4>Summary Statistics (Tested Systems)</h4>
+    <p>Aggregated performance metrics for tested systems (JSON)</p>
+    <a href="attachments/summary_tested.json" class="btn btn-download" download>Download</a>
+</div>
+
+                <div class="download-card">
+    <div class="download-icon">💻</div>
+    <h4>Clickhouse System Information</h4>
+    <p>Hardware specifications captured during the benchmark (JSON)</p>
+    <a href="attachments/system_clickhouse.json" class="btn btn-download" download>Download</a>
+</div>
+
+                <div class="download-card">
+    <div class="download-icon">📦</div>
+    <h4>Benchmark Package</h4>
+    <p>Self-contained reproduction package for tested systems</p>
+    <a href="exa_vs_ch_100g_1to1-workload.zip" class="btn btn-download" download>Download</a>
+</div>
+
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p><em>This benchmark was conducted to provide transparent, reproducible performance comparisons. All configuration details and setup commands are included to enable independent verification of these results.</em></p>
+        </footer>
+    </div>
+
+    <!-- Query Modal -->
+    <div id="queryModal" class="query-modal">
+        <div class="query-modal-content">
+            <div class="query-modal-header">
+                <h3 id="modalTitle">Query Details</h3>
+                <button class="query-modal-close" onclick="closeQueryModal()">&times;</button>
+            </div>
+            <div id="modalBody">
+                <pre><code id="queryCode" class="language-sql"></code></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- Syntax Highlighting -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+
+    <script>
+        // Query data embedded from workload
+        const queryData = {
+            "Q01": {
+                "exasol": "attachments/queries/exasol/Q01.sql",                "clickhouse": "attachments/queries/clickhouse/Q01.sql"            },            "Q02": {
+                "exasol": "attachments/queries/exasol/Q02.sql",                "clickhouse": "attachments/queries/clickhouse/Q02.sql"            },            "Q03": {
+                "exasol": "attachments/queries/exasol/Q03.sql",                "clickhouse": "attachments/queries/clickhouse/Q03.sql"            },            "Q04": {
+                "exasol": "attachments/queries/exasol/Q04.sql",                "clickhouse": "attachments/queries/clickhouse/Q04.sql"            },            "Q05": {
+                "exasol": "attachments/queries/exasol/Q05.sql",                "clickhouse": "attachments/queries/clickhouse/Q05.sql"            },            "Q06": {
+                "exasol": "attachments/queries/exasol/Q06.sql",                "clickhouse": "attachments/queries/clickhouse/Q06.sql"            },            "Q07": {
+                "exasol": "attachments/queries/exasol/Q07.sql",                "clickhouse": "attachments/queries/clickhouse/Q07.sql"            },            "Q08": {
+                "exasol": "attachments/queries/exasol/Q08.sql",                "clickhouse": "attachments/queries/clickhouse/Q08.sql"            },            "Q09": {
+                "exasol": "attachments/queries/exasol/Q09.sql",                "clickhouse": "attachments/queries/clickhouse/Q09.sql"            },            "Q10": {
+                "exasol": "attachments/queries/exasol/Q10.sql",                "clickhouse": "attachments/queries/clickhouse/Q10.sql"            },            "Q11": {
+                "exasol": "attachments/queries/exasol/Q11.sql",                "clickhouse": "attachments/queries/clickhouse/Q11.sql"            },            "Q12": {
+                "exasol": "attachments/queries/exasol/Q12.sql",                "clickhouse": "attachments/queries/clickhouse/Q12.sql"            },            "Q13": {
+                "exasol": "attachments/queries/exasol/Q13.sql",                "clickhouse": "attachments/queries/clickhouse/Q13.sql"            },            "Q14": {
+                "exasol": "attachments/queries/exasol/Q14.sql",                "clickhouse": "attachments/queries/clickhouse/Q14.sql"            },            "Q15": {
+                "exasol": "attachments/queries/exasol/Q15.sql",                "clickhouse": "attachments/queries/clickhouse/Q15.sql"            },            "Q16": {
+                "exasol": "attachments/queries/exasol/Q16.sql",                "clickhouse": "attachments/queries/clickhouse/Q16.sql"            },            "Q17": {
+                "exasol": "attachments/queries/exasol/Q17.sql",                "clickhouse": "attachments/queries/clickhouse/Q17.sql"            },            "Q18": {
+                "exasol": "attachments/queries/exasol/Q18.sql",                "clickhouse": "attachments/queries/clickhouse/Q18.sql"            },            "Q19": {
+                "exasol": "attachments/queries/exasol/Q19.sql",                "clickhouse": "attachments/queries/clickhouse/Q19.sql"            },            "Q20": {
+                "exasol": "attachments/queries/exasol/Q20.sql",                "clickhouse": "attachments/queries/clickhouse/Q20.sql"            },            "Q21": {
+                "exasol": "attachments/queries/exasol/Q21.sql",                "clickhouse": "attachments/queries/clickhouse/Q21.sql"            },            "Q22": {
+                "exasol": "attachments/queries/exasol/Q22.sql",                "clickhouse": "attachments/queries/clickhouse/Q22.sql"            }        };
+
+        // Add click handlers to query links
+        document.addEventListener('DOMContentLoaded', function() {
+            const queryLinks = document.querySelectorAll('.query-link');
+            queryLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const query = this.dataset.query;
+                    const system = this.dataset.system;
+                    showQueryModal(query, system);
+                });
+            });
+        });
+
+        function showQueryModal(query, system) {
+            const modal = document.getElementById('queryModal');
+            const title = document.getElementById('modalTitle');
+            const code = document.getElementById('queryCode');
+
+            title.textContent = `${query} - ${system}`;
+
+            // Load query from file
+            if (queryData[query] && queryData[query][system]) {
+                fetch(queryData[query][system])
+                    .then(response => response.text())
+                    .then(sql => {
+                        code.textContent = sql;
+                        Prism.highlightElement(code);
+                        modal.classList.add('active');
+                    })
+                    .catch(error => {
+                        code.textContent = `Error loading query: ${error}`;
+                        modal.classList.add('active');
+                    });
+            } else {
+                code.textContent = `Query ${query} not found for system ${system}`;
+                modal.classList.add('active');
+            }
+        }
+
+        function closeQueryModal() {
+            const modal = document.getElementById('queryModal');
+            modal.classList.remove('active');
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('queryModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeQueryModal();
+            }
+        });
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeQueryModal();
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "infrastructure_provisioning_s": 120.597267397,
+  "systems": {
+    "clickhouse": {
+      "installation_s": 32.33652515099993
+    },
+    "exasol": {
+      "installation_s": 574.9953993869999
+    }
+  }
+}

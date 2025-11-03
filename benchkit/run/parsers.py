@@ -46,7 +46,15 @@ def normalize_runs(results: list[dict[str, Any]]) -> pd.DataFrame:
     final_columns = ["system", "query", "run", "elapsed_s", "elapsed_ms"]
 
     # Add optional columns if they exist
-    optional_columns = ["rows_returned", "success", "error", "workload", "scale_factor"]
+    optional_columns = [
+        "stream_id",
+        "rows_returned",
+        "success",
+        "error",
+        "workload",
+        "scale_factor",
+        "variant",
+    ]
     for col in optional_columns:
         if col in df.columns:
             final_columns.append(col)

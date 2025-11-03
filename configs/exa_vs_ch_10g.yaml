@@ -4,7 +4,7 @@ author: "Oleksandr Kozachuk, Principal Architect at Exasol AG"
 # Execution configuration (optional)
 execution:
   parallel: true          # Enable parallel execution of systems (default: false)
-  max_workers: 4          # Max concurrent systems (default: number of systems)
+  max_workers: 3          # Max concurrent systems (default: number of systems)
 
 env:
   mode: "aws"                    # aws, gcp, azure, or local
@@ -27,11 +27,6 @@ env:
       disk:
         type: "local"
       label: "ok-bench-ch-tuned"
-    clickhouse_stat:
-      instance_type: "r5d.4xlarge"  # 16 vCPUs, 128GB RAM, 2x300GB NVMe local storage
-      disk:
-        type: "local"
-      label: "ok-bench-ch-stat"
   os_image: "ubuntu-22.04"
   ssh_key_name: "ok-work3"            # AWS key pair name (without .pem extension)
   ssh_private_key_path: "~/.ssh/ok-work3.pem"  # Local private key file path
@@ -68,7 +63,7 @@ systems:
   # ClickHouse with original queries
   - name: "clickhouse"
     kind: "clickhouse"
-    version: "25.9.4.58"         # Latest stable ClickHouse version
+    version: "25.9.5.21"         # Latest stable ClickHouse version
     setup:
       method: "native"           # Native APT installation
       use_additional_disk: true  # Auto-detect and use additional NVMe disk
@@ -86,7 +81,7 @@ systems:
   # ClickHouse with tuned queries
   - name: "clickhouse_tuned"
     kind: "clickhouse"
-    version: "25.9.4.58"         # Latest stable ClickHouse version
+    version: "25.9.5.21"         # Latest stable ClickHouse version
     setup:
       method: "native"           # Native APT installation
       use_additional_disk: true  # Auto-detect and use additional NVMe disk
@@ -99,25 +94,6 @@ systems:
         memory_limit: "48g"      # Memory limit for ClickHouse (optimized for SF10)
         max_threads: "16"        # Match instance vCPUs
         max_memory_usage: "45000000000"  # ~42GB in bytes (optimized for SF10)
-
-  # ClickHouse with statistics enabled (original queries)
-  - name: "clickhouse_stat"
-    kind: "clickhouse"
-    version: "25.9.4.58"         # Latest stable ClickHouse version
-    setup:
-      method: "native"           # Native APT installation
-      use_additional_disk: true  # Auto-detect and use additional NVMe disk
-      data_dir: "/data/clickhouse"
-      host: "$CLICKHOUSE_STAT_PUBLIC_IP"  # Use public IP for external access
-      port: 8123                 # HTTP port for clickhouse-connect
-      username: "default"
-      password: "clickhouse123"  # Password for benchmark user
-      extra:
-        memory_limit: "48g"      # Memory limit for ClickHouse (optimized for SF10)
-        max_threads: "16"        # Match instance vCPUs
-        max_memory_usage: "45000000000"  # ~42GB in bytes (optimized for SF10)
-        allow_experimental_statistics: 1  # Enable experimental statistics feature
-        allow_statistics_optimize: 1      # Allow query optimizer to use statistics
 
 workload:
   name: "tpch"

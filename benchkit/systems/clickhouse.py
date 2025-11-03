@@ -1017,13 +1017,15 @@ class ClickHouseSystem(SystemUnderTest):
 
         # Handle environment variable substitution
         if ip_config.startswith("$"):
+            from typing import cast
+
             from benchkit.infra.manager import InfraManager
 
             env_var = ip_config[1:]  # Remove $ prefix
             resolved = InfraManager.resolve_ip_from_infrastructure(env_var, self.name)
 
             if resolved:
-                return resolved
+                return cast(str, resolved)
             else:
                 return ip_config
 
