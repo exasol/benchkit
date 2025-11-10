@@ -13,6 +13,9 @@ from .base import SystemUnderTest
 class ClickHouseSystem(SystemUnderTest):
     """ClickHouse database system implementation."""
 
+    # ClickHouse supports multinode clusters via sharding
+    SUPPORTS_MULTINODE = True
+
     @classmethod
     def get_python_dependencies(cls) -> list[str]:
         """Return Python packages required by ClickHouse system."""
@@ -117,7 +120,15 @@ class ClickHouseSystem(SystemUnderTest):
 
         # Connection settings - resolve host IP addresses from config or infrastructure
         raw_host = self.setup_config.get("host", "localhost")
-        self.host = self._resolve_ip_addresses(raw_host)
+        resolved_host = self._resolve_ip_addresses(raw_host)
+
+        # For multinode, resolved_host may contain comma-separated IPs
+        # Use first IP only for connection
+        if "," in resolved_host:
+            self.host = resolved_host.split(",")[0].strip()
+        else:
+            self.host = resolved_host
+
         self.port = self.setup_config.get(
             "port", 8123
         )  # HTTP port for clickhouse-connect
@@ -127,10 +138,14 @@ class ClickHouseSystem(SystemUnderTest):
         self.database = self.setup_config.get("database", "benchmark")
 
         self._client = None
-        self._cloud_instance_manager: Any = None
+        self._cloud_instance_manager: Any = None  # Primary node (node 0) for single-node or multinode
+        self._cloud_instance_managers: list[Any] = []  # All nodes for multinode clusters
         self._external_host: str | None = (
             None  # Initialize for cloud instance external IP
         )
+
+        # Cluster configuration for multinode
+        self.cluster_name = "benchmark_cluster"  # Default cluster name
 
     @exclude_from_package
     def is_already_installed(self) -> bool:
@@ -282,10 +297,76 @@ class ClickHouseSystem(SystemUnderTest):
         """Install ClickHouse using official APT repository."""
         self.record_setup_note("Installing ClickHouse using official APT repository")
 
+        # Check if multinode setup
+        is_multinode = self._cloud_instance_managers and len(self._cloud_instance_managers) > 1
+
+        if is_multinode:
+            # Install on all nodes
+            print(f"Installing ClickHouse on all {len(self._cloud_instance_managers)} nodes...")
+            all_success = True
+
+            for idx, mgr in enumerate(self._cloud_instance_managers):
+                print(f"\n[Node {idx}] Installing ClickHouse...")
+
+                # Temporarily override execute_command to use this specific node
+                original_mgr = self._cloud_instance_manager
+                original_external_host = getattr(self, '_external_host', None)
+
+                self._cloud_instance_manager = mgr
+
+                # Set external host to this node's IP for health checks
+                # This ensures wait_for_health() connects to the correct node
+                self._external_host = mgr.public_ip
+
+                try:
+                    # Run core installation on this node
+                    success = self._install_native_on_node()
+                    if not success:
+                        print(f"[Node {idx}] ✗ Installation failed")
+                        all_success = False
+                    else:
+                        print(f"[Node {idx}] ✓ Installation completed")
+                finally:
+                    # Restore primary manager and external host
+                    self._cloud_instance_manager = original_mgr
+                    if original_external_host:
+                        self._external_host = original_external_host
+
+            if not all_success:
+                return False
+
+            # Configure cluster topology on all nodes
+            print(f"\n⚙️  Configuring {self.node_count}-node ClickHouse cluster...")
+            if not self._configure_multinode_cluster():
+                print("Failed to configure multinode cluster")
+                return False
+            print("✓ Cluster configuration complete on all nodes")
+
+            # Restart all nodes to apply cluster config
+            print("\n🔄 Restarting ClickHouse on all nodes...")
+            for idx, mgr in enumerate(self._cloud_instance_managers):
+                result = mgr.run_remote_command("sudo systemctl restart clickhouse-server")
+                if not result.get("success"):
+                    print(f"[Node {idx}] ✗ Failed to restart ClickHouse")
+                else:
+                    print(f"[Node {idx}] ✓ ClickHouse restarted")
+
+            return True
+        else:
+            # Single node installation
+            return self._install_native_on_node()
+
+    def _install_native_on_node(self) -> bool:
+        """Install ClickHouse on the current node (works for both single and multinode)."""
         # Resolve IP addresses from configuration
         resolved_host = self._resolve_ip_addresses(
             self.setup_config.get("host", "localhost")
         )
+
+        # For multinode, resolved_host may contain comma-separated IPs
+        # Use first IP only for connection
+        if "," in resolved_host:
+            resolved_host = resolved_host.split(",")[0].strip()
 
         try:
             # Step 1: Install prerequisite packages
@@ -446,6 +527,8 @@ class ClickHouseSystem(SystemUnderTest):
             # Step 9: Configure user profile (query-level settings + password)
             if self.password:
                 self._configure_user_profile(settings)
+
+            # Note: Cluster configuration is handled at higher level for multinode
 
             # Step 10: Start and enable ClickHouse service
             self.record_setup_command(
@@ -708,6 +791,120 @@ class ClickHouseSystem(SystemUnderTest):
             )
 
     @exclude_from_package
+    def _configure_multinode_cluster(self) -> bool:
+        """
+        Configure ClickHouse cluster for multinode deployment.
+
+        Generates and distributes:
+        1. remote_servers.xml - cluster topology (same on all nodes)
+        2. macros.xml - node-specific shard/replica info (unique per node)
+
+        For benchmarking, we use sharding WITHOUT replication (no Keeper needed).
+        """
+        if not self._cloud_instance_managers or len(self._cloud_instance_managers) < 2:
+            print("Skipping cluster configuration: not multinode")
+            return True
+
+        print(f"Configuring cluster with {len(self._cloud_instance_managers)} nodes...")
+
+        # Build list of node IPs
+        node_ips = [mgr.private_ip for mgr in self._cloud_instance_managers]
+
+        # Generate remote_servers.xml content (same on all nodes)
+        remote_servers_xml = self._generate_remote_servers_xml(node_ips)
+
+        # Distribute remote_servers.xml to ALL nodes
+        remote_servers_path = "/etc/clickhouse-server/config.d/remote_servers.xml"
+        self.record_setup_command(
+            f"sudo tee {remote_servers_path} > /dev/null << 'EOF'\n{remote_servers_xml}\nEOF",
+            "Create cluster configuration (remote_servers.xml) on all nodes",
+            "cluster_configuration",
+        )
+
+        print("Distributing remote_servers.xml to all nodes...")
+        for idx, mgr in enumerate(self._cloud_instance_managers):
+            create_config_cmd = f"sudo tee {remote_servers_path} > /dev/null << 'EOF'\n{remote_servers_xml}\nEOF"
+            result = mgr.run_remote_command(create_config_cmd, timeout=60)
+            if result.get("success"):
+                print(f"  ✓ remote_servers.xml created on node {idx}")
+            else:
+                print(f"  ✗ Failed to create remote_servers.xml on node {idx}")
+                return False
+
+        # Generate and distribute unique macros.xml for each node
+        print("Distributing unique macros.xml to each node...")
+        for idx, mgr in enumerate(self._cloud_instance_managers):
+            # Generate node-specific macros
+            macros_xml = self._generate_macros_xml(idx + 1, node_ips[idx])
+            macros_path = "/etc/clickhouse-server/config.d/macros.xml"
+
+            # Record for first node as example
+            if idx == 0:
+                self.record_setup_command(
+                    f"sudo tee {macros_path} > /dev/null << 'EOF'\n{macros_xml}\nEOF",
+                    f"Create node-specific macros (example for node 0)",
+                    "cluster_configuration",
+                )
+
+            create_macros_cmd = f"sudo tee {macros_path} > /dev/null << 'EOF'\n{macros_xml}\nEOF"
+            result = mgr.run_remote_command(create_macros_cmd, timeout=60)
+            if result.get("success"):
+                print(f"  ✓ macros.xml created on node {idx} (shard={idx+1})")
+            else:
+                print(f"  ✗ Failed to create macros.xml on node {idx}")
+                return False
+
+        self.record_setup_note(f"ClickHouse cluster configured with {len(node_ips)} nodes (sharding without replication)")
+        self.record_setup_note(f"Cluster name: {self.cluster_name}")
+
+        return True
+
+    @exclude_from_package
+    def _generate_remote_servers_xml(self, node_ips: list[str]) -> str:
+        """
+        Generate remote_servers.xml content for cluster configuration.
+
+        Creates a cluster with N shards (one per node), without replication.
+        Each shard has only 1 replica.
+        """
+        shard_entries = []
+        for idx, ip in enumerate(node_ips):
+            shard_entry = f"""        <shard>
+            <replica>
+                <host>{ip}</host>
+                <port>9000</port>
+            </replica>
+        </shard>"""
+            shard_entries.append(shard_entry)
+
+        shards_xml = "\n".join(shard_entries)
+
+        return f"""<clickhouse>
+    <remote_servers>
+        <{self.cluster_name}>
+{shards_xml}
+        </{self.cluster_name}>
+    </remote_servers>
+</clickhouse>"""
+
+    @exclude_from_package
+    def _generate_macros_xml(self, shard_num: int, replica_name: str) -> str:
+        """
+        Generate macros.xml content for a specific node.
+
+        Args:
+            shard_num: Shard number (1-indexed)
+            replica_name: Unique replica identifier (usually the node's IP)
+        """
+        return f"""<clickhouse>
+    <macros>
+        <cluster>{self.cluster_name}</cluster>
+        <shard>{shard_num}</shard>
+        <replica>node{shard_num}</replica>
+    </macros>
+</clickhouse>"""
+
+    @exclude_from_package
     def _parse_memory_size(self, memory_str: str) -> int:
         """Parse memory size string like '32g', '1024m' to bytes."""
         memory_str = memory_str.lower().strip()
@@ -850,13 +1047,57 @@ class ClickHouseSystem(SystemUnderTest):
         ClickHouse uses a subdirectory under /data for its data.
         The base class mounts the disk/RAID at /data.
 
+        For multinode clusters, this runs on ALL nodes.
+
         Returns:
             True if successful, False otherwise
+        """
+        # For multinode, we need to setup storage on ALL nodes
+        if self._cloud_instance_managers and len(self._cloud_instance_managers) > 1:
+            print(f"Setting up storage on all {len(self._cloud_instance_managers)} nodes...")
+            return self._setup_multinode_storage(scale_factor)
+
+        # Single node setup
+        return self._setup_single_node_storage(scale_factor)
+
+    @exclude_from_package
+    def _setup_multinode_storage(self, scale_factor: int) -> bool:
+        """
+        Setup storage on all nodes in a multinode cluster.
+        Each node gets its own RAID0 and ClickHouse data directory.
+        """
+        all_success = True
+
+        for idx, mgr in enumerate(self._cloud_instance_managers):
+            print(f"\n  [Node {idx}] Setting up storage...")
+
+            # Temporarily override execute_command to use this specific node
+            original_mgr = self._cloud_instance_manager
+            self._cloud_instance_manager = mgr
+
+            try:
+                # Run single-node storage setup on this node
+                success = self._setup_single_node_storage(scale_factor)
+                if not success:
+                    print(f"  [Node {idx}] ✗ Storage setup failed")
+                    all_success = False
+                else:
+                    print(f"  [Node {idx}] ✓ Storage setup completed")
+            finally:
+                # Restore primary manager
+                self._cloud_instance_manager = original_mgr
+
+        return all_success
+
+    @exclude_from_package
+    def _setup_single_node_storage(self, scale_factor: int) -> bool:
+        """
+        Setup storage on a single node. Used by both single-node and multinode setups.
         """
         # Check if /data is already mounted
         check_mount = self.execute_command("mount | grep '/data'", record=False)
         if check_mount.get("success", False) and check_mount.get("stdout", "").strip():
-            print("Storage already mounted at /data, creating ClickHouse subdirectory")
+            print("    Storage already mounted at /data, creating ClickHouse subdirectory")
             # Create clickhouse subdirectory
             clickhouse_dir = "/data/clickhouse"
             self.record_setup_command(
@@ -891,7 +1132,7 @@ class ClickHouseSystem(SystemUnderTest):
         self.data_dir = Path(clickhouse_dir)
 
         self.record_setup_note(f"ClickHouse data directory: {clickhouse_dir}")
-        print(f"ClickHouse data directory configured: {clickhouse_dir}")
+        print(f"    ClickHouse data directory configured: {clickhouse_dir}")
 
         return True
 
@@ -964,14 +1205,28 @@ class ClickHouseSystem(SystemUnderTest):
         # Use default local path
         return None
 
-    def set_cloud_instance_manager(self, instance_manager: Any) -> None:
-        """Set cloud instance manager for remote execution."""
-        self._cloud_instance_manager = instance_manager
+    def set_cloud_instance_manager(self, instance_manager: Any | list[Any]) -> None:
+        """
+        Set the cloud instance manager(s) for remote command execution.
+
+        Args:
+            instance_manager: Single CloudInstanceManager for single-node systems,
+                            or list of CloudInstanceManagers for multinode systems
+        """
+        # Handle both single instance and list of instances
+        if isinstance(instance_manager, list):
+            # Multinode setup
+            self._cloud_instance_managers = instance_manager
+            self._cloud_instance_manager = instance_manager[0] if instance_manager else None
+        else:
+            # Single node setup
+            self._cloud_instance_manager = instance_manager
+            self._cloud_instance_managers = [instance_manager] if instance_manager else []
 
         # Set external host for health checks from local machine
         # This is critical for pre-existing installations where install() doesn't run
-        if instance_manager and hasattr(instance_manager, "public_ip"):
-            self._external_host = instance_manager.public_ip
+        if self._cloud_instance_manager and hasattr(self._cloud_instance_manager, "public_ip"):
+            self._external_host = self._cloud_instance_manager.public_ip
             # Keep self.host as localhost for remote execution
             self.host = "localhost"
 
@@ -987,6 +1242,7 @@ class ClickHouseSystem(SystemUnderTest):
         timeout: float | None = None,
         record: bool = True,
         category: str = "setup",
+        node_info: str | None = None,
     ) -> dict[str, Any]:
         """Execute command with remote execution support if cloud instance manager is available."""
         if self._cloud_instance_manager and self.setup_method == "native":
@@ -997,18 +1253,19 @@ class ClickHouseSystem(SystemUnderTest):
 
             # Record command for report reproduction if requested
             if record:
-                self.setup_commands.append(
-                    {
-                        "command": self._sanitize_command_for_report(command),
-                        "success": result.get("success", False),
-                        "description": f"Execute {command.split()[0]} command on remote system",
-                        "category": category,
-                    }
-                )
+                command_record = {
+                    "command": self._sanitize_command_for_report(command),
+                    "success": result.get("success", False),
+                    "description": f"Execute {command.split()[0]} command on remote system",
+                    "category": category,
+                }
+                if node_info:
+                    command_record["node_info"] = node_info
+                self.setup_commands.append(command_record)
 
             return dict(result)
         else:
-            return super().execute_command(command, timeout, record, category)
+            return super().execute_command(command, timeout, record, category, node_info)
 
     def _resolve_ip_addresses(self, ip_config: str) -> str:
         """Resolve IP address placeholders with actual values from infrastructure."""

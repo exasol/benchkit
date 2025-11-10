@@ -1,10 +1,9 @@
-title: "Exasol vs ClickHouse Performance Comparison on TPC-H SF10"
+title: "Exasol vs ClickHouse Performance Comparison on TPC-H SF1"
 author: "Oleksandr Kozachuk, Principal Architect at Exasol AG"
 
-# Execution configuration (optional)
 execution:
   parallel: true          # Enable parallel execution of systems (default: false)
-  max_workers: 3          # Max concurrent systems (default: number of systems)
+  max_workers: 2          # Max concurrent systems (default: number of systems)
 
 env:
   mode: "aws"                    # aws, gcp, azure, or local
@@ -22,11 +21,6 @@ env:
       disk:
         type: "local"
       label: "ok-bench-ch"
-    clickhouse_tuned:
-      instance_type: "r5d.4xlarge"  # 16 vCPUs, 128GB RAM, 2x300GB NVMe local storage
-      disk:
-        type: "local"
-      label: "ok-bench-ch-tuned"
   os_image: "ubuntu-22.04"
   ssh_key_name: "ok-work3"            # AWS key pair name (without .pem extension)
   ssh_private_key_path: "~/.ssh/ok-work3.pem"  # Local private key file path
@@ -38,6 +32,7 @@ systems:
     version: "2025.1.0"          # Latest Exasol version
     setup:
       method: "installer"        # Native c4 installation
+      node_count: 2
       use_additional_disk: true  # Auto-detect and use additional NVMe disk
       c4_version: "4.28.2"       # Latest c4 version
       host_addrs: "$EXASOL_PRIVATE_IP"  # Will be resolved from infrastructure
@@ -48,7 +43,7 @@ systems:
       working_copy: "@exasol-2025.1.0"
       license_file: "configs/exasol.license"  # License file path
       extra:
-        dbram: "48g"             # Database RAM allocation (optimized for SF10)
+        dbram: "32g"             # Database RAM allocation
         optimizer_mode: "analytical"
         # Exasol database parameters for analytical workload optimization
         db_params:
@@ -66,6 +61,7 @@ systems:
     version: "25.10.1.3832"         # Latest stable ClickHouse version
     setup:
       method: "native"           # Native APT installation
+      node_count: 2
       use_additional_disk: true  # Auto-detect and use additional NVMe disk
       data_dir: "/data/clickhouse"
       host: "$CLICKHOUSE_PUBLIC_IP"  # Use public IP for external access
@@ -73,37 +69,17 @@ systems:
       username: "default"
       password: "clickhouse123"  # Password for benchmark user
       extra:
-        memory_limit: "48g"      # Memory limit for ClickHouse (optimized for SF10)
+        memory_limit: "32g"      # Memory limit for ClickHouse
         max_threads: "16"        # Match instance vCPUs
-        max_memory_usage: "45000000000"  # ~42GB in bytes (optimized for SF10)
-
-  # Exasol with tuned queries
-  # ClickHouse with tuned queries
-  - name: "clickhouse_tuned"
-    kind: "clickhouse"
-    version: "25.10.1.3832"         # Latest stable ClickHouse version
-    setup:
-      method: "native"           # Native APT installation
-      use_additional_disk: true  # Auto-detect and use additional NVMe disk
-      data_dir: "/data/clickhouse"
-      host: "$CLICKHOUSE_TUNED_PUBLIC_IP"  # Use public IP for external access
-      port: 8123                 # HTTP port for clickhouse-connect
-      username: "default"
-      password: "clickhouse123"  # Password for benchmark user
-      extra:
-        memory_limit: "48g"      # Memory limit for ClickHouse (optimized for SF10)
-        max_threads: "16"        # Match instance vCPUs
-        max_memory_usage: "45000000000"  # ~42GB in bytes (optimized for SF10)
+        max_memory_usage: "30000000000"  # ~28GB in bytes
 
 workload:
   name: "tpch"
-  scale_factor: 10              # 10GB dataset
+  scale_factor: 1               # 1GB dataset for test
   runs_per_query: 7             # Number of measured runs
   warmup_runs: 1                # Warmup runs before measurement
   data_format: "csv"            # csv or parquet
   generator: "dbgen"
-  system_variants:
-    clickhouse_tuned: "tuned"   # ClickHouse-tuned uses tuned queries
 
 report:
   show_boxplots: true

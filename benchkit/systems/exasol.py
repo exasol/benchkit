@@ -14,6 +14,9 @@ from .base import SystemUnderTest
 class ExasolSystem(SystemUnderTest):
     """Exasol database system implementation."""
 
+    # Exasol supports multinode clusters via c4 tool
+    SUPPORTS_MULTINODE = True
+
     @classmethod
     def get_python_dependencies(cls) -> list[str]:
         """Return Python packages required by Exasol system."""
@@ -113,8 +116,8 @@ class ExasolSystem(SystemUnderTest):
                         resolved_ip if resolved_ip else host_external_addrs
                     )
 
-                # Use first external IP
-                self.host = host_external_addrs.split(",")[0].strip()
+                # Use first external IP (handle both comma and space-separated lists)
+                self.host = host_external_addrs.replace(",", " ").split()[0]
             else:
                 self.host = self.setup_config.get("host", "localhost")
             self.password = self.setup_config.get("db_password", "exasol")
@@ -128,7 +131,8 @@ class ExasolSystem(SystemUnderTest):
 
         self._connection = None
         self._schema_created = False
-        self._cloud_instance_manager = None
+        self._cloud_instance_manager = None  # Primary node (node 0) for single-node or multinode
+        self._cloud_instance_managers: list[Any] = []  # All nodes for multinode clusters
         self._external_host = None  # Initialize for cloud instance external IP
         self._certificate_fingerprint: str | None = (
             None  # Cache for TLS certificate fingerprint
@@ -588,14 +592,58 @@ class ExasolSystem(SystemUnderTest):
         2. Create RAID0 if multiple local devices
         3. Defer partitioning until workload scale factor is known
 
+        For multinode clusters, this runs on ALL nodes.
+
         Returns:
             True if successful, False otherwise
         """
-        # Check if /data is already mounted or if disk already configured
-        # This prevents re-running storage setup on already-configured instances
+        # For multinode, we need to setup storage on ALL nodes
+        if self._cloud_instance_managers and len(self._cloud_instance_managers) > 1:
+            print(f"Setting up storage on all {len(self._cloud_instance_managers)} nodes...")
+            return self._setup_multinode_storage(scale_factor)
+
+        # Single node setup - use the same logic
+        return self._setup_single_node_storage(scale_factor)
+
+    @exclude_from_package
+    def _setup_multinode_storage(self, scale_factor: int) -> bool:
+        """
+        Setup storage on all nodes in a multinode cluster.
+        Each node gets its own RAID0 and partitioned disk.
+        """
+        all_success = True
+
+        for idx, mgr in enumerate(self._cloud_instance_managers):
+            print(f"\n  [Node {idx}] Setting up storage...")
+
+            # Temporarily override execute_command to use this specific node
+            original_mgr = self._cloud_instance_manager
+            self._cloud_instance_manager = mgr
+
+            try:
+                # Run single-node storage setup on this node
+                success = self._setup_single_node_storage(scale_factor)
+                if not success:
+                    print(f"  [Node {idx}] ✗ Storage setup failed")
+                    all_success = False
+                else:
+                    print(f"  [Node {idx}] ✓ Storage setup completed")
+            finally:
+                # Restore primary manager
+                self._cloud_instance_manager = original_mgr
+
+        return all_success
+
+    @exclude_from_package
+    def _setup_single_node_storage(self, scale_factor: int) -> bool:
+        """
+        Setup storage on a single node. Used by both single-node and multinode setups.
+        This contains the actual storage setup logic.
+        """
+        # Check if /data is already mounted
         check_mount = self.execute_command("mount | grep ' /data '", record=False)
         if check_mount.get("success", False) and check_mount.get("stdout", "").strip():
-            print("✓ Storage already configured for Exasol, skipping setup")
+            print("    ✓ Storage already configured, skipping")
             return True
 
         # Detect local instance store devices first
@@ -607,9 +655,7 @@ class ExasolSystem(SystemUnderTest):
 
         if len(local_devices) > 1:
             # Multiple local instance store devices → create RAID0
-            print(
-                f"Detected {len(local_devices)} local instance store devices for Exasol, creating RAID0..."
-            )
+            print(f"    Detected {len(local_devices)} local instance store devices, creating RAID0...")
 
             # Check if RAID already exists
             raid_device = "/dev/md0"
@@ -620,7 +666,7 @@ class ExasolSystem(SystemUnderTest):
             if raid_check.get("success", False) and "exists" in raid_check.get(
                 "stdout", ""
             ):
-                print(f"RAID array {raid_device} already exists")
+                print(f"    RAID array {raid_device} already exists")
                 device_to_use = raid_device
             else:
                 # Create RAID0 from all local devices
@@ -628,47 +674,38 @@ class ExasolSystem(SystemUnderTest):
                 if self._create_raid0(device_paths, raid_device):
                     device_to_use = raid_device
                 else:
-                    print(
-                        "Warning: RAID0 creation failed, falling back to first device"
-                    )
+                    print("    Warning: RAID0 creation failed, falling back to first device")
                     device_to_use = local_devices[0]["path"]
 
         elif len(local_devices) == 1:
             # Single local instance store device
             device_to_use = local_devices[0]["path"]
-            print(
-                f"Detected single local instance store device for Exasol: {device_to_use}"
-            )
+            print(f"    Detected single local instance store device: {device_to_use}")
 
         else:
-            # No local devices, check for any additional devices (EBS, etc.)
-            print("No local instance store devices found, checking for EBS volumes...")
+            # No local devices
+            print("    No local instance store devices found")
             all_devices = self._detect_storage_devices(skip_root=True)
 
             if not all_devices:
-                print(
-                    "Warning: No additional storage devices found for Exasol, will use directory storage"
-                )
-                return self._setup_directory_storage(scale_factor)
+                print("    Warning: No additional storage devices found")
+                return False
 
             device_to_use = all_devices[0]["path"]
-            print(f"Using EBS device for Exasol: {device_to_use}")
+            print(f"    Using EBS device: {device_to_use}")
 
-        # Store device for later use in partitioning
+        # Store device for later use
         self._exasol_base_device = device_to_use
 
-        # Partition the disk and capture partition paths
+        # Partition the disk
         data_mount_point, exasol_partition = self._setup_partitioned_disk(scale_factor)
 
-        # Store partition paths for later use in installation
+        # Store partition paths
         if data_mount_point:
             self._data_generation_mount_point = data_mount_point
         if exasol_partition:
             self._exasol_raw_partition = exasol_partition
 
-        self.record_setup_note(f"Storage device prepared for Exasol: {device_to_use}")
-
-        # Partitioning complete - partitions stored for later use in installation
         return True
 
     @exclude_from_package
@@ -899,12 +936,26 @@ class ExasolSystem(SystemUnderTest):
 
         # Get configuration from setup_config
         c4_version = self.setup_config.get("c4_version", "2025.1.4")
-        host_addrs = self._resolve_ip_addresses(
-            self.setup_config.get("host_addrs", "localhost")
-        )
-        host_external_addrs = self._resolve_ip_addresses(
-            self.setup_config.get("host_external_addrs", host_addrs)
-        )
+
+        # Build IP address lists for multinode support
+        if self._cloud_instance_managers and len(self._cloud_instance_managers) > 1:
+            # Multinode: build space-separated IP lists from instance managers (c4 expects spaces, not commas)
+            private_ips = [mgr.private_ip for mgr in self._cloud_instance_managers]
+            public_ips = [mgr.public_ip for mgr in self._cloud_instance_managers]
+            host_addrs = " ".join(private_ips)
+            host_external_addrs = " ".join(public_ips)
+            print(f"Multinode setup with {len(self._cloud_instance_managers)} nodes:")
+            print(f"  Private IPs: {host_addrs}")
+            print(f"  Public IPs: {host_external_addrs}")
+        else:
+            # Single node: use configured addresses or resolve from environment
+            host_addrs = self._resolve_ip_addresses(
+                self.setup_config.get("host_addrs", "localhost")
+            )
+            host_external_addrs = self._resolve_ip_addresses(
+                self.setup_config.get("host_external_addrs", host_addrs)
+            )
+
         image_password = self.setup_config.get("image_password", "exasol123")
         db_password = self.setup_config.get("db_password", "exasol456")
         admin_password = self.setup_config.get("admin_password", "exasol789")
@@ -934,18 +985,33 @@ class ExasolSystem(SystemUnderTest):
                 else:
                     remote_license_path = self.license_file
 
-            # Step 1: Create exasol user
+            # Step 1: Create exasol user on ALL nodes (for multinode)
             self.record_setup_command(
                 "sudo useradd -m exasol", "Create Exasol system user", "user_setup"
             )
-            result = self.execute_command("sudo useradd -m exasol || true")
+            if not self.execute_command_on_all_nodes(
+                "sudo useradd -m exasol || true",
+                description="Creating exasol user on all nodes"
+            ):
+                print("Warning: Failed to create exasol user on some nodes")
 
             self.record_setup_command(
                 "sudo usermod -aG sudo exasol",
                 "Add exasol user to sudo group",
                 "user_setup",
             )
-            self.execute_command("sudo usermod -aG sudo exasol || true")
+            if not self.execute_command_on_all_nodes(
+                "sudo usermod -aG sudo exasol || true",
+                description="Adding exasol to sudo group on all nodes"
+            ):
+                print("Warning: Failed to add exasol to sudo group on some nodes")
+
+            # Setup passwordless sudo on ALL nodes
+            if not self.execute_command_on_all_nodes(
+                'sudo sed -i "/%sudo/s/) ALL$/) NOPASSWD: ALL/" /etc/sudoers',
+                description="Configuring passwordless sudo on all nodes"
+            ):
+                print("Warning: Failed to configure passwordless sudo on some nodes")
 
             self.record_setup_command(
                 "sudo passwd exasol",
@@ -1049,30 +1115,54 @@ class ExasolSystem(SystemUnderTest):
                 print(f"Failed to download c4: {result['stderr']}")
                 return False
 
-            # Step 4: Generate SSH key if not exists
+            # Step 4: Generate SSH key on primary node and distribute to ALL nodes
             self.record_setup_command(
                 'ssh-keygen -t rsa -b 2048 -f ~/.ssh/id_rsa -N ""',
                 "Generate SSH key pair for cluster communication",
                 "ssh_setup",
             )
+            # Generate SSH key on primary node
             self.execute_command(
                 'test -e ~/.ssh/id_rsa || ssh-keygen -t rsa -b 2048 -f ~/.ssh/id_rsa -N ""',
                 record=False,
             )
-            self.execute_command(
-                "sudo mkdir -p ~exasol/.ssh && cat ~/.ssh/id_rsa.pub | sudo tee ~exasol/.ssh/authorized_keys"
-            )
-            self.execute_command(
-                'sudo sed -i "/%sudo/s/) ALL$/) NOPASSWD: ALL/" /etc/sudoers'
-            )
-            result = self.execute_command(
-                f"ssh -o StrictHostKeyChecking=no exasol@{host_addrs} sudo uptime"
-            )
-            if not result["success"]:
-                print("Failed to setup SSH login to exasol user")
+
+            # Get the public key from primary node
+            pub_key_result = self.execute_command("cat ~/.ssh/id_rsa.pub", record=False)
+            if not pub_key_result["success"]:
+                print("Failed to read SSH public key")
                 return False
+            pub_key = pub_key_result["stdout"].strip()
+
+            # Distribute SSH public key to ALL nodes (including primary)
+            print(f"Distributing SSH key to all {len(self._cloud_instance_managers)} nodes...")
+            for idx, mgr in enumerate(self._cloud_instance_managers):
+                # Create .ssh directory and add authorized_keys for exasol user
+                setup_cmd = f"sudo mkdir -p ~exasol/.ssh && echo '{pub_key}' | sudo tee ~exasol/.ssh/authorized_keys > /dev/null && sudo chown -R exasol:exasol ~exasol/.ssh && sudo chmod 700 ~exasol/.ssh && sudo chmod 600 ~exasol/.ssh/authorized_keys"
+                result = mgr.run_remote_command(setup_cmd, timeout=60)
+                if result.get("success"):
+                    print(f"  ✓ SSH key installed on node {idx}")
+                else:
+                    print(f"  ✗ Failed to install SSH key on node {idx}")
+                    return False
+
+            # Test SSH connectivity from primary to all nodes
+            print("Testing SSH connectivity to all nodes...")
+            host_list = host_addrs.split()  # Split on whitespace
+            for idx, host in enumerate(host_list):
+                result = self.execute_command(
+                    f"ssh -o StrictHostKeyChecking=no exasol@{host} sudo uptime",
+                    record=False,
+                )
+                if result["success"]:
+                    print(f"  ✓ SSH connectivity confirmed to node {idx} ({host})")
+                else:
+                    print(f"  ✗ Failed SSH connectivity to node {idx} ({host})")
+                    return False
 
             # Step 5: Create c4 configuration file on remote system
+            # Note: For multinode, IP addresses are space-separated lists,
+            # and storage paths are the same on all nodes
             config_content = f"""CCC_HOST_ADDRS="{host_addrs}"
 CCC_HOST_EXTERNAL_ADDRS="{host_external_addrs}"
 CCC_HOST_DATADISK={storage_disk_path}
@@ -1085,6 +1175,7 @@ CCC_PLAY_DB_PASSWORD={db_password}
 CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
 
             # Only add mounts when using file storage, not raw disk
+            # Mount path is the same on all nodes (c4 applies it to each node)
             if not use_additional_disk:
                 config_content += f"\nCCC_PLAY_MOUNTS={data_dir}:{data_dir}"
 
@@ -1139,13 +1230,13 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
 
             # Update connection parameters for deployed cluster
             if host_external_addrs and host_external_addrs != "localhost":
-                external_host = host_external_addrs.split(",")[
+                external_host = host_external_addrs.split()[
                     0
-                ].strip()  # Use first external IP
+                ]  # Use first external IP
             else:
-                external_host = host_addrs.split(",")[
+                external_host = host_addrs.split()[
                     0
-                ].strip()  # Use first internal IP
+                ]  # Use first internal IP
 
             # Set host based on context:
             # - External IP for health checks from local machine
@@ -1803,14 +1894,28 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
 
         return False
 
-    def set_cloud_instance_manager(self, instance_manager: Any) -> None:
-        """Set the cloud instance manager for remote command execution."""
-        self._cloud_instance_manager = instance_manager
+    def set_cloud_instance_manager(self, instance_manager: Any | list[Any]) -> None:
+        """
+        Set the cloud instance manager(s) for remote command execution.
+
+        Args:
+            instance_manager: Single CloudInstanceManager for single-node systems,
+                            or list of CloudInstanceManagers for multinode systems
+        """
+        # Handle both single instance and list of instances
+        if isinstance(instance_manager, list):
+            # Multinode setup
+            self._cloud_instance_managers = instance_manager
+            self._cloud_instance_manager = instance_manager[0] if instance_manager else None
+        else:
+            # Single node setup
+            self._cloud_instance_manager = instance_manager
+            self._cloud_instance_managers = [instance_manager] if instance_manager else []
 
         # Set external host for health checks from local machine
         # This is critical for pre-existing installations where install() doesn't run
-        if instance_manager and hasattr(instance_manager, "public_ip"):
-            self._external_host = instance_manager.public_ip
+        if self._cloud_instance_manager and hasattr(self._cloud_instance_manager, "public_ip"):
+            self._external_host = self._cloud_instance_manager.public_ip
             # Keep self.host as localhost for remote execution
             self.host = "localhost"
 
@@ -1820,34 +1925,74 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
             if db_password:
                 self.password = db_password
 
+    def execute_command_on_all_nodes(
+        self,
+        command: str,
+        timeout: float | None = None,
+        description: str | None = None,
+    ) -> bool:
+        """
+        Execute a command on all nodes in a multinode cluster.
+
+        Args:
+            command: Command to execute
+            timeout: Timeout in seconds
+            description: Description for logging
+
+        Returns:
+            True if command succeeded on all nodes, False otherwise
+        """
+        if not self._cloud_instance_managers:
+            # Fallback to single node execution
+            result = self.execute_command(command, timeout=timeout, record=False)
+            return bool(result.get("success", False))
+
+        if description:
+            print(f"{description} (on {len(self._cloud_instance_managers)} nodes)...")
+
+        all_success = True
+        for idx, mgr in enumerate(self._cloud_instance_managers):
+            result = mgr.run_remote_command(
+                command, timeout=int(timeout) if timeout else 300
+            )
+            if not result.get("success", False):
+                print(f"  ✗ Failed on node {idx}: {result.get('stderr', 'Unknown error')}")
+                all_success = False
+            else:
+                print(f"  ✓ Success on node {idx}")
+
+        return all_success
+
     def execute_command(
         self,
         command: str,
         timeout: float | None = None,
         record: bool = True,
         category: str = "setup",
+        node_info: str | None = None,
     ) -> dict[str, Any]:
         """Execute a command, either locally or remotely depending on setup."""
         if self._cloud_instance_manager:
-            # Execute on remote instance
+            # Execute on remote instance (primary node for multinode)
             result = self._cloud_instance_manager.run_remote_command(
                 command, timeout=int(timeout) if timeout else 300
             )
 
             # Record command for report reproduction if requested
             if record:
-                self.setup_commands.append(
-                    {
-                        "command": self._sanitize_command_for_report(command),
-                        "success": result.get("success", False),
-                        "description": f"Execute {command.split()[0]} command on remote system",
-                        "category": category,
-                    }
-                )
+                command_record = {
+                    "command": self._sanitize_command_for_report(command),
+                    "success": result.get("success", False),
+                    "description": f"Execute {command.split()[0]} command on remote system",
+                    "category": category,
+                }
+                if node_info:
+                    command_record["node_info"] = node_info
+                self.setup_commands.append(command_record)
 
             return dict(result)
         else:
-            return super().execute_command(command, timeout, record, category)
+            return super().execute_command(command, timeout, record, category, node_info)
 
     @exclude_from_package
     def _cleanup_disturbing_services(self, play_id: str) -> bool:

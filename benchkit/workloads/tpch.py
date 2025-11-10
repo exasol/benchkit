@@ -146,11 +146,18 @@ class TPCH(Workload):
 
             # Load and render the template
             template = self.template_env.get_template(script_name)
+
+            # Get node_count and cluster for multinode support
+            node_count = getattr(system, "node_count", 1)
+            cluster = getattr(system, "cluster_name", "benchmark_cluster")
+
             rendered_sql = template.render(
                 system_kind=system.kind,
                 scale_factor=self.scale_factor,
                 schema=self.get_schema_name(),
                 system_extra=system_extra,
+                node_count=node_count,
+                cluster=cluster,
             )
 
             # Split SQL into individual statements and execute them one by one

@@ -11,6 +11,10 @@ from ..util import safe_command
 class SystemUnderTest(ABC):
     """Abstract base class for database systems under test."""
 
+    # Class attribute indicating if this system supports multinode clusters
+    # Subclasses should override this to True if they support multinode
+    SUPPORTS_MULTINODE: bool = False
+
     def __init__(self, config: dict[str, Any]):
         self.name = config["name"]
         self.kind = config["kind"]
@@ -26,6 +30,9 @@ class SystemUnderTest(ABC):
         # Command recording for report reproduction
         self.setup_commands: list[dict[str, Any]] = []
         self.installation_notes: list[str] = []
+
+        # Multinode configuration
+        self.node_count: int = self.setup_config.get("node_count", 1)
 
     @exclude_from_package
     def get_install_marker_path(self) -> str | None:
@@ -250,20 +257,31 @@ class SystemUnderTest(ABC):
         timeout: float | None = None,
         record: bool = True,
         category: str = "setup",
+        node_info: str | None = None,
     ) -> dict[str, Any]:
-        """Execute a system command safely and optionally record it."""
+        """Execute a system command safely and optionally record it.
+
+        Args:
+            command: Command to execute
+            timeout: Command timeout in seconds
+            record: Whether to record command for report reproduction
+            category: Category for organizing commands in report
+            node_info: Node information (e.g., "node0", "all nodes", "node1,node2")
+        """
         result = safe_command(command, timeout=timeout)
 
         # Record command for report reproduction
         if record:
-            self.setup_commands.append(
-                {
-                    "command": command,
-                    "success": result["success"],
-                    "description": f"Execute {command.split()[0]} command",
-                    "category": category,
-                }
-            )
+            command_record = {
+                "command": command,
+                "success": result["success"],
+                "description": f"Execute {command.split()[0]} command",
+                "category": category,
+            }
+            if node_info:
+                command_record["node_info"] = node_info
+
+            self.setup_commands.append(command_record)
 
         return result
 

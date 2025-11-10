@@ -37,6 +37,7 @@ variable "systems" {
     disk_size     = number
     disk_type     = string
     label         = optional(string, "")
+    node_count    = optional(number, 1)
   }))
   default = {}
 }
@@ -139,6 +140,26 @@ resource "aws_security_group" "benchmark" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # Allow ALL TCP traffic between nodes in the same security group
+  # This is required for cluster communication (Exasol c4, ClickHouse distributed queries)
+  ingress {
+    description = "Inter-node TCP communication"
+    from_port   = 0
+    to_port     = 65535
+    protocol    = "tcp"
+    self        = true
+  }
+
+  # Allow ALL UDP traffic between nodes in the same security group
+  # This is required for cluster communication (Exasol cluster coordination)
+  ingress {
+    description = "Inter-node UDP communication"
+    from_port   = 0
+    to_port     = 65535
+    protocol    = "udp"
+    self        = true
+  }
+
   # Dynamic database ports from system requirements
   dynamic "ingress" {
     for_each = var.required_ports
@@ -189,10 +210,33 @@ resource "aws_security_group" "benchmark" {
   }
 }
 
+# Flatten systems into individual nodes
+# This creates a list where each element represents a single node
+# For multinode systems (node_count > 1), creates multiple entries
+locals {
+  system_nodes = flatten([
+    for system_key, system_config in var.systems : [
+      for node_idx in range(system_config.node_count) : {
+        system_key    = system_key
+        node_idx      = node_idx
+        node_key      = system_config.node_count > 1 ? "${system_key}-node${node_idx}" : system_key
+        instance_type = system_config.instance_type
+        disk_size     = system_config.disk_size
+        disk_type     = system_config.disk_type
+        label         = system_config.label
+        node_count    = system_config.node_count
+      }
+    ]
+  ])
+
+  # Convert to map for easier access in resources
+  system_nodes_map = { for node in local.system_nodes : node.node_key => node }
+}
+
 # Generic system instances and storage
 # Only create EBS volumes when disk_type is not "local"
 resource "aws_ebs_volume" "system_data" {
-  for_each = { for k, v in var.systems : k => v if v.disk_type != "local" }
+  for_each = { for k, v in local.system_nodes_map : k => v if v.disk_type != "local" }
 
   availability_zone = data.aws_availability_zones.available.names[0]
   type              = each.value.disk_type
@@ -204,14 +248,15 @@ resource "aws_ebs_volume" "system_data" {
   tags = merge({
     Name    = "benchmark-${var.project_id}-${each.key}-data"
     Project = var.project_id
-    System  = each.key
+    System  = each.value.system_key
+    Node    = each.value.node_idx
   }, each.value.label != "" ? {
     Label = each.value.label
   } : {})
 }
 
 resource "aws_instance" "system" {
-  for_each = var.systems
+  for_each = local.system_nodes_map
 
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = each.value.instance_type
@@ -230,16 +275,18 @@ resource "aws_instance" "system" {
   user_data = base64encode(file("${path.module}/user_data.sh"))
 
   tags = merge({
-    Name    = "benchmark-${var.project_id}-${each.key}"
-    Project = var.project_id
-    System  = each.key
+    Name      = "benchmark-${var.project_id}-${each.key}"
+    Project   = var.project_id
+    System    = each.value.system_key
+    Node      = each.value.node_idx
+    NodeCount = each.value.node_count
   }, each.value.label != "" ? {
     Label = each.value.label
   } : {})
 }
 
 resource "aws_volume_attachment" "system_data" {
-  for_each = { for k, v in var.systems : k => v if v.disk_type != "local" }
+  for_each = { for k, v in local.system_nodes_map : k => v if v.disk_type != "local" }
 
   device_name = "/dev/sdf"
   volume_id   = aws_ebs_volume.system_data[each.key].id
@@ -247,23 +294,48 @@ resource "aws_volume_attachment" "system_data" {
 }
 
 # Generic outputs for all systems
+# Group nodes by system name for multinode support
 output "system_instance_ids" {
-  description = "Map of system names to EC2 instance IDs"
-  value       = { for k, v in aws_instance.system : k => v.id }
+  description = "Map of system names to EC2 instance IDs (or list of IDs for multinode)"
+  value = {
+    for system_key, system_config in var.systems :
+    system_key => system_config.node_count > 1 ? [
+      for node_idx in range(system_config.node_count) :
+      aws_instance.system["${system_key}-node${node_idx}"].id
+    ] : [aws_instance.system[system_key].id]
+  }
 }
 
 output "system_public_ips" {
-  description = "Map of system names to public IP addresses"
-  value       = { for k, v in aws_instance.system : k => v.public_ip }
+  description = "Map of system names to public IP addresses (or list of IPs for multinode)"
+  value = {
+    for system_key, system_config in var.systems :
+    system_key => system_config.node_count > 1 ? [
+      for node_idx in range(system_config.node_count) :
+      aws_instance.system["${system_key}-node${node_idx}"].public_ip
+    ] : [aws_instance.system[system_key].public_ip]
+  }
 }
 
 output "system_private_ips" {
-  description = "Map of system names to private IP addresses"
-  value       = { for k, v in aws_instance.system : k => v.private_ip }
+  description = "Map of system names to private IP addresses (or list of IPs for multinode)"
+  value = {
+    for system_key, system_config in var.systems :
+    system_key => system_config.node_count > 1 ? [
+      for node_idx in range(system_config.node_count) :
+      aws_instance.system["${system_key}-node${node_idx}"].private_ip
+    ] : [aws_instance.system[system_key].private_ip]
+  }
 }
 
 output "system_ssh_commands" {
-  description = "Map of system names to SSH commands"
-  value       = { for k, v in aws_instance.system : k => "ssh ubuntu@${v.public_ip}" }
+  description = "Map of system names to SSH commands (or list of commands for multinode)"
+  value = {
+    for system_key, system_config in var.systems :
+    system_key => system_config.node_count > 1 ? [
+      for node_idx in range(system_config.node_count) :
+      "ssh ubuntu@${aws_instance.system["${system_key}-node${node_idx}"].public_ip}"
+    ] : ["ssh ubuntu@${aws_instance.system[system_key].public_ip}"]
+  }
 }
 
