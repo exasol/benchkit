@@ -55,9 +55,22 @@ We compared {{ data.summary.systems | length }} database systems:
 {% if system_config.setup.data_dir %}
 - **Data directory:** {{ system_config.setup.data_dir }}
 {% endif %}
+{% if system_config.setup.node_count and system_config.setup.node_count > 1 %}
+- **Cluster configuration:** {{ system_config.setup.node_count }}-node cluster
+{% endif %}
 
-{% if system_info.per_system and system_config.name in system_info.per_system %}
-{% set sys_probe = system_info.per_system[system_config.name] %}
+{% if system_info.per_system %}
+{# Find all nodes for this system (handles both single-node and multinode) #}
+{% set system_nodes = [] %}
+{% for probe_name, probe_data in system_info.per_system.items() %}
+  {% if probe_name == system_config.name or probe_name.startswith(system_config.name ~ '-node') %}
+    {% set _ = system_nodes.append((probe_name, probe_data)) %}
+  {% endif %}
+{% endfor %}
+
+{% if system_nodes | length > 0 %}
+{# Get first node as representative #}
+{% set sys_probe = system_nodes[0][1] %}
 **Hardware Specifications:**
 {% if cfg.env.mode in ['aws', 'gcp', 'azure'] %}
 - **Cloud Provider:** {{ cfg.env.mode | upper }}
@@ -66,22 +79,39 @@ We compared {{ data.summary.systems | length }} database systems:
 - **Instance Type:** {{ cfg.env.instances[system_config.name].instance_type | default('N/A') }}
 {% endif %}
 {% endif %}
+{% if system_nodes | length > 1 %}
+- **Node Count:** {{ system_nodes | length }} nodes
+{% endif %}
 {% if sys_probe.cpu_model %}
 - **CPU:** {{ sys_probe.cpu_model }}
 {% endif %}
 {% if sys_probe.count_logical or sys_probe.cpu_count_logical %}
+{% if system_nodes | length > 1 %}
+- **CPU Cores per node:** {{ sys_probe.count_logical | default(sys_probe.cpu_count_logical) }} vCPUs ({{ (sys_probe.count_logical | default(sys_probe.cpu_count_logical)) * (system_nodes | length) }} total vCPUs)
+{% else %}
 - **CPU Cores:** {{ sys_probe.count_logical | default(sys_probe.cpu_count_logical) }} vCPUs
 {% endif %}
+{% endif %}
 {% if sys_probe.memory_total_gb or sys_probe.total_gb %}
+{% if system_nodes | length > 1 %}
+- **Memory per node:** {{ sys_probe.memory_total_gb | default(sys_probe.total_gb) }}GB RAM ({{ (sys_probe.memory_total_gb | default(sys_probe.total_gb) | float * (system_nodes | length)) | round(1) }}GB total RAM)
+{% else %}
 - **Memory:** {{ sys_probe.memory_total_gb | default(sys_probe.total_gb) }}GB RAM
+{% endif %}
 {% endif %}
 {% if sys_probe.system or sys_probe.platform %}
 - **Operating System:** {{ sys_probe.system | default(sys_probe.platform) }}
 {% endif %}
-{% if sys_probe.hostname %}
+{% if system_nodes | length > 1 %}
+- **Node hostnames:**
+{% for node_name, node_data in system_nodes %}
+  - {{ node_name }}: {{ node_data.hostname | default('N/A') }}
+{% endfor %}
+{% elif sys_probe.hostname %}
 - **Hostname:** {{ sys_probe.hostname }}
 {% endif %}
 
+{% endif %}
 {% endif %}
 {% endfor %}
 

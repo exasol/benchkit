@@ -305,6 +305,9 @@ class ClickHouseSystem(SystemUnderTest):
             print(f"Installing ClickHouse on all {len(self._cloud_instance_managers)} nodes...")
             all_success = True
 
+            # Store original setup_commands to prevent duplicate recording
+            original_commands_count = len(self.setup_commands)
+
             for idx, mgr in enumerate(self._cloud_instance_managers):
                 print(f"\n[Node {idx}] Installing ClickHouse...")
 
@@ -318,6 +321,10 @@ class ClickHouseSystem(SystemUnderTest):
                 # This ensures wait_for_health() connects to the correct node
                 self._external_host = mgr.public_ip
 
+                # For nodes after the first, temporarily disable recording to avoid duplicates
+                if idx > 0:
+                    commands_before = len(self.setup_commands)
+
                 try:
                     # Run core installation on this node
                     success = self._install_native_on_node()
@@ -327,10 +334,20 @@ class ClickHouseSystem(SystemUnderTest):
                     else:
                         print(f"[Node {idx}] ✓ Installation completed")
                 finally:
+                    # For nodes after the first, remove any commands that were recorded
+                    if idx > 0:
+                        self.setup_commands = self.setup_commands[:commands_before]
+
                     # Restore primary manager and external host
                     self._cloud_instance_manager = original_mgr
                     if original_external_host:
                         self._external_host = original_external_host
+
+            # Add node_info to all commands recorded during installation if multinode
+            if len(self._cloud_instance_managers) > 1:
+                node_info = f"all_nodes_{len(self._cloud_instance_managers)}"
+                for i in range(original_commands_count, len(self.setup_commands)):
+                    self.setup_commands[i]["node_info"] = node_info
 
             if not all_success:
                 return False
@@ -1068,12 +1085,19 @@ class ClickHouseSystem(SystemUnderTest):
         """
         all_success = True
 
+        # Store original setup_commands to prevent duplicate recording
+        original_commands_count = len(self.setup_commands)
+
         for idx, mgr in enumerate(self._cloud_instance_managers):
             print(f"\n  [Node {idx}] Setting up storage...")
 
             # Temporarily override execute_command to use this specific node
             original_mgr = self._cloud_instance_manager
             self._cloud_instance_manager = mgr
+
+            # For nodes after the first, temporarily disable recording to avoid duplicates
+            if idx > 0:
+                commands_before = len(self.setup_commands)
 
             try:
                 # Run single-node storage setup on this node
@@ -1084,8 +1108,18 @@ class ClickHouseSystem(SystemUnderTest):
                 else:
                     print(f"  [Node {idx}] ✓ Storage setup completed")
             finally:
+                # For nodes after the first, remove any commands that were recorded
+                if idx > 0:
+                    self.setup_commands = self.setup_commands[:commands_before]
+
                 # Restore primary manager
                 self._cloud_instance_manager = original_mgr
+
+        # Add node_info to all commands recorded during storage setup if multinode
+        if len(self._cloud_instance_managers) > 1:
+            node_info = f"all_nodes_{len(self._cloud_instance_managers)}"
+            for i in range(original_commands_count, len(self.setup_commands)):
+                self.setup_commands[i]["node_info"] = node_info
 
         return all_success
 

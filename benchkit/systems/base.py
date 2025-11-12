@@ -317,21 +317,23 @@ class SystemUnderTest(ABC):
 
     @exclude_from_package
     def record_setup_command(
-        self, command: str, description: str, category: str = "setup"
+        self, command: str, description: str, category: str = "setup", node_info: str | None = None
     ) -> None:
         """Record a setup command without executing it."""
         # Sanitize both command and description for report by replacing sensitive data with placeholders
         sanitized_command = self._sanitize_command_for_report(command)
         sanitized_description = self._sanitize_command_for_report(description)
 
-        self.setup_commands.append(
-            {
-                "command": sanitized_command,
-                "success": True,
-                "description": sanitized_description,
-                "category": category,
-            }
-        )
+        command_record = {
+            "command": sanitized_command,
+            "success": True,
+            "description": sanitized_description,
+            "category": category,
+        }
+        if node_info:
+            command_record["node_info"] = node_info
+
+        self.setup_commands.append(command_record)
 
     def _sanitize_command_for_report(self, command: str) -> str:
         """Replace sensitive information in commands with placeholders for reports."""

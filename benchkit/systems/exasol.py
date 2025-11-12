@@ -613,12 +613,19 @@ class ExasolSystem(SystemUnderTest):
         """
         all_success = True
 
+        # Store original setup_commands to prevent duplicate recording
+        original_commands_count = len(self.setup_commands)
+
         for idx, mgr in enumerate(self._cloud_instance_managers):
             print(f"\n  [Node {idx}] Setting up storage...")
 
             # Temporarily override execute_command to use this specific node
             original_mgr = self._cloud_instance_manager
             self._cloud_instance_manager = mgr
+
+            # For nodes after the first, temporarily disable recording to avoid duplicates
+            if idx > 0:
+                commands_before = len(self.setup_commands)
 
             try:
                 # Run single-node storage setup on this node
@@ -629,8 +636,18 @@ class ExasolSystem(SystemUnderTest):
                 else:
                     print(f"  [Node {idx}] ✓ Storage setup completed")
             finally:
+                # For nodes after the first, remove any commands that were recorded
+                if idx > 0:
+                    self.setup_commands = self.setup_commands[:commands_before]
+
                 # Restore primary manager
                 self._cloud_instance_manager = original_mgr
+
+        # Add node_info to all commands recorded during storage setup if multinode
+        if len(self._cloud_instance_managers) > 1:
+            node_info = f"all_nodes_{len(self._cloud_instance_managers)}"
+            for i in range(original_commands_count, len(self.setup_commands)):
+                self.setup_commands[i]["node_info"] = node_info
 
         return all_success
 
@@ -986,8 +1003,11 @@ class ExasolSystem(SystemUnderTest):
                     remote_license_path = self.license_file
 
             # Step 1: Create exasol user on ALL nodes (for multinode)
+            node_count = len(self._cloud_instance_managers) if self._cloud_instance_managers else 1
+            node_info = f"all_nodes_{node_count}" if node_count > 1 else None
+
             self.record_setup_command(
-                "sudo useradd -m exasol", "Create Exasol system user", "user_setup"
+                "sudo useradd -m exasol", "Create Exasol system user", "user_setup", node_info=node_info
             )
             if not self.execute_command_on_all_nodes(
                 "sudo useradd -m exasol || true",
@@ -999,6 +1019,7 @@ class ExasolSystem(SystemUnderTest):
                 "sudo usermod -aG sudo exasol",
                 "Add exasol user to sudo group",
                 "user_setup",
+                node_info=node_info
             )
             if not self.execute_command_on_all_nodes(
                 "sudo usermod -aG sudo exasol || true",
