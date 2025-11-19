@@ -365,7 +365,8 @@ class ReportRenderer:
                 if system_names is not None:
                     # Check if system_name matches any filter (exact or starts with filter name)
                     matches_filter = any(
-                        system_name == filter_name or system_name.startswith(f"{filter_name}-")
+                        system_name == filter_name
+                        or system_name.startswith(f"{filter_name}-")
                         for filter_name in system_names
                     )
                     if not matches_filter:

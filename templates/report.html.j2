@@ -132,6 +132,9 @@
                             {% if system_config.setup.data_dir %}
                             <tr><td>Data Directory</td><td><code>{{ system_config.setup.data_dir }}</code></td></tr>
                             {% endif %}
+                            {% if setup_summaries and system_config.name in setup_summaries and setup_summaries[system_config.name].data_device %}
+                            <tr><td>Data Device</td><td><code>{{ setup_summaries[system_config.name].data_device }}</code></td></tr>
+                            {% endif %}
                             {% if system_config.setup.node_count and system_config.setup.node_count > 1 %}
                             <tr><td>Cluster Configuration</td><td><span class="badge badge-success">{{ system_config.setup.node_count }}-node cluster</span></td></tr>
                             {% endif %}

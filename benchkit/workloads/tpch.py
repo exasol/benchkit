@@ -557,11 +557,18 @@ class TPCH(Workload):
                 system_extra = {}
                 if hasattr(system, "setup_config"):
                     system_extra = system.setup_config.get("extra", {})
+
+                # Get node_count and cluster for multinode support
+                node_count = getattr(system, "node_count", 1)
+                cluster = getattr(system, "cluster_name", "benchmark_cluster")
+
                 rendered = template.render(
                     system_kind=system.kind,
                     scale_factor=self.scale_factor,
                     schema=self.get_schema_name(),
                     system_extra=system_extra,
+                    node_count=node_count,
+                    cluster=cluster,
                 )
                 scripts[script_name] = rendered
             except Exception as e:

@@ -55,6 +55,9 @@ We compared {{ data.summary.systems | length }} database systems:
 {% if system_config.setup.data_dir %}
 - **Data directory:** {{ system_config.setup.data_dir }}
 {% endif %}
+{% if setup_summaries and system_config.name in setup_summaries and setup_summaries[system_config.name].data_device %}
+- **Data device:** {{ setup_summaries[system_config.name].data_device }}
+{% endif %}
 {% if system_config.setup.node_count and system_config.setup.node_count > 1 %}
 - **Cluster configuration:** {{ system_config.setup.node_count }}-node cluster
 {% endif %}
@@ -159,6 +162,9 @@ The following commands were **actually executed** during the benchmark setup. Yo
 - **Setup method:** {{ system_config.setup.method }}
 {% if system_config.setup.data_dir %}
 - **Data directory:** {{ system_config.setup.data_dir }}
+{% endif %}
+{% if setup_summaries and system_config.name in setup_summaries and setup_summaries[system_config.name].data_device %}
+- **Data device:** {{ setup_summaries[system_config.name].data_device }}
 {% endif %}
 
 {% if system_config.setup.extra %}

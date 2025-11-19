@@ -117,13 +117,19 @@ class InfraManager:
                     # Multinode system (multiple IPs)
                     infra_ips[system_name] = {
                         "public_ips": public_ip,
-                        "private_ips": private_ip if isinstance(private_ip, list) else [private_ip],
+                        "private_ips": (
+                            private_ip if isinstance(private_ip, list) else [private_ip]
+                        ),
                     }
                 elif isinstance(public_ip, list) and len(public_ip) == 1:
                     # Single node system (list with one element)
                     infra_ips[system_name] = {
                         "public_ip": public_ip[0],
-                        "private_ip": private_ip[0] if isinstance(private_ip, list) else private_ip,
+                        "private_ip": (
+                            private_ip[0]
+                            if isinstance(private_ip, list)
+                            else private_ip
+                        ),
                     }
                 else:
                     # Backward compatibility: non-list (single node)
@@ -571,21 +577,33 @@ class InfraManager:
                             "node_count": len(public_ip),
                             "nodes": [
                                 {
-                                    "instance_id": instance_id[i] if isinstance(instance_id, list) else instance_id,
+                                    "instance_id": (
+                                        instance_id[i]
+                                        if isinstance(instance_id, list)
+                                        else instance_id
+                                    ),
                                     "public_ip": public_ip[i],
                                     "private_ip": private_ip[i],
                                     "node_idx": i,
                                 }
                                 for i in range(len(public_ip))
-                            ]
+                            ],
                         }
                     elif isinstance(public_ip, list) and len(public_ip) == 1:
                         # Single node system (list with one element) - extract values
                         system_data[system_name] = {
                             "multinode": False,
-                            "instance_id": instance_id[0] if isinstance(instance_id, list) else instance_id,
+                            "instance_id": (
+                                instance_id[0]
+                                if isinstance(instance_id, list)
+                                else instance_id
+                            ),
                             "public_ip": public_ip[0],
-                            "private_ip": private_ip[0] if isinstance(private_ip, list) else private_ip,
+                            "private_ip": (
+                                private_ip[0]
+                                if isinstance(private_ip, list)
+                                else private_ip
+                            ),
                         }
                     else:
                         # Backward compatibility: non-list (single node)
@@ -751,19 +769,33 @@ class InfraManager:
             if isinstance(private_ip, list) and len(private_ip) > 1:
                 print(f"     Nodes: {len(private_ip)}")
                 for idx in range(len(private_ip)):
-                    pub_ip = system_public_ips.get(system_name, [])[idx] if isinstance(system_public_ips.get(system_name), list) else "unknown"
+                    pub_ip = (
+                        system_public_ips.get(system_name, [])[idx]
+                        if isinstance(system_public_ips.get(system_name), list)
+                        else "unknown"
+                    )
                     priv_ip = private_ip[idx]
-                    ssh_cmd = system_ssh_commands.get(system_name, [])[idx] if isinstance(system_ssh_commands.get(system_name), list) else f"ssh ubuntu@{pub_ip}"
+                    ssh_cmd = (
+                        system_ssh_commands.get(system_name, [])[idx]
+                        if isinstance(system_ssh_commands.get(system_name), list)
+                        else f"ssh ubuntu@{pub_ip}"
+                    )
                     print(f"       Node {idx}: {pub_ip} ({priv_ip})")
             else:
                 # Extract single values from lists if needed
                 pub_ip = system_public_ips.get(system_name)
                 if isinstance(pub_ip, list) and len(pub_ip) == 1:
                     pub_ip = pub_ip[0]
-                priv_ip = private_ip[0] if isinstance(private_ip, list) and len(private_ip) == 1 else private_ip
+                priv_ip = (
+                    private_ip[0]
+                    if isinstance(private_ip, list) and len(private_ip) == 1
+                    else private_ip
+                )
                 print(f"     Public IP:   {pub_ip}")
                 print(f"     Private IP:  {priv_ip}")
-                print(f"     SSH:         {ssh_command if isinstance(ssh_command, str) else ssh_command[0] if isinstance(ssh_command, list) else 'unknown'}")
+                print(
+                    f"     SSH:         {ssh_command if isinstance(ssh_command, str) else ssh_command[0] if isinstance(ssh_command, list) else 'unknown'}"
+                )
             print()
 
         print(f"Waiting for {len(instances_to_check)} instance(s) to initialize...")
@@ -782,12 +814,26 @@ class InfraManager:
 
                 if self._check_instance_ready(public_ip, system_name):
                     # Display node index for multinode systems
-                    node_label = f"-node{node_idx}" if any(s == system_name and i != node_idx for s, i, _ in instances_to_check) else ""
+                    node_label = (
+                        f"-node{node_idx}"
+                        if any(
+                            s == system_name and i != node_idx
+                            for s, i, _ in instances_to_check
+                        )
+                        else ""
+                    )
                     print(f"✅ {system_name}{node_label} instance ready ({public_ip})")
                     ready_instances.add(instance_key)
                 else:
                     remaining_time = max_wait_time - (time.time() - start_time)
-                    node_label = f"-node{node_idx}" if any(s == system_name and i != node_idx for s, i, _ in instances_to_check) else ""
+                    node_label = (
+                        f"-node{node_idx}"
+                        if any(
+                            s == system_name and i != node_idx
+                            for s, i, _ in instances_to_check
+                        )
+                        else ""
+                    )
                     print(
                         f"⏳ {system_name}{node_label} still initializing... ({remaining_time:.0f}s remaining)"
                     )
@@ -803,7 +849,14 @@ class InfraManager:
         failed_instances = []
         for system_name, node_idx, public_ip in instances_to_check:
             if (system_name, node_idx) not in ready_instances:
-                node_label = f"-node{node_idx}" if any(s == system_name and i != node_idx for s, i, _ in instances_to_check) else ""
+                node_label = (
+                    f"-node{node_idx}"
+                    if any(
+                        s == system_name and i != node_idx
+                        for s, i, _ in instances_to_check
+                    )
+                    else ""
+                )
                 failed_instances.append(f"{system_name}{node_label}")
         print(
             f"✗ Timeout: {', '.join(failed_instances)} failed to initialize within {max_wait_time}s"

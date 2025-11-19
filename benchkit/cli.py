@@ -820,7 +820,9 @@ def _probe_remote_systems(config: dict[str, Any], outdir: Path) -> bool:
 
         # Extract instance information from new terraform output format
         # After Terraform fix, IPs are always lists: ["ip"] for single-node, ["ip1", "ip2"] for multinode
-        instances_to_probe = []  # List of (system_name, node_idx, public_ip, private_ip)
+        instances_to_probe = (
+            []
+        )  # List of (system_name, node_idx, public_ip, private_ip)
 
         # New format: system_public_ips = {"exasol": ["ip"], "clickhouse": ["ip1", "ip2"]}
         # Note: _parse_terraform_outputs already extracted the "value" field
@@ -834,11 +836,19 @@ def _probe_remote_systems(config: dict[str, Any], outdir: Path) -> bool:
                 # Handle both list and single IP (backward compatibility)
                 if isinstance(public_ip_list, list):
                     for idx, public_ip in enumerate(public_ip_list):
-                        private_ip = private_ip_list[idx] if isinstance(private_ip_list, list) else private_ip_list
-                        instances_to_probe.append((system_name, idx, public_ip, private_ip))
+                        private_ip = (
+                            private_ip_list[idx]
+                            if isinstance(private_ip_list, list)
+                            else private_ip_list
+                        )
+                        instances_to_probe.append(
+                            (system_name, idx, public_ip, private_ip)
+                        )
                 else:
                     # Backward compatibility: single IP (not a list)
-                    instances_to_probe.append((system_name, 0, public_ip_list, private_ip_list))
+                    instances_to_probe.append(
+                        (system_name, 0, public_ip_list, private_ip_list)
+                    )
 
         if not instances_to_probe:
             console.print("[yellow]No instances found in terraform outputs[/yellow]")
@@ -859,13 +869,24 @@ def _probe_remote_systems(config: dict[str, Any], outdir: Path) -> bool:
 
         for system_name, node_idx, public_ip, private_ip in instances_to_probe:
             # Show node index for multinode systems
-            node_label = f"-node{node_idx}" if any(s == system_name and i != node_idx for s, i, _, _ in instances_to_probe) else ""
-            console.print(f"[blue]Probing {system_name}{node_label} ([{public_ip}])...[/blue]")
+            node_label = (
+                f"-node{node_idx}"
+                if any(
+                    s == system_name and i != node_idx
+                    for s, i, _, _ in instances_to_probe
+                )
+                else ""
+            )
+            console.print(
+                f"[blue]Probing {system_name}{node_label} ([{public_ip}])...[/blue]"
+            )
 
             if _probe_single_remote_system(
                 f"{system_name}{node_label}", public_ip, ssh_key_path, ssh_user, outdir
             ):
-                console.print(f"[green]✓ {system_name}{node_label} probe completed[/green]")
+                console.print(
+                    f"[green]✓ {system_name}{node_label} probe completed[/green]"
+                )
                 success_count += 1
             else:
                 console.print(f"[red]✗ {system_name}{node_label} probe failed[/red]")

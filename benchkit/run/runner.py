@@ -261,8 +261,20 @@ class BenchmarkRunner:
                         # Set environment variables for IP resolution (use comma-separated lists for multinode)
                         import os
 
-                        private_ips = ",".join([mgr.private_ip for mgr in node_managers])
-                        public_ips = ",".join([mgr.public_ip for mgr in node_managers])
+                        private_ips = ",".join(
+                            [
+                                str(mgr.private_ip)
+                                for mgr in node_managers
+                                if mgr.private_ip
+                            ]
+                        )
+                        public_ips = ",".join(
+                            [
+                                str(mgr.public_ip)
+                                for mgr in node_managers
+                                if mgr.public_ip
+                            ]
+                        )
                         private_ip_var = f"{system_name.upper()}_PRIVATE_IP"
                         public_ip_var = f"{system_name.upper()}_PUBLIC_IP"
                         os.environ[private_ip_var] = private_ips
@@ -619,15 +631,21 @@ class BenchmarkRunner:
         system_timings: dict[str, Any] = {}
 
         try:
+            # Create output callback for thread-safe logging
+            def output_callback(msg: str) -> None:
+                executor.add_output(system_name, msg)
+
             # Get prepared system instance (read-only access, thread-safe)
             if (
                 hasattr(self, "_prepared_systems")
                 and system_name in self._prepared_systems
             ):
                 system = self._prepared_systems[system_name]
+                # Set output callback on prepared system for parallel execution
+                system._output_callback = output_callback
                 executor.add_output(system_name, "Using prepared system instance")
             else:
-                system = create_system(system_config)
+                system = create_system(system_config, output_callback=output_callback)
 
             # Get cloud instance manager (read-only access, thread-safe)
             instance_manager = self._cloud_instance_managers.get(system_name)
@@ -1309,7 +1327,9 @@ class BenchmarkRunner:
 
         try:
             # Handle multinode case: check ALL nodes for multinode systems
-            is_multinode = isinstance(instance_manager, list) and len(instance_manager) > 1
+            is_multinode = (
+                isinstance(instance_manager, list) and len(instance_manager) > 1
+            )
 
             # 1. Check system-specific installation marker
             marker_file = system.get_install_marker_path()
@@ -1337,7 +1357,11 @@ class BenchmarkRunner:
                         return "NEEDS_INSTALLATION"
                 else:
                     # Single node check
-                    primary_manager = instance_manager[0] if isinstance(instance_manager, list) else instance_manager
+                    primary_manager = (
+                        instance_manager[0]
+                        if isinstance(instance_manager, list)
+                        else instance_manager
+                    )
                     marker_result = primary_manager.run_remote_command(
                         f"test -f {marker_file} && echo 'marker_found' || echo 'no_marker'",
                         debug=False,
@@ -1381,7 +1405,9 @@ class BenchmarkRunner:
         """Install system via remote commands (recorded for reports)."""
         try:
             # Check if this is a multinode system
-            is_multinode = isinstance(instance_manager, list) and len(instance_manager) > 1
+            is_multinode = (
+                isinstance(instance_manager, list) and len(instance_manager) > 1
+            )
 
             # For multinode systems, DON'T override execute_command
             # Let the system handle its own multinode installation logic
@@ -1406,7 +1432,9 @@ class BenchmarkRunner:
                                 debug=False,
                             )
 
-                            if check_result.get("success") and "missing" in check_result.get("stdout", ""):
+                            if check_result.get(
+                                "success"
+                            ) and "missing" in check_result.get("stdout", ""):
                                 # Create marker on this node
                                 marker_result = node_manager.run_remote_command(
                                     f"touch {marker_path}",
@@ -1442,7 +1470,11 @@ class BenchmarkRunner:
                 return success
 
             # Single node: override execute_command to use remote execution
-            primary_manager = instance_manager[0] if isinstance(instance_manager, list) else instance_manager
+            primary_manager = (
+                instance_manager[0]
+                if isinstance(instance_manager, list)
+                else instance_manager
+            )
 
             # Override the system's execute_command to use remote execution
             original_execute = system.execute_command
@@ -1485,7 +1517,7 @@ class BenchmarkRunner:
             system.execute_command = remote_execute_command
 
             try:
-                success: bool = system.install()
+                success = system.install()
 
                 if success:
                     marker_path = system.get_install_marker_path()
@@ -1523,7 +1555,11 @@ class BenchmarkRunner:
         """Restart system via remote commands."""
         try:
             # Handle multinode case: use primary node for command execution
-            primary_manager = instance_manager[0] if isinstance(instance_manager, list) else instance_manager
+            primary_manager = (
+                instance_manager[0]
+                if isinstance(instance_manager, list)
+                else instance_manager
+            )
 
             system_kind = system.kind
 
@@ -1579,9 +1615,7 @@ class BenchmarkRunner:
                     executor,
                     system_name,
                 )
-                cleanup_success = self._cleanup_exasol_services(
-                    system, primary_manager
-                )
+                cleanup_success = self._cleanup_exasol_services(system, primary_manager)
                 if cleanup_success:
                     self._log_output(
                         "✅ Service cleanup completed after restart",
@@ -1831,7 +1865,11 @@ class BenchmarkRunner:
         """Deploy minimal package and execute workload remotely."""
         try:
             # Handle multinode case: use primary node for workload execution
-            primary_manager = instance_manager[0] if isinstance(instance_manager, list) else instance_manager
+            primary_manager = (
+                instance_manager[0]
+                if isinstance(instance_manager, list)
+                else instance_manager
+            )
 
             project_id = self.config["project_id"]
             system_name = system_config["name"]

@@ -1,7 +1,7 @@
 """ClickHouse database system implementation."""
 
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Callable, cast
 
 import clickhouse_connect
 
@@ -108,8 +108,12 @@ class ClickHouseSystem(SystemUnderTest):
 
         return cmd
 
-    def __init__(self, config: dict[str, Any]):
-        super().__init__(config)
+    def __init__(
+        self,
+        config: dict[str, Any],
+        output_callback: Callable[[str], None] | None = None,
+    ):
+        super().__init__(config, output_callback)
         self.setup_method = self.setup_config.get("method", "docker")
         self.container_name = f"clickhouse_{self.name}"
         self.config_profile = self.setup_config.get("extra", {}).get(
@@ -138,8 +142,12 @@ class ClickHouseSystem(SystemUnderTest):
         self.database = self.setup_config.get("database", "benchmark")
 
         self._client = None
-        self._cloud_instance_manager: Any = None  # Primary node (node 0) for single-node or multinode
-        self._cloud_instance_managers: list[Any] = []  # All nodes for multinode clusters
+        self._cloud_instance_manager: Any = (
+            None  # Primary node (node 0) for single-node or multinode
+        )
+        self._cloud_instance_managers: list[Any] = (
+            []
+        )  # All nodes for multinode clusters
         self._external_host: str | None = (
             None  # Initialize for cloud instance external IP
         )
@@ -162,38 +170,38 @@ class ClickHouseSystem(SystemUnderTest):
             # Multi-level verification similar to Exasol approach
             # Level 1: Check for installation marker file
             if not self.has_install_marker():
-                print("No existing ClickHouse installation marker found")
+                self._log("No existing ClickHouse installation marker found")
                 return False
 
-            print("Found existing ClickHouse installation marker")
+            self._log("Found existing ClickHouse installation marker")
 
             # Level 2: Check if clickhouse-server binary is available
             binary_check = self.execute_command("which clickhouse-server", record=False)
             if not binary_check.get("success", False):
-                print(
+                self._log(
                     "⚠ Installation marker found but clickhouse-server not available, will reinstall"
                 )
                 return False
 
-            print("✓ clickhouse-server binary available")
+            self._log("✓ clickhouse-server binary available")
 
             # Level 3: Check if service is running
             service_check = self.execute_command(
                 "systemctl is-active clickhouse-server", record=False
             )
             if not service_check.get("success", False):
-                print("⚠ clickhouse-server service not running, will restart")
+                self._log("⚠ clickhouse-server service not running, will restart")
                 return False
 
-            print("✓ clickhouse-server service is active")
+            self._log("✓ clickhouse-server service is active")
 
             # Level 4: Most importantly - check if database is accessible
-            print("Checking if ClickHouse database is accessible...")
+            self._log("Checking if ClickHouse database is accessible...")
             if self.is_healthy(quiet=False):
-                print("✓ ClickHouse database is accessible and healthy")
+                self._log("✓ ClickHouse database is accessible and healthy")
                 return True
             else:
-                print(
+                self._log(
                     "⚠ ClickHouse installation exists but database not accessible, will restart"
                 )
                 return False
@@ -227,7 +235,7 @@ class ClickHouseSystem(SystemUnderTest):
         elif self.setup_method == "preinstalled":
             return self._verify_preinstalled()
         else:
-            print(f"Unknown setup method: {self.setup_method}")
+            self._log(f"Unknown setup method: {self.setup_method}")
             return False
 
     @exclude_from_package
@@ -278,7 +286,7 @@ class ClickHouseSystem(SystemUnderTest):
         full_cmd = " ".join(docker_cmd)
         result = self.execute_command(full_cmd)
         if not result["success"]:
-            print(f"Failed to start ClickHouse container: {result['stderr']}")
+            self._log(f"Failed to start ClickHouse container: {result['stderr']}")
             return False
 
         # Record configuration applied
@@ -289,7 +297,7 @@ class ClickHouseSystem(SystemUnderTest):
                 self.record_setup_note(f"  {key}: {value}")
 
         # Wait for container to be ready
-        print("Waiting for ClickHouse to start...")
+        self._log("Waiting for ClickHouse to start...")
         return self.wait_for_health(max_attempts=30, delay=2.0)
 
     @exclude_from_package
@@ -298,22 +306,26 @@ class ClickHouseSystem(SystemUnderTest):
         self.record_setup_note("Installing ClickHouse using official APT repository")
 
         # Check if multinode setup
-        is_multinode = self._cloud_instance_managers and len(self._cloud_instance_managers) > 1
+        is_multinode = (
+            self._cloud_instance_managers and len(self._cloud_instance_managers) > 1
+        )
 
         if is_multinode:
             # Install on all nodes
-            print(f"Installing ClickHouse on all {len(self._cloud_instance_managers)} nodes...")
+            self._log(
+                f"Installing ClickHouse on all {len(self._cloud_instance_managers)} nodes..."
+            )
             all_success = True
 
             # Store original setup_commands to prevent duplicate recording
             original_commands_count = len(self.setup_commands)
 
             for idx, mgr in enumerate(self._cloud_instance_managers):
-                print(f"\n[Node {idx}] Installing ClickHouse...")
+                self._log(f"\n[Node {idx}] Installing ClickHouse...")
 
                 # Temporarily override execute_command to use this specific node
                 original_mgr = self._cloud_instance_manager
-                original_external_host = getattr(self, '_external_host', None)
+                original_external_host = getattr(self, "_external_host", None)
 
                 self._cloud_instance_manager = mgr
 
@@ -329,10 +341,10 @@ class ClickHouseSystem(SystemUnderTest):
                     # Run core installation on this node
                     success = self._install_native_on_node()
                     if not success:
-                        print(f"[Node {idx}] ✗ Installation failed")
+                        self._log(f"[Node {idx}] ✗ Installation failed")
                         all_success = False
                     else:
-                        print(f"[Node {idx}] ✓ Installation completed")
+                        self._log(f"[Node {idx}] ✓ Installation completed")
                 finally:
                     # For nodes after the first, remove any commands that were recorded
                     if idx > 0:
@@ -353,20 +365,22 @@ class ClickHouseSystem(SystemUnderTest):
                 return False
 
             # Configure cluster topology on all nodes
-            print(f"\n⚙️  Configuring {self.node_count}-node ClickHouse cluster...")
+            self._log(f"\n⚙️  Configuring {self.node_count}-node ClickHouse cluster...")
             if not self._configure_multinode_cluster():
-                print("Failed to configure multinode cluster")
+                self._log("Failed to configure multinode cluster")
                 return False
-            print("✓ Cluster configuration complete on all nodes")
+            self._log("✓ Cluster configuration complete on all nodes")
 
             # Restart all nodes to apply cluster config
-            print("\n🔄 Restarting ClickHouse on all nodes...")
+            self._log("\n🔄 Restarting ClickHouse on all nodes...")
             for idx, mgr in enumerate(self._cloud_instance_managers):
-                result = mgr.run_remote_command("sudo systemctl restart clickhouse-server")
+                result = mgr.run_remote_command(
+                    "sudo systemctl restart clickhouse-server"
+                )
                 if not result.get("success"):
-                    print(f"[Node {idx}] ✗ Failed to restart ClickHouse")
+                    self._log(f"[Node {idx}] ✗ Failed to restart ClickHouse")
                 else:
-                    print(f"[Node {idx}] ✓ ClickHouse restarted")
+                    self._log(f"[Node {idx}] ✓ ClickHouse restarted")
 
             return True
         else:
@@ -392,7 +406,7 @@ class ClickHouseSystem(SystemUnderTest):
             )
             result = self.execute_command("sudo apt-get update")
             if not result["success"]:
-                print(f"Failed to update package lists: {result['stderr']}")
+                self._log(f"Failed to update package lists: {result['stderr']}")
                 return False
 
             self.record_setup_command(
@@ -404,7 +418,7 @@ class ClickHouseSystem(SystemUnderTest):
                 "sudo apt-get install -y apt-transport-https ca-certificates curl gnupg"
             )
             if not result["success"]:
-                print(f"Failed to install prerequisites: {result['stderr']}")
+                self._log(f"Failed to install prerequisites: {result['stderr']}")
                 return False
 
             # Step 2: Add ClickHouse GPG key
@@ -422,7 +436,7 @@ class ClickHouseSystem(SystemUnderTest):
                 "curl -fsSL 'https://packages.clickhouse.com/rpm/lts/repodata/repomd.xml.key' | sudo gpg --dearmor -o /usr/share/keyrings/clickhouse-keyring.gpg"
             )
             if not result["success"]:
-                print(f"Failed to add ClickHouse GPG key: {result['stderr']}")
+                self._log(f"Failed to add ClickHouse GPG key: {result['stderr']}")
                 return False
 
             # Step 3: Add ClickHouse repository
@@ -435,7 +449,7 @@ class ClickHouseSystem(SystemUnderTest):
                 'ARCH=$(dpkg --print-architecture) && echo "deb [signed-by=/usr/share/keyrings/clickhouse-keyring.gpg arch=${ARCH}] https://packages.clickhouse.com/deb stable main" | sudo tee /etc/apt/sources.list.d/clickhouse.list'
             )
             if not result["success"]:
-                print(f"Failed to add ClickHouse repository: {result['stderr']}")
+                self._log(f"Failed to add ClickHouse repository: {result['stderr']}")
                 return False
 
             # Step 4: Update package lists with new repository
@@ -446,7 +460,7 @@ class ClickHouseSystem(SystemUnderTest):
             )
             result = self.execute_command("sudo apt-get update")
             if not result["success"]:
-                print(
+                self._log(
                     f"Failed to update package lists after adding repository: {result['stderr']}"
                 )
                 return False
@@ -462,7 +476,7 @@ class ClickHouseSystem(SystemUnderTest):
                 description = (
                     f"Install ClickHouse server and client version {self.version}"
                 )
-                print(f"Attempting to install ClickHouse {self.version}...")
+                self._log(f"Attempting to install ClickHouse {self.version}...")
 
                 self.record_setup_command(
                     f"sudo apt-get install -y clickhouse-server{version_suffix} clickhouse-client{version_suffix}",
@@ -474,7 +488,7 @@ class ClickHouseSystem(SystemUnderTest):
                 )  # 5 min timeout for installation
 
                 if not result["success"]:
-                    print(
+                    self._log(
                         f"Version {self.version} not available, falling back to latest..."
                     )
                     # Fallback to latest version
@@ -491,19 +505,19 @@ class ClickHouseSystem(SystemUnderTest):
                     result = self.execute_command(install_cmd, timeout=300)
 
                     if not result["success"]:
-                        print(
+                        self._log(
                             f"Failed to install ClickHouse (even latest): {result['stderr']}"
                         )
                         return False
                     else:
-                        print("✓ Successfully installed latest ClickHouse version")
+                        self._log("✓ Successfully installed latest ClickHouse version")
                 else:
-                    print(f"✓ Successfully installed ClickHouse {self.version}")
+                    self._log(f"✓ Successfully installed ClickHouse {self.version}")
             else:
                 # Install latest version
                 install_cmd = f"{install_env} sudo -E apt-get install -y clickhouse-server clickhouse-client"
                 description = "Install latest ClickHouse server and client"
-                print("Installing latest ClickHouse version...")
+                self._log("Installing latest ClickHouse version...")
 
                 self.record_setup_command(
                     "sudo apt-get install -y clickhouse-server clickhouse-client",
@@ -513,30 +527,32 @@ class ClickHouseSystem(SystemUnderTest):
                 result = self.execute_command(install_cmd, timeout=300)
 
                 if not result["success"]:
-                    print(f"Failed to install ClickHouse: {result['stderr']}")
+                    self._log(f"Failed to install ClickHouse: {result['stderr']}")
                     return False
                 else:
-                    print("✓ Successfully installed ClickHouse")
+                    self._log("✓ Successfully installed ClickHouse")
 
             # Step 6: Detect hardware specs for optimal configuration
-            print("📊 Detecting hardware specifications...")
+            self._log("📊 Detecting hardware specifications...")
             hw_specs = self._detect_hardware_specs()
             cpu_cores = hw_specs["cpu_cores"]
             total_mem_gb = hw_specs["total_memory_bytes"] / (1024**3)
-            print(f"✓ Detected: {cpu_cores} CPU cores, {total_mem_gb:.1f}GB RAM")
+            self._log(f"✓ Detected: {cpu_cores} CPU cores, {total_mem_gb:.1f}GB RAM")
 
             # Step 7: Calculate optimal settings based on hardware
             extra_config = self.setup_config.get("extra", {})
             settings = self._calculate_optimal_settings(hw_specs, extra_config)
-            print("⚙️  Calculated optimal settings:")
-            print(f"   - max_threads: {settings['max_threads']}")
-            print(
+            self._log("⚙️  Calculated optimal settings:")
+            self._log(f"   - max_threads: {settings['max_threads']}")
+            self._log(
                 f"   - max_memory_usage: {settings['max_memory_usage'] / 1e9:.1f}GB (per query)"
             )
-            print(
+            self._log(
                 f"   - max_server_memory_usage: {settings['max_server_memory_usage'] / 1e9:.1f}GB (total)"
             )
-            print(f"   - max_concurrent_queries: {settings['max_concurrent_queries']}")
+            self._log(
+                f"   - max_concurrent_queries: {settings['max_concurrent_queries']}"
+            )
 
             # Step 8: Configure ClickHouse server (server-level settings)
             self._configure_clickhouse_server(settings)
@@ -555,7 +571,7 @@ class ClickHouseSystem(SystemUnderTest):
             )
             result = self.execute_command("sudo systemctl start clickhouse-server")
             if not result["success"]:
-                print(f"Failed to start ClickHouse service: {result['stderr']}")
+                self._log(f"Failed to start ClickHouse service: {result['stderr']}")
                 return False
 
             self.record_setup_command(
@@ -569,9 +585,9 @@ class ClickHouseSystem(SystemUnderTest):
             self.record_setup_note(
                 "Waiting for ClickHouse server to be ready for connections..."
             )
-            print("Waiting for ClickHouse server to be ready...")
+            self._log("Waiting for ClickHouse server to be ready...")
             if not self.wait_for_health(max_attempts=30, delay=2.0):
-                print("ClickHouse server failed to become ready within timeout")
+                self._log("ClickHouse server failed to become ready within timeout")
                 return False
 
             self.record_setup_note(
@@ -605,12 +621,12 @@ class ClickHouseSystem(SystemUnderTest):
 
             # Mark that system is installed
             self.mark_installed(record=False)
-            print("✓ ClickHouse installation completed successfully")
+            self._log("✓ ClickHouse installation completed successfully")
 
             return True
 
         except Exception as e:
-            print(f"Native ClickHouse installation failed: {e}")
+            self._log(f"Native ClickHouse installation failed: {e}")
             return False
 
     @exclude_from_package
@@ -686,7 +702,7 @@ class ClickHouseSystem(SystemUnderTest):
             create_config_cmd = f"sudo tee {config_file_path} > /dev/null << 'EOF'\n{config_content}\nEOF"
             result = self.execute_command(create_config_cmd)
             if not result["success"]:
-                print(
+                self._log(
                     f"Warning: Failed to create ClickHouse config file: {result.get('stderr', 'Unknown error')}"
                 )
 
@@ -799,7 +815,7 @@ class ClickHouseSystem(SystemUnderTest):
         )
         result = self.execute_command(create_users_cmd)
         if not result["success"]:
-            print(
+            self._log(
                 f"Warning: Failed to configure user profile: {result.get('stderr', 'Unknown error')}"
             )
         else:
@@ -819,10 +835,12 @@ class ClickHouseSystem(SystemUnderTest):
         For benchmarking, we use sharding WITHOUT replication (no Keeper needed).
         """
         if not self._cloud_instance_managers or len(self._cloud_instance_managers) < 2:
-            print("Skipping cluster configuration: not multinode")
+            self._log("Skipping cluster configuration: not multinode")
             return True
 
-        print(f"Configuring cluster with {len(self._cloud_instance_managers)} nodes...")
+        self._log(
+            f"Configuring cluster with {len(self._cloud_instance_managers)} nodes..."
+        )
 
         # Build list of node IPs
         node_ips = [mgr.private_ip for mgr in self._cloud_instance_managers]
@@ -838,18 +856,18 @@ class ClickHouseSystem(SystemUnderTest):
             "cluster_configuration",
         )
 
-        print("Distributing remote_servers.xml to all nodes...")
+        self._log("Distributing remote_servers.xml to all nodes...")
         for idx, mgr in enumerate(self._cloud_instance_managers):
             create_config_cmd = f"sudo tee {remote_servers_path} > /dev/null << 'EOF'\n{remote_servers_xml}\nEOF"
             result = mgr.run_remote_command(create_config_cmd, timeout=60)
             if result.get("success"):
-                print(f"  ✓ remote_servers.xml created on node {idx}")
+                self._log(f"  ✓ remote_servers.xml created on node {idx}")
             else:
-                print(f"  ✗ Failed to create remote_servers.xml on node {idx}")
+                self._log(f"  ✗ Failed to create remote_servers.xml on node {idx}")
                 return False
 
         # Generate and distribute unique macros.xml for each node
-        print("Distributing unique macros.xml to each node...")
+        self._log("Distributing unique macros.xml to each node...")
         for idx, mgr in enumerate(self._cloud_instance_managers):
             # Generate node-specific macros
             macros_xml = self._generate_macros_xml(idx + 1, node_ips[idx])
@@ -863,15 +881,19 @@ class ClickHouseSystem(SystemUnderTest):
                     "cluster_configuration",
                 )
 
-            create_macros_cmd = f"sudo tee {macros_path} > /dev/null << 'EOF'\n{macros_xml}\nEOF"
+            create_macros_cmd = (
+                f"sudo tee {macros_path} > /dev/null << 'EOF'\n{macros_xml}\nEOF"
+            )
             result = mgr.run_remote_command(create_macros_cmd, timeout=60)
             if result.get("success"):
-                print(f"  ✓ macros.xml created on node {idx} (shard={idx+1})")
+                self._log(f"  ✓ macros.xml created on node {idx} (shard={idx+1})")
             else:
-                print(f"  ✗ Failed to create macros.xml on node {idx}")
+                self._log(f"  ✗ Failed to create macros.xml on node {idx}")
                 return False
 
-        self.record_setup_note(f"ClickHouse cluster configured with {len(node_ips)} nodes (sharding without replication)")
+        self.record_setup_note(
+            f"ClickHouse cluster configured with {len(node_ips)} nodes (sharding without replication)"
+        )
         self.record_setup_note(f"Cluster name: {self.cluster_name}")
 
         return True
@@ -1032,7 +1054,7 @@ class ClickHouseSystem(SystemUnderTest):
                 extra_config, "max_concurrent_queries", max(4, cpu_cores // 2)
             ),
             "background_pool_size": self._get_int_config(
-                extra_config, "background_pool_size", cpu_cores
+                extra_config, "background_pool_size", max(16, cpu_cores)
             ),
             "background_schedule_pool_size": self._get_int_config(
                 extra_config, "background_schedule_pool_size", cpu_cores
@@ -1071,7 +1093,9 @@ class ClickHouseSystem(SystemUnderTest):
         """
         # For multinode, we need to setup storage on ALL nodes
         if self._cloud_instance_managers and len(self._cloud_instance_managers) > 1:
-            print(f"Setting up storage on all {len(self._cloud_instance_managers)} nodes...")
+            self._log(
+                f"Setting up storage on all {len(self._cloud_instance_managers)} nodes..."
+            )
             return self._setup_multinode_storage(scale_factor)
 
         # Single node setup
@@ -1089,7 +1113,7 @@ class ClickHouseSystem(SystemUnderTest):
         original_commands_count = len(self.setup_commands)
 
         for idx, mgr in enumerate(self._cloud_instance_managers):
-            print(f"\n  [Node {idx}] Setting up storage...")
+            self._log(f"\n  [Node {idx}] Setting up storage...")
 
             # Temporarily override execute_command to use this specific node
             original_mgr = self._cloud_instance_manager
@@ -1103,10 +1127,10 @@ class ClickHouseSystem(SystemUnderTest):
                 # Run single-node storage setup on this node
                 success = self._setup_single_node_storage(scale_factor)
                 if not success:
-                    print(f"  [Node {idx}] ✗ Storage setup failed")
+                    self._log(f"  [Node {idx}] ✗ Storage setup failed")
                     all_success = False
                 else:
-                    print(f"  [Node {idx}] ✓ Storage setup completed")
+                    self._log(f"  [Node {idx}] ✓ Storage setup completed")
             finally:
                 # For nodes after the first, remove any commands that were recorded
                 if idx > 0:
@@ -1131,7 +1155,9 @@ class ClickHouseSystem(SystemUnderTest):
         # Check if /data is already mounted
         check_mount = self.execute_command("mount | grep '/data'", record=False)
         if check_mount.get("success", False) and check_mount.get("stdout", "").strip():
-            print("    Storage already mounted at /data, creating ClickHouse subdirectory")
+            self._log(
+                "    Storage already mounted at /data, creating ClickHouse subdirectory"
+            )
             # Create clickhouse subdirectory
             clickhouse_dir = "/data/clickhouse"
             self.record_setup_command(
@@ -1166,7 +1192,7 @@ class ClickHouseSystem(SystemUnderTest):
         self.data_dir = Path(clickhouse_dir)
 
         self.record_setup_note(f"ClickHouse data directory: {clickhouse_dir}")
-        print(f"    ClickHouse data directory configured: {clickhouse_dir}")
+        self._log(f"    ClickHouse data directory configured: {clickhouse_dir}")
 
         return True
 
@@ -1198,14 +1224,14 @@ class ClickHouseSystem(SystemUnderTest):
             )
 
             if not result.get("success", False):
-                print(f"Failed to create data directory {self.data_dir}")
+                self._log(f"Failed to create data directory {self.data_dir}")
                 return False
 
             # Set ownership to clickhouse user
             self._set_ownership(str(self.data_dir), owner="clickhouse:clickhouse")
 
             self.record_setup_note(f"✓ Data directory created: {self.data_dir}")
-            print(f"✓ Directory storage setup complete: {self.data_dir}")
+            self._log(f"✓ Directory storage setup complete: {self.data_dir}")
 
         return True
 
@@ -1231,7 +1257,7 @@ class ClickHouseSystem(SystemUnderTest):
             data_gen_dir = (
                 Path(tpch_gen_dir) / workload.name / f"sf{workload.scale_factor}"
             )
-            print(
+            self._log(
                 f"ClickHouse: Using additional disk for data generation: {data_gen_dir}"
             )
             return cast(Path, data_gen_dir)
@@ -1251,15 +1277,21 @@ class ClickHouseSystem(SystemUnderTest):
         if isinstance(instance_manager, list):
             # Multinode setup
             self._cloud_instance_managers = instance_manager
-            self._cloud_instance_manager = instance_manager[0] if instance_manager else None
+            self._cloud_instance_manager = (
+                instance_manager[0] if instance_manager else None
+            )
         else:
             # Single node setup
             self._cloud_instance_manager = instance_manager
-            self._cloud_instance_managers = [instance_manager] if instance_manager else []
+            self._cloud_instance_managers = (
+                [instance_manager] if instance_manager else []
+            )
 
         # Set external host for health checks from local machine
         # This is critical for pre-existing installations where install() doesn't run
-        if self._cloud_instance_manager and hasattr(self._cloud_instance_manager, "public_ip"):
+        if self._cloud_instance_manager and hasattr(
+            self._cloud_instance_manager, "public_ip"
+        ):
             self._external_host = self._cloud_instance_manager.public_ip
             # Keep self.host as localhost for remote execution
             self.host = "localhost"
@@ -1299,7 +1331,9 @@ class ClickHouseSystem(SystemUnderTest):
 
             return dict(result)
         else:
-            return super().execute_command(command, timeout, record, category, node_info)
+            return super().execute_command(
+                command, timeout, record, category, node_info
+            )
 
     def _resolve_ip_addresses(self, ip_config: str) -> str:
         """Resolve IP address placeholders with actual values from infrastructure."""
@@ -1356,7 +1390,7 @@ class ClickHouseSystem(SystemUnderTest):
                 health_check_host = self.host
 
             if clickhouse_connect is None:
-                print(
+                self._log(
                     "Warning: clickhouse-connect not available, falling back to curl/client"
                 )
                 if self.setup_method == "docker":
@@ -1396,8 +1430,8 @@ class ClickHouseSystem(SystemUnderTest):
             if not quiet:
                 import traceback
 
-                print(f"Health check failed: {type(e).__name__}: {e}")
-                print(f"Full traceback:\n{traceback.format_exc()}")
+                self._log(f"Health check failed: {type(e).__name__}: {e}")
+                self._log(f"Full traceback:\n{traceback.format_exc()}")
             return False
 
     def create_schema(self, schema_name: str) -> bool:
@@ -1414,15 +1448,15 @@ class ClickHouseSystem(SystemUnderTest):
             # Update current database context after successful creation
             if success:
                 self.database = schema_name
-                print(f"✓ Using database: {schema_name}")
+                self._log(f"✓ Using database: {schema_name}")
             else:
                 # Print the actual error to help with debugging
                 error = result.get("error", "Unknown error")
-                print(f"✗ Failed to create database '{schema_name}': {error}")
+                self._log(f"✗ Failed to create database '{schema_name}': {error}")
         except Exception as e:
             # Restore original database on exception
             self.database = original_database
-            print(f"✗ Failed to create database '{schema_name}': {e}")
+            self._log(f"✗ Failed to create database '{schema_name}': {e}")
             return False
         return success
 
@@ -1431,7 +1465,7 @@ class ClickHouseSystem(SystemUnderTest):
         schema_name = kwargs.get("schema", "default")
 
         try:
-            print(f"Loading {data_path} into {table_name}...")
+            self._log(f"Loading {data_path} into {table_name}...")
 
             # Use native clickhouse-client for bulk loading
             # TPC-H .tbl files have trailing pipe delimiter - remove it with sed
@@ -1453,7 +1487,9 @@ class ClickHouseSystem(SystemUnderTest):
             result = self.execute_command(import_cmd, timeout=3600.0, record=False)
 
             if not result.get("success", False):
-                print(f"Failed to load data: {result.get('stderr', 'Unknown error')}")
+                self._log(
+                    f"Failed to load data: {result.get('stderr', 'Unknown error')}"
+                )
                 return False
 
             # Verify data was loaded by counting rows
@@ -1471,7 +1507,7 @@ class ClickHouseSystem(SystemUnderTest):
                 if count_result.get("success", False):
                     row_count = int(count_result.get("stdout", "0").strip())
                 else:
-                    print("Warning: Could not verify row count")
+                    self._log("Warning: Could not verify row count")
                     return True  # Assume success if import succeeded
             else:
                 # Use clickhouse-connect for verification
@@ -1482,14 +1518,14 @@ class ClickHouseSystem(SystemUnderTest):
                     )
                     row_count = count_result.result_rows[0][0]
                 else:
-                    print("Warning: Could not verify row count")
+                    self._log("Warning: Could not verify row count")
                     return True  # Assume success if import succeeded
 
-            print(f"Successfully loaded {row_count:,} rows into {table_name}")
+            self._log(f"Successfully loaded {row_count:,} rows into {table_name}")
             return True
 
         except Exception as e:
-            print(f"Failed to load data into {table_name}: {e}")
+            self._log(f"Failed to load data into {table_name}: {e}")
             return False
 
     def execute_query(
@@ -1514,7 +1550,7 @@ class ClickHouseSystem(SystemUnderTest):
 
             with Timer(f"Query {query_name}") as timer:
                 if clickhouse_connect is None:
-                    print(
+                    self._log(
                         "Warning: clickhouse-connect not available, falling back to client"
                     )
                     return self._execute_query_fallback(
@@ -1601,7 +1637,7 @@ class ClickHouseSystem(SystemUnderTest):
     ) -> dict[str, Any]:
         """Fallback query execution using clickhouse-client when clickhouse-connect is not available."""
         if return_data:
-            print(
+            self._log(
                 "Warning: return_data not supported in fallback mode, data will not be returned"
             )
 
