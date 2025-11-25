@@ -109,7 +109,7 @@ infra-destroy: ## Destroy cloud infrastructure
 	python -m benchkit infra destroy --config $(CFG)
 
 check-aws: ## Check AWS credentials and permissions
-	python scripts/check_aws_credentials.py
+	python scripts/check_aws_credentials.py --config $(CFG)
 
 
 # Code Quality & Unused Code Detection
