@@ -112,12 +112,14 @@ benchmark configurations using supported modules.
 
 ### setup / installation
 
-| system     | local | aws  | docker | gcp | azure |
-|------------|-------|------|--------|-----|-------|
-| Exasol     | ✗     | ✓^1^ | ✗      | ✗   | ✗     | 
-| ClickHouse | ✗     | ✓^1^ | ✗      | ✗   | ✗     |
+| system     | local | aws           | docker | gcp | azure |
+|------------|-------|---------------|--------|-----|-------|
+| Exasol     | ✗     | ✓<sup>1</sup> | ✗      | ✗   | ✗     | 
+| ClickHouse | ✗     | ✓<sup>1</sup> | ✗      | ✗   | ✗     |
 
-^1^ Only single-node deployments supported at this time.
+Notes:
+
+1. Only single-node deployments supported at this time.
 
 ### "tpch" workload
 
