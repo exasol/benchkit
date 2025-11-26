@@ -7,14 +7,12 @@ collect detailed system information, run benchmark workloads, and generate repor
 ## Features
 
 - 🏗️ **Modular Architecture**: Fine-grained templates for setup, execution, and reporting
-- ☁️ **Multi-Cloud Support[^todo-cloud]**: Infrastructure automation with separate instances per database
+- ☁️ **Multi-Cloud Support**: Infrastructure automation with separate instances per database
 - 📊 **Benchmark Workloads**: TPC-H with support for custom workloads
 - 📝 **Self-Contained Reports**: Generate reproducible reports with all attachments
 - 🔧 **Extensible**: Easy to add new systems, workloads, and cloud providers
 - 📈 **Rich Visualizations**: Automated generation of performance plots and tables
 - 🔍 **Result Verification**: Validate query correctness against expected outputs
-
-[^todo-cloud]: Currently, only AWS is fully supported. Local and docker-based deployments are work in progress.
 
 ## Requirements
 
@@ -27,39 +25,40 @@ collect detailed system information, run benchmark workloads, and generate repor
 # 1. Clone and enter the repository
 git clone https://github.com/exasol/benchkit.git
 cd benchkit
-
-# 2. Install dependencies and local package
-python -m pip install -e .
 ```
 
 > [!TIP]
-> You might have to set up a python virtual environment for this first.
+> You might have to set up a python virtual environment before running the next command.
 
 ```shell
+# 2. Install dependencies and local package
+python -m pip install -e .
+
 # 3. Copy and edit example environment
 cp .env.example .env
 $EDITOR .env
+```
 
+> [!TIP]
+> The sample benchmark uses AWS cloud infrastructure. See [Getting Started Guide](user-docs/GETTING_STARTED.md)
+> for detailed cloud setup instructions.
+
+```shell
 # 4. Validate your configuration
 python scripts/check_aws_credentials.py --config configs/exa_vs_ch_1g.yaml
-
-# 5. Run sample benchmark
-make all CFG=configs/exa_vs_ch_1g.yaml
 ```
 
 > [!CAUTION]
-> Please note that the sample benchmark will use cost-incurring AWS resources, and requires your account
-> to be properly set up.
-> 
-> **Required AWS Permissions**: `ec2:*`, `ec2:DescribeImages`, `ec2:DescribeAvailabilityZones`
->
-> 📖 **See [Getting Started Guide](user-docs/GETTING_STARTED.md) for detailed cloud setup instructions.**
+> Please note that running the sample benchmark will use cost-incurring AWS resources.
 
 > [!NOTE]
 > Currently, the `env` section of the sample benchmark contains references to AWS key pair name and
 > ssh key files. You will also have to edit those parts accordingly.
 
 ```shell
+# 5. Run sample benchmark
+make all CFG=configs/exa_vs_ch_1g.yaml
+
 # 6. Clean up AWS resources
 make infra-destroy CFG=configs/exa_vs_ch_1g.yaml
 
@@ -118,30 +117,18 @@ You can easily create your own benchmark by creating a yaml configuration file c
 📖 See [Getting Started Guide](user-docs/GETTING_STARTED.md) for information on how to create
 benchmark configurations using supported modules.
 
-## Extending the Framework
-
-The framework is designed for easy extension.
-
-📖 **See [Extending the Framework](dev-docs/EXTENDING.md) for comprehensive guides on:**
-
-- Adding new database systems
-- Creating custom workloads
-- Adding cloud providers
-- Customizing reports and visualizations
-- Implementing result verification
-
 ## Support Matrix
 
 ### setup / installation
 
-| system     | local | aws             | docker | gcp | azure |
-|------------|-------|-----------------|--------|-----|-------|
-| Exasol     | ✗     | ✓[^single-node] | ✗      | ✗   | ✗     | 
-| ClickHouse | ✗     | ✓[^single-node] | ✗      | ✗   | ✗     |
+| system     | local | aws  | docker | gcp | azure |
+|------------|-------|------|--------|-----|-------|
+| Exasol     | ✗     | ✓^1^ | ✗      | ✗   | ✗     | 
+| ClickHouse | ✗     | ✓^1^ | ✗      | ✗   | ✗     |
 
-[^single-node]: Single-node system support for now.
+^1^ Only single-node deployments supported at this time.
 
-### tcph workload
+### "tpch" workload
 
 | system     | local | aws | docker | gcp | azure |
 |------------|-------|-----|--------|-----|-------|

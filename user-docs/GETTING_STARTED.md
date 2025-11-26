@@ -534,6 +534,9 @@ workload:
 
 ### AWS Deployment
 
+> [!NOTE]
+> **Required AWS Permissions**: `ec2:*`, `ec2:DescribeImages`, `ec2:DescribeAvailabilityZones`
+
 #### 1. Configure AWS Credentials
 
 Choose one of these methods:
