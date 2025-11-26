@@ -330,7 +330,9 @@ class BenchmarkRunner:
             console.print(f"\n🔧 Preparing storage for: [bold]{system_name}[/bold]")
 
             try:
-                system = create_system(system_config)
+                system = create_system(
+                    system_config, workload_config=self.config.get("workload", {})
+                )
                 instance_manager = self._cloud_instance_managers.get(system_name)
 
                 if not instance_manager:
@@ -420,7 +422,9 @@ class BenchmarkRunner:
                     "[dim]Using prepared system instance with storage configuration[/dim]"
                 )
             else:
-                system = create_system(system_config)
+                system = create_system(
+                    system_config, workload_config=self.config.get("workload", {})
+                )
 
             # Get cloud instance manager for this system
             if system_name not in self._cloud_instance_managers:
@@ -645,7 +649,11 @@ class BenchmarkRunner:
                 system._output_callback = output_callback
                 executor.add_output(system_name, "Using prepared system instance")
             else:
-                system = create_system(system_config, output_callback=output_callback)
+                system = create_system(
+                    system_config,
+                    output_callback=output_callback,
+                    workload_config=self.config.get("workload", {}),
+                )
 
             # Get cloud instance manager (read-only access, thread-safe)
             instance_manager = self._cloud_instance_managers.get(system_name)

@@ -112,8 +112,9 @@ class ClickHouseSystem(SystemUnderTest):
         self,
         config: dict[str, Any],
         output_callback: Callable[[str], None] | None = None,
+        workload_config: dict[str, Any] | None = None,
     ):
-        super().__init__(config, output_callback)
+        super().__init__(config, output_callback, workload_config)
         self.setup_method = self.setup_config.get("method", "docker")
         self.container_name = f"clickhouse_{self.name}"
         self.config_profile = self.setup_config.get("extra", {}).get(
@@ -1009,6 +1010,33 @@ class ClickHouseSystem(SystemUnderTest):
 
         return {"cpu_cores": cpu_cores, "total_memory_bytes": mem_bytes}
 
+    def _calculate_max_concurrent_queries(self, cpu_cores: int) -> int:
+        """
+        Calculate max_concurrent_queries based on workload configuration.
+
+        Uses num_streams from multiuser config if available, otherwise falls back
+        to a reasonable default based on CPU cores.
+
+        Args:
+            cpu_cores: Number of CPU cores available
+
+        Returns:
+            Calculated max_concurrent_queries value
+        """
+        # Get num_streams from workload multiuser config
+        multiuser_config = (self.workload_config or {}).get("multiuser", {})
+        num_streams: int = int(multiuser_config.get("num_streams", 1))
+
+        # Base value on CPU cores
+        base_value = max(4, cpu_cores)
+
+        # If multiuser is enabled, ensure we have enough capacity
+        # Add buffer for system queries and overhead
+        if num_streams > 1:
+            return max(base_value, num_streams + 10)
+
+        return base_value
+
     @exclude_from_package
     def _calculate_optimal_settings(
         self, hw_specs: dict[str, int], extra_config: dict[str, Any]
@@ -1051,7 +1079,9 @@ class ClickHouseSystem(SystemUnderTest):
                 extra_config, "max_server_memory_usage", int(total_mem * 0.80)
             ),
             "max_concurrent_queries": self._get_int_config(
-                extra_config, "max_concurrent_queries", max(4, cpu_cores // 2)
+                extra_config,
+                "max_concurrent_queries",
+                self._calculate_max_concurrent_queries(cpu_cores),
             ),
             "background_pool_size": self._get_int_config(
                 extra_config, "background_pool_size", max(16, cpu_cores)
@@ -1529,9 +1559,21 @@ class ClickHouseSystem(SystemUnderTest):
             return False
 
     def execute_query(
-        self, query: str, query_name: str | None = None, return_data: bool = False
+        self,
+        query: str,
+        query_name: str | None = None,
+        return_data: bool = False,
+        timeout: int | None = None,
     ) -> dict[str, Any]:
-        """Execute a SQL query in ClickHouse using clickhouse-connect."""
+        """Execute a SQL query in ClickHouse using clickhouse-connect.
+
+        Args:
+            query: SQL query to execute
+            query_name: Optional name for the query (for logging)
+            return_data: If True, return query results as DataFrame
+            timeout: Optional timeout in seconds (default: 300 for regular queries,
+                    uses dynamic calculation for OPTIMIZE operations)
+        """
         from ..debug import debug_print
 
         if not query_name:
@@ -1539,6 +1581,13 @@ class ClickHouseSystem(SystemUnderTest):
 
         # ClickHouse HTTP interface doesn't allow trailing semicolons
         query = query.rstrip().rstrip(";")
+
+        # Determine timeout - use provided value or calculate based on query type
+        if timeout is None:
+            timeout = 300  # Default 5 minutes
+
+        # Convert timeout to milliseconds for clickhouse-connect
+        send_receive_timeout = timeout
 
         try:
             # Debug output
@@ -1566,6 +1615,7 @@ class ClickHouseSystem(SystemUnderTest):
                     database=self.database,
                     interface="http",
                     secure=False,
+                    send_receive_timeout=send_receive_timeout,
                 )
 
                 try:

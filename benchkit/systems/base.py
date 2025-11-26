@@ -20,6 +20,7 @@ class SystemUnderTest(ABC):
         self,
         config: dict[str, Any],
         output_callback: Callable[[str], None] | None = None,
+        workload_config: dict[str, Any] | None = None,
     ):
         self.name = config["name"]
         self.kind = config["kind"]
@@ -34,6 +35,9 @@ class SystemUnderTest(ABC):
 
         # Output callback for thread-safe logging in parallel execution
         self._output_callback = output_callback
+
+        # Workload configuration for dynamic tuning
+        self.workload_config = workload_config or {}
 
         # Command recording for report reproduction
         self.setup_commands: list[dict[str, Any]] = []
@@ -204,7 +208,11 @@ class SystemUnderTest(ABC):
 
     @abstractmethod
     def execute_query(
-        self, query: str, query_name: str | None = None, return_data: bool = False
+        self,
+        query: str,
+        query_name: str | None = None,
+        return_data: bool = False,
+        timeout: int | None = None,
     ) -> dict[str, Any]:
         """
         Execute a SQL query and return timing and result information.
@@ -213,6 +221,7 @@ class SystemUnderTest(ABC):
             query: SQL query to execute
             query_name: Optional name for the query (for logging)
             return_data: If True, include result data in response (default: False)
+            timeout: Optional timeout in seconds for query execution
 
         Returns:
             Dictionary containing:

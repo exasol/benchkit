@@ -168,10 +168,17 @@ class TPCH(Workload):
                 if not statement.strip():
                     continue
 
-                # Execute each statement individually
+                # Calculate dynamic timeout for OPTIMIZE operations
+                # These can take a long time for large tables
+                timeout = self._calculate_statement_timeout(
+                    statement, system.kind, node_count
+                )
+
+                # Execute each statement individually with calculated timeout
                 result = system.execute_query(
                     statement,
                     query_name=f"setup_{script_name.replace('.sql', '')}_{idx+1}",
+                    timeout=timeout,
                 )
 
                 if not result["success"]:
@@ -186,6 +193,79 @@ class TPCH(Workload):
         except Exception as e:
             print(f"Error executing setup script {script_name}: {e}")
             return False
+
+    def _calculate_statement_timeout(
+        self, statement: str, system_kind: str, node_count: int
+    ) -> int:
+        """
+        Calculate dynamic timeout for a SQL statement based on scale factor and node count.
+
+        For OPTIMIZE TABLE operations on large datasets, the default timeout is often
+        insufficient. This method calculates appropriate timeouts based on:
+        - Scale factor: larger data = longer merge/optimize time
+        - Node count: more nodes can mean faster parallel processing
+        - Table size: lineitem is ~6x larger than orders, etc.
+
+        Args:
+            statement: SQL statement to execute
+            system_kind: Type of database system (e.g., 'clickhouse')
+            node_count: Number of nodes in the cluster
+
+        Returns:
+            Timeout in seconds
+        """
+        # Default timeout for regular queries
+        base_timeout = 300  # 5 minutes
+
+        # Check if this is an OPTIMIZE operation (ClickHouse specific)
+        statement_upper = statement.upper().strip()
+        if system_kind == "clickhouse" and "OPTIMIZE TABLE" in statement_upper:
+            # Base timeout for OPTIMIZE: 10 minutes per SF1
+            # Scale factor 100 = ~1000 minutes base for lineitem
+            # But we apply table-specific multipliers
+
+            # Determine table being optimized
+            table_multipliers = {
+                "LINEITEM": 1.0,  # Largest table (~6x orders)
+                "ORDERS": 0.25,  # ~25% of lineitem
+                "PARTSUPP": 0.13,  # ~13% of lineitem
+                "PART": 0.03,  # ~3% of lineitem
+                "CUSTOMER": 0.025,  # ~2.5% of lineitem
+                "SUPPLIER": 0.002,  # ~0.2% of lineitem
+                "NATION": 0.0001,  # Tiny table
+                "REGION": 0.0001,  # Tiny table
+            }
+
+            # Find which table is being optimized
+            multiplier = 0.1  # Default for unknown tables
+            for table_name, table_mult in table_multipliers.items():
+                if table_name in statement_upper:
+                    multiplier = table_mult
+                    break
+
+            # Calculate timeout:
+            # - Base: 60 seconds per SF1 for lineitem
+            # - Adjusted by table multiplier
+            # - Divided by node_count (parallel processing)
+            # - Minimum 300 seconds (5 min), maximum 7200 seconds (2 hours)
+
+            sf_factor = max(1, self.scale_factor)
+            timeout = int(60 * sf_factor * multiplier / max(1, node_count))
+
+            # Apply bounds
+            timeout = max(300, min(7200, timeout))
+
+            return timeout
+
+        # For MATERIALIZE STATISTICS, also needs longer timeout
+        if system_kind == "clickhouse" and "MATERIALIZE STATISTICS" in statement_upper:
+            # Similar to OPTIMIZE but typically faster
+            sf_factor = max(1, self.scale_factor)
+            timeout = int(30 * sf_factor / max(1, node_count))
+            timeout = max(300, min(3600, timeout))
+            return timeout
+
+        return base_timeout
 
     def _split_sql_statements(self, sql: str) -> list[str]:
         """
@@ -308,6 +388,21 @@ class TPCH(Workload):
             if not success:
                 print(f"Failed to load {table_name}")
                 return False
+
+            # Delete data file immediately after successful load to save disk space
+            try:
+                data_file.unlink()
+                print(f"  ✓ Cleaned up {data_file.name}")
+            except Exception as e:
+                print(f"  Warning: Could not delete {data_file.name}: {e}")
+
+        # Try to remove the empty data directory
+        try:
+            if self.data_dir.exists() and not any(self.data_dir.iterdir()):
+                self.data_dir.rmdir()
+                print(f"Cleaned up empty data directory: {self.data_dir}")
+        except Exception as e:
+            print(f"Warning: Could not remove data directory: {e}")
 
         return True
 
