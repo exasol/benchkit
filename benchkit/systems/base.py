@@ -25,6 +25,13 @@ class SystemUnderTest(ABC):
         self.name = config["name"]
         self.kind = config["kind"]
         self.version = config["version"]
+
+        # Defensive: Ensure setup is not None
+        if "setup" not in config:
+            raise ValueError(f"System config for '{self.name}' is missing 'setup' section")
+        if config["setup"] is None:
+            raise ValueError(f"System config for '{self.name}' has None 'setup' section")
+
         self.setup_config = config["setup"]
         self.data_dir: Path | None = Path(
             self.setup_config.get("data_dir", f"/data/{self.name}")
