@@ -16,17 +16,22 @@ This comprehensive guide will help you install, configure, and run your first da
 
 ## Prerequisites
 
-### System Requirements
+### System Requirements (Benchmark Host)
 
-- **Operating System**: Linux (Ubuntu 20.04+ recommended)
+- **Operating System**: Linux (Ubuntu 22.04+ recommended)
 - **Python**: 3.10 or higher
-- **Memory**: 16GB RAM minimum (32GB+ recommended for larger benchmarks)
-- **Storage**: 100GB+ free space (SSD recommended)
-- **Docker**: Optional, for containerized database systems
+- **Memory**: 2GB RAM minimum
 
-### Software Dependencies
+### System Requirements (System Host)
 
-```bash
+- **Operating System**: Linux (Ubuntu 22.04+ recommended)
+- **Python**: 3.10 or higher
+- **Memory**: Depends on benchmark settings
+- **Storage**: Depends on benchmark settings
+
+### Software Dependencies (ubuntu syntax, when starting at zero)
+
+```shell
 # Update system packages
 sudo apt-get update && sudo apt-get upgrade -y
 
@@ -46,16 +51,16 @@ sudo usermod -aG docker $USER
 
 ### 1. Clone the Repository
 
-```bash
-git clone <repository-url>
+```shell
+git clone https://github.com/exasol/benchkit.git
 cd benchkit
 ```
 
 ### 2. Set Up Python Environment
 
-```bash
+```shell
 # Create virtual environment
-python3 -m venv .venv
+python3 -m venv --system-site-packages .venv
 source .venv/bin/activate
 
 # Install the framework
@@ -67,7 +72,7 @@ benchkit --help
 
 You should see the framework's help message with 9 available commands.
 
-### 3. Install TPC-H Tools (Optional)
+### 3. Install TPC-H Tools (Optional/Obsolete?)
 
 For TPC-H benchmarks, install the data generation tools:
 
@@ -94,12 +99,11 @@ cat configs/exa_vs_ch_1g.yaml
 ```
 
 This configuration defines:
-- Two systems: Exasol and ClickHouse
-- TPC-H workload at scale factor 100
-- Selected queries: Q01, Q03, Q05, Q06, Q09, Q12, Q13, Q18, Q22
-- 3 runs per query with 1 warmup run
+- Three systems: Exasol, ClickHouse and Clickhouse with tuned queries
+- TPC-H workload at scale factor 1
+- 7 runs per query with 1 warmup run
 
-### 2. Prepare Data Directory
+### 2. Prepare Data Directory (Obsolete ?)
 
 ```bash
 # Create data directory
@@ -114,6 +118,9 @@ mkdir -p /data/{exasol,clickhouse,tpch}
 
 #### Option A: Run Everything at Once
 
+The included Makefile provides some shortcuts combining multiple calls to `benchkit`.
+Run `make` without arguments to get acommand overview.
+
 ```bash
 # Run the complete benchmark pipeline
 make all CFG=configs/exa_vs_ch_1g.yaml
@@ -122,7 +129,8 @@ make all CFG=configs/exa_vs_ch_1g.yaml
 This will:
 1. Probe system information
 2. Run the benchmark
-3. Generate a report report
+3. Generate a report
+4. Leave the cloud infrastructure running
 
 #### Option B: Run Step by Step
 
@@ -168,6 +176,9 @@ benchkit probe --config configs/my_benchmark.yaml --debug
 ```
 
 **Output**: Creates `results/<project_id>/system.json` (or `system_<systemname>.json` for cloud setups)
+
+> [!IMPORTANT]
+> Note that `probe` will automatically call `infra apply` if necessary, possibly starting cost-incurring services.
 
 ### 2. `run` - Execute Benchmarks
 
@@ -364,7 +375,8 @@ benchkit verify --config configs/my_benchmark.yaml --systems exasol
 benchkit verify --config configs/my_benchmark.yaml --debug
 ```
 
-**Note**: Requires expected results in `workloads/<workload_name>/expected/`
+> [!NOTE]
+> Requires expected results in `workloads/<workload_name>/expected/`
 
 ### 9. `cleanup` - System Cleanup
 
@@ -938,7 +950,7 @@ results/my-benchmark/reports/<report-name>/
 Once you have a basic benchmark working:
 
 1. **Explore Configurations**: Try different scale factors and query sets
-2. **Add Systems**: See [EXTENDING.md](EXTENDING.md) for adding new databases
+2. **Add Systems**: See [EXTENDING.md](../dev-docs/EXTENDING.md) for adding new databases
 3. **Custom Workloads**: Create domain-specific benchmarks
 4. **Automate**: Set up CI/CD pipelines for regular benchmarking
 5. **Share Results**: Publish your benchmark methodology and results
@@ -946,6 +958,6 @@ Once you have a basic benchmark working:
 ## Additional Resources
 
 - [README](../README.md) - Framework overview and quick reference
-- [Extending the Framework](EXTENDING.md) - Add systems, workloads, and features
+- [Extending the Framework](../dev-docs/EXTENDING.md) - Add systems, workloads, and features
 
 This framework provides a solid foundation for database benchmarking. Start with the simple examples above and gradually explore more advanced features as you become comfortable with the system.
