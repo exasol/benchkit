@@ -21,41 +21,32 @@ collect detailed system information, run benchmark workloads, and generate repor
 
 ## Quick Start
 
+> [!TIP]
+> You might have to set up a python virtual environment for installing python packages.
+
+> [!CAUTION]
+> The sample benchmark uses AWS cloud infrastructure. See [Getting Started Guide](user-docs/GETTING_STARTED.md)
+> for detailed cloud setup instructions.
+> Note that AWS infrastructure is usually not free to use.
+
 ```shell
 # 1. Clone and enter the repository
 git clone https://github.com/exasol/benchkit.git
 cd benchkit
-```
 
-> [!TIP]
-> You might have to set up a python virtual environment before running the next command.
-
-```shell
 # 2. Install dependencies and local package
 python -m pip install -e .
 
 # 3. Copy and edit example environment
 cp .env.example .env
 $EDITOR .env
-```
 
-> [!TIP]
-> The sample benchmark uses AWS cloud infrastructure. See [Getting Started Guide](user-docs/GETTING_STARTED.md)
-> for detailed cloud setup instructions.
+# 3b. (temporary) fix hardcoded ssh-key names in 'env' section of configuration
+$EDITOR configs/exa_vs_ch_1g.yaml
 
-```shell
 # 4. Validate your configuration
 python scripts/check_aws_credentials.py --config configs/exa_vs_ch_1g.yaml
-```
 
-> [!CAUTION]
-> Please note that running the sample benchmark will use cost-incurring AWS resources.
-
-> [!NOTE]
-> Currently, the `env` section of the sample benchmark contains references to AWS key pair name and
-> ssh key files. You will also have to edit those parts accordingly.
-
-```shell
 # 5. Run sample benchmark
 make all CFG=configs/exa_vs_ch_1g.yaml
 
