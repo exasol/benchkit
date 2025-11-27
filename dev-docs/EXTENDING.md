@@ -4,12 +4,36 @@ This guide explains how to extend the database benchmark framework with new syst
 
 ## Table of Contents
 
+- [Dependencies](#dependencies)
+- [Contributing](#contributing)
 - [Adding New Database Systems](#adding-new-database-systems)
 - [Adding New Workloads](#adding-new-workloads)
 - [Adding Cloud Providers](#adding-cloud-providers)
 - [Customizing Reports](#customizing-reports)
 - [Adding Result Verification](#adding-result-verification)
 - [Best Practices](#best-practices)
+
+## Dependencies
+
+Core dependencies (automatically installed):
+- `typer` - CLI framework
+- `jinja2` - Template rendering
+- `pyyaml` - Configuration parsing
+- `pandas` - Data manipulation
+- `matplotlib` - Plotting
+- `rich` - CLI formatting
+- `boto3` - AWS integration (optional)
+- `python-dotenv` - .env file support (optional)
+
+Database-specific drivers loaded dynamically based on systems used.
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests for new functionality
+5. Submit a pull request
 
 ## Adding New Database Systems
 
@@ -768,61 +792,5 @@ class ResultVerifier:
 
 The `verify` command is already implemented in `benchkit/cli.py`. Extend the verification logic in `benchkit/verify/__init__.py`.
 
-## Best Practices
-
-### Code Quality
-
-1. **Follow existing patterns**: Study `ExasolSystem` and `ClickHouseSystem` implementations
-2. **Error handling**: Always include proper error handling and logging
-3. **Documentation**: Add docstrings explaining complex logic
-4. **Type hints**: Use type hints for better code clarity
-
-### Installation Independence
-
-1. **Use Python drivers**: Prefer official Python drivers over CLI tools
-2. **Universal connectivity**: Code should work with Docker, native, cloud, preinstalled
-3. **Graceful fallback**: Provide fallback mechanisms when drivers unavailable
-
-### Dynamic Dependencies
-
-1. **Implement `get_python_dependencies()`**: Each system declares its dependencies
-2. **Minimal packages**: Only include what's needed for the specific benchmark
-3. **Version pinning**: Specify minimum versions for dependencies
-
-### Testing
-
-1. **Unit tests**: Create tests for new functionality in `tests/`
-2. **Integration tests**: Test with actual database systems when possible
-3. **Cross-environment**: Test across Docker, native, and cloud deployments
-
-### Configuration
-
-1. **Validation**: Add configuration validation for new parameters
-2. **Defaults**: Provide sensible defaults for optional parameters
-3. **Documentation**: Document all configuration options
-
-### Security
-
-1. **Credentials**: Never commit credentials or sensitive data
-2. **Input validation**: Validate all user inputs
-3. **Least privilege**: Use minimal required permissions
-
-### Extension Checklist
-
-When adding a new component, verify:
-
-- [ ] Follows base class interface
-- [ ] Implements `get_python_dependencies()` (for systems)
-- [ ] Configuration validation includes new parameters
-- [ ] Documentation updated
-- [ ] Tests added for new functionality
-- [ ] Error handling implemented
-- [ ] Resource cleanup implemented
-- [ ] Works across deployment methods
-
-## References
-
-- [Getting Started Guide](GETTING_STARTED.md) - Basic usage instructions
-- [README](../README.md) - Quick start and overview
 
 This extensible design allows the framework to grow and adapt to new requirements while maintaining consistency and reliability across all components.
