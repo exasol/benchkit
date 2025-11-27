@@ -132,11 +132,26 @@
                             {% if system_config.setup.data_dir %}
                             <tr><td>Data Directory</td><td><code>{{ system_config.setup.data_dir }}</code></td></tr>
                             {% endif %}
+                            {% if setup_summaries and system_config.name in setup_summaries and setup_summaries[system_config.name].data_device %}
+                            <tr><td>Data Device</td><td><code>{{ setup_summaries[system_config.name].data_device }}</code></td></tr>
+                            {% endif %}
+                            {% if system_config.setup.node_count and system_config.setup.node_count > 1 %}
+                            <tr><td>Cluster Configuration</td><td><span class="badge badge-success">{{ system_config.setup.node_count }}-node cluster</span></td></tr>
+                            {% endif %}
                         </table>
                     </div>
 
-                    {% if system_info.per_system and system_config.name in system_info.per_system %}
-                    {% set sys_probe = system_info.per_system[system_config.name] %}
+                    {% if system_info.per_system %}
+                    {# Find all nodes for this system (handles both single-node and multinode) #}
+                    {% set system_nodes = [] %}
+                    {% for probe_name, probe_data in system_info.per_system.items() %}
+                      {% if probe_name == system_config.name or probe_name.startswith(system_config.name ~ '-node') %}
+                        {% set _ = system_nodes.append((probe_name, probe_data)) %}
+                      {% endif %}
+                    {% endfor %}
+
+                    {% if system_nodes | length > 0 %}
+                    {% set sys_probe = system_nodes[0][1] %}
                     <div class="system-info">
                         <h4>Hardware Specifications</h4>
                         <table class="info-table">
@@ -147,17 +162,32 @@
                             <tr><td>Instance Type</td><td><strong>{{ cfg.env.instances[system_config.name].instance_type | default('N/A') }}</strong></td></tr>
                             {% endif %}
                             {% endif %}
+                            {% if system_nodes | length > 1 %}
+                            <tr><td>Node Count</td><td><strong>{{ system_nodes | length }} nodes</strong></td></tr>
+                            {% endif %}
                             {% if sys_probe.cpu_model %}
                             <tr><td>CPU</td><td>{{ sys_probe.cpu_model }}</td></tr>
                             {% endif %}
                             {% if sys_probe.count_logical or sys_probe.cpu_count_logical %}
+                            {% if system_nodes | length > 1 %}
+                            <tr><td>CPU Cores per node</td><td>{{ sys_probe.count_logical | default(sys_probe.cpu_count_logical) }} vCPUs <span class="secondary">({{ (sys_probe.count_logical | default(sys_probe.cpu_count_logical)) * (system_nodes | length) }} total vCPUs)</span></td></tr>
+                            {% else %}
                             <tr><td>CPU Cores</td><td>{{ sys_probe.count_logical | default(sys_probe.cpu_count_logical) }} vCPUs</td></tr>
                             {% endif %}
+                            {% endif %}
                             {% if sys_probe.memory_total_gb or sys_probe.total_gb %}
+                            {% if system_nodes | length > 1 %}
+                            <tr><td>Memory per node</td><td>{{ sys_probe.memory_total_gb | default(sys_probe.total_gb) }}GB RAM <span class="secondary">({{ (sys_probe.memory_total_gb | default(sys_probe.total_gb) | float * (system_nodes | length)) | round(1) }}GB total RAM)</span></td></tr>
+                            {% else %}
                             <tr><td>Memory</td><td>{{ sys_probe.memory_total_gb | default(sys_probe.total_gb) }}GB RAM</td></tr>
+                            {% endif %}
+                            {% endif %}
+                            {% if system_nodes | length > 1 %}
+                            <tr><td>Hostnames</td><td>{% for node_name, node_data in system_nodes %}<code>{{ node_data.hostname | default('N/A') }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</td></tr>
                             {% endif %}
                         </table>
                     </div>
+                    {% endif %}
                     {% endif %}
                 </div>
                 {% endfor %}

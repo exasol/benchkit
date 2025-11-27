@@ -49,8 +49,17 @@
                 <div class="system-card">
                     <h3>{{ system_config.name | title }} {{ system_config.version }}</h3>
 
-                    {% if system_info.per_system and system_config.name in system_info.per_system %}
-                    {% set sys_probe = system_info.per_system[system_config.name] %}
+                    {% if system_info.per_system %}
+                    {# Find all nodes for this system (handles both single-node and multinode) #}
+                    {% set system_nodes = [] %}
+                    {% for probe_name, probe_data in system_info.per_system.items() %}
+                      {% if probe_name == system_config.name or probe_name.startswith(system_config.name ~ '-node') %}
+                        {% set _ = system_nodes.append((probe_name, probe_data)) %}
+                      {% endif %}
+                    {% endfor %}
+
+                    {% if system_nodes | length > 0 %}
+                    {% set sys_probe = system_nodes[0][1] %}
                     <div class="system-specs">
                         <h4>Environment & Hardware</h4>
                         <ul>
@@ -60,19 +69,30 @@
                             <li><strong>Instance:</strong> {{ cfg.env.instances[system_config.name].instance_type | default('N/A') }}</li>
                             {% endif %}
                             {% endif %}
+                            {% if system_nodes | length > 1 %}
+                            <li><strong>Cluster:</strong> {{ system_nodes | length }}-node cluster</li>
+                            {% endif %}
                             {% if sys_probe.cpu_model %}
-                            <li><strong>CPU:</strong> {{ sys_probe.cpu_model }}{% if sys_probe.count_logical or sys_probe.cpu_count_logical %} ({{ sys_probe.count_logical | default(sys_probe.cpu_count_logical) }} vCPUs){% endif %}</li>
+                            <li><strong>CPU:</strong> {{ sys_probe.cpu_model }}{% if sys_probe.count_logical or sys_probe.cpu_count_logical %}{% if system_nodes | length > 1 %} ({{ sys_probe.count_logical | default(sys_probe.cpu_count_logical) }} vCPUs per node, {{ (sys_probe.count_logical | default(sys_probe.cpu_count_logical)) * (system_nodes | length) }} total vCPUs){% else %} ({{ sys_probe.count_logical | default(sys_probe.cpu_count_logical) }} vCPUs){% endif %}{% endif %}</li>
                             {% endif %}
                             {% if sys_probe.memory_total_gb or sys_probe.total_gb %}
+                            {% if system_nodes | length > 1 %}
+                            <li><strong>Memory:</strong> {{ sys_probe.memory_total_gb | default(sys_probe.total_gb) }}GB RAM per node ({{ (sys_probe.memory_total_gb | default(sys_probe.total_gb) | float * (system_nodes | length)) | round(1) }}GB total RAM)</li>
+                            {% else %}
                             <li><strong>Memory:</strong> {{ sys_probe.memory_total_gb | default(sys_probe.total_gb) }}GB RAM</li>
+                            {% endif %}
                             {% endif %}
                         </ul>
 
                         <h4>Software</h4>
                         <ul>
                             <li><strong>Database:</strong> {{ system_config.kind }} {{ system_config.version }}</li>
+                            {% if system_config.setup.node_count and system_config.setup.node_count > 1 %}
+                            <li><strong>Deployment:</strong> {{ system_config.setup.node_count }}-node cluster</li>
+                            {% endif %}
                         </ul>
                     </div>
+                    {% endif %}
                     {% endif %}
                 </div>
             {% endfor %}

@@ -61,6 +61,9 @@ We conducted performance testing of **{{ tested_systems_names | join(', ') }}** 
 {% if tested_system.setup.data_dir %}
 - **Data Directory:** {{ tested_system.setup.data_dir }}
 {% endif %}
+{% if setup_summaries and tested_system.name in setup_summaries and setup_summaries[tested_system.name].data_device %}
+- **Data Device:** {{ setup_summaries[tested_system.name].data_device }}
+{% endif %}
 
 ### Installation & Configuration
 

@@ -30,8 +30,17 @@ This report presents the complete query-by-query performance results for {{ data
 {% for system_config in cfg.systems %}
 ### {{ system_config.name | title }} {{ system_config.version }}
 
-{% if system_info.per_system and system_config.name in system_info.per_system %}
-{% set sys_probe = system_info.per_system[system_config.name] %}
+{% if system_info.per_system %}
+{# Find all nodes for this system (handles both single-node and multinode) #}
+{% set system_nodes = [] %}
+{% for probe_name, probe_data in system_info.per_system.items() %}
+  {% if probe_name == system_config.name or probe_name.startswith(system_config.name ~ '-node') %}
+    {% set _ = system_nodes.append((probe_name, probe_data)) %}
+  {% endif %}
+{% endfor %}
+
+{% if system_nodes | length > 0 %}
+{% set sys_probe = system_nodes[0][1] %}
 **Environment & Hardware:**
 {% if cfg.env.mode in ['aws', 'gcp', 'azure'] %}
 - **Cloud:** {{ cfg.env.mode | upper }} {{ cfg.env.region | default('N/A') }}
@@ -39,16 +48,27 @@ This report presents the complete query-by-query performance results for {{ data
 - **Instance:** {{ cfg.env.instances[system_config.name].instance_type | default('N/A') }}
 {% endif %}
 {% endif %}
+{% if system_nodes | length > 1 %}
+- **Cluster:** {{ system_nodes | length }}-node cluster
+{% endif %}
 {% if sys_probe.cpu_model %}
-- **CPU:** {{ sys_probe.cpu_model }}{% if sys_probe.count_logical or sys_probe.cpu_count_logical %} ({{ sys_probe.count_logical | default(sys_probe.cpu_count_logical) }} vCPUs){% endif %}
+- **CPU:** {{ sys_probe.cpu_model }}{% if sys_probe.count_logical or sys_probe.cpu_count_logical %}{% if system_nodes | length > 1 %} ({{ sys_probe.count_logical | default(sys_probe.cpu_count_logical) }} vCPUs per node, {{ (sys_probe.count_logical | default(sys_probe.cpu_count_logical)) * (system_nodes | length) }} total vCPUs){% else %} ({{ sys_probe.count_logical | default(sys_probe.cpu_count_logical) }} vCPUs){% endif %}{% endif %}
 {% endif %}
 {% if sys_probe.memory_total_gb or sys_probe.total_gb %}
+{% if system_nodes | length > 1 %}
+- **Memory:** {{ sys_probe.memory_total_gb | default(sys_probe.total_gb) }}GB RAM per node ({{ (sys_probe.memory_total_gb | default(sys_probe.total_gb) | float * (system_nodes | length)) | round(1) }}GB total RAM)
+{% else %}
 - **Memory:** {{ sys_probe.memory_total_gb | default(sys_probe.total_gb) }}GB RAM
+{% endif %}
+{% endif %}
 {% endif %}
 {% endif %}
 
 **Software:**
 - **Database:** {{ system_config.kind }} {{ system_config.version }}
+{% if system_config.setup.node_count and system_config.setup.node_count > 1 %}
+- **Deployment:** {{ system_config.setup.node_count }}-node cluster
+{% endif %}
 
 {% endfor %}
 

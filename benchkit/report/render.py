@@ -361,8 +361,16 @@ class ReportRenderer:
                 system_name = sys_file.stem.replace("system_", "")
 
                 # Filter by system_names if provided
-                if system_names is not None and system_name not in system_names:
-                    continue
+                # Handle both exact matches and node-specific names (e.g., "exasol-node0" matches "exasol")
+                if system_names is not None:
+                    # Check if system_name matches any filter (exact or starts with filter name)
+                    matches_filter = any(
+                        system_name == filter_name
+                        or system_name.startswith(f"{filter_name}-")
+                        for filter_name in system_names
+                    )
+                    if not matches_filter:
+                        continue
 
                 system_data = load_json(sys_file)
                 system_info["per_system"][system_name] = system_data
@@ -373,7 +381,7 @@ class ReportRenderer:
                 system_info["comparison"] = compare_system_configurations(
                     all_systems_data
                 )
-            else:
+            elif len(all_systems_data) == 1:
                 system_info["comparison"] = {
                     "groups": [
                         {
@@ -383,6 +391,13 @@ class ReportRenderer:
                     ],
                     "total_systems": 1,
                     "unique_configurations": 1,
+                }
+            else:
+                # No systems found after filtering - create empty comparison
+                system_info["comparison"] = {
+                    "groups": [],
+                    "total_systems": 0,
+                    "unique_configurations": 0,
                 }
 
         # If we only have main system.json, create a simple structure

@@ -38,7 +38,7 @@ def _apply_template(fig: go.Figure, **custom_layout: Any) -> None:
 
 
 def _build_system_color_map(systems: Sequence[str]) -> dict[str, str]:
-    """Return consistent colors per system, ensuring Exasol uses green."""
+    """Return consistent colors per system, ensuring first Exasol uses green."""
     unique_norms: list[str] = []
     for system in systems:
         norm = system.strip().lower()
@@ -47,9 +47,11 @@ def _build_system_color_map(systems: Sequence[str]) -> dict[str, str]:
 
     palette = cycle(TECH_COLORS)
     color_map: dict[str, str] = {}
+    first_exasol_seen = False
     for norm in unique_norms:
-        if "exasol" in norm:
+        if "exasol" in norm and not first_exasol_seen:
             color_map[norm] = EXASOL_COLOR
+            first_exasol_seen = True
         else:
             color = next(palette)
             while color.lower() == EXASOL_COLOR.lower():
