@@ -46,17 +46,32 @@ benchkit/
 └── results/                   # Generated results (auto-created)
 ```
 
+## Adding New Workloads
+
+A workload defines the contents of the benchmark, in terms of
+
+- **data model**, typically a set of DDL queries stored under `workloads/<name>`
+- **table data**, generated or otherwise defined by code under `benchkit/workloads/`
+- **query execution logic**, defined by code under `benchkit/workloads/`
+- **benchmark queries**, stored as SQL files under `workloads/<name>`
+
+📖 **See [Extending Guide](EXTENDING.md) for details**
+
 ## Adding New Systems
 
-See [Extending Guide](EXTENDING.md)
+Systems are defined by python code at `benchkit/systems/`, which needs to provide methods to
+
+- **deploy** the software on supported infrastructure providers
+- **configure** the software according to the benchmark configuration
+- **execute SQL** statements
+- **load data** (CSV) into tables
+
+📖 **See [Extending Guide](EXTENDING.md) for details**
 
 ## Adding New Infrastructure Providers
 
-See [Extending Guide](EXTENDING.md)
+📖 **See [Extending Guide](EXTENDING.md) for details**
 
-## Adding New Workloads
-
-See [Extending Guide](EXTENDING.md)
 
 ## Best Practices
 

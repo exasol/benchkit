@@ -102,11 +102,11 @@ See [Developer Guide](dev-docs/DEVELOPERS.md) for a more detailed structure defi
 You can easily create your own benchmark by creating a yaml configuration file combining
 
 - One infrastructure provider (aws/docker/local/...)
+- One workload (benchmark type) to be executed
 - Multiple systems (software) to be tested
-- Infrastructure definition per system (e.g. AWS instance types)
 
-📖 See [Getting Started Guide](user-docs/GETTING_STARTED.md) for information on how to create
-benchmark configurations using supported modules.
+📖 **See [Getting Started Guide](user-docs/GETTING_STARTED.md) for information on how to create
+benchmark configurations using supported modules.**
 
 ## Support Matrix
 
