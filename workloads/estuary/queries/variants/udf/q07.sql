@@ -24,10 +24,8 @@ number_extraction AS (
 digit_sum_calc AS (
     SELECT
         order_month, C_NAME, total_spent, total_quantity, price_rank, quantity_rank, customer_number,
-        SUM(nvl(cast(substr(customer_number, digit, 1) as decimal(1)), 0)) AS number_sum
+        helpers.digit_sum(customer_number) AS number_sum
     FROM number_extraction
-    cross join ( values between 1 and 18 as T(digit) )
-    GROUP BY order_month, C_NAME, total_spent, total_quantity, price_rank, quantity_rank, customer_number
 )
 SELECT order_month, C_NAME, total_spent, total_quantity, price_rank, quantity_rank
 FROM digit_sum_calc

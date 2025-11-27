@@ -4,7 +4,7 @@
 -- Difficulty: Medium
 WITH base_table AS (
     SELECT
-        DATE_FORMAT(L_SHIPDATE, 'yyyy-MM') AS ship_year_month,
+        TO_CHAR(L_SHIPDATE, 'yyyy-MM') AS ship_year_month,
         L_SHIPMODE AS L_SHIPMODE,
         O_ORDERPRIORITY AS order_priority,
         COUNT(*) AS count_of_line_items,
@@ -13,10 +13,10 @@ WITH base_table AS (
     FROM lineitem LI
     LEFT JOIN orders ORD
         ON LI.L_ORDERKEY = ORD.O_ORDERKEY
-    GROUP BY ship_year_month, L_SHIPMODE, order_priority
+    GROUP BY TO_CHAR(L_SHIPDATE, 'yyyy-MM'), L_SHIPMODE, O_ORDERPRIORITY
 )
 SELECT
-    *,
+    base_table.*,
     ROW_NUMBER() OVER (PARTITION BY order_priority ORDER BY sum) AS row_number_by_order_priority,
     ROW_NUMBER() OVER (PARTITION BY L_SHIPMODE ORDER BY avg) AS row_number_by_ship_mode
 FROM base_table

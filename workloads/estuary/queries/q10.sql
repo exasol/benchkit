@@ -8,11 +8,11 @@ WITH customer_orders AS (
         o.o_orderdate,
         COUNT(*) AS total_orders,
         SUM(l.l_extendedprice * (1 - l.l_discount)) AS total_revenue,
-        SUM(CASE WHEN l.l_shipdate <= DATE_ADD(o.o_orderdate, 30) THEN 1 ELSE 0 END) AS shipped_orders
+        SUM(CASE WHEN l.l_shipdate <= ADD_DAYS(o.o_orderdate, 30) THEN 1 ELSE 0 END) AS shipped_orders
     FROM customer c
     JOIN orders o ON c.c_custkey = o.o_custkey
     JOIN lineitem l ON o.o_orderkey = l.l_orderkey
-    WHERE o.o_orderdate >= date_sub(CURRENT_DATE, 30 * 365)
+    WHERE o.o_orderdate >= ADD_DAYS(CURRENT_DATE, -30 * 365)
     GROUP BY c.c_custkey, c.c_name, o.o_orderdate
 ),
 customer_metrics AS (

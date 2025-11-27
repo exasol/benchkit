@@ -12,7 +12,7 @@ WITH customer_orders AS (
     FROM customer c
     JOIN orders o ON c.c_custkey = o.o_custkey
     JOIN lineitem l ON o.o_orderkey = l.l_orderkey
-    WHERE o.o_orderdate >= date_sub(CURRENT_DATE, 30 * 365)
+    WHERE o.o_orderdate >= add_days(CURRENT_DATE, -30 * 365)
     AND l.l_shipdate > o.o_orderdate
     GROUP BY c.c_custkey, c.c_name, o.o_orderdate
 ),
@@ -39,8 +39,8 @@ monthly_analysis AS (
 SELECT
     m.c_custkey,
     m.c_name,
-    ARRAY_AGG(
-        CONCAT('Month: ', DATE_FORMAT(order_month, 'yyyy-MM'),
+    GROUP_CONCAT(
+        CONCAT('Month: ', TO_CHAR(order_month, 'yyyy-MM'),
             ', Orders: ', monthly_orders,
             ', Revenue: ', ROUND(monthly_revenue, 2))
     ) AS monthly_summary,
@@ -50,4 +50,3 @@ JOIN cumulative_revenue c ON m.c_custkey = c.c_custkey
 GROUP BY m.c_custkey, m.c_name
 ORDER BY lifetime_revenue DESC
 LIMIT 1000;
-

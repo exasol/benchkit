@@ -62,11 +62,10 @@ ranked_comments AS (
 SELECT
     RC.C_CUSTKEY,
     RC.C_NAME,
-    ARRAY_AGG(CONCAT(RC.CLEANED_COMMENT, ' (', RC.COMMENT_TYPE, ')')) AS customer_comments,
+    GROUP_CONCAT(CONCAT(RC.CLEANED_COMMENT, ' (', RC.COMMENT_TYPE, ')')) AS customer_comments,
     MAX(RC.TOTAL_COMMENTS) AS total_comments_per_customer
 FROM ranked_comments RC
 WHERE RC.COMMENT_RANK <= 5
 GROUP BY RC.C_CUSTKEY, RC.C_NAME
 ORDER BY total_comments_per_customer DESC
 LIMIT 1000;
-

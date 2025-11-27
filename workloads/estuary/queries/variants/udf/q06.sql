@@ -20,12 +20,8 @@ tokenized_words AS (
     SELECT
         order_month,
         cleaned_comment,
-        trim(regexp_substr(cleaned_comment, '[^ ]+( |$)', 0, word_nr)) as word
+        helpers.string_split(cleaned_comment, ' ') as word
     FROM combined_comments
-    cross join ( values between 1 and 50 as T(word_nr) )
-    WHERE trim(regexp_substr(cleaned_comment, '[^ ]+( |$)', 0, word_nr)) is not null
-      AND word_nr <= (LENGTH(cleaned_comment) - LENGTH(REPLACE(cleaned_comment, ' ', '')) + 1)
-      AND cleaned_comment IS NOT NULL
 ),
 word_counts AS (
     SELECT
