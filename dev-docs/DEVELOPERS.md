@@ -57,6 +57,11 @@ A workload defines the contents of the benchmark, in terms of
 
 📖 **See [Extending Guide](EXTENDING.md) for details**
 
+## Adding Query Variants To Existing Workloads
+
+> [!NOTE]
+> Section needs content.
+
 ## Adding New Systems
 
 Systems are defined by python code at `benchkit/systems/`, which needs to provide methods to
@@ -69,6 +74,9 @@ Systems are defined by python code at `benchkit/systems/`, which needs to provid
 📖 **See [Extending Guide](EXTENDING.md) for details**
 
 ## Adding New Infrastructure Providers
+
+> [!NOTE]
+> Section needs content.
 
 📖 **See [Extending Guide](EXTENDING.md) for details**
 
