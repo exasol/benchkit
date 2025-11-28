@@ -69,16 +69,24 @@ class InfraManager:
                 error=f"Provider {self.provider} not implemented",
             )
 
-    def get_infrastructure_ips(self) -> dict[str, dict[str, str]] | None:
+    def get_infrastructure_ips(self) -> dict[str, dict[str, Any]] | None:
         """
         Get public and private IPs for all systems in the infrastructure.
 
         Returns:
             Dictionary mapping system names to their IP addresses:
+            For single-node systems:
             {
                 "system_name": {
                     "public_ip": "1.2.3.4",
                     "private_ip": "10.0.0.1"
+                }
+            }
+            For multi-node systems:
+            {
+                "system_name": {
+                    "public_ips": ["1.2.3.4", "1.2.3.5", "1.2.3.6"],
+                    "private_ips": ["10.0.0.1", "10.0.0.2", "10.0.0.3"]
                 }
             }
             Returns None if infrastructure not provisioned or IPs not available.
@@ -101,10 +109,34 @@ class InfraManager:
             # Build infrastructure details
             infra_ips = {}
             for system_name, public_ip in public_ips.items():
-                infra_ips[system_name] = {
-                    "public_ip": public_ip,
-                    "private_ip": private_ips.get(system_name, "-"),
-                }
+                private_ip = private_ips.get(system_name, "-")
+
+                # IPs are always lists now (Terraform outputs are consistent)
+                # Single-node: [ip], Multinode: [ip1, ip2, ...]
+                if isinstance(public_ip, list) and len(public_ip) > 1:
+                    # Multinode system (multiple IPs)
+                    infra_ips[system_name] = {
+                        "public_ips": public_ip,
+                        "private_ips": (
+                            private_ip if isinstance(private_ip, list) else [private_ip]
+                        ),
+                    }
+                elif isinstance(public_ip, list) and len(public_ip) == 1:
+                    # Single node system (list with one element)
+                    infra_ips[system_name] = {
+                        "public_ip": public_ip[0],
+                        "private_ip": (
+                            private_ip[0]
+                            if isinstance(private_ip, list)
+                            else private_ip
+                        ),
+                    }
+                else:
+                    # Backward compatibility: non-list (single node)
+                    infra_ips[system_name] = {
+                        "public_ip": public_ip,
+                        "private_ip": private_ip,
+                    }
 
             return infra_ips
         except Exception:
@@ -369,11 +401,20 @@ class InfraManager:
             # Only include systems that are in the filtered systems list
             if system_name in active_systems:
                 disk_config = system_config.get("disk", {})
+
+                # Get node_count from system setup config
+                node_count = 1
+                for sys_cfg in self.config.get("systems", []):
+                    if sys_cfg["name"] == system_name:
+                        node_count = sys_cfg.get("setup", {}).get("node_count", 1)
+                        break
+
                 systems_tf[system_name] = {
                     "instance_type": system_config.get("instance_type", "m7i.4xlarge"),
                     "disk_size": disk_config.get("size_gb", 40),
                     "disk_type": disk_config.get("type", "gp3"),
                     "label": system_config.get("label", ""),
+                    "node_count": node_count,
                 }
 
         # Convert to JSON string for Terraform
@@ -523,11 +564,55 @@ class InfraManager:
                 private_ips = outputs.get("system_private_ips", {}).get("value", {})
 
                 for system_name in instance_ids.keys():
-                    system_data[system_name] = {
-                        "instance_id": instance_ids.get(system_name),
-                        "public_ip": public_ips.get(system_name),
-                        "private_ip": private_ips.get(system_name),
-                    }
+                    instance_id = instance_ids.get(system_name)
+                    public_ip = public_ips.get(system_name)
+                    private_ip = private_ips.get(system_name)
+
+                    # IPs are always lists now (Terraform outputs are consistent)
+                    # Single-node: [ip], Multinode: [ip1, ip2, ...]
+                    if isinstance(public_ip, list) and len(public_ip) > 1:
+                        # Multinode system: create list of node info
+                        system_data[system_name] = {
+                            "multinode": True,
+                            "node_count": len(public_ip),
+                            "nodes": [
+                                {
+                                    "instance_id": (
+                                        instance_id[i]
+                                        if isinstance(instance_id, list)
+                                        else instance_id
+                                    ),
+                                    "public_ip": public_ip[i],
+                                    "private_ip": private_ip[i],
+                                    "node_idx": i,
+                                }
+                                for i in range(len(public_ip))
+                            ],
+                        }
+                    elif isinstance(public_ip, list) and len(public_ip) == 1:
+                        # Single node system (list with one element) - extract values
+                        system_data[system_name] = {
+                            "multinode": False,
+                            "instance_id": (
+                                instance_id[0]
+                                if isinstance(instance_id, list)
+                                else instance_id
+                            ),
+                            "public_ip": public_ip[0],
+                            "private_ip": (
+                                private_ip[0]
+                                if isinstance(private_ip, list)
+                                else private_ip
+                            ),
+                        }
+                    else:
+                        # Backward compatibility: non-list (single node)
+                        system_data[system_name] = {
+                            "multinode": False,
+                            "instance_id": instance_id,
+                            "public_ip": public_ip,
+                            "private_ip": private_ip,
+                        }
 
                 return system_data
             except json.JSONDecodeError:
@@ -634,14 +719,24 @@ class InfraManager:
         import time
 
         # Parse instance information from terraform outputs
-        instances = {}
+        # Flatten multinode systems into individual instances to wait for
+        instances_to_check = []  # List of (system_name, node_idx, public_ip)
 
         # Check if we have the expected terraform output structure
         if "system_public_ips" in terraform_outputs:
-            # New structure: system_public_ips = {"exasol": "1.2.3.4", "clickhouse": "5.6.7.8"}
+            # New structure: system_public_ips = {"exasol": ["1.2.3.4"], "clickhouse": ["5.6.7.8"]}
+            # or multinode: {"exasol": ["1.2.3.4", "1.2.3.5", "1.2.3.6"]}
             system_public_ips = terraform_outputs["system_public_ips"]
             if isinstance(system_public_ips, dict):
-                instances = system_public_ips
+                for system_name, public_ip in system_public_ips.items():
+                    # Handle both list and single IP (backward compatibility)
+                    if isinstance(public_ip, list):
+                        # List of IPs (single-node returns [ip], multinode returns [ip1, ip2, ...])
+                        for idx, ip in enumerate(public_ip):
+                            instances_to_check.append((system_name, idx, ip))
+                    else:
+                        # Single IP (backward compatibility)
+                        instances_to_check.append((system_name, 0, public_ip))
             else:
                 print(
                     f"Warning: system_public_ips is not a dict: {type(system_public_ips)}"
@@ -651,9 +746,9 @@ class InfraManager:
             for key, value in terraform_outputs.items():
                 if key.endswith("_public_ip"):
                     system_name = key.replace("_public_ip", "")
-                    instances[system_name] = value
+                    instances_to_check.append((system_name, 0, value))
 
-        if not instances:
+        if not instances_to_check:
             print("No instances found in terraform outputs")
             return False
 
@@ -663,53 +758,108 @@ class InfraManager:
         system_private_ips = terraform_outputs.get("system_private_ips", {})
         system_ssh_commands = terraform_outputs.get("system_ssh_commands", {})
 
-        for system_name, public_ip in instances.items():
+        for system_name in set(s for s, _, _ in instances_to_check):
             instance_id = system_instance_ids.get(system_name, "unknown")
             private_ip = system_private_ips.get(system_name, "unknown")
-            ssh_command = system_ssh_commands.get(
-                system_name, f"ssh ubuntu@{public_ip}"
-            )
+            ssh_command = system_ssh_commands.get(system_name, "unknown")
 
             print(f"  🖥️  {system_name}:")
             print(f"     Instance ID: {instance_id}")
-            print(f"     Public IP:   {public_ip}")
-            print(f"     Private IP:  {private_ip}")
-            print(f"     SSH:         {ssh_command}")
+            # Format IPs nicely for multinode
+            if isinstance(private_ip, list) and len(private_ip) > 1:
+                print(f"     Nodes: {len(private_ip)}")
+                for idx in range(len(private_ip)):
+                    pub_ip = (
+                        system_public_ips.get(system_name, [])[idx]
+                        if isinstance(system_public_ips.get(system_name), list)
+                        else "unknown"
+                    )
+                    priv_ip = private_ip[idx]
+                    ssh_cmd = (
+                        system_ssh_commands.get(system_name, [])[idx]
+                        if isinstance(system_ssh_commands.get(system_name), list)
+                        else f"ssh ubuntu@{pub_ip}"
+                    )
+                    print(f"       Node {idx}: {pub_ip} ({priv_ip})")
+            else:
+                # Extract single values from lists if needed
+                pub_ip = system_public_ips.get(system_name)
+                if isinstance(pub_ip, list) and len(pub_ip) == 1:
+                    pub_ip = pub_ip[0]
+                priv_ip = (
+                    private_ip[0]
+                    if isinstance(private_ip, list) and len(private_ip) == 1
+                    else private_ip
+                )
+                print(f"     Public IP:   {pub_ip}")
+                print(f"     Private IP:  {priv_ip}")
+                print(
+                    f"     SSH:         {ssh_command if isinstance(ssh_command, str) else ssh_command[0] if isinstance(ssh_command, list) else 'unknown'}"
+                )
             print()
 
-        print(f"Waiting for {len(instances)} instance(s) to initialize...")
+        print(f"Waiting for {len(instances_to_check)} instance(s) to initialize...")
 
         max_wait_time = 900  # 15 minutes
         check_interval = 30  # Check every 30 seconds
         start_time = time.time()
 
-        ready_instances = set()
+        ready_instances = set()  # Set of (system_name, node_idx) tuples
 
         while time.time() - start_time < max_wait_time:
-            for system_name, public_ip in instances.items():
-                if system_name in ready_instances:
+            for system_name, node_idx, public_ip in instances_to_check:
+                instance_key = (system_name, node_idx)
+                if instance_key in ready_instances:
                     continue  # Already confirmed ready
 
                 if self._check_instance_ready(public_ip, system_name):
-                    print(f"✅ {system_name} instance ready ({public_ip})")
-                    ready_instances.add(system_name)
+                    # Display node index for multinode systems
+                    node_label = (
+                        f"-node{node_idx}"
+                        if any(
+                            s == system_name and i != node_idx
+                            for s, i, _ in instances_to_check
+                        )
+                        else ""
+                    )
+                    print(f"✅ {system_name}{node_label} instance ready ({public_ip})")
+                    ready_instances.add(instance_key)
                 else:
                     remaining_time = max_wait_time - (time.time() - start_time)
+                    node_label = (
+                        f"-node{node_idx}"
+                        if any(
+                            s == system_name and i != node_idx
+                            for s, i, _ in instances_to_check
+                        )
+                        else ""
+                    )
                     print(
-                        f"⏳ {system_name} still initializing... ({remaining_time:.0f}s remaining)"
+                        f"⏳ {system_name}{node_label} still initializing... ({remaining_time:.0f}s remaining)"
                     )
 
             # Check if all instances are ready
-            if len(ready_instances) == len(instances):
+            if len(ready_instances) == len(instances_to_check):
                 print("\n🎉 All instances are ready and initialized!")
                 return True
 
             time.sleep(check_interval)
 
         # Timeout reached
-        failed_instances = set(instances.keys()) - ready_instances
+        failed_instances = []
+        for system_name, node_idx, public_ip in instances_to_check:
+            if (system_name, node_idx) not in ready_instances:
+                node_label = (
+                    f"-node{node_idx}"
+                    if any(
+                        s == system_name and i != node_idx
+                        for s, i, _ in instances_to_check
+                    )
+                    else ""
+                )
+                failed_instances.append(f"{system_name}{node_label}")
         print(
-            f"✗ Timeout: {failed_instances} failed to initialize within {max_wait_time}s"
+            f"✗ Timeout: {', '.join(failed_instances)} failed to initialize within {max_wait_time}s"
         )
         return False
 

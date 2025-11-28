@@ -1,8 +1,9 @@
 """Base classes for database systems under test."""
 
+import re
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from ..package.markers import exclude_from_package
 from ..util import safe_command
@@ -11,7 +12,15 @@ from ..util import safe_command
 class SystemUnderTest(ABC):
     """Abstract base class for database systems under test."""
 
-    def __init__(self, config: dict[str, Any]):
+    # Class attribute indicating if this system supports multinode clusters
+    # Subclasses should override this to True if they support multinode
+    SUPPORTS_MULTINODE: bool = False
+
+    def __init__(
+        self,
+        config: dict[str, Any],
+        output_callback: Callable[[str], None] | None = None,
+    ):
         self.name = config["name"]
         self.kind = config["kind"]
         self.version = config["version"]
@@ -23,9 +32,30 @@ class SystemUnderTest(ABC):
         self._connection = None
         self._is_running = False
 
+        # Output callback for thread-safe logging in parallel execution
+        self._output_callback = output_callback
+
         # Command recording for report reproduction
         self.setup_commands: list[dict[str, Any]] = []
         self.installation_notes: list[str] = []
+
+        # Multinode configuration
+        self.node_count: int = self.setup_config.get("node_count", 1)
+
+    def _log(self, message: str) -> None:
+        """
+        Thread-safe logging that respects parallel execution context.
+
+        Use this method instead of print() to ensure correct system name tagging
+        when systems are being installed/configured in parallel.
+
+        Args:
+            message: Message to log
+        """
+        if self._output_callback:
+            self._output_callback(message)
+        else:
+            print(message)
 
     @exclude_from_package
     def get_install_marker_path(self) -> str | None:
@@ -227,7 +257,7 @@ class SystemUnderTest(ABC):
             self.data_dir.mkdir(parents=True, exist_ok=True)
             return True
         except Exception as e:
-            print(f"Failed to create data directory {self.data_dir}: {e}")
+            self._log(f"Failed to create data directory {self.data_dir}: {e}")
             return False
 
     def cleanup_data_directory(self) -> bool:
@@ -241,7 +271,7 @@ class SystemUnderTest(ABC):
                 shutil.rmtree(self.data_dir)
             return True
         except Exception as e:
-            print(f"Failed to cleanup data directory {self.data_dir}: {e}")
+            self._log(f"Failed to cleanup data directory {self.data_dir}: {e}")
             return False
 
     def execute_command(
@@ -250,20 +280,31 @@ class SystemUnderTest(ABC):
         timeout: float | None = None,
         record: bool = True,
         category: str = "setup",
+        node_info: str | None = None,
     ) -> dict[str, Any]:
-        """Execute a system command safely and optionally record it."""
+        """Execute a system command safely and optionally record it.
+
+        Args:
+            command: Command to execute
+            timeout: Command timeout in seconds
+            record: Whether to record command for report reproduction
+            category: Category for organizing commands in report
+            node_info: Node information (e.g., "node0", "all nodes", "node1,node2")
+        """
         result = safe_command(command, timeout=timeout)
 
         # Record command for report reproduction
         if record:
-            self.setup_commands.append(
-                {
-                    "command": command,
-                    "success": result["success"],
-                    "description": f"Execute {command.split()[0]} command",
-                    "category": category,
-                }
-            )
+            command_record = {
+                "command": command,
+                "success": result["success"],
+                "description": f"Execute {command.split()[0]} command",
+                "category": category,
+            }
+            if node_info:
+                command_record["node_info"] = node_info
+
+            self.setup_commands.append(command_record)
 
         return result
 
@@ -299,21 +340,27 @@ class SystemUnderTest(ABC):
 
     @exclude_from_package
     def record_setup_command(
-        self, command: str, description: str, category: str = "setup"
+        self,
+        command: str,
+        description: str,
+        category: str = "setup",
+        node_info: str | None = None,
     ) -> None:
         """Record a setup command without executing it."""
         # Sanitize both command and description for report by replacing sensitive data with placeholders
         sanitized_command = self._sanitize_command_for_report(command)
         sanitized_description = self._sanitize_command_for_report(description)
 
-        self.setup_commands.append(
-            {
-                "command": sanitized_command,
-                "success": True,
-                "description": sanitized_description,
-                "category": category,
-            }
-        )
+        command_record = {
+            "command": sanitized_command,
+            "success": True,
+            "description": sanitized_description,
+            "category": category,
+        }
+        if node_info:
+            command_record["node_info"] = node_info
+
+        self.setup_commands.append(command_record)
 
     def _sanitize_command_for_report(self, command: str) -> str:
         """Replace sensitive information in commands with placeholders for reports."""
@@ -504,7 +551,7 @@ class SystemUnderTest(ABC):
         )
 
         if not result.get("success", False):
-            print("Warning: Could not detect storage devices")
+            self._log("Warning: Could not detect storage devices")
             return []
 
         devices = []
@@ -519,8 +566,38 @@ class SystemUnderTest(ABC):
                 device_path = f"/dev/{device_name}"
 
                 # Skip root disk if requested
-                if skip_root and device_name == "nvme0n1":
-                    continue
+                if skip_root:
+                    # Dynamically detect root disk by checking what's mounted as /
+                    # Use findmnt which properly resolves /dev/root symlinks
+                    root_check = self.execute_command(
+                        "findmnt -n -o SOURCE /", record=False
+                    )
+
+                    # Fallback to df if findmnt not available
+                    if not root_check.get("success", False):
+                        root_check = self.execute_command(
+                            "df / | tail -1 | awk '{print $1}'", record=False
+                        )
+
+                    if root_check.get("success", False):
+                        root_device = root_check.get("stdout", "").strip()
+
+                        # If we got /dev/root symlink, resolve it to actual device
+                        if root_device == "/dev/root":
+                            readlink_check = self.execute_command(
+                                "readlink -f /dev/root", record=False
+                            )
+                            if readlink_check.get("success", False):
+                                root_device = readlink_check.get("stdout", "").strip()
+
+                        # Extract base device name (e.g., /dev/nvme1n1p1 -> nvme1n1)
+                        if "/" in root_device:
+                            # Use regex to remove partition suffix (p1, p15, or just digits)
+                            # This correctly handles: nvme0n1p1 -> nvme0n1, sda1 -> sda
+                            device_part = root_device.split("/")[-1]
+                            root_base = re.sub(r"p?\d+$", "", device_part)
+                            if device_name == root_base:
+                                continue
 
                 # Check if device exists
                 check_result = self.execute_command(
@@ -547,9 +624,9 @@ class SystemUnderTest(ABC):
                 if device_filter and storage_type != device_filter:
                     continue
 
-                # Check mount status
+                # Check mount status - use exact match to avoid matching partitions
                 mount_result = self.execute_command(
-                    f"mount | grep {device_path}", record=False
+                    f"mount | grep '^{device_path} '", record=False
                 )
                 mounted_at = None
                 if (
@@ -561,6 +638,24 @@ class SystemUnderTest(ABC):
                     if len(mount_parts) >= 3:
                         mounted_at = mount_parts[2]
 
+                # Resolve to stable /dev/disk/by-id/ path for multinode consistency
+                stable_path = device_path
+                by_id_result = self.execute_command(
+                    f"ls -l /dev/disk/by-id/ | grep '{device_name}$' | grep -v -- '-part' | grep -v '_[0-9]*$' | head -1 | awk '{{print \"/dev/disk/by-id/\" $9}}'",
+                    record=False,
+                )
+                if (
+                    by_id_result.get("success", False)
+                    and by_id_result.get("stdout", "").strip()
+                ):
+                    # Ensure we only have a single line (no embedded newlines)
+                    stable_path_raw = by_id_result.get("stdout", "").strip()
+                    stable_path = (
+                        stable_path_raw.split("\n")[0]
+                        if stable_path_raw
+                        else device_path
+                    )
+
                 devices.append(
                     {
                         "name": device_name,
@@ -569,8 +664,16 @@ class SystemUnderTest(ABC):
                         "type": device_type,
                         "storage_type": storage_type,
                         "mounted_at": mounted_at,
+                        "stable_path": stable_path,
                     }
                 )
+
+        # Sort devices by stable_path for deterministic ordering across nodes
+        # This is critical for multinode consistency:
+        # - Single disk: ensures same disk selected on all nodes
+        # - RAID: ensures same device order → consistent RAID layout
+        # - Multiple disks: ensures consistent device assignment
+        devices.sort(key=lambda d: d["stable_path"])
 
         return devices
 
@@ -681,10 +784,10 @@ class SystemUnderTest(ABC):
             check_user.get("success", False)
             and "exists" in check_user.get("stdout", "")
         ):
-            print(
+            self._log(
                 f"Warning: User {user} does not exist yet, skipping ownership setting"
             )
-            print("  Ownership will need to be set later during installation")
+            self._log("  Ownership will need to be set later during installation")
             return True
 
         self.record_setup_command(
@@ -713,13 +816,15 @@ class SystemUnderTest(ABC):
             True if successful, False otherwise
         """
         if len(device_paths) < 2:
-            print(
+            self._log(
                 f"Warning: Need at least 2 devices for RAID0, got {len(device_paths)}"
             )
             return False
 
         devices_str = " ".join(device_paths)
-        print(f"Creating RAID0 array from {len(device_paths)} device(s): {devices_str}")
+        self._log(
+            f"Creating RAID0 array from {len(device_paths)} device(s): {devices_str}"
+        )
 
         # Step 1: Stop any existing RAID arrays on the target device
         self.record_setup_command(
@@ -733,7 +838,39 @@ class SystemUnderTest(ABC):
             category="storage_setup",
         )
 
-        # Step 2: Zero superblocks on all devices
+        # Step 2: Clean devices - unmount if needed and clear filesystem signatures
+        for dev in device_paths:
+            # Check if device is mounted
+            mount_check = self.execute_command(f"mount | grep '^{dev} '", record=False)
+            if (
+                mount_check.get("success", False)
+                and mount_check.get("stdout", "").strip()
+            ):
+                self._log(f"Device {dev} is mounted, unmounting...")
+                self.record_setup_command(
+                    f"sudo umount {dev}",
+                    f"Unmount {dev} before RAID creation",
+                    "storage_setup",
+                )
+                umount_result = self.execute_command(
+                    f"sudo umount {dev}", record=True, category="storage_setup"
+                )
+                if not umount_result.get("success", False):
+                    self._log(f"Warning: Failed to unmount {dev}, continuing anyway...")
+
+            # Clear filesystem signatures
+            self.record_setup_command(
+                f"sudo wipefs -a {dev} 2>/dev/null || true",
+                f"Clear filesystem signatures on {dev}",
+                "storage_setup",
+            )
+            self.execute_command(
+                f"sudo wipefs -a {dev} 2>/dev/null || true",
+                record=True,
+                category="storage_setup",
+            )
+
+        # Step 3: Zero superblocks on all devices
         for dev in device_paths:
             self.record_setup_command(
                 f"sudo mdadm --zero-superblock {dev} 2>/dev/null || true",
@@ -746,7 +883,7 @@ class SystemUnderTest(ABC):
                 category="storage_setup",
             )
 
-        # Step 3: Create RAID0 array
+        # Step 4: Create RAID0 array
         create_cmd = (
             f"yes | sudo mdadm --create {raid_device} "
             f"--level=0 --raid-devices={len(device_paths)} {devices_str}"
@@ -759,12 +896,12 @@ class SystemUnderTest(ABC):
 
         result = self.execute_command(create_cmd, record=True, category="storage_setup")
         if not result.get("success", False):
-            print(
+            self._log(
                 f"Failed to create RAID0 array: {result.get('stderr', 'Unknown error')}"
             )
             return False
 
-        # Step 4: Wait for array to be ready (non-fatal)
+        # Step 5: Wait for array to be ready (non-fatal)
         self.record_setup_command(
             f"sudo mdadm --wait {raid_device} 2>/dev/null || true",
             f"Wait for RAID array {raid_device} to be ready",
@@ -805,7 +942,7 @@ class SystemUnderTest(ABC):
         self.record_setup_note(
             f"RAID0 array created: {raid_device} from {len(device_paths)} devices"
         )
-        print(f"✓ RAID0 array created successfully: {raid_device}")
+        self._log(f"✓ RAID0 array created successfully: {raid_device}")
 
         return True
 
@@ -825,17 +962,17 @@ class SystemUnderTest(ABC):
         """
         # Check if storage setup was already completed
         if getattr(self, "_storage_setup_complete", False):
-            print(f"✓ Storage already configured for {self.name}, skipping setup")
+            self._log(f"✓ Storage already configured for {self.name}, skipping setup")
             return True
 
         use_additional_disk = self.setup_config.get("use_additional_disk", False)
 
         result = False
         if use_additional_disk:
-            print(f"Setting up additional disk storage for {self.name}...")
+            self._log(f"Setting up additional disk storage for {self.name}...")
             result = self._setup_database_storage(scale_factor)
         else:
-            print(f"Setting up directory-based storage for {self.name}...")
+            self._log(f"Setting up directory-based storage for {self.name}...")
             result = self._setup_directory_storage(scale_factor)
 
         # Mark storage setup as complete if successful
@@ -864,7 +1001,7 @@ class SystemUnderTest(ABC):
         # Use space-padded grep to match exact mount point (not subdirectories)
         check_mount = self.execute_command("mount | grep ' /data '", record=False)
         if check_mount.get("success", False) and check_mount.get("stdout", "").strip():
-            print("✓ Storage already mounted at /data, skipping setup")
+            self._log("✓ Storage already mounted at /data, skipping setup")
             self.data_dir = Path("/data")
             return True
 
@@ -879,7 +1016,7 @@ class SystemUnderTest(ABC):
 
         if len(local_devices) > 1:
             # Multiple local instance store devices → create RAID0
-            print(
+            self._log(
                 f"Detected {len(local_devices)} local instance store devices, creating RAID0..."
             )
 
@@ -892,39 +1029,56 @@ class SystemUnderTest(ABC):
             if raid_check.get("success", False) and "exists" in raid_check.get(
                 "stdout", ""
             ):
-                print(f"✓ RAID array {raid_device} already exists")
+                self._log(f"✓ RAID array {raid_device} already exists")
                 device_to_use = raid_device
             else:
                 # Create RAID0 from all local devices
-                device_paths = [d["path"] for d in local_devices]
+                # Use stable_path for consistent device identification across nodes
+                device_paths = [d.get("stable_path", d["path"]) for d in local_devices]
+
+                # Validate device paths - ensure no embedded newlines
+                for idx, path in enumerate(device_paths):
+                    if "\n" in path:
+                        self._log(
+                            f"[yellow]Warning: Device path {idx} contains newlines, using regular path instead[/yellow]"
+                        )
+                        # Fall back to regular path
+                        device_paths[idx] = local_devices[idx]["path"]
+
                 if self._create_raid0(device_paths, raid_device):
                     device_to_use = raid_device
                 else:
-                    print(
+                    self._log(
                         "Warning: RAID0 creation failed, falling back to first device"
                     )
-                    device_to_use = local_devices[0]["path"]
+                    # Prefer stable_path for multinode consistency
+                    device_to_use = local_devices[0].get(
+                        "stable_path", local_devices[0]["path"]
+                    )
 
         elif len(local_devices) == 1:
             # Single local instance store device
-            print(
-                f"Detected single local instance store device: {local_devices[0]['path']}"
-            )
-            device_to_use = local_devices[0]["path"]
+            # Prefer stable_path for multinode consistency
+            device_path = local_devices[0].get("stable_path", local_devices[0]["path"])
+            self._log(f"Detected single local instance store device: {device_path}")
+            device_to_use = device_path
 
         else:
             # No local devices, check for any additional devices (EBS, etc.)
-            print("No local instance store devices found, checking for EBS volumes...")
+            self._log(
+                "No local instance store devices found, checking for EBS volumes..."
+            )
             all_devices = self._detect_storage_devices(skip_root=True)
 
             if not all_devices:
-                print(
+                self._log(
                     f"Warning: No additional storage devices found for {self.name}, using directory storage"
                 )
                 return self._setup_directory_storage(scale_factor)
 
-            device_to_use = all_devices[0]["path"]
-            print(f"Using EBS device: {device_to_use}")
+            # Prefer stable_path for multinode consistency
+            device_to_use = all_devices[0].get("stable_path", all_devices[0]["path"])
+            self._log(f"Using EBS device: {device_to_use}")
 
         # Check if device is already mounted
         mount_check = self.execute_command(
@@ -935,16 +1089,18 @@ class SystemUnderTest(ABC):
             if len(mount_parts) >= 3:
                 current_mount = mount_parts[2]
                 if current_mount == mount_point:
-                    print(f"✓ Device {device_to_use} already mounted at {mount_point}")
+                    self._log(
+                        f"✓ Device {device_to_use} already mounted at {mount_point}"
+                    )
                     self.data_dir = Path(mount_point)
                     return True
                 else:
                     # Mounted elsewhere, unmount first
-                    print(
+                    self._log(
                         f"Device {device_to_use} mounted at {current_mount}, unmounting..."
                     )
                     if not self._unmount_disk(device_to_use):
-                        print(f"Failed to unmount {device_to_use}")
+                        self._log(f"Failed to unmount {device_to_use}")
                         return False
 
         # Format and mount
@@ -960,7 +1116,7 @@ class SystemUnderTest(ABC):
         self.record_setup_note(
             f"Storage device {device_to_use} mounted at {mount_point}"
         )
-        print(f"✓ Storage setup complete: {device_to_use} → {mount_point}")
+        self._log(f"✓ Storage setup complete: {device_to_use} → {mount_point}")
 
         # Update data_dir to actual mount point
         self.data_dir = Path(mount_point)
@@ -978,7 +1134,7 @@ class SystemUnderTest(ABC):
             True if successful, False otherwise
         """
         if not self.data_dir:
-            print(f"No data directory configured for {self.name}, skipping")
+            self._log(f"No data directory configured for {self.name}, skipping")
             return True
 
         # Create directory
@@ -992,14 +1148,14 @@ class SystemUnderTest(ABC):
         )
 
         if not result.get("success", False):
-            print(f"Failed to create data directory {self.data_dir}")
+            self._log(f"Failed to create data directory {self.data_dir}")
             return False
 
         # Set ownership
         self._set_ownership(str(self.data_dir))
 
         self.record_setup_note(f"✓ Data directory created: {self.data_dir}")
-        print(f"✓ Directory storage setup complete: {self.data_dir}")
+        self._log(f"✓ Directory storage setup complete: {self.data_dir}")
 
         return True
 

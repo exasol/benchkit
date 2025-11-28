@@ -2,7 +2,7 @@
 
 import os
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Callable, cast
 
 import pyexasol  # type: ignore
 
@@ -13,6 +13,9 @@ from .base import SystemUnderTest
 
 class ExasolSystem(SystemUnderTest):
     """Exasol database system implementation."""
+
+    # Exasol supports multinode clusters via c4 tool
+    SUPPORTS_MULTINODE = True
 
     @classmethod
     def get_python_dependencies(cls) -> list[str]:
@@ -88,8 +91,12 @@ class ExasolSystem(SystemUnderTest):
         schema = self.setup_config.get("schema", "benchmark")
         return f"exaplus -c {public_ip}:{port} -u {username} -p <password> -s {schema}"
 
-    def __init__(self, config: dict[str, Any]):
-        super().__init__(config)
+    def __init__(
+        self,
+        config: dict[str, Any],
+        output_callback: Callable[[str], None] | None = None,
+    ):
+        super().__init__(config, output_callback)
         self.setup_method = self.setup_config.get("method", "docker")
         self.container_name = f"exasol_{self.name}"
         self.license_file = self.setup_config.get("license_file")
@@ -113,8 +120,8 @@ class ExasolSystem(SystemUnderTest):
                         resolved_ip if resolved_ip else host_external_addrs
                     )
 
-                # Use first external IP
-                self.host = host_external_addrs.split(",")[0].strip()
+                # Use first external IP (handle both comma and space-separated lists)
+                self.host = host_external_addrs.replace(",", " ").split()[0]
             else:
                 self.host = self.setup_config.get("host", "localhost")
             self.password = self.setup_config.get("db_password", "exasol")
@@ -128,7 +135,12 @@ class ExasolSystem(SystemUnderTest):
 
         self._connection = None
         self._schema_created = False
-        self._cloud_instance_manager = None
+        self._cloud_instance_manager = (
+            None  # Primary node (node 0) for single-node or multinode
+        )
+        self._cloud_instance_managers: list[Any] = (
+            []
+        )  # All nodes for multinode clusters
         self._external_host = None  # Initialize for cloud instance external IP
         self._certificate_fingerprint: str | None = (
             None  # Cache for TLS certificate fingerprint
@@ -137,6 +149,7 @@ class ExasolSystem(SystemUnderTest):
         # Storage for partitioned disk information
         self._data_generation_mount_point: str | None = None
         self._exasol_raw_partition: str | None = None
+        self.data_device: str | None = None  # Storage device path for Exasol
 
     def _resolve_ip_address(self, var_name: str) -> str | None:
         """Resolve IP address from configuration or infrastructure state."""
@@ -180,7 +193,7 @@ class ExasolSystem(SystemUnderTest):
 
             # For localhost, if SSL error persists, try without SSL completely
             if is_localhost and ("SSL" in error_msg or "certificate" in error_msg):
-                print(
+                self._log(
                     "SSL error on localhost, attempting connection without SSL verification"
                 )
                 connection_kwargs["websocket_sslopt"] = {"cert_reqs": ssl.CERT_NONE}
@@ -225,7 +238,7 @@ class ExasolSystem(SystemUnderTest):
                     else:
                         dsn_with_fingerprint = f"{dsn}/{fingerprint}"
 
-                    print(
+                    self._log(
                         f"TLS certificate issue detected, retrying with fingerprint: {dsn_with_fingerprint}"
                     )
 
@@ -235,7 +248,7 @@ class ExasolSystem(SystemUnderTest):
                     )
                 else:
                     # Certificate error but couldn't extract fingerprint
-                    print(
+                    self._log(
                         f"Certificate error but couldn't extract fingerprint: {error_msg}"
                     )
                     raise
@@ -317,7 +330,7 @@ class ExasolSystem(SystemUnderTest):
         """
         # If we already set up a base device (possibly RAID), use that
         if hasattr(self, "_exasol_base_device") and self._exasol_base_device:
-            print(
+            self._log(
                 f"Using previously configured Exasol device: {self._exasol_base_device}"
             )
             return self._exasol_base_device
@@ -326,21 +339,24 @@ class ExasolSystem(SystemUnderTest):
         devices = self._detect_storage_devices(skip_root=True)
 
         if not devices:
-            print("Warning: No additional disk found for Exasol")
+            self._log("Warning: No additional disk found for Exasol")
             return None
 
         # Return first available device
         for device in devices:
             # If allow_mounted, or device is not mounted, return it
             if allow_mounted or not device["mounted_at"]:
-                print(f"Detected additional disk for Exasol: {device['path']}")
-                return device["path"]
+                # Prefer stable_path for multinode consistency, fallback to path
+                disk_path = device.get("stable_path", device["path"])
+                self._log(f"Detected additional disk for Exasol: {disk_path}")
+                return disk_path
 
         # All devices are mounted and allow_mounted is False
         if not allow_mounted:
-            print("Warning: All additional disks are mounted")
+            self._log("Warning: All additional disks are mounted")
             # Return first device anyway (caller will handle unmounting)
-            return devices[0]["path"]
+            # Prefer stable_path for multinode consistency, fallback to path
+            return devices[0].get("stable_path", devices[0]["path"])
 
         return None
 
@@ -362,12 +378,14 @@ class ExasolSystem(SystemUnderTest):
             Tuple of (data_generation_mount_point, exasol_raw_partition_path)
             Returns (None, None) if partitioning fails
         """
-        print("Setting up partitioned disk for data generation and Exasol storage...")
+        self._log(
+            "Setting up partitioned disk for data generation and Exasol storage..."
+        )
 
         # Step 1: Detect additional disk
         detected_disk = self._detect_exasol_disk(allow_mounted=True)
         if not detected_disk:
-            print("No additional disk available for partitioning")
+            self._log("No additional disk available for partitioning")
             return None, None
 
         # Step 1.5: Check if disk is already partitioned
@@ -384,7 +402,7 @@ class ExasolSystem(SystemUnderTest):
             existing_partitions = [p.strip() for p in existing_partitions if p.strip()]
 
             if len(existing_partitions) >= 2:
-                print(
+                self._log(
                     f"✓ Disk {detected_disk} already has partitions, checking if they're usable..."
                 )
 
@@ -408,15 +426,15 @@ class ExasolSystem(SystemUnderTest):
                     and check_mount_result.get("stdout", "").strip()
                 ):
                     # Already mounted
-                    print(
+                    self._log(
                         f"✓ Data partition {data_partition_dev} is already mounted at {data_mount_point}"
                     )
-                    print(f"✓ Exasol partition {exasol_partition_dev} is ready")
-                    print("✓ Skipping partitioning - using existing setup")
+                    self._log(f"✓ Exasol partition {exasol_partition_dev} is ready")
+                    self._log("✓ Skipping partitioning - using existing setup")
                     return data_mount_point, exasol_partition_dev
                 else:
                     # Partitions exist but not mounted, try to mount
-                    print(
+                    self._log(
                         f"✓ Partitions exist, attempting to mount {data_partition_dev}..."
                     )
 
@@ -437,14 +455,14 @@ class ExasolSystem(SystemUnderTest):
                             f"sudo chown -R $(whoami):$(whoami) {data_mount_point}",
                             record=False,
                         )
-                        print(
+                        self._log(
                             f"✓ Successfully mounted existing partition at {data_mount_point}"
                         )
-                        print(f"✓ Exasol partition {exasol_partition_dev} is ready")
-                        print("✓ Skipping partitioning - using existing setup")
+                        self._log(f"✓ Exasol partition {exasol_partition_dev} is ready")
+                        self._log("✓ Skipping partitioning - using existing setup")
                         return data_mount_point, exasol_partition_dev
                     else:
-                        print(
+                        self._log(
                             "⚠ Could not mount existing partition, will repartition..."
                         )
 
@@ -453,11 +471,11 @@ class ExasolSystem(SystemUnderTest):
         device_info = next((d for d in devices if d["path"] == detected_disk), None)
 
         if device_info and device_info["mounted_at"]:
-            print(
+            self._log(
                 f"Disk {detected_disk} is mounted at {device_info['mounted_at']}, unmounting..."
             )
             if not self._unmount_disk(detected_disk):
-                print(f"Failed to unmount {detected_disk}")
+                self._log(f"Failed to unmount {detected_disk}")
                 return None, None
 
         # Step 3: Get disk size
@@ -465,29 +483,29 @@ class ExasolSystem(SystemUnderTest):
             f"lsblk -bdn -o SIZE {detected_disk}", record=False
         )
         if not disk_size_result.get("success", False):
-            print(f"Failed to get disk size for {detected_disk}")
+            self._log(f"Failed to get disk size for {detected_disk}")
             return None, None
 
         disk_size_bytes = int(disk_size_result.get("stdout", "0").strip())
         disk_size_gb = disk_size_bytes // (1024**3)
-        print(f"Detected disk size: {disk_size_gb} GB")
+        self._log(f"Detected disk size: {disk_size_gb} GB")
 
         # Step 4: Calculate partition sizes
         data_partition_gb = self._estimate_tpch_data_size_gb(scale_factor)
         exasol_partition_gb = disk_size_gb - data_partition_gb
 
         if exasol_partition_gb < 10:
-            print(
+            self._log(
                 f"Error: Not enough space for Exasol partition (would be {exasol_partition_gb}GB)"
             )
-            print("Minimum 10GB required for Exasol")
+            self._log("Minimum 10GB required for Exasol")
             return None, None
 
-        print("Partition plan:")
-        print(
+        self._log("Partition plan:")
+        self._log(
             f"  - Data generation partition: {data_partition_gb} GB (for TPC-H SF{scale_factor})"
         )
-        print(f"  - Exasol raw partition: {exasol_partition_gb} GB")
+        self._log(f"  - Exasol raw partition: {exasol_partition_gb} GB")
 
         # Step 5: Create partition table using parted
         self.record_setup_command(
@@ -501,7 +519,7 @@ class ExasolSystem(SystemUnderTest):
             category="storage_setup",
         )
         if not parted_result.get("success", False):
-            print("Failed to create partition table")
+            self._log("Failed to create partition table")
             return None, None
 
         # Step 6: Create data generation partition (partition 1)
@@ -517,7 +535,7 @@ class ExasolSystem(SystemUnderTest):
             category="storage_setup",
         )
         if not data_part_result.get("success", False):
-            print("Failed to create data generation partition")
+            self._log("Failed to create data generation partition")
             return None, None
 
         # Step 7: Create Exasol raw partition (partition 2)
@@ -532,7 +550,7 @@ class ExasolSystem(SystemUnderTest):
             category="storage_setup",
         )
         if not exasol_part_result.get("success", False):
-            print("Failed to create Exasol partition")
+            self._log("Failed to create Exasol partition")
             return None, None
 
         # Step 8: Wait for partition devices to appear
@@ -551,13 +569,13 @@ class ExasolSystem(SystemUnderTest):
 
         # Step 9: Create filesystem on data generation partition
         if not self._format_disk(data_partition_dev, filesystem="ext4"):
-            print("Failed to create filesystem on data generation partition")
+            self._log("Failed to create filesystem on data generation partition")
             return None, None
 
         # Step 10: Mount data generation partition
         data_mount_point = "/data/tpch_gen"
         if not self._mount_disk(data_partition_dev, data_mount_point):
-            print("Failed to mount data generation partition")
+            self._log("Failed to mount data generation partition")
             return None, None
 
         # Step 11: Set ownership for data generation directory
@@ -569,9 +587,9 @@ class ExasolSystem(SystemUnderTest):
             f"{exasol_partition_gb}GB raw for Exasol"
         )
 
-        print("✓ Successfully partitioned disk:")
-        print(f"  - Data generation: {data_partition_dev} → {data_mount_point}")
-        print(f"  - Exasol storage: {exasol_partition_dev} (raw)")
+        self._log("✓ Successfully partitioned disk:")
+        self._log(f"  - Data generation: {data_partition_dev} → {data_mount_point}")
+        self._log(f"  - Exasol storage: {exasol_partition_dev} (raw)")
 
         return data_mount_point, exasol_partition_dev
 
@@ -588,14 +606,77 @@ class ExasolSystem(SystemUnderTest):
         2. Create RAID0 if multiple local devices
         3. Defer partitioning until workload scale factor is known
 
+        For multinode clusters, this runs on ALL nodes.
+
         Returns:
             True if successful, False otherwise
         """
-        # Check if /data is already mounted or if disk already configured
-        # This prevents re-running storage setup on already-configured instances
+        # For multinode, we need to setup storage on ALL nodes
+        if self._cloud_instance_managers and len(self._cloud_instance_managers) > 1:
+            self._log(
+                f"Setting up storage on all {len(self._cloud_instance_managers)} nodes..."
+            )
+            return self._setup_multinode_storage(scale_factor)
+
+        # Single node setup - use the same logic
+        return self._setup_single_node_storage(scale_factor)
+
+    @exclude_from_package
+    def _setup_multinode_storage(self, scale_factor: int) -> bool:
+        """
+        Setup storage on all nodes in a multinode cluster.
+        Each node gets its own RAID0 and partitioned disk.
+        """
+        all_success = True
+
+        # Store original setup_commands to prevent duplicate recording
+        original_commands_count = len(self.setup_commands)
+
+        for idx, mgr in enumerate(self._cloud_instance_managers):
+            self._log(f"\n  [Node {idx}] Setting up storage...")
+
+            # Temporarily override execute_command to use this specific node
+            original_mgr = self._cloud_instance_manager
+            self._cloud_instance_manager = mgr
+
+            # For nodes after the first, temporarily disable recording to avoid duplicates
+            if idx > 0:
+                commands_before = len(self.setup_commands)
+
+            try:
+                # Run single-node storage setup on this node
+                success = self._setup_single_node_storage(scale_factor)
+                if not success:
+                    self._log(f"  [Node {idx}] ✗ Storage setup failed")
+                    all_success = False
+                else:
+                    self._log(f"  [Node {idx}] ✓ Storage setup completed")
+            finally:
+                # For nodes after the first, remove any commands that were recorded
+                if idx > 0:
+                    self.setup_commands = self.setup_commands[:commands_before]
+
+                # Restore primary manager
+                self._cloud_instance_manager = original_mgr
+
+        # Add node_info to all commands recorded during storage setup if multinode
+        if len(self._cloud_instance_managers) > 1:
+            node_info = f"all_nodes_{len(self._cloud_instance_managers)}"
+            for i in range(original_commands_count, len(self.setup_commands)):
+                self.setup_commands[i]["node_info"] = node_info
+
+        return all_success
+
+    @exclude_from_package
+    def _setup_single_node_storage(self, scale_factor: int) -> bool:
+        """
+        Setup storage on a single node. Used by both single-node and multinode setups.
+        This contains the actual storage setup logic.
+        """
+        # Check if /data is already mounted
         check_mount = self.execute_command("mount | grep ' /data '", record=False)
         if check_mount.get("success", False) and check_mount.get("stdout", "").strip():
-            print("✓ Storage already configured for Exasol, skipping setup")
+            self._log("    ✓ Storage already configured, skipping")
             return True
 
         # Detect local instance store devices first
@@ -607,8 +688,8 @@ class ExasolSystem(SystemUnderTest):
 
         if len(local_devices) > 1:
             # Multiple local instance store devices → create RAID0
-            print(
-                f"Detected {len(local_devices)} local instance store devices for Exasol, creating RAID0..."
+            self._log(
+                f"    Detected {len(local_devices)} local instance store devices, creating RAID0..."
             )
 
             # Check if RAID already exists
@@ -620,7 +701,7 @@ class ExasolSystem(SystemUnderTest):
             if raid_check.get("success", False) and "exists" in raid_check.get(
                 "stdout", ""
             ):
-                print(f"RAID array {raid_device} already exists")
+                self._log(f"    RAID array {raid_device} already exists")
                 device_to_use = raid_device
             else:
                 # Create RAID0 from all local devices
@@ -628,47 +709,42 @@ class ExasolSystem(SystemUnderTest):
                 if self._create_raid0(device_paths, raid_device):
                     device_to_use = raid_device
                 else:
-                    print(
-                        "Warning: RAID0 creation failed, falling back to first device"
+                    self._log(
+                        "    Warning: RAID0 creation failed, falling back to first device"
                     )
                     device_to_use = local_devices[0]["path"]
 
         elif len(local_devices) == 1:
             # Single local instance store device
             device_to_use = local_devices[0]["path"]
-            print(
-                f"Detected single local instance store device for Exasol: {device_to_use}"
+            self._log(
+                f"    Detected single local instance store device: {device_to_use}"
             )
 
         else:
-            # No local devices, check for any additional devices (EBS, etc.)
-            print("No local instance store devices found, checking for EBS volumes...")
+            # No local devices
+            self._log("    No local instance store devices found")
             all_devices = self._detect_storage_devices(skip_root=True)
 
             if not all_devices:
-                print(
-                    "Warning: No additional storage devices found for Exasol, will use directory storage"
-                )
-                return self._setup_directory_storage(scale_factor)
+                self._log("    Warning: No additional storage devices found")
+                return False
 
             device_to_use = all_devices[0]["path"]
-            print(f"Using EBS device for Exasol: {device_to_use}")
+            self._log(f"    Using EBS device: {device_to_use}")
 
-        # Store device for later use in partitioning
+        # Store device for later use
         self._exasol_base_device = device_to_use
 
-        # Partition the disk and capture partition paths
+        # Partition the disk
         data_mount_point, exasol_partition = self._setup_partitioned_disk(scale_factor)
 
-        # Store partition paths for later use in installation
+        # Store partition paths
         if data_mount_point:
             self._data_generation_mount_point = data_mount_point
         if exasol_partition:
             self._exasol_raw_partition = exasol_partition
 
-        self.record_setup_note(f"Storage device prepared for Exasol: {device_to_use}")
-
-        # Partitioning complete - partitions stored for later use in installation
         return True
 
     @exclude_from_package
@@ -678,6 +754,133 @@ class ExasolSystem(SystemUnderTest):
             # Using additional disk, no data directory needed
             return True
         return super().prepare_data_directory()
+
+    @exclude_from_package
+    def get_setup_summary(self) -> dict[str, Any]:
+        """Get setup summary with Exasol-specific data_device field."""
+        summary = super().get_setup_summary()
+        # Add data_device field if it was set during installation
+        if hasattr(self, "data_device") and self.data_device:
+            summary["data_device"] = str(self.data_device)
+        return summary
+
+    def _create_storage_symlink(self, target_device: str) -> str:
+        """
+        Create a consistent symlink for Exasol storage across all nodes.
+
+        This solves the multinode problem where different nodes may have
+        different device names (nvme0n1 vs nvme1n1) or different by-id paths.
+        By creating a consistent symlink path in /dev, all nodes can use the same
+        configuration in c4. The /dev directory is visible inside containers.
+
+        Args:
+            target_device: The actual device path (e.g., /dev/nvme1n1p2 or /dev/md0)
+                         Note: Each node will have its own actual device, but this
+                         is typically the path on the primary node used as reference.
+
+        Returns:
+            The symlink path to use in configuration
+
+        Examples:
+            Node 0: /dev/exasol.storage -> /dev/disk/by-id/nvme-...-part2
+            Node 3: /dev/exasol.storage -> /dev/disk/by-id/nvme-...-part2
+            Config: CCC_HOST_DATADISK=/dev/exasol.storage (same on all!)
+        """
+        symlink_path = "/dev/exasol.storage"
+
+        # Determine if multinode and get list of nodes
+        is_multinode = (
+            self._cloud_instance_managers and len(self._cloud_instance_managers) > 1
+        )
+
+        if is_multinode:
+            # Multinode: Create symlink on ALL nodes
+            self._log(
+                f"Creating storage symlink on {len(self._cloud_instance_managers)} nodes..."
+            )
+
+            for idx, mgr in enumerate(self._cloud_instance_managers):
+                self._log(f"  Node {idx}: Setting up storage symlink...")
+
+                # Detect the actual device on THIS node (may differ from primary node)
+                # This detection happens remotely on each node
+                detect_cmd = """
+# Find the instance store device (not root disk) using stable by-id path
+INSTANCE_STORE=$(
+    # Find Instance_Storage devices (exclude _1 namespace variants, prefer shortest path)
+    for byid in $(ls -1 /dev/disk/by-id/ 2>/dev/null | grep 'Instance_Storage' | grep -v '_1' | grep -v -- '-part'); do
+        # Check if this device or its partition 2 exists
+        if [ -b "/dev/disk/by-id/${byid}-part2" ]; then
+            echo "/dev/disk/by-id/${byid}-part2"
+            break
+        elif [ -b "/dev/disk/by-id/${byid}" ]; then
+            echo "/dev/disk/by-id/${byid}"
+            break
+        fi
+    done | head -1
+)
+
+# If detection failed, fall back to provided device (shouldn't happen)
+if [ -z "$INSTANCE_STORE" ]; then
+    INSTANCE_STORE="%s"
+fi
+
+# Create symlink in /dev (no directory creation needed - /dev already exists)
+sudo rm -f %s
+sudo ln -sf "$INSTANCE_STORE" %s
+
+echo "Symlink: %s -> $INSTANCE_STORE"
+""" % (
+                    target_device,
+                    symlink_path,
+                    symlink_path,
+                    symlink_path,
+                )
+
+                result = mgr.run_remote_command(detect_cmd, debug=False)
+                if result.get("success", False):
+                    output = result.get("stdout", "").strip()
+                    self._log(f"  Node {idx}: {output}")
+                else:
+                    self._log(
+                        f"  Node {idx}: Warning - Failed to create symlink, may use direct path"
+                    )
+
+            self.record_setup_note(
+                f"Created storage symlinks on all {len(self._cloud_instance_managers)} nodes: {symlink_path}"
+            )
+            return symlink_path
+
+        else:
+            # Single node: Create symlink locally in /dev
+            # Remove existing symlink if present
+            self.execute_command(
+                f"sudo rm -f {symlink_path}",
+                record=False,
+            )
+
+            # Create symlink in /dev (no directory creation needed - /dev already exists)
+            self.record_setup_command(
+                f"sudo ln -sf {target_device} {symlink_path}",
+                f"Create storage symlink: {symlink_path} -> {target_device}",
+                "storage_setup",
+            )
+            symlink_result = self.execute_command(
+                f"sudo ln -sf {target_device} {symlink_path}",
+                record=True,
+                category="storage_setup",
+            )
+
+            if symlink_result.get("success", False):
+                self._log(
+                    f"✓ Created storage symlink: {symlink_path} -> {target_device}"
+                )
+                return symlink_path
+            else:
+                self._log(
+                    f"Warning: Failed to create symlink, using direct path: {target_device}"
+                )
+                return target_device
 
     def get_data_generation_directory(self, workload: Any) -> Path | None:
         """
@@ -703,7 +906,7 @@ class ExasolSystem(SystemUnderTest):
                 / workload.name
                 / f"sf{workload.scale_factor}"
             )
-            print(
+            self._log(
                 f"Exasol: Using configured data_dir for data generation: {data_gen_path}"
             )
             return cast(Path, data_gen_path)
@@ -727,7 +930,9 @@ class ExasolSystem(SystemUnderTest):
             data_gen_path = (
                 Path(tpch_gen_dir) / workload.name / f"sf{workload.scale_factor}"
             )
-            print(f"Exasol: Using additional disk for data generation: {data_gen_path}")
+            self._log(
+                f"Exasol: Using additional disk for data generation: {data_gen_path}"
+            )
             return cast(Path, data_gen_path)
 
         # Priority 3: Use default local path
@@ -739,42 +944,44 @@ class ExasolSystem(SystemUnderTest):
         if self.setup_method == "docker":
             raise ValueError("docker install method not implementd yet")
         elif self.setup_method == "installer":
-            print("Checking if Exasol is already installed and running...")
+            self._log("Checking if Exasol is already installed and running...")
 
             # First check for installation marker file
             if not self.has_install_marker():
-                print("No existing Exasol installation marker found")
+                self._log("No existing Exasol installation marker found")
                 return False
 
-            print("Found existing Exasol installation marker")
+            self._log("Found existing Exasol installation marker")
 
             # Check if c4 is available and working
             c4_check = self.execute_command("which c4", record=False)
             if not c4_check.get("success", False):
-                print(
+                self._log(
                     "⚠ Installation marker found but c4 not available, will reinstall"
                 )
                 return False
 
-            print("✓ c4 command available")
+            self._log("✓ c4 command available")
 
             # Check if c4 service is running
             service_check = self.execute_command(
                 "systemctl is-active c4_cloud_command", record=False
             )
             if not service_check.get("success", False):
-                print("⚠ c4_cloud_command service not running, will restart cluster")
+                self._log(
+                    "⚠ c4_cloud_command service not running, will restart cluster"
+                )
                 return False
 
-            print("✓ c4_cloud_command service is active")
+            self._log("✓ c4_cloud_command service is active")
 
             # Most importantly: Check if the database is actually accessible
-            print("Checking if Exasol database is accessible...")
+            self._log("Checking if Exasol database is accessible...")
             if self.is_healthy(quiet=False):
-                print("✓ Exasol database is accessible and healthy")
+                self._log("✓ Exasol database is accessible and healthy")
                 return True
             else:
-                print(
+                self._log(
                     "⚠ Exasol installation exists but database not accessible, will restart"
                 )
                 return False
@@ -808,7 +1015,7 @@ class ExasolSystem(SystemUnderTest):
         elif self.setup_method == "preinstalled":
             return self._verify_preinstalled()
         else:
-            print(f"Unknown setup method: {self.setup_method}")
+            self._log(f"Unknown setup method: {self.setup_method}")
             return False
 
     @exclude_from_package
@@ -874,7 +1081,7 @@ class ExasolSystem(SystemUnderTest):
         full_cmd = " ".join(docker_cmd)
         result = self.execute_command(full_cmd)
         if not result["success"]:
-            print(f"Failed to start Exasol container: {result['stderr']}")
+            self._log(f"Failed to start Exasol container: {result['stderr']}")
             return False
 
         # Record configuration applied
@@ -885,7 +1092,7 @@ class ExasolSystem(SystemUnderTest):
                 self.record_setup_note(f"  {key}: {value}")
 
         # Wait for container to be ready
-        print("Waiting for Exasol to start...")
+        self._log("Waiting for Exasol to start...")
         return self.wait_for_health(max_attempts=60, delay=5.0)
 
     @exclude_from_package
@@ -899,12 +1106,28 @@ class ExasolSystem(SystemUnderTest):
 
         # Get configuration from setup_config
         c4_version = self.setup_config.get("c4_version", "2025.1.4")
-        host_addrs = self._resolve_ip_addresses(
-            self.setup_config.get("host_addrs", "localhost")
-        )
-        host_external_addrs = self._resolve_ip_addresses(
-            self.setup_config.get("host_external_addrs", host_addrs)
-        )
+
+        # Build IP address lists for multinode support
+        if self._cloud_instance_managers and len(self._cloud_instance_managers) > 1:
+            # Multinode: build space-separated IP lists from instance managers (c4 expects spaces, not commas)
+            private_ips = [mgr.private_ip for mgr in self._cloud_instance_managers]
+            public_ips = [mgr.public_ip for mgr in self._cloud_instance_managers]
+            host_addrs = " ".join(private_ips)
+            host_external_addrs = " ".join(public_ips)
+            self._log(
+                f"Multinode setup with {len(self._cloud_instance_managers)} nodes:"
+            )
+            self._log(f"  Private IPs: {host_addrs}")
+            self._log(f"  Public IPs: {host_external_addrs}")
+        else:
+            # Single node: use configured addresses or resolve from environment
+            host_addrs = self._resolve_ip_addresses(
+                self.setup_config.get("host_addrs", "localhost")
+            )
+            host_external_addrs = self._resolve_ip_addresses(
+                self.setup_config.get("host_external_addrs", host_addrs)
+            )
+
         image_password = self.setup_config.get("image_password", "exasol123")
         db_password = self.setup_config.get("db_password", "exasol456")
         admin_password = self.setup_config.get("admin_password", "exasol789")
@@ -929,23 +1152,51 @@ class ExasolSystem(SystemUnderTest):
                     if not self._cloud_instance_manager.copy_file_to_instance(
                         Path(self.license_file), remote_license_path
                     ):
-                        print("Failed to copy license file to remote instance")
+                        self._log("Failed to copy license file to remote instance")
                         return False
                 else:
                     remote_license_path = self.license_file
 
-            # Step 1: Create exasol user
-            self.record_setup_command(
-                "sudo useradd -m exasol", "Create Exasol system user", "user_setup"
+            # Step 1: Create exasol user on ALL nodes (for multinode)
+            node_count = (
+                len(self._cloud_instance_managers)
+                if self._cloud_instance_managers
+                else 1
             )
-            result = self.execute_command("sudo useradd -m exasol || true")
+            node_info = f"all_nodes_{node_count}" if node_count > 1 else None
+
+            self.record_setup_command(
+                "sudo useradd -m exasol",
+                "Create Exasol system user",
+                "user_setup",
+                node_info=node_info,
+            )
+            if not self.execute_command_on_all_nodes(
+                "sudo useradd -m exasol || true",
+                description="Creating exasol user on all nodes",
+            ):
+                self._log("Warning: Failed to create exasol user on some nodes")
 
             self.record_setup_command(
                 "sudo usermod -aG sudo exasol",
                 "Add exasol user to sudo group",
                 "user_setup",
+                node_info=node_info,
             )
-            self.execute_command("sudo usermod -aG sudo exasol || true")
+            if not self.execute_command_on_all_nodes(
+                "sudo usermod -aG sudo exasol || true",
+                description="Adding exasol to sudo group on all nodes",
+            ):
+                self._log("Warning: Failed to add exasol to sudo group on some nodes")
+
+            # Setup passwordless sudo on ALL nodes
+            if not self.execute_command_on_all_nodes(
+                'sudo sed -i "/%sudo/s/) ALL$/) NOPASSWD: ALL/" /etc/sudoers',
+                description="Configuring passwordless sudo on all nodes",
+            ):
+                self._log(
+                    "Warning: Failed to configure passwordless sudo on some nodes"
+                )
 
             self.record_setup_command(
                 "sudo passwd exasol",
@@ -960,13 +1211,18 @@ class ExasolSystem(SystemUnderTest):
                 # Check if disk was already partitioned by get_data_generation_directory
                 if self._exasol_raw_partition:
                     # Use the partitioned raw disk
-                    storage_disk_path = self._exasol_raw_partition
+                    actual_device_path = self._exasol_raw_partition
+
+                    # Create consistent symlink for multinode compatibility
+                    storage_disk_path = self._create_storage_symlink(actual_device_path)
+                    self.data_device = storage_disk_path  # Store for report display
+
                     # Note: lsblk is just for verification, not needed for reproduction
                     self.record_setup_note(
-                        f"Using partitioned raw disk: {storage_disk_path}"
+                        f"Using partitioned raw disk: {actual_device_path} (via {storage_disk_path})"
                     )
-                    print(
-                        f"✓ Using pre-partitioned raw disk for Exasol: {storage_disk_path}"
+                    self._log(
+                        f"✓ Using pre-partitioned raw disk for Exasol: {actual_device_path} (via {storage_disk_path})"
                     )
                 else:
                     # Fall back to detecting and using full disk (old behavior)
@@ -980,30 +1236,36 @@ class ExasolSystem(SystemUnderTest):
 
                         # Check if disk is mounted and unmount it
                         if device_info and device_info["mounted_at"]:
-                            print(
+                            self._log(
                                 f"Disk {detected_disk} is mounted at {device_info['mounted_at']}, unmounting..."
                             )
                             if not self._unmount_disk(detected_disk):
-                                print(
+                                self._log(
                                     f"Error: Could not unmount {detected_disk} from {device_info['mounted_at']}"
                                 )
-                                print("Falling back to file storage")
+                                self._log("Falling back to file storage")
                                 use_additional_disk = False
 
                         if (
                             use_additional_disk
                         ):  # Still using additional disk after potential unmount
-                            storage_disk_path = detected_disk
+                            # Create consistent symlink for multinode compatibility
+                            # (works for both single disk and RAID device like /dev/md0)
+                            storage_disk_path = self._create_storage_symlink(
+                                detected_disk
+                            )
+                            self.data_device = storage_disk_path  # Store for report display
+
                             self.record_setup_command(
                                 f"lsblk {detected_disk}",
-                                f"Using additional disk: {detected_disk}",
+                                f"Using additional disk: {detected_disk} (via {storage_disk_path})",
                                 "storage_setup",
                             )
                             self.record_setup_note(
-                                f"Using additional disk: {detected_disk}"
+                                f"Using additional disk: {detected_disk} (via {storage_disk_path})"
                             )
                     else:
-                        print(
+                        self._log(
                             "Warning: No suitable additional disk found, falling back to file storage"
                         )
                         use_additional_disk = False
@@ -1021,6 +1283,7 @@ class ExasolSystem(SystemUnderTest):
                 self.execute_command(f"sudo mkdir -p {data_dir}")
 
                 storage_disk_path = f"{data_dir}/storage_disk1"
+                self.data_device = storage_disk_path  # Store for report display
                 self.record_setup_command(
                     f"sudo truncate -s {storage_disk_size} {storage_disk_path}",
                     f"Create {storage_disk_size} storage disk file",
@@ -1046,33 +1309,59 @@ class ExasolSystem(SystemUnderTest):
             )
             result = self.execute_command(f"wget {c4_url} -O c4 && chmod +x c4")
             if not result["success"]:
-                print(f"Failed to download c4: {result['stderr']}")
+                self._log(f"Failed to download c4: {result['stderr']}")
                 return False
 
-            # Step 4: Generate SSH key if not exists
+            # Step 4: Generate SSH key on primary node and distribute to ALL nodes
             self.record_setup_command(
                 'ssh-keygen -t rsa -b 2048 -f ~/.ssh/id_rsa -N ""',
                 "Generate SSH key pair for cluster communication",
                 "ssh_setup",
             )
+            # Generate SSH key on primary node
             self.execute_command(
                 'test -e ~/.ssh/id_rsa || ssh-keygen -t rsa -b 2048 -f ~/.ssh/id_rsa -N ""',
                 record=False,
             )
-            self.execute_command(
-                "sudo mkdir -p ~exasol/.ssh && cat ~/.ssh/id_rsa.pub | sudo tee ~exasol/.ssh/authorized_keys"
-            )
-            self.execute_command(
-                'sudo sed -i "/%sudo/s/) ALL$/) NOPASSWD: ALL/" /etc/sudoers'
-            )
-            result = self.execute_command(
-                f"ssh -o StrictHostKeyChecking=no exasol@{host_addrs} sudo uptime"
-            )
-            if not result["success"]:
-                print("Failed to setup SSH login to exasol user")
+
+            # Get the public key from primary node
+            pub_key_result = self.execute_command("cat ~/.ssh/id_rsa.pub", record=False)
+            if not pub_key_result["success"]:
+                self._log("Failed to read SSH public key")
                 return False
+            pub_key = pub_key_result["stdout"].strip()
+
+            # Distribute SSH public key to ALL nodes (including primary)
+            self._log(
+                f"Distributing SSH key to all {len(self._cloud_instance_managers)} nodes..."
+            )
+            for idx, mgr in enumerate(self._cloud_instance_managers):
+                # Create .ssh directory and add authorized_keys for exasol user
+                setup_cmd = f"sudo mkdir -p ~exasol/.ssh && echo '{pub_key}' | sudo tee ~exasol/.ssh/authorized_keys > /dev/null && sudo chown -R exasol:exasol ~exasol/.ssh && sudo chmod 700 ~exasol/.ssh && sudo chmod 600 ~exasol/.ssh/authorized_keys"
+                result = mgr.run_remote_command(setup_cmd, timeout=60)
+                if result.get("success"):
+                    self._log(f"  ✓ SSH key installed on node {idx}")
+                else:
+                    self._log(f"  ✗ Failed to install SSH key on node {idx}")
+                    return False
+
+            # Test SSH connectivity from primary to all nodes
+            self._log("Testing SSH connectivity to all nodes...")
+            host_list = host_addrs.split()  # Split on whitespace
+            for idx, host in enumerate(host_list):
+                result = self.execute_command(
+                    f"ssh -o StrictHostKeyChecking=no exasol@{host} sudo uptime",
+                    record=False,
+                )
+                if result["success"]:
+                    self._log(f"  ✓ SSH connectivity confirmed to node {idx} ({host})")
+                else:
+                    self._log(f"  ✗ Failed SSH connectivity to node {idx} ({host})")
+                    return False
 
             # Step 5: Create c4 configuration file on remote system
+            # Note: For multinode, IP addresses are space-separated lists,
+            # and storage paths are the same on all nodes
             config_content = f"""CCC_HOST_ADDRS="{host_addrs}"
 CCC_HOST_EXTERNAL_ADDRS="{host_external_addrs}"
 CCC_HOST_DATADISK={storage_disk_path}
@@ -1085,6 +1374,7 @@ CCC_PLAY_DB_PASSWORD={db_password}
 CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
 
             # Only add mounts when using file storage, not raw disk
+            # Mount path is the same on all nodes (c4 applies it to each node)
             if not use_additional_disk:
                 config_content += f"\nCCC_PLAY_MOUNTS={data_dir}:{data_dir}"
 
@@ -1116,7 +1406,7 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
             )
             result = self.execute_command(create_config_cmd)
             if not result["success"]:
-                print(
+                self._log(
                     f"Failed to create config file on remote system: {result.get('stderr', 'Unknown error')}"
                 )
                 return False
@@ -1132,20 +1422,16 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
             )  # 30 min timeout
 
             if not result["success"]:
-                print(f"C4 cluster deployment failed: {result['stderr']}")
+                self._log(f"C4 cluster deployment failed: {result['stderr']}")
                 return False
 
             self.record_setup_note("Exasol cluster deployment initiated")
 
             # Update connection parameters for deployed cluster
             if host_external_addrs and host_external_addrs != "localhost":
-                external_host = host_external_addrs.split(",")[
-                    0
-                ].strip()  # Use first external IP
+                external_host = host_external_addrs.split()[0]  # Use first external IP
             else:
-                external_host = host_addrs.split(",")[
-                    0
-                ].strip()  # Use first internal IP
+                external_host = host_addrs.split()[0]  # Use first internal IP
 
             # Set host based on context:
             # - External IP for health checks from local machine
@@ -1171,11 +1457,11 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
             self.record_setup_note(
                 "Waiting for Exasol cluster to be ready for connections..."
             )
-            print("Waiting for Exasol cluster to be ready...")
+            self._log("Waiting for Exasol cluster to be ready...")
             if not self.wait_for_health(
                 max_attempts=120, delay=10.0
             ):  # Wait up to 20 minutes
-                print("Exasol cluster failed to become ready within timeout")
+                self._log("Exasol cluster failed to become ready within timeout")
                 return False
 
             self.record_setup_note(
@@ -1185,33 +1471,33 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
             # Step 8: Get cluster play_id for confd_client operations
             play_id = self._get_cluster_play_id()
             if not play_id:
-                print("Could not get cluster play ID")
+                self._log("Could not get cluster play ID")
                 return False
-            print(f"Got play ID {play_id}")
+            self._log(f"Got play ID {play_id}")
 
             # Step 8a: Cleanup disturbing services (not recorded in report)
-            print("Step 8a: Cleaning up interfering services...")
+            self._log("Step 8a: Cleaning up interfering services...")
             cleanup_success = self._cleanup_disturbing_services(play_id)
             if cleanup_success:
-                print("✓ Service cleanup completed successfully")
+                self._log("✓ Service cleanup completed successfully")
             else:
-                print("⚠ Service cleanup failed or no services to remove")
+                self._log("⚠ Service cleanup failed or no services to remove")
 
             # Step 8b: Install license file if specified
             if remote_license_path:
-                print("Installing license file...")
+                self._log("Installing license file...")
                 self._install_license_file(play_id, remote_license_path)
-                print("✓ License file installation completed")
+                self._log("✓ License file installation completed")
 
             # Step 8b: Configure database parameters if specified
             extra_config = self.setup_config.get("extra", {})
             db_params = extra_config.get("db_params", [])
             if db_params:
-                print(
+                self._log(
                     f"Configuring database parameters ({len(db_params)} parameters)..."
                 )
                 self._configure_database_parameters(play_id, db_params)
-                print("✓ Database parameter configuration completed")
+                self._log("✓ Database parameter configuration completed")
 
             # Record other applied configuration parameters
             if extra_config:
@@ -1222,12 +1508,12 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
 
             # Mark that system is installed
             self.mark_installed(record=False)
-            print("✓ Exasol installation completed successfully")
+            self._log("✓ Exasol installation completed successfully")
 
             return True
 
         except Exception as e:
-            print(f"Native Exasol installation failed: {e}")
+            self._log(f"Native Exasol installation failed: {e}")
             return False
 
     def _verify_preinstalled(self) -> bool:
@@ -1236,44 +1522,46 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
 
     def start(self) -> bool:
         """Start the Exasol system."""
-        print(f"Starting {self.name} system using {self.setup_method} method...")
+        self._log(f"Starting {self.name} system using {self.setup_method} method...")
 
         if self.setup_method == "docker":
             result = self.execute_command(f"docker start {self.container_name}")
             if result["success"]:
-                print(
+                self._log(
                     f"Docker container started, waiting for {self.name} to be healthy..."
                 )
                 return self.wait_for_health()
-            print(f"Failed to start Docker container for {self.name}")
+            self._log(f"Failed to start Docker container for {self.name}")
             return False
         else:
             # For native installations, check if already healthy first
-            print(f"Connection details: {self.host}:{self.port} as {self.username}")
-            print("Performing initial health check...")
+            self._log(f"Connection details: {self.host}:{self.port} as {self.username}")
+            self._log("Performing initial health check...")
             if self.is_healthy(quiet=False):
-                print(f"✓ {self.name} is already healthy and ready")
+                self._log(f"✓ {self.name} is already healthy and ready")
                 return True
 
             # If not healthy, check if c4 service is running
-            print("Database not accessible, checking c4 service status...")
+            self._log("Database not accessible, checking c4 service status...")
             service_check = self.execute_command(
                 "systemctl is-active c4_cloud_command", record=False
             )
             if service_check.get("success", False):
-                print("✓ c4_cloud_command service is running, waiting for database...")
+                self._log(
+                    "✓ c4_cloud_command service is running, waiting for database..."
+                )
                 # Service is running, just wait for health
                 success = self.wait_for_health(max_attempts=60, delay=5.0)
                 if success:
-                    print(f"✓ {self.name} is healthy and ready")
+                    self._log(f"✓ {self.name} is healthy and ready")
                 else:
-                    print(f"✗ {self.name} failed to become healthy after 5 minutes")
+                    self._log(f"✗ {self.name} failed to become healthy after 5 minutes")
                     # Try one final health check with verbose output to see the exact error
-                    print("Final health check with detailed error:")
+                    self._log("Final health check with detailed error:")
                     self.is_healthy(quiet=False)
                 return success
             else:
-                print(
+                self._log(
                     "⚠ c4_cloud_command service not running, attempting to restart cluster..."
                 )
                 # Need to restart the cluster
@@ -1281,7 +1569,7 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
 
     def _restart_existing_cluster(self) -> bool:
         """Restart an existing Exasol cluster that has been installed but not running."""
-        print("Attempting to restart existing Exasol cluster...")
+        self._log("Attempting to restart existing Exasol cluster...")
 
         # Find the existing config file
         config_check = self.execute_command(
@@ -1291,30 +1579,34 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
             not config_check.get("success", False)
             or not config_check.get("stdout", "").strip()
         ):
-            print("⚠ No existing c4 config file found, cannot restart cluster")
-            print("   This likely means the cluster was never fully deployed")
+            self._log("⚠ No existing c4 config file found, cannot restart cluster")
+            self._log("   This likely means the cluster was never fully deployed")
             return False
 
         config_path = config_check.get("stdout", "").strip()
-        print(f"Found existing config file: {config_path}")
+        self._log(f"Found existing config file: {config_path}")
 
         # Try to restart using the existing config
-        print("Restarting cluster with existing configuration...")
+        self._log("Restarting cluster with existing configuration...")
         result = self.execute_command(
             f"./c4 host play -i {config_path}",
             timeout=900,  # 15 min timeout for restart (shorter than full install)
         )
 
         if not result["success"]:
-            print(f"Failed to restart cluster: {result.get('stderr', 'Unknown error')}")
+            self._log(
+                f"Failed to restart cluster: {result.get('stderr', 'Unknown error')}"
+            )
             return False
 
-        print("Cluster restart initiated, waiting for database to become healthy...")
+        self._log(
+            "Cluster restart initiated, waiting for database to become healthy..."
+        )
         success = self.wait_for_health(max_attempts=60, delay=5.0)
         if success:
-            print(f"✓ {self.name} cluster restarted successfully")
+            self._log(f"✓ {self.name} cluster restarted successfully")
         else:
-            print(f"✗ {self.name} cluster restart failed - database not healthy")
+            self._log(f"✗ {self.name} cluster restart failed - database not healthy")
 
         return success
 
@@ -1337,7 +1629,7 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
 
             dsn = self._build_dsn(health_check_host, self.port)
             if not quiet:
-                print(f"Connecting to Exasol at {dsn} as {self.username}...")
+                self._log(f"Connecting to Exasol at {dsn} as {self.username}...")
 
             conn = self._connect_with_fingerprint_retry(
                 dsn=dsn,
@@ -1347,20 +1639,20 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
             )
 
             if not quiet:
-                print("Connection established, testing with SELECT 1...")
+                self._log("Connection established, testing with SELECT 1...")
 
             # Test connection with simple query
             conn.execute("SELECT 1")
             conn.close()
 
             if not quiet:
-                print("Health check successful")
+                self._log("Health check successful")
             return True
 
         except Exception as e:
             if not quiet:
-                print(f"Health check failed: {e}")
-                print(
+                self._log(f"Health check failed: {e}")
+                self._log(
                     f"Connection details: host={self.host}, port={self.port}, user={self.username}"
                 )
             return False
@@ -1402,7 +1694,7 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
             # Remove None values
             import_params = {k: v for k, v in import_params.items() if v is not None}
 
-            print(f"Loading {data_path} into {table_name}...")
+            self._log(f"Loading {data_path} into {table_name}...")
             conn.import_from_file(
                 str(data_path), table=table_name, import_params=import_params
             )
@@ -1410,11 +1702,11 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
             # Verify data was loaded
             result = conn.execute(f"SELECT COUNT(*) FROM {table_name}")
             row_count = result.fetchone()[0]
-            print(f"Successfully loaded {row_count:,} rows into {table_name}")
+            self._log(f"Successfully loaded {row_count:,} rows into {table_name}")
             return True
 
         except Exception as e:
-            print(f"Failed to load data into {table_name}: {e}")
+            self._log(f"Failed to load data into {table_name}: {e}")
             return False
         finally:
             if conn:
@@ -1686,7 +1978,7 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
     ) -> None:
         """Configure Exasol database parameters using c4 connect."""
         self.record_setup_note("Configuring Exasol database parameters...")
-        print(f"Configuring {len(db_params)} database parameters: {db_params}")
+        self._log(f"Configuring {len(db_params)} database parameters: {db_params}")
 
         # Step 1: Stop the database before parameter configuration
         self.record_setup_note("Stopping database for parameter configuration...")
@@ -1698,7 +1990,7 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
             "database_tuning",
         )
 
-        print("Stopping database for parameter configuration...")
+        self._log("Stopping database for parameter configuration...")
         if not self._execute_confd_client_command(
             play_id,
             stop_command,
@@ -1708,10 +2000,10 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
             self.record_setup_note(
                 "⚠ Warning: Failed to stop database for parameter configuration"
             )
-            print("✗ Failed to stop database")
+            self._log("✗ Failed to stop database")
             return
         else:
-            print("✓ Database stopped successfully")
+            self._log("✓ Database stopped successfully")
 
         # Step 2: Configure database parameters
         params_with_quotes = ["'" + param + "'" for param in db_params]
@@ -1727,7 +2019,7 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
             "database_tuning",
         )
 
-        print(f"Configuring database with parameters: {params_str}")
+        self._log(f"Configuring database with parameters: {params_str}")
         if not self._execute_confd_client_command(
             play_id,
             params_command,
@@ -1735,16 +2027,16 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
             "database_tuning",
         ):
             self.record_setup_note("Warning: Database parameter configuration failed")
-            print("✗ Failed to configure database parameters")
+            self._log("✗ Failed to configure database parameters")
             return
         else:
-            print("✓ Database parameters configured successfully")
+            self._log("✓ Database parameters configured successfully")
 
         # Step 3: Start the database (capture command in report for transparency)
         self.record_setup_note("Starting database with new parameters...")
         start_command = "confd_client db_start db_name: Exasol"
 
-        print("Starting database with new parameters...")
+        self._log("Starting database with new parameters...")
         if not self._execute_confd_client_command(
             play_id,
             start_command,
@@ -1754,24 +2046,24 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
             self.record_setup_note(
                 "⚠ Warning: Failed to start database after parameter configuration"
             )
-            print("✗ Failed to start database after parameter configuration")
+            self._log("✗ Failed to start database after parameter configuration")
             return
         else:
-            print("✓ Database start command completed")
+            self._log("✓ Database start command completed")
 
         # Step 4: Wait for database to be fully initialized
         self.record_setup_note("Waiting for database to be fully initialized...")
-        print("Waiting for database to be fully initialized...")
+        self._log("Waiting for database to be fully initialized...")
         if self._wait_for_database_ready(play_id):
             self.record_setup_note(
                 "✓ Database parameters configured and database started successfully"
             )
-            print("✓ Database is fully ready after parameter configuration")
+            self._log("✓ Database is fully ready after parameter configuration")
         else:
             self.record_setup_note(
                 "⚠ Warning: Database started but initialization check failed"
             )
-            print(
+            self._log(
                 "✗ Database initialization check failed after parameter configuration"
             )
 
@@ -1803,14 +2095,34 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
 
         return False
 
-    def set_cloud_instance_manager(self, instance_manager: Any) -> None:
-        """Set the cloud instance manager for remote command execution."""
-        self._cloud_instance_manager = instance_manager
+    def set_cloud_instance_manager(self, instance_manager: Any | list[Any]) -> None:
+        """
+        Set the cloud instance manager(s) for remote command execution.
+
+        Args:
+            instance_manager: Single CloudInstanceManager for single-node systems,
+                            or list of CloudInstanceManagers for multinode systems
+        """
+        # Handle both single instance and list of instances
+        if isinstance(instance_manager, list):
+            # Multinode setup
+            self._cloud_instance_managers = instance_manager
+            self._cloud_instance_manager = (
+                instance_manager[0] if instance_manager else None
+            )
+        else:
+            # Single node setup
+            self._cloud_instance_manager = instance_manager
+            self._cloud_instance_managers = (
+                [instance_manager] if instance_manager else []
+            )
 
         # Set external host for health checks from local machine
         # This is critical for pre-existing installations where install() doesn't run
-        if instance_manager and hasattr(instance_manager, "public_ip"):
-            self._external_host = instance_manager.public_ip
+        if self._cloud_instance_manager and hasattr(
+            self._cloud_instance_manager, "public_ip"
+        ):
+            self._external_host = self._cloud_instance_manager.public_ip
             # Keep self.host as localhost for remote execution
             self.host = "localhost"
 
@@ -1820,34 +2132,80 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
             if db_password:
                 self.password = db_password
 
+    def execute_command_on_all_nodes(
+        self,
+        command: str,
+        timeout: float | None = None,
+        description: str | None = None,
+    ) -> bool:
+        """
+        Execute a command on all nodes in a multinode cluster.
+
+        Args:
+            command: Command to execute
+            timeout: Timeout in seconds
+            description: Description for logging
+
+        Returns:
+            True if command succeeded on all nodes, False otherwise
+        """
+        if not self._cloud_instance_managers:
+            # Fallback to single node execution
+            result = self.execute_command(command, timeout=timeout, record=False)
+            return bool(result.get("success", False))
+
+        if description:
+            self._log(
+                f"{description} (on {len(self._cloud_instance_managers)} nodes)..."
+            )
+
+        all_success = True
+        for idx, mgr in enumerate(self._cloud_instance_managers):
+            result = mgr.run_remote_command(
+                command, timeout=int(timeout) if timeout else 300
+            )
+            if not result.get("success", False):
+                self._log(
+                    f"  ✗ Failed on node {idx}: {result.get('stderr', 'Unknown error')}"
+                )
+                all_success = False
+            else:
+                self._log(f"  ✓ Success on node {idx}")
+
+        return all_success
+
     def execute_command(
         self,
         command: str,
         timeout: float | None = None,
         record: bool = True,
         category: str = "setup",
+        node_info: str | None = None,
     ) -> dict[str, Any]:
         """Execute a command, either locally or remotely depending on setup."""
         if self._cloud_instance_manager:
-            # Execute on remote instance
+            # Execute on remote instance (primary node for multinode)
             result = self._cloud_instance_manager.run_remote_command(
                 command, timeout=int(timeout) if timeout else 300
             )
 
             # Record command for report reproduction if requested
             if record:
-                self.setup_commands.append(
-                    {
-                        "command": self._sanitize_command_for_report(command),
-                        "success": result.get("success", False),
-                        "description": f"Execute {command.split()[0]} command on remote system",
-                        "category": category,
-                    }
-                )
+                command_record = {
+                    "command": self._sanitize_command_for_report(command),
+                    "success": result.get("success", False),
+                    "description": f"Execute {command.split()[0]} command on remote system",
+                    "category": category,
+                }
+                if node_info:
+                    command_record["node_info"] = node_info
+                self.setup_commands.append(command_record)
 
             return dict(result)
         else:
-            return super().execute_command(command, timeout, record, category)
+            return super().execute_command(
+                command, timeout, record, category, node_info
+            )
 
     @exclude_from_package
     def _cleanup_disturbing_services(self, play_id: str) -> bool:
@@ -1856,10 +2214,10 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
         Removes rapid, eventd, and healthd services using cosrm command.
         This is not recorded in the report as it's internal cleanup.
         """
-        print(
+        self._log(
             "🧹 Cleaning up services that could interfere with benchmark performance..."
         )
-        print("   Targeting services: rapid, eventd, healthd")
+        self._log("   Targeting services: rapid, eventd, healthd")
 
         try:
             # Step 1: Get list of running services with cosps
@@ -1868,20 +2226,20 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
             )
 
             if not cosps_result.get("success", False):
-                print(
+                self._log(
                     f"⚠ Warning: Could not get service list: {cosps_result.get('stderr', '')}"
                 )
                 return False
 
             cosps_output = cosps_result.get("stdout", "")
-            print("📝 Current Exasol services:")
+            self._log("📝 Current Exasol services:")
             # Only show relevant lines to avoid clutter
             for line in cosps_output.split("\n")[:10]:  # Show first 10 lines
                 if line.strip():
-                    print(f"   {line}")
+                    self._log(f"   {line}")
             if len(cosps_output.split("\n")) > 10:
-                print("   ... (truncated)")
-            print()
+                self._log("   ... (truncated)")
+            self._log("")
 
             # Step 2: Parse output to find service IDs for rapid, eventd, healthd
             services_to_remove = ["rapid", "eventd", "healthd"]
@@ -1908,17 +2266,17 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
                             break
 
             if service_ids:
-                print(
+                self._log(
                     f"🎯 Found interfering services to remove: {list(service_ids.keys())}"
                 )
             else:
-                print("✓ No interfering services found (this is good!)")
+                self._log("✓ No interfering services found (this is good!)")
                 return True
 
             # Step 3: Remove each identified service
             removed_count = 0
             for service_name, service_id in service_ids.items():
-                print(f"   🗑️  Removing {service_name} (ID: {service_id})...")
+                self._log(f"   🗑️  Removing {service_name} (ID: {service_id})...")
                 remove_result = self.execute_command(
                     f"c4 connect -s cos -i {play_id} -- cosrm -a {service_id}",
                     timeout=30,
@@ -1926,27 +2284,27 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
                 )
 
                 if remove_result.get("success", False):
-                    print(f"      ✅ Successfully removed {service_name}")
+                    self._log(f"      ✅ Successfully removed {service_name}")
                     removed_count += 1
                 else:
-                    print(
+                    self._log(
                         f"      ❌ Failed to remove {service_name}: {remove_result.get('stderr', '')}"
                     )
 
-            print(
+            self._log(
                 f"🧹 Service cleanup summary: {removed_count}/{len(service_ids)} services removed"
             )
 
             if removed_count == len(service_ids):
-                print("✅ All interfering services successfully removed!")
+                self._log("✅ All interfering services successfully removed!")
                 return True
             elif removed_count > 0:
-                print("⚠️ Some services removed, but some failures occurred")
+                self._log("⚠️ Some services removed, but some failures occurred")
                 return True
             else:
-                print("❌ Failed to remove any interfering services")
+                self._log("❌ Failed to remove any interfering services")
                 return False
 
         except Exception as e:
-            print(f"❌ Service cleanup failed with exception: {e}")
+            self._log(f"❌ Service cleanup failed with exception: {e}")
             return False

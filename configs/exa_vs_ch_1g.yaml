@@ -63,7 +63,7 @@ systems:
   # ClickHouse with original queries
   - name: "clickhouse"
     kind: "clickhouse"
-    version: "25.9.5.21"         # Latest stable ClickHouse version
+    version: "25.10.2.65"         # Latest stable ClickHouse version
     setup:
       method: "native"           # Native APT installation
       use_additional_disk: true  # Auto-detect and use additional NVMe disk
@@ -80,7 +80,7 @@ systems:
   # ClickHouse with tuned queries
   - name: "clickhouse_tuned"
     kind: "clickhouse"
-    version: "25.9.5.21"         # Latest stable ClickHouse version
+    version: "25.10.2.65"         # Latest stable ClickHouse version
     setup:
       method: "native"           # Native APT installation
       use_additional_disk: true  # Auto-detect and use additional NVMe disk

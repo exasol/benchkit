@@ -94,9 +94,38 @@ class BenchmarkConfig(BaseModel):
 
     @validator("systems")
     def validate_systems(cls, v: list[SystemConfig]) -> list[SystemConfig]:
-        """Ensure at least one system is configured."""
+        """Ensure at least one system is configured and validate multinode support."""
         if len(v) < 1:
             raise ValueError("At least one system must be configured")
+
+        # Import here to avoid circular dependency
+        from .systems.base import get_system_class
+
+        # Validate multinode configuration for each system
+        for system_config in v:
+            node_count = system_config.setup.get("node_count", 1)
+
+            # Validate node_count is a positive integer
+            if not isinstance(node_count, int) or node_count < 1:
+                raise ValueError(
+                    f"System '{system_config.name}': node_count must be a positive integer (got {node_count})"
+                )
+
+            # Check if system supports multinode when node_count > 1
+            if node_count > 1:
+                system_class = get_system_class(system_config.kind)
+
+                if system_class is None:
+                    raise ValueError(
+                        f"System '{system_config.name}': Unknown system kind '{system_config.kind}'"
+                    )
+
+                if not getattr(system_class, "SUPPORTS_MULTINODE", False):
+                    raise ValueError(
+                        f"System '{system_config.name}' (kind: {system_config.kind}) does not support multinode clusters. "
+                        f"Set node_count to 1 or remove it (defaults to 1)."
+                    )
+
         return v
 
 
@@ -143,10 +172,9 @@ def load_config(path: str | Path) -> dict[str, Any]:
 
     # Validate using Pydantic model
     try:
-        from typing import cast
-
         validated_config = BenchmarkConfig(**raw_config)
-        return cast(dict[str, Any], validated_config.dict())
+        result: dict[str, Any] = validated_config.dict()
+        return result
     except Exception as e:
         raise ValueError(f"Invalid configuration: {e}") from e
 
