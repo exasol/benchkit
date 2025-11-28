@@ -1,6 +1,7 @@
 """Exasol database system implementation."""
 
 import os
+import ssl
 from pathlib import Path
 from typing import Any, Callable, cast
 
@@ -95,8 +96,9 @@ class ExasolSystem(SystemUnderTest):
         self,
         config: dict[str, Any],
         output_callback: Callable[[str], None] | None = None,
+        workload_config: dict[str, Any] | None = None,
     ):
-        super().__init__(config, output_callback)
+        super().__init__(config, output_callback, workload_config)
         self.setup_method = self.setup_config.get("method", "docker")
         self.container_name = f"exasol_{self.name}"
         self.license_file = self.setup_config.get("license_file")
@@ -182,8 +184,8 @@ class ExasolSystem(SystemUnderTest):
             connection_kwargs = kwargs.copy()
             connection_kwargs["autocommit"] = True
 
-            if is_localhost:
-                connection_kwargs["websocket_sslopt"] = {"cert_reqs": ssl.CERT_NONE}
+            # Disable SSL certificate verification for benchmarks (security not critical)
+            connection_kwargs["websocket_sslopt"] = {"cert_reqs": ssl.CERT_NONE}
 
             return pyexasol.connect(
                 dsn=dsn, user=user, password=password, **connection_kwargs
@@ -1254,7 +1256,9 @@ echo "Symlink: %s -> $INSTANCE_STORE"
                             storage_disk_path = self._create_storage_symlink(
                                 detected_disk
                             )
-                            self.data_device = storage_disk_path  # Store for report display
+                            self.data_device = (
+                                storage_disk_path  # Store for report display
+                            )
 
                             self.record_setup_command(
                                 f"lsblk {detected_disk}",
@@ -1713,9 +1717,17 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
                 conn.close()
 
     def execute_query(
-        self, query: str, query_name: str | None = None, return_data: bool = False
+        self,
+        query: str,
+        query_name: str | None = None,
+        return_data: bool = False,
+        timeout: int | None = None,
     ) -> dict[str, Any]:
-        """Execute a SQL query in Exasol using pyexasol."""
+        """Execute a SQL query in Exasol using pyexasol.
+
+        Note: timeout parameter is accepted for interface compatibility but not
+        currently used by Exasol (pyexasol manages its own timeouts).
+        """
         from ..debug import debug_print
 
         if not query_name:

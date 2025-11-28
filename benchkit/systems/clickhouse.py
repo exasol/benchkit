@@ -112,11 +112,13 @@ class ClickHouseSystem(SystemUnderTest):
         self,
         config: dict[str, Any],
         output_callback: Callable[[str], None] | None = None,
+        workload_config: dict[str, Any] | None = None,
     ):
-        super().__init__(config, output_callback)
+        super().__init__(config, output_callback, workload_config)
         self.setup_method = self.setup_config.get("method", "docker")
         self.container_name = f"clickhouse_{self.name}"
-        self.config_profile = self.setup_config.get("extra", {}).get(
+        # Use 'or {}' to handle case where 'extra' exists but is None
+        self.config_profile = (self.setup_config.get("extra") or {}).get(
             "config_profile", "default"
         )
         self.http_port = 8123
@@ -275,7 +277,8 @@ class ClickHouseSystem(SystemUnderTest):
         ]
 
         # Add memory limits for consistent benchmarking
-        memory_limit = self.setup_config.get("extra", {}).get("memory_limit", "32g")
+        # Use 'or {}' to handle case where 'extra' exists but is None
+        memory_limit = (self.setup_config.get("extra") or {}).get("memory_limit", "32g")
         docker_cmd.extend(["--memory", memory_limit])
 
         # Use specified Docker image version
@@ -290,7 +293,8 @@ class ClickHouseSystem(SystemUnderTest):
             return False
 
         # Record configuration applied
-        extra_config = self.setup_config.get("extra", {})
+        # Use 'or {}' to handle case where 'extra' exists but is None
+        extra_config = self.setup_config.get("extra") or {}
         if extra_config:
             self.record_setup_note("ClickHouse configuration applied:")
             for key, value in extra_config.items():
@@ -389,6 +393,15 @@ class ClickHouseSystem(SystemUnderTest):
 
     def _install_native_on_node(self) -> bool:
         """Install ClickHouse on the current node (works for both single and multinode)."""
+        # Defensive: ensure setup_config is not None (can happen in parallel execution)
+        if self.setup_config is None:
+            self._log("ERROR: setup_config is None, attempting to recover from self.config")
+            if hasattr(self, 'config') and self.config and 'setup' in self.config:
+                self.setup_config = self.config['setup']
+                self._log("✓ Recovered setup_config from self.config")
+            else:
+                raise RuntimeError("setup_config is None and cannot be recovered")
+
         # Resolve IP addresses from configuration
         resolved_host = self._resolve_ip_addresses(
             self.setup_config.get("host", "localhost")
@@ -472,14 +485,15 @@ class ClickHouseSystem(SystemUnderTest):
             if self.version and self.version != "latest":
                 # Try to install specific version first
                 version_suffix = f"={self.version}"
-                install_cmd = f"{install_env} sudo -E apt-get install -y clickhouse-server{version_suffix} clickhouse-client{version_suffix}"
+                # Install all three packages with same version to avoid dependency conflicts
+                install_cmd = f"{install_env} sudo -E apt-get install -y clickhouse-common-static{version_suffix} clickhouse-server{version_suffix} clickhouse-client{version_suffix}"
                 description = (
                     f"Install ClickHouse server and client version {self.version}"
                 )
                 self._log(f"Attempting to install ClickHouse {self.version}...")
 
                 self.record_setup_command(
-                    f"sudo apt-get install -y clickhouse-server{version_suffix} clickhouse-client{version_suffix}",
+                    f"sudo apt-get install -y clickhouse-common-static{version_suffix} clickhouse-server{version_suffix} clickhouse-client{version_suffix}",
                     description,
                     "installation",
                 )
@@ -491,14 +505,14 @@ class ClickHouseSystem(SystemUnderTest):
                     self._log(
                         f"Version {self.version} not available, falling back to latest..."
                     )
-                    # Fallback to latest version
-                    install_cmd = f"{install_env} sudo -E apt-get install -y clickhouse-server clickhouse-client"
+                    # Fallback to latest version - install all packages together
+                    install_cmd = f"{install_env} sudo -E apt-get install -y clickhouse-common-static clickhouse-server clickhouse-client"
                     description = (
                         "Install latest ClickHouse server and client (fallback)"
                     )
 
                     self.record_setup_command(
-                        "sudo apt-get install -y clickhouse-server clickhouse-client",
+                        "sudo apt-get install -y clickhouse-common-static clickhouse-server clickhouse-client",
                         description,
                         "installation",
                     )
@@ -514,13 +528,13 @@ class ClickHouseSystem(SystemUnderTest):
                 else:
                     self._log(f"✓ Successfully installed ClickHouse {self.version}")
             else:
-                # Install latest version
-                install_cmd = f"{install_env} sudo -E apt-get install -y clickhouse-server clickhouse-client"
+                # Install latest version - install all packages together to avoid conflicts
+                install_cmd = f"{install_env} sudo -E apt-get install -y clickhouse-common-static clickhouse-server clickhouse-client"
                 description = "Install latest ClickHouse server and client"
                 self._log("Installing latest ClickHouse version...")
 
                 self.record_setup_command(
-                    "sudo apt-get install -y clickhouse-server clickhouse-client",
+                    "sudo apt-get install -y clickhouse-common-static clickhouse-server clickhouse-client",
                     description,
                     "installation",
                 )
@@ -540,7 +554,17 @@ class ClickHouseSystem(SystemUnderTest):
             self._log(f"✓ Detected: {cpu_cores} CPU cores, {total_mem_gb:.1f}GB RAM")
 
             # Step 7: Calculate optimal settings based on hardware
-            extra_config = self.setup_config.get("extra", {})
+            # Defensive: ensure setup_config is still not None
+            if self.setup_config is None:
+                self._log("ERROR: setup_config is None, attempting to recover from self.config")
+                if hasattr(self, 'config') and self.config and 'setup' in self.config:
+                    self.setup_config = self.config['setup']
+                    self._log("✓ Recovered setup_config from self.config")
+                else:
+                    raise RuntimeError("setup_config is None and cannot be recovered")
+
+            # Use 'or {}' to handle case where 'extra' exists but is None
+            extra_config = self.setup_config.get("extra") or {}
             settings = self._calculate_optimal_settings(hw_specs, extra_config)
             self._log("⚙️  Calculated optimal settings:")
             self._log(f"   - max_threads: {settings['max_threads']}")
@@ -627,6 +651,9 @@ class ClickHouseSystem(SystemUnderTest):
 
         except Exception as e:
             self._log(f"Native ClickHouse installation failed: {e}")
+            # Log full traceback for debugging
+            import traceback
+            self._log(f"Traceback:\n{traceback.format_exc()}")
             return False
 
     @exclude_from_package
@@ -773,7 +800,8 @@ class ClickHouseSystem(SystemUnderTest):
 
         # Statistics for query optimization (ClickHouse 24.6+)
         # Only enable if explicitly requested in extra config
-        extra_config = self.setup_config.get("extra", {})
+        # Use 'or {}' to handle case where 'extra' exists but is None
+        extra_config = self.setup_config.get("extra") or {}
         if extra_config.get("allow_statistics_optimize", 0) == 1:
             profile_settings.append(
                 "            <allow_experimental_statistics>1</allow_experimental_statistics>"
@@ -989,6 +1017,10 @@ class ClickHouseSystem(SystemUnderTest):
         if cpu_result.get("success", False):
             try:
                 cpu_cores = int(cpu_result["stdout"].strip())
+                # Sanity check: CPU cores should be reasonable (between 1 and 512)
+                if cpu_cores < 1 or cpu_cores > 512:
+                    self._log(f"⚠️  WARNING: Detected {cpu_cores} CPU cores - this seems wrong, using default 16")
+                    cpu_cores = 16
             except (ValueError, KeyError):
                 cpu_cores = 16  # Fallback default
         else:
@@ -1008,6 +1040,34 @@ class ClickHouseSystem(SystemUnderTest):
             mem_bytes = 64 * 1024 * 1024 * 1024  # 64GB fallback
 
         return {"cpu_cores": cpu_cores, "total_memory_bytes": mem_bytes}
+
+    def _calculate_max_concurrent_queries(self, cpu_cores: int) -> int:
+        """
+        Calculate max_concurrent_queries based on workload configuration.
+
+        Uses num_streams from multiuser config if available, otherwise falls back
+        to a reasonable default based on CPU cores.
+
+        Args:
+            cpu_cores: Number of CPU cores available
+
+        Returns:
+            Calculated max_concurrent_queries value
+        """
+        # Get num_streams from workload multiuser config
+        # Use 'or {}' to handle case where multiuser exists but is None
+        multiuser_config = (self.workload_config or {}).get("multiuser") or {}
+        num_streams: int = int(multiuser_config.get("num_streams", 1))
+
+        # Base value on CPU cores
+        base_value = max(4, cpu_cores)
+
+        # If multiuser is enabled, ensure we have enough capacity
+        # Add buffer for system queries and overhead
+        if num_streams > 1:
+            return max(base_value, num_streams + 10)
+
+        return base_value
 
     @exclude_from_package
     def _calculate_optimal_settings(
@@ -1051,7 +1111,9 @@ class ClickHouseSystem(SystemUnderTest):
                 extra_config, "max_server_memory_usage", int(total_mem * 0.80)
             ),
             "max_concurrent_queries": self._get_int_config(
-                extra_config, "max_concurrent_queries", max(4, cpu_cores // 2)
+                extra_config,
+                "max_concurrent_queries",
+                self._calculate_max_concurrent_queries(cpu_cores),
             ),
             "background_pool_size": self._get_int_config(
                 extra_config, "background_pool_size", max(16, cpu_cores)
@@ -1529,9 +1591,21 @@ class ClickHouseSystem(SystemUnderTest):
             return False
 
     def execute_query(
-        self, query: str, query_name: str | None = None, return_data: bool = False
+        self,
+        query: str,
+        query_name: str | None = None,
+        return_data: bool = False,
+        timeout: int | None = None,
     ) -> dict[str, Any]:
-        """Execute a SQL query in ClickHouse using clickhouse-connect."""
+        """Execute a SQL query in ClickHouse using clickhouse-connect.
+
+        Args:
+            query: SQL query to execute
+            query_name: Optional name for the query (for logging)
+            return_data: If True, return query results as DataFrame
+            timeout: Optional timeout in seconds (default: 300 for regular queries,
+                    uses dynamic calculation for OPTIMIZE operations)
+        """
         from ..debug import debug_print
 
         if not query_name:
@@ -1539,6 +1613,13 @@ class ClickHouseSystem(SystemUnderTest):
 
         # ClickHouse HTTP interface doesn't allow trailing semicolons
         query = query.rstrip().rstrip(";")
+
+        # Determine timeout - use provided value or calculate based on query type
+        if timeout is None:
+            timeout = 300  # Default 5 minutes
+
+        # Convert timeout to milliseconds for clickhouse-connect
+        send_receive_timeout = timeout
 
         try:
             # Debug output
@@ -1566,6 +1647,7 @@ class ClickHouseSystem(SystemUnderTest):
                     database=self.database,
                     interface="http",
                     secure=False,
+                    send_receive_timeout=send_receive_timeout,
                 )
 
                 try:

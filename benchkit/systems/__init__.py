@@ -35,13 +35,16 @@ def _lazy_import_system(kind: str) -> type[SystemUnderTest]:
     raise ValueError(f"Unknown system kind: {kind}")
 
 
-def create_system(config: dict, output_callback: Any = None) -> SystemUnderTest:
+def create_system(
+    config: dict, output_callback: Any = None, workload_config: dict | None = None
+) -> SystemUnderTest:
     """
     Factory function to create a system under test.
 
     Args:
         config: System configuration dictionary
         output_callback: Optional callback for thread-safe logging during parallel execution
+        workload_config: Optional workload configuration for dynamic tuning
 
     Returns:
         SystemUnderTest instance
@@ -76,7 +79,11 @@ def create_system(config: dict, output_callback: Any = None) -> SystemUnderTest:
     # Lazy import the system class only when needed
     system_class = _lazy_import_system(kind)
 
-    return system_class(config_expanded, output_callback=output_callback)
+    return system_class(
+        config_expanded,
+        output_callback=output_callback,
+        workload_config=workload_config,
+    )
 
 
 __all__ = [

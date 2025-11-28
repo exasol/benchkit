@@ -20,10 +20,18 @@ class SystemUnderTest(ABC):
         self,
         config: dict[str, Any],
         output_callback: Callable[[str], None] | None = None,
+        workload_config: dict[str, Any] | None = None,
     ):
         self.name = config["name"]
         self.kind = config["kind"]
         self.version = config["version"]
+
+        # Defensive: Ensure setup is not None
+        if "setup" not in config:
+            raise ValueError(f"System config for '{self.name}' is missing 'setup' section")
+        if config["setup"] is None:
+            raise ValueError(f"System config for '{self.name}' has None 'setup' section")
+
         self.setup_config = config["setup"]
         self.data_dir: Path | None = Path(
             self.setup_config.get("data_dir", f"/data/{self.name}")
@@ -34,6 +42,9 @@ class SystemUnderTest(ABC):
 
         # Output callback for thread-safe logging in parallel execution
         self._output_callback = output_callback
+
+        # Workload configuration for dynamic tuning
+        self.workload_config = workload_config or {}
 
         # Command recording for report reproduction
         self.setup_commands: list[dict[str, Any]] = []
@@ -204,7 +215,11 @@ class SystemUnderTest(ABC):
 
     @abstractmethod
     def execute_query(
-        self, query: str, query_name: str | None = None, return_data: bool = False
+        self,
+        query: str,
+        query_name: str | None = None,
+        return_data: bool = False,
+        timeout: int | None = None,
     ) -> dict[str, Any]:
         """
         Execute a SQL query and return timing and result information.
@@ -213,6 +228,7 @@ class SystemUnderTest(ABC):
             query: SQL query to execute
             query_name: Optional name for the query (for logging)
             return_data: If True, include result data in response (default: False)
+            timeout: Optional timeout in seconds for query execution
 
         Returns:
             Dictionary containing:
