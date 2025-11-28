@@ -8,12 +8,12 @@ WITH supplier_delivery_metrics AS (
 		s.s_address,
 		s.s_phone,
 		COUNT(DISTINCT l.l_orderkey) AS total_orders,
-		AVG(DATEDIFF(l.l_receiptdate, l.l_commitdate)) AS avg_delivery_delay,
-		PERCENTILE_APPROX(DATEDIFF(l.l_receiptdate, l.l_commitdate), 0.5) AS median_delivery_delay,
-		PERCENTILE_APPROX(DATEDIFF(l.l_receiptdate, l.l_commitdate), 0.90) AS p90_delivery_delay,
+		AVG(DAYS_BETWEEN(l.l_receiptdate, l.l_commitdate)) AS avg_delivery_delay,
+		MEDIAN(DAYS_BETWEEN(l.l_receiptdate, l.l_commitdate)) AS median_delivery_delay,
+		PERCENTILE_DISC(0.90) WITHIN GROUP(ORDER BY DAYS_BETWEEN(l.l_receiptdate, l.l_commitdate)) AS p90_delivery_delay,
 		SUM(CASE WHEN l.l_receiptdate > l.l_commitdate THEN 1 ELSE 0 END) AS late_deliveries,
 		SUM(CASE WHEN l.l_receiptdate <= l.l_commitdate THEN 1 ELSE 0 END) AS on_time_deliveries,
-		SUM(CASE WHEN DATEDIFF(l.l_receiptdate, l.l_commitdate) > 7 THEN 1 ELSE 0 END) AS severely_late_deliveries,
+		SUM(CASE WHEN DAYS_BETWEEN(l.l_receiptdate, l.l_commitdate) > 7 THEN 1 ELSE 0 END) AS severely_late_deliveries,
 		SUM(l.l_extendedprice * (1 - l.l_discount)) AS total_revenue,
 		SUM(l.l_extendedprice * (1 - l.l_discount) * l.l_tax) AS total_tax,
 		SUM(l.l_quantity) AS total_quantity,
@@ -23,7 +23,7 @@ WITH supplier_delivery_metrics AS (
 		VARIANCE(l.l_extendedprice * (1 - l.l_discount)) AS revenue_variance,
 		MIN(l.l_shipdate) AS first_shipment_date,
 		MAX(l.l_shipdate) AS last_shipment_date,
-		DATEDIFF(MAX(l.l_shipdate), MIN(l.l_shipdate)) AS active_days,
+		DAYS_BETWEEN(MAX(l.l_shipdate), MIN(l.l_shipdate)) AS active_days,
 		COUNT(DISTINCT l.l_partkey) AS unique_parts_shipped
 	FROM supplier s
 	JOIN lineitem l ON s.s_suppkey = l.l_suppkey
@@ -31,7 +31,7 @@ WITH supplier_delivery_metrics AS (
 ),
 
 -- Step 2: Calculate Supplier Transaction Frequency Patterns
-supplier_transaction_frequency AS (
+supplier_transaction_frequency_p1 AS (
 	SELECT
 		l_suppkey,
 		DATE_TRUNC('MONTH', l_shipdate) AS ship_month,
@@ -41,36 +41,43 @@ supplier_transaction_frequency AS (
 		LAG(COUNT(*)) OVER (PARTITION BY l_suppkey ORDER BY DATE_TRUNC('MONTH', l_shipdate)) AS prev_month_transactions,
 		LAG(SUM(l_quantity)) OVER (PARTITION BY l_suppkey ORDER BY DATE_TRUNC('MONTH', l_shipdate)) AS prev_month_quantity,
 		LAG(SUM(l_extendedprice * (1 - l_discount))) OVER (PARTITION BY l_suppkey ORDER BY DATE_TRUNC('MONTH', l_shipdate)) AS prev_month_revenue,
-		DATEDIFF(DATE_TRUNC('MONTH', l_shipdate), LAG(DATE_TRUNC('MONTH', l_shipdate)) OVER (PARTITION BY l_suppkey ORDER BY DATE_TRUNC('MONTH', l_shipdate))) AS months_since_last_activity
+		LAG(DATE_TRUNC('MONTH', l_shipdate)) OVER (PARTITION BY l_suppkey ORDER BY DATE_TRUNC('MONTH', l_shipdate)) as prev_ship_month
 	FROM lineitem
-	GROUP BY l_suppkey, ship_month
+	GROUP BY l_suppkey, DATE_TRUNC('MONTH', l_shipdate)
+),
+
+supplier_transaction_frequency AS (
+	SELECT
+		p1.*,
+		DAYS_BETWEEN(ship_month, prev_ship_month) AS months_since_last_activity
+	FROM supplier_transaction_frequency_p1 as p1
 ),
 
 -- Step 3: Calculate Seasonal Ordering Patterns (Quarterly)
 seasonal_patterns_quarterly AS (
 	SELECT
 		l.l_suppkey,
-		QUARTER(o.o_orderdate) AS quarter,
-		YEAR(o.o_orderdate) AS year,
+		TO_CHAR(o.o_orderdate, 'Q') AS quarter,
+		YEAR(o.o_orderdate) AS "year",
 		COUNT(DISTINCT o.o_orderkey) AS quarterly_orders,
 		COUNT(DISTINCT MONTH(o.o_orderdate)) AS active_months_in_quarter,
 		SUM(l.l_quantity) AS quarterly_quantity,
 		SUM(l.l_extendedprice * (1 - l.l_discount)) AS quarterly_revenue,
 		AVG(l.l_extendedprice * (1 - l.l_discount)) AS avg_order_value_in_quarter,
 		COUNT(DISTINCT l.l_partkey) AS unique_parts_in_quarter,
-		LAG(SUM(l.l_quantity)) OVER (PARTITION BY l.l_suppkey, QUARTER(o.o_orderdate) ORDER BY YEAR(o.o_orderdate)) AS prev_year_quarterly_quantity,
-		LAG(SUM(l.l_extendedprice * (1 - l.l_discount))) OVER (PARTITION BY l.l_suppkey, QUARTER(o.o_orderdate) ORDER BY YEAR(o.o_orderdate)) AS prev_year_quarterly_revenue
+		LAG(SUM(l.l_quantity)) OVER (PARTITION BY l.l_suppkey, TO_CHAR(o.o_orderdate, 'Q') ORDER BY YEAR(o.o_orderdate)) AS prev_year_quarterly_quantity,
+		LAG(SUM(l.l_extendedprice * (1 - l.l_discount))) OVER (PARTITION BY l.l_suppkey, TO_CHAR(o.o_orderdate, 'Q') ORDER BY YEAR(o.o_orderdate)) AS prev_year_quarterly_revenue
 	FROM lineitem l
 	JOIN orders o ON l.l_orderkey = o.o_orderkey
-	GROUP BY l.l_suppkey, quarter, year
+	GROUP BY l.l_suppkey, TO_CHAR(o.o_orderdate, 'Q'), YEAR(o.o_orderdate)
 ),
 
 -- Step 4: Calculate Seasonal Ordering Patterns (Monthly)
 seasonal_patterns_monthly AS (
 	SELECT
 		l.l_suppkey,
-		MONTH(o.o_orderdate) AS month,
-		YEAR(o.o_orderdate) AS year,
+		MONTH(o.o_orderdate) AS "month",
+		YEAR(o.o_orderdate) AS "year",
 		COUNT(DISTINCT o.o_orderkey) AS monthly_orders,
 		SUM(l.l_quantity) AS monthly_quantity,
 		SUM(l.l_extendedprice * (1 - l.l_discount)) AS monthly_revenue,
@@ -78,7 +85,7 @@ seasonal_patterns_monthly AS (
 		LAG(SUM(l.l_extendedprice * (1 - l.l_discount))) OVER (PARTITION BY l.l_suppkey, MONTH(o.o_orderdate) ORDER BY YEAR(o.o_orderdate)) AS prev_year_monthly_revenue
 	FROM lineitem l
 	JOIN orders o ON l.l_orderkey = o.o_orderkey
-	GROUP BY l.l_suppkey, month, year
+	GROUP BY l.l_suppkey, MONTH(o.o_orderdate), YEAR(o.o_orderdate)
 ),
 
 -- Step 5: Calculate YoY Growth and Seasonality Scores (Quarterly)
@@ -86,7 +93,7 @@ supplier_seasonality_quarterly AS (
 	SELECT
 		l_suppkey,
 		quarter,
-		year,
+		"year",
 		quarterly_quantity,
 		quarterly_revenue,
 		unique_parts_in_quarter,
@@ -110,8 +117,8 @@ supplier_seasonality_quarterly AS (
 supplier_seasonality_monthly AS (
 	SELECT
 		l_suppkey,
-		month,
-		year,
+		"month",
+		"year",
 		monthly_quantity,
 		monthly_revenue,
 		CASE
@@ -159,7 +166,7 @@ part_supplier_diversity AS (
 -- Step 8: Analyze Part Categories and Their Supply Chain Characteristics
 part_category_analysis AS (
 	SELECT
-		SPLIT(p.p_type, ' ')[0] AS part_category,
+		regexp_substr(p.p_type, '[^ ]*') AS part_category,
 		COUNT(DISTINCT p.p_partkey) AS category_part_count,
 		AVG(psd.supplier_count) AS avg_suppliers_per_part,
 		MIN(psd.supplier_count) AS min_suppliers_per_part,
@@ -171,7 +178,7 @@ part_category_analysis AS (
 	FROM part p
 	JOIN part_supplier_diversity psd ON p.p_partkey = psd.p_partkey
 	JOIN partsupp ps ON p.p_partkey = ps.ps_partkey
-	GROUP BY part_category
+	GROUP BY regexp_substr(p.p_type, '[^ ]*')
 ),
 
 -- Step 9: Geographic Performance Analysis (Nation Level)
@@ -182,7 +189,7 @@ nation_performance AS (
 		n.n_regionkey,
 		COUNT(DISTINCT s.s_suppkey) AS supplier_count,
 		AVG(sdm.avg_delivery_delay) AS nation_avg_delay,
-		PERCENTILE_APPROX(sdm.avg_delivery_delay, 0.5) AS nation_median_delay,
+		MEDIAN(sdm.avg_delivery_delay) AS nation_median_delay,
 		AVG(sdm.p90_delivery_delay) AS nation_p90_delay,
 		SUM(sdm.total_revenue) AS nation_revenue,
 		SUM(sdm.total_quantity) AS nation_quantity,
@@ -228,7 +235,7 @@ customer_satisfaction AS (
 		l.l_suppkey,
 		o.o_custkey,
 		COUNT(DISTINCT o.o_orderkey) AS order_count,
-		AVG(DATEDIFF(l.l_receiptdate, o.o_orderdate)) AS avg_order_to_receipt,
+		AVG(DAYS_BETWEEN(l.l_receiptdate, o.o_orderdate)) AS avg_order_to_receipt,
 		AVG(o.o_totalprice) AS avg_order_value,
 		COUNT(DISTINCT CASE WHEN l.l_returnflag = 'R' THEN l.l_orderkey END) AS returned_orders,
 		COUNT(DISTINCT CASE WHEN l.l_returnflag = 'R' THEN l.l_orderkey END) / NULLIF(COUNT(DISTINCT o.o_orderkey), 0) * 100 AS return_rate,
@@ -244,23 +251,23 @@ customer_satisfaction AS (
 -- Step 12: Supplier Customer Diversity and Loyalty Analysis
 supplier_customer_analysis AS (
 	SELECT
-		cs.l_suppkey,
-		COUNT(DISTINCT cs.o_custkey) AS unique_customers,
-		AVG(cs.order_count) AS avg_orders_per_customer,
-		MAX(cs.order_count) AS max_orders_from_customer,
-		MIN(cs.order_count) AS min_orders_from_customer,
-		STDDEV(cs.order_count) AS order_count_stddev,
-		COUNT(DISTINCT CASE WHEN cs.order_count > 5 THEN cs.o_custkey ELSE NULL END) AS loyal_customers,
-		COUNT(DISTINCT CASE WHEN cs.order_count > 5 THEN cs.o_custkey ELSE NULL END) / NULLIF(COUNT(DISTINCT cs.o_custkey), 0) * 100 AS loyal_customer_percentage,
-		AVG(cs.return_rate) AS avg_return_rate,
-		MAX(cs.return_rate) AS max_return_rate,
-		AVG(cs.avg_order_value) AS avg_customer_order_value,
-		MAX(cs.avg_order_value) AS max_customer_order_value,
-		MIN(cs.avg_order_value) AS min_customer_order_value,
-		COUNT(DISTINCT CASE WHEN cs.high_priority_percentage > 50 THEN cs.o_custkey ELSE NULL END) AS high_priority_customers,
-		COUNT(DISTINCT CASE WHEN cs.high_priority_percentage > 50 THEN cs.o_custkey ELSE NULL END) / NULLIF(COUNT(DISTINCT cs.o_custkey), 0) * 100 AS high_priority_customer_percentage
-	FROM customer_satisfaction cs
-	GROUP BY cs.l_suppkey
+		csa.l_suppkey,
+		COUNT(DISTINCT csa.o_custkey) AS unique_customers,
+		AVG(csa.order_count) AS avg_orders_per_customer,
+		MAX(csa.order_count) AS max_orders_from_customer,
+		MIN(csa.order_count) AS min_orders_from_customer,
+		STDDEV(csa.order_count) AS order_count_stddev,
+		COUNT(DISTINCT CASE WHEN csa.order_count > 5 THEN csa.o_custkey ELSE NULL END) AS loyal_customers,
+		COUNT(DISTINCT CASE WHEN csa.order_count > 5 THEN csa.o_custkey ELSE NULL END) / NULLIF(COUNT(DISTINCT csa.o_custkey), 0) * 100 AS loyal_customer_percentage,
+		AVG(csa.return_rate) AS avg_return_rate,
+		MAX(csa.return_rate) AS max_return_rate,
+		AVG(csa.avg_order_value) AS avg_customer_order_value,
+		MAX(csa.avg_order_value) AS max_customer_order_value,
+		MIN(csa.avg_order_value) AS min_customer_order_value,
+		COUNT(DISTINCT CASE WHEN csa.high_priority_percentage > 50 THEN csa.o_custkey ELSE NULL END) AS high_priority_customers,
+		COUNT(DISTINCT CASE WHEN csa.high_priority_percentage > 50 THEN csa.o_custkey ELSE NULL END) / NULLIF(COUNT(DISTINCT csa.o_custkey), 0) * 100 AS high_priority_customer_percentage
+	FROM customer_satisfaction csa
+	GROUP BY csa.l_suppkey
 ),
 
 -- Step 13: Calculate Risk Scores for Each Supplier
@@ -346,8 +353,8 @@ supplier_seasonality_quarterly_agg AS (
 supplier_seasonality_monthly_agg AS (
 	SELECT
 		ssm.l_suppkey,
-		MAX(CASE WHEN ssm.quantity_month_rank = 1 THEN ssm.month ELSE NULL END) AS peak_quantity_month,
-		MAX(CASE WHEN ssm.revenue_month_rank = 1 THEN ssm.month ELSE NULL END) AS peak_revenue_month,
+		MAX(CASE WHEN ssm.quantity_month_rank = 1 THEN ssm."month" ELSE NULL END) AS peak_quantity_month,
+		MAX(CASE WHEN ssm.revenue_month_rank = 1 THEN ssm."month" ELSE NULL END) AS peak_revenue_month,
 		AVG(CASE WHEN ssm.yoy_quantity_growth_monthly IS NOT NULL THEN ABS(ssm.yoy_quantity_growth_monthly) ELSE NULL END) AS avg_monthly_quantity_volatility,
 		AVG(CASE WHEN ssm.yoy_revenue_growth_monthly IS NOT NULL THEN ABS(ssm.yoy_revenue_growth_monthly) ELSE NULL END) AS avg_monthly_revenue_volatility,
 		MAX(ssm.yoy_revenue_growth_monthly) AS max_monthly_revenue_growth,
@@ -364,7 +371,7 @@ supplier_parts_profile AS (
 		COUNT(DISTINCT ps.ps_partkey) AS unique_parts_supplied,
 		COUNT(DISTINCT p.p_mfgr) AS manufacturer_count,
 		COUNT(DISTINCT p.p_brand) AS brand_count,
-		COUNT(DISTINCT SPLIT(p.p_type, ' ')[0]) AS part_category_count,
+		COUNT(DISTINCT regexp_substr(p.p_type, '[^ ]*')) AS part_category_count,
 		AVG(ps.ps_supplycost) AS avg_supply_cost,
 		MIN(ps.ps_supplycost) AS min_supply_cost,
 		MAX(ps.ps_supplycost) AS max_supply_cost,
@@ -376,7 +383,7 @@ supplier_parts_profile AS (
 		STDDEV(ps.ps_availqty) AS availability_stddev,
 		AVG(ps.ps_availqty * p.p_retailprice) AS avg_inventory_value,
 		SUM(ps.ps_availqty * p.p_retailprice) AS total_inventory_value,
-		COUNT(DISTINCT SPLIT(p.p_type, ' ')[0]) AS category_diversity,
+		COUNT(DISTINCT regexp_substr(p.p_type, '[^ ]*')) AS category_diversity,
 		AVG(CASE WHEN psd.supplier_count IS NOT NULL THEN psd.supplier_count ELSE 1 END) AS avg_supply_chain_redundancy,
 		SUM(CASE WHEN p.p_retailprice > 1000 THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0) * 100 AS premium_part_percentage,
 		SUM(ps.ps_availqty) / NULLIF(SUM(COALESCE(l.l_quantity, 0)), 0) AS inventory_turnover_ratio
