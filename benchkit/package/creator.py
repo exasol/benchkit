@@ -326,6 +326,9 @@ class WorkloadPackage:
             "run": [
                 "parsers.py"
             ],  # Only parsers, no __init__.py to avoid import issues
+            "package": [
+                "markers.py", # imported by systems/base
+            ],
             "systems": None,  # Copy all - needed for database connections
             "workloads": None,  # Copy all - needed for workload execution
         }
