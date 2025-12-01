@@ -235,14 +235,17 @@ locals {
 
 # Generic system instances and storage
 # Only create EBS volumes when disk_type is not "local"
+# "ebs" is a simple alias for "gp3" with auto-tuned IOPS/throughput
 resource "aws_ebs_volume" "system_data" {
   for_each = { for k, v in local.system_nodes_map : k => v if v.disk_type != "local" }
 
   availability_zone = data.aws_availability_zones.available.names[0]
-  type              = each.value.disk_type
+  # "ebs" is an alias for "gp3" - provides a simple configuration option
+  type              = each.value.disk_type == "ebs" ? "gp3" : each.value.disk_type
   size              = each.value.disk_size
-  iops              = each.value.disk_type == "gp3" ? min(16000, max(3000, each.value.disk_size * 3)) : null
-  throughput        = each.value.disk_type == "gp3" ? min(1000, max(125, each.value.disk_size / 4)) : null
+  # Auto-tune IOPS and throughput for gp3 and "ebs" (alias for gp3)
+  iops              = contains(["gp3", "ebs"], each.value.disk_type) ? min(16000, max(3000, each.value.disk_size * 3)) : null
+  throughput        = contains(["gp3", "ebs"], each.value.disk_type) ? min(1000, max(125, each.value.disk_size / 4)) : null
   encrypted         = true
 
   tags = merge({

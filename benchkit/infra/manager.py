@@ -401,6 +401,16 @@ class InfraManager:
             # Only include systems that are in the filtered systems list
             if system_name in active_systems:
                 disk_config = system_config.get("disk", {})
+                # Default to "local" (instance store) - no EBS created unless specified
+                disk_type = disk_config.get("type", "local")
+
+                # Validate: size_gb is required for EBS volumes (anything not "local")
+                if disk_type != "local":
+                    if "size_gb" not in disk_config:
+                        raise ValueError(
+                            f"System '{system_name}': disk.size_gb is required when using "
+                            f"disk type '{disk_type}'. Please specify the EBS volume size."
+                        )
 
                 # Get node_count from system setup config
                 node_count = 1
@@ -411,8 +421,10 @@ class InfraManager:
 
                 systems_tf[system_name] = {
                     "instance_type": system_config.get("instance_type", "m7i.4xlarge"),
-                    "disk_size": disk_config.get("size_gb", 40),
-                    "disk_type": disk_config.get("type", "gp3"),
+                    "disk_size": disk_config.get(
+                        "size_gb", 0
+                    ),  # 0 for local (unused by Terraform)
+                    "disk_type": disk_type,
                     "label": system_config.get("label", ""),
                     "node_count": node_count,
                 }

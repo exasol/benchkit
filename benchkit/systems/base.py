@@ -28,9 +28,13 @@ class SystemUnderTest(ABC):
 
         # Defensive: Ensure setup is not None
         if "setup" not in config:
-            raise ValueError(f"System config for '{self.name}' is missing 'setup' section")
+            raise ValueError(
+                f"System config for '{self.name}' is missing 'setup' section"
+            )
         if config["setup"] is None:
-            raise ValueError(f"System config for '{self.name}' has None 'setup' section")
+            raise ValueError(
+                f"System config for '{self.name}' has None 'setup' section"
+            )
 
         self.setup_config = config["setup"]
         self.data_dir: Path | None = Path(
@@ -635,6 +639,19 @@ class SystemUnderTest(ABC):
                     )
                     if nvme_result.get("success", False):
                         storage_type = nvme_result.get("stdout", "").strip()
+                    else:
+                        # Fallback: Check /dev/disk/by-id for EBS markers
+                        # AWS EBS volumes attached as NVMe have Amazon_Elastic_Block_Store in by-id
+                        by_id_check = self.execute_command(
+                            f"ls -la /dev/disk/by-id/ 2>/dev/null | grep '{device_name}' | grep -q 'Amazon_Elastic_Block_Store' && echo 'ebs' || echo 'local'",
+                            record=False,
+                        )
+                        if by_id_check.get("success", False):
+                            storage_type = by_id_check.get("stdout", "").strip()
+                elif device_name.startswith(("sd", "xvd")):
+                    # Traditional block device names (sd*, xvd*) are typically EBS volumes
+                    # on AWS. Instance store NVMe devices use nvme* prefix on modern instances.
+                    storage_type = "ebs"
 
                 # Apply device filter if specified
                 if device_filter and storage_type != device_filter:
@@ -796,10 +813,30 @@ class SystemUnderTest(ABC):
             f"id {user} >/dev/null 2>&1 && echo 'exists'", record=False
         )
 
-        if not (
+        # Distinguish between SSH failure and user not existing
+        # If command failed but stderr contains connection errors, it's SSH failure
+        stderr = check_user.get("stderr", "").lower()
+        is_ssh_failure = any(
+            err in stderr
+            for err in [
+                "connection",
+                "broken pipe",
+                "timeout",
+                "no route",
+                "refused",
+            ]
+        )
+
+        if is_ssh_failure:
+            # SSH failure - try chown anyway as the user might exist
+            self._log(
+                f"Warning: SSH connection issue while checking user {user}, attempting chown anyway"
+            )
+        elif not (
             check_user.get("success", False)
             and "exists" in check_user.get("stdout", "")
         ):
+            # User genuinely doesn't exist
             self._log(
                 f"Warning: User {user} does not exist yet, skipping ownership setting"
             )
