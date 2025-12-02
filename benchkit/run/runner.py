@@ -138,6 +138,675 @@ class BenchmarkRunner:
             # Sequential mode - print to console
             console.print(message)
 
+    # ========================================================================
+    # State Management for Phase Tracking
+    # ========================================================================
+
+    def _get_setup_complete_path(self, system_name: str) -> Path:
+        """Get path to setup completion marker file."""
+        return self.output_dir / f"setup_complete_{system_name}.json"
+
+    def _get_load_complete_path(self, system_name: str) -> Path:
+        """Get path to load completion marker file."""
+        return self.output_dir / f"load_complete_{system_name}.json"
+
+    def _is_setup_complete(self, system_name: str) -> bool:
+        """Check if setup phase is complete for a system."""
+        return self._get_setup_complete_path(system_name).exists()
+
+    def _is_load_complete(self, system_name: str) -> bool:
+        """Check if load phase is complete for a system."""
+        return self._get_load_complete_path(system_name).exists()
+
+    def _save_setup_complete(
+        self, system_name: str, connection_info: dict[str, Any]
+    ) -> None:
+        """Save setup completion marker with connection info."""
+        marker_data = {
+            "system_name": system_name,
+            "connection_info": connection_info,
+            "installation_s": self._load_installation_timing(system_name),
+            "timestamp": self._get_timestamp(),
+        }
+        save_json(marker_data, self._get_setup_complete_path(system_name))
+
+    def _save_load_complete(
+        self,
+        system_name: str,
+        data_generation_s: float = 0.0,
+        schema_creation_s: float = 0.0,
+        data_loading_s: float = 0.0,
+    ) -> None:
+        """Save load completion marker with timing info."""
+        marker_data = {
+            "system_name": system_name,
+            "data_generation_s": data_generation_s,
+            "schema_creation_s": schema_creation_s,
+            "data_loading_s": data_loading_s,
+            "timestamp": self._get_timestamp(),
+        }
+        save_json(marker_data, self._get_load_complete_path(system_name))
+
+    def _load_setup_info(self, system_name: str) -> dict[str, Any] | None:
+        """Load setup completion info for a system."""
+        path = self._get_setup_complete_path(system_name)
+        if path.exists():
+            data: dict[str, Any] = load_json(path)
+            return data
+        return None
+
+    def _load_load_info(self, system_name: str) -> dict[str, Any] | None:
+        """Load load completion info for a system."""
+        path = self._get_load_complete_path(system_name)
+        if path.exists():
+            data: dict[str, Any] = load_json(path)
+            return data
+        return None
+
+    def _check_setup_prerequisites(self) -> tuple[bool, list[str]]:
+        """Check if setup prerequisites are met for all systems."""
+        missing_systems = []
+        for system_config in self.config["systems"]:
+            system_name = system_config["name"]
+            if not self._is_setup_complete(system_name):
+                missing_systems.append(system_name)
+        return len(missing_systems) == 0, missing_systems
+
+    def _check_load_prerequisites(self) -> tuple[bool, list[str]]:
+        """Check if load prerequisites are met for all systems."""
+        missing_systems = []
+        for system_config in self.config["systems"]:
+            system_name = system_config["name"]
+            if not self._is_load_complete(system_name):
+                missing_systems.append(system_name)
+        return len(missing_systems) == 0, missing_systems
+
+    # ========================================================================
+    # Phase-Separated Benchmark Execution
+    # ========================================================================
+
+    def run_setup(self) -> bool:
+        """
+        Phase 1: Setup infrastructure and install database systems.
+
+        This phase handles:
+        - Cloud infrastructure provisioning (if cloud mode)
+        - Storage preparation (disk partitioning, RAID setup)
+        - Database system installation and configuration
+
+        Returns:
+            True if setup completed successfully, False otherwise
+        """
+        console.print(f"[bold blue]Starting setup phase: {self.project_id}[/bold blue]")
+
+        env_config = self.config.get("env", {})
+        env_mode = env_config.get("mode", "local")
+
+        if env_mode in ["aws", "gcp", "azure"]:
+            return self._run_setup_cloud()
+        else:
+            return self._run_setup_local()
+
+    def _run_setup_cloud(self) -> bool:
+        """Run setup phase for cloud infrastructure."""
+        console.print("[bold blue]🏗️  Phase 1: System Setup (Cloud)[/bold blue]")
+
+        # Setup cloud infrastructure connection
+        if not self._setup_cloud_infrastructure():
+            return False
+
+        # Phase 0.5: Prepare storage (partition disks) before system installation
+        if not self._prepare_storage_phase():
+            console.print("[red]❌ Storage preparation phase failed[/red]")
+            return False
+
+        # Phase 1: Setup all systems via remote commands
+        if not self._setup_phase():
+            console.print("[red]❌ Setup phase failed[/red]")
+            return False
+
+        # Save setup completion markers for each system
+        for system_config in self.config["systems"]:
+            system_name = system_config["name"]
+            instance_manager = self._cloud_instance_managers.get(system_name)
+
+            # Build connection info
+            connection_info = {}
+            if instance_manager:
+                if isinstance(instance_manager, list):
+                    # Multinode
+                    connection_info["public_ips"] = [
+                        mgr.public_ip for mgr in instance_manager
+                    ]
+                    connection_info["private_ips"] = [
+                        mgr.private_ip for mgr in instance_manager
+                    ]
+                else:
+                    connection_info["public_ip"] = instance_manager.public_ip
+                    connection_info["private_ip"] = instance_manager.private_ip
+
+            self._save_setup_complete(system_name, connection_info)
+            console.print(
+                f"[green]✅ Setup complete marker saved for {system_name}[/green]"
+            )
+
+        console.print("[bold green]✅ Setup phase completed successfully![/bold green]")
+        return True
+
+    def _run_setup_local(self) -> bool:
+        """Run setup phase for local execution."""
+        console.print("[bold blue]🏗️  Phase 1: System Setup (Local)[/bold blue]")
+
+        for system_config in self.config["systems"]:
+            system_name = system_config["name"]
+            console.print(f"\n🔧 Setting up: [bold]{system_name}[/bold]")
+
+            system = create_system(
+                system_config, workload_config=self.config.get("workload", {})
+            )
+
+            try:
+                # Check if system is already installed
+                if system.is_already_installed():
+                    console.print(f"  [green]✓ {system.name} already installed[/green]")
+                else:
+                    console.print(f"  Installing {system.name}...")
+                    if not system.install():
+                        console.print(
+                            f"  [red]Installation failed for {system_name}[/red]"
+                        )
+                        return False
+
+                # Start system
+                if not system.start():
+                    console.print(f"  [red]Failed to start {system_name}[/red]")
+                    return False
+
+                # Wait for system to be healthy
+                console.print(f"  Waiting for {system.name} to be ready...")
+                if not system.wait_for_health():
+                    console.print(f"  [red]{system_name} not healthy[/red]")
+                    return False
+
+                # Save setup completion marker
+                connection_info = {
+                    "host": system_config.get("setup", {}).get("host", "localhost"),
+                    "port": system_config.get("setup", {}).get("port"),
+                }
+                self._save_setup_complete(system_name, connection_info)
+                console.print(f"  [green]✓ Setup complete for {system_name}[/green]")
+
+                # Save setup summary
+                setup_summary = system.get_setup_summary()
+                self._save_setup_summary(system_name, setup_summary)
+
+            except Exception as e:
+                console.print(f"  [red]Setup failed for {system_name}: {e}[/red]")
+                return False
+
+        console.print("[bold green]✅ Setup phase completed successfully![/bold green]")
+        return True
+
+    def run_load(self, force: bool = False) -> bool:
+        """
+        Phase 2: Generate data, create schema, and load data into databases.
+
+        This phase handles:
+        - Data generation (TPC-H data files)
+        - Schema creation (tables, indexes)
+        - Data loading (bulk insert)
+
+        Args:
+            force: If True, re-run load even if already complete
+
+        Returns:
+            True if load completed successfully, False otherwise
+        """
+        console.print(f"[bold blue]Starting load phase: {self.project_id}[/bold blue]")
+
+        # Check setup prerequisites
+        setup_ok, missing_setup = self._check_setup_prerequisites()
+        if not setup_ok:
+            console.print(
+                f"[red]Error: Setup phase not complete for system(s): {', '.join(missing_setup)}[/red]"
+            )
+            console.print(
+                "[yellow]Run 'benchkit setup --config <config.yaml>' first, "
+                "or use 'benchkit run --full' to run all phases.[/yellow]"
+            )
+            return False
+
+        env_config = self.config.get("env", {})
+        env_mode = env_config.get("mode", "local")
+
+        if env_mode in ["aws", "gcp", "azure"]:
+            return self._run_load_cloud(force)
+        else:
+            return self._run_load_local(force)
+
+    def _run_load_cloud(self, force: bool = False) -> bool:
+        """Run load phase for cloud infrastructure."""
+        # Use parallel execution if configured
+        if self.use_parallel:
+            return self._run_load_cloud_parallel(force)
+
+        console.print("[bold blue]📦 Phase 2: Data Loading (Cloud)[/bold blue]")
+
+        # Re-establish cloud connections if needed
+        if not self._cloud_instance_managers:
+            if not self._setup_cloud_infrastructure():
+                return False
+
+        # Create unified package (supports both load and run)
+        console.print("📦 Creating package...")
+        package_path = self._create_package()
+        if not package_path:
+            console.print("[red]❌ Failed to create load package[/red]")
+            return False
+
+        console.print(f"✅ Package created: {package_path}")
+
+        # Execute load on each system
+        for system_config in self.config["systems"]:
+            system_name = system_config["name"]
+
+            # Check if already loaded (unless force)
+            if not force and self._is_load_complete(system_name):
+                console.print(
+                    f"[green]✅ {system_name} data already loaded, skipping[/green]"
+                )
+                continue
+
+            console.print(f"\n📤 Loading data on [bold]{system_name}[/bold]")
+
+            instance_manager = self._cloud_instance_managers.get(system_name)
+            if not instance_manager:
+                console.print(f"[red]❌ No instance manager for {system_name}[/red]")
+                return False
+
+            # Deploy and execute load package
+            success = self._execute_load_remotely(
+                system_config, instance_manager, package_path
+            )
+            if success:
+                console.print(f"[green]✅ {system_name} data loaded[/green]")
+            else:
+                console.print(f"[red]❌ {system_name} data load failed[/red]")
+                return False
+
+        console.print("[bold green]✅ Load phase completed successfully![/bold green]")
+        return True
+
+    def _run_load_cloud_parallel(self, force: bool = False) -> bool:
+        """Run load phase for cloud infrastructure in parallel.
+
+        This method executes data loading on all systems concurrently,
+        following the same pattern as _workload_execution_parallel().
+
+        Thread Safety:
+        - Package is created BEFORE parallel execution (single-threaded)
+        - Each system runs on separate cloud instance (no shared state)
+        - Output is routed through ParallelExecutor.add_output() which uses locks
+        - Results collected after all threads complete
+        """
+        console.print(
+            "[bold blue]📦 Phase 2: Data Loading (Cloud - Parallel)[/bold blue]"
+        )
+
+        # Re-establish cloud connections if needed
+        if not self._cloud_instance_managers:
+            if not self._setup_cloud_infrastructure():
+                return False
+
+        # Create unified package (single-threaded, before parallel execution)
+        console.print("📦 Creating package...")
+        package_path = self._create_package()
+        if not package_path:
+            console.print("[red]❌ Failed to create package[/red]")
+            return False
+
+        console.print(f"✅ Package created: {package_path}")
+
+        # Create parallel executor
+        executor = ParallelExecutor(max_workers=self.max_workers)
+
+        # Build tasks dictionary
+        tasks: dict[str, Callable[[], bool]] = {}
+        for system_config in self.config["systems"]:
+            system_name = system_config["name"]
+
+            # Check if already loaded (unless force)
+            if not force and self._is_load_complete(system_name):
+                console.print(
+                    f"[green]✅ {system_name} data already loaded, skipping[/green]"
+                )
+                continue
+
+            instance_manager = self._cloud_instance_managers.get(system_name)
+            if not instance_manager:
+                console.print(f"[red]❌ No instance manager for {system_name}[/red]")
+                continue
+
+            # Capture variables in default args to avoid closure issues
+            def make_load_task(
+                cfg: dict[str, Any], mgr: Any, pkg: Path, exec_ref: ParallelExecutor
+            ) -> Callable[[], bool]:
+                return lambda: self._execute_load_remotely(
+                    cfg, mgr, pkg, executor=exec_ref
+                )
+
+            tasks[system_name] = make_load_task(
+                system_config, instance_manager, package_path, executor
+            )
+
+        # If no tasks (all already loaded), return success
+        if not tasks:
+            console.print("[bold green]✅ All systems already loaded![/bold green]")
+            return True
+
+        # Execute in parallel with live display
+        results = executor.execute_parallel(
+            tasks, "Loading Data", log_dir=self.parallel_log_dir
+        )
+
+        # Check results
+        all_success = True
+        for system_name, success in results.items():
+            if success:
+                console.print(f"[green]✅ {system_name} data loaded[/green]")
+            else:
+                console.print(f"[red]❌ {system_name} data load failed[/red]")
+                all_success = False
+
+        if all_success:
+            console.print(
+                "[bold green]✅ Load phase completed successfully![/bold green]"
+            )
+        else:
+            console.print("[bold red]❌ Load phase failed for some systems[/bold red]")
+
+        return all_success
+
+    def _run_load_local(self, force: bool = False) -> bool:
+        """Run load phase for local execution."""
+        console.print("[bold blue]📦 Phase 2: Data Loading (Local)[/bold blue]")
+
+        workload = create_workload(self.config["workload"])
+        console.print(f"Workload: {workload.name} (SF={workload.scale_factor})")
+
+        for system_config in self.config["systems"]:
+            system_name = system_config["name"]
+
+            # Check if already loaded (unless force)
+            if not force and self._is_load_complete(system_name):
+                console.print(
+                    f"[green]✅ {system_name} data already loaded, skipping[/green]"
+                )
+                continue
+
+            console.print(f"\n📤 Loading data on [bold]{system_name}[/bold]")
+
+            system = create_system(
+                system_config, workload_config=self.config.get("workload", {})
+            )
+
+            try:
+                # Ensure system is running
+                if not system.is_healthy():
+                    console.print(f"  Starting {system_name}...")
+                    if not system.start():
+                        console.print(f"  [red]Failed to start {system_name}[/red]")
+                        return False
+                    if not system.wait_for_health():
+                        console.print(f"  [red]{system_name} not healthy[/red]")
+                        return False
+
+                # Prepare workload (data generation, schema creation, data loading)
+                console.print("  Preparing workload...")
+                if not workload.prepare(system):
+                    console.print(
+                        f"  [red]Workload preparation failed for {system_name}[/red]"
+                    )
+                    return False
+
+                # Get preparation timings if available
+                prep_timings = getattr(workload, "preparation_timings", {})
+
+                # Save load completion marker
+                self._save_load_complete(
+                    system_name,
+                    data_generation_s=prep_timings.get("data_generation_s", 0.0),
+                    schema_creation_s=prep_timings.get("schema_creation_s", 0.0),
+                    data_loading_s=prep_timings.get("data_loading_s", 0.0),
+                )
+                console.print(f"  [green]✓ Data loaded for {system_name}[/green]")
+
+            except Exception as e:
+                console.print(f"  [red]Data load failed for {system_name}: {e}[/red]")
+                return False
+
+        console.print("[bold green]✅ Load phase completed successfully![/bold green]")
+        return True
+
+    def run_queries(self, force: bool = False) -> bool:
+        """
+        Phase 3: Execute benchmark queries only.
+
+        This phase handles:
+        - Warmup query execution
+        - Measured query execution
+        - Result collection and saving
+
+        Args:
+            force: If True, re-run queries even if results exist
+
+        Returns:
+            True if queries completed successfully, False otherwise
+        """
+        console.print(
+            f"[bold blue]Starting query execution: {self.project_id}[/bold blue]"
+        )
+
+        # Check load prerequisites
+        load_ok, missing_load = self._check_load_prerequisites()
+        if not load_ok:
+            console.print(
+                f"[red]Error: Load phase not complete for system(s): {', '.join(missing_load)}[/red]"
+            )
+            console.print(
+                "[yellow]Run 'benchkit load --config <config.yaml>' first, "
+                "or use 'benchkit run --full' to run all phases.[/yellow]"
+            )
+            return False
+
+        # Check if results already exist
+        runs_file = self.output_dir / "runs.csv"
+        if runs_file.exists() and not force:
+            console.print(
+                f"[yellow]Skipping benchmark - results already exist:[/] {runs_file}"
+            )
+            console.print("[dim]Use --force to overwrite existing results[/dim]")
+            return True
+
+        env_config = self.config.get("env", {})
+        env_mode = env_config.get("mode", "local")
+
+        if env_mode in ["aws", "gcp", "azure"]:
+            return self._run_queries_cloud()
+        else:
+            return self._run_queries_local()
+
+    def _run_queries_cloud(self) -> bool:
+        """Run query execution phase for cloud infrastructure."""
+        console.print("[bold blue]🚀 Phase 3: Query Execution (Cloud)[/bold blue]")
+
+        # Re-establish cloud connections if needed
+        if not self._cloud_instance_managers:
+            if not self._setup_cloud_infrastructure():
+                return False
+
+        # Use existing workload execution phase
+        return self._workload_execution_phase()
+
+    def _run_queries_local(self) -> bool:
+        """Run query execution phase for local execution."""
+        console.print("[bold blue]🚀 Phase 3: Query Execution (Local)[/bold blue]")
+
+        workload = create_workload(self.config["workload"])
+        all_results = []
+        all_warmup_results = []
+
+        for system_config in self.config["systems"]:
+            system_name = system_config["name"]
+            console.print(f"\n🚀 Executing queries on [bold]{system_name}[/bold]")
+
+            system = create_system(
+                system_config, workload_config=self.config.get("workload", {})
+            )
+
+            try:
+                # Ensure system is running
+                if not system.is_healthy():
+                    console.print(f"  Starting {system_name}...")
+                    if not system.start():
+                        console.print(f"  [red]Failed to start {system_name}[/red]")
+                        continue
+                    if not system.wait_for_health():
+                        console.print(f"  [red]{system_name} not healthy[/red]")
+                        continue
+
+                # Execute queries
+                console.print("  Executing queries...")
+                measured_results, warmup_results = self._execute_queries(
+                    system, workload
+                )
+                all_results.extend(measured_results)
+                all_warmup_results.extend(warmup_results)
+
+                console.print(f"  [green]✓ Queries completed for {system_name}[/green]")
+
+            except Exception as e:
+                console.print(
+                    f"  [red]Query execution failed for {system_name}: {e}[/red]"
+                )
+                continue
+
+        # Save results
+        if all_results:
+            self._save_benchmark_results(all_results, all_warmup_results)
+            console.print(f"[green]✅ Results saved to: {self.output_dir}[/green]")
+        else:
+            console.print("[red]❌ No results to save[/red]")
+            return False
+
+        console.print(
+            "[bold green]✅ Query execution completed successfully![/bold green]"
+        )
+        return True
+
+    def _execute_load_remotely(
+        self,
+        system_config: dict[str, Any],
+        instance_manager: Any,
+        package_path: Path,
+        executor: "ParallelExecutor | None" = None,
+    ) -> bool:
+        """Deploy load package and execute data loading remotely.
+
+        Args:
+            system_config: System configuration dictionary
+            instance_manager: Cloud instance manager (or list for multinode)
+            package_path: Path to the package to deploy
+            executor: ParallelExecutor instance for parallel output (optional)
+
+        Returns:
+            True if load succeeded, False otherwise
+        """
+        try:
+            # Handle multinode case: use primary node
+            primary_manager = (
+                instance_manager[0]
+                if isinstance(instance_manager, list)
+                else instance_manager
+            )
+
+            project_id = self.config["project_id"]
+            system_name = system_config["name"]
+
+            # Deploy package
+            self._log_output(
+                f"📦 Deploying load package to {system_name}...",
+                executor,
+                system_name,
+            )
+            if not self._deploy_minimal_package(
+                primary_manager, package_path, project_id
+            ):
+                return False
+
+            # Calculate timeout based on scale factor
+            execution_timeout = self._get_workload_execution_timeout()
+            timeout_hours = execution_timeout / 3600
+
+            # Execute load
+            self._log_output(
+                f"📤 Loading data on {system_name} (timeout: {timeout_hours:.1f}h)...",
+                executor,
+                system_name,
+            )
+
+            # Create streaming callback for remote output (thread-safe)
+            def stream_remote_output(line: str, stream_name: str) -> None:
+                prefix = "STDERR" if stream_name == "stderr" else "STDOUT"
+                message = prefix if not line else f"{prefix}: {line}"
+                self._log_output(message, executor, system_name)
+
+            load_result = primary_manager.run_remote_command(
+                f"cd /home/ubuntu/{project_id} && ./load_data.sh {system_name}",
+                timeout=execution_timeout,
+                debug=True,
+                stream_callback=stream_remote_output,
+            )
+
+            if load_result.get("success"):
+                # Collect load completion info
+                remote_load_complete = f"/home/ubuntu/{project_id}/results/{project_id}/load_complete_{system_name}.json"
+                local_load_complete = self._get_load_complete_path(system_name)
+
+                if primary_manager.copy_file_from_instance(
+                    remote_load_complete, local_load_complete
+                ):
+                    self._log_output(
+                        f"✅ Load completion info collected from {system_name}",
+                        executor,
+                        system_name,
+                    )
+                else:
+                    # Create local marker if remote collection failed
+                    self._save_load_complete(system_name)
+                    self._log_output(
+                        f"✅ Load completed for {system_name}",
+                        executor,
+                        system_name,
+                    )
+
+                return True
+            else:
+                self._log_output(
+                    f"[red]Data loading failed on {system_name}[/red]",
+                    executor,
+                    system_name,
+                )
+                return False
+
+        except Exception as e:
+            self._log_output(
+                f"[red]Remote data loading failed: {e}[/red]",
+                executor,
+                system_name if "system_name" in dir() else None,
+            )
+            return False
+
     def run_full_benchmark(self) -> bool:
         """Run the complete benchmark with new two-phase architecture."""
         console.print(f"[bold blue]Starting benchmark: {self.project_id}[/bold blue]")
@@ -366,12 +1035,6 @@ class BenchmarkRunner:
                     self._prepared_systems = {}
                 self._prepared_systems[system_name] = system
 
-                # Save setup commands recorded during storage prep
-                # This ensures commands are preserved even if system is already installed
-                setup_summary = system.get_setup_summary()
-                if setup_summary.get("commands"):
-                    self._save_setup_summary(system_name, setup_summary)
-
             except Exception as e:
                 console.print(
                     f"[yellow]⚠️  Storage preparation warning for {system_name}: {e}[/yellow]"
@@ -514,6 +1177,14 @@ class BenchmarkRunner:
 
                 # Load previously saved setup summary if available
                 self._load_setup_summary_to_system(system, system_name)
+
+                # Warn if setup file doesn't exist (should have been created during first run)
+                setup_path = self.output_dir / f"setup_{system_name}.json"
+                if not setup_path.exists():
+                    console.print(
+                        f"[yellow]Warning: {setup_path.name} not found. "
+                        f"Setup commands will be missing from report.[/yellow]"
+                    )
 
             # Store timings for this system
             self.setup_timings[system_name] = system_timings
@@ -726,6 +1397,15 @@ class BenchmarkRunner:
                 # Load previously saved setup summary
                 self._load_setup_summary_to_system(system, system_name, executor)
 
+                # Warn if setup file doesn't exist (should have been created during first run)
+                setup_path = self.output_dir / f"setup_{system_name}.json"
+                if not setup_path.exists():
+                    executor.add_output(
+                        system_name,
+                        f"[yellow]Warning: {setup_path.name} not found. "
+                        f"Setup commands will be missing from report.[/yellow]",
+                    )
+
                 if saved_timing > 0:
                     executor.update_status(
                         system_name, f"✅ Ready ({saved_timing:.0f}s)"
@@ -758,7 +1438,7 @@ class BenchmarkRunner:
         console.print("📦 Creating workload package...")
 
         # Create minimal package (workload code only)
-        package_path = self._create_workload_package()
+        package_path = self._create_package()
         if not package_path:
             console.print("[red]❌ Failed to create workload package[/red]")
             return False
@@ -808,7 +1488,7 @@ class BenchmarkRunner:
         console.print("📦 Creating workload package...")
 
         # Create minimal package (single-threaded, before parallel execution)
-        package_path = self._create_workload_package()
+        package_path = self._create_package()
         if not package_path:
             console.print("[red]❌ Failed to create workload package[/red]")
             return False
@@ -965,10 +1645,6 @@ class BenchmarkRunner:
             console.print("  Collecting system metrics...")
             metrics = system.get_system_metrics()
             self._save_system_metrics(system.name, metrics)
-
-            # Save setup summary for report reproduction
-            setup_summary = system.get_setup_summary()
-            self._save_setup_summary(system.name, setup_summary)
 
             return measured_results
 
@@ -1853,7 +2529,7 @@ class BenchmarkRunner:
         else:
             return 21600  # 6 hours
 
-    def _create_workload_package(self) -> Path | None:
+    def _create_package(self) -> Path | None:
         """Create a package containing workload execution components."""
         try:
             from ..package.creator import create_workload_zip
@@ -1910,7 +2586,7 @@ class BenchmarkRunner:
                 self._log_output(message, executor, system_name)
 
             workload_result = primary_manager.run_remote_command(
-                f"cd /home/ubuntu/{project_id} && ./execute_workload.sh {system_name}",
+                f"cd /home/ubuntu/{project_id} && ./run_queries.sh {system_name}",
                 timeout=execution_timeout,
                 debug=True,
                 stream_callback=stream_remote_output,

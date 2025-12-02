@@ -256,7 +256,12 @@ class BenchmarkConfig(BaseModel):
             kind = system_config.kind
 
             if kind == "exasol" and method == "installer":
-                required_fields = ["c4_version", "working_copy", "image_password", "db_password"]
+                required_fields = [
+                    "c4_version",
+                    "working_copy",
+                    "image_password",
+                    "db_password",
+                ]
                 missing = [f for f in required_fields if not system_config.setup.get(f)]
                 if missing:
                     raise ValueError(

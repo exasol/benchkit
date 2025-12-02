@@ -1401,9 +1401,7 @@ echo "Symlink: %s -> $INSTANCE_STORE"
 
                 # Use consistent symlink for c4 config
                 storage_disk_path = exasol_storage_link
-                self.data_device = (
-                    f"{storage_file_path} (via {exasol_storage_link})"  # For report display
-                )
+                self.data_device = f"{storage_file_path} (via {exasol_storage_link})"  # For report display
 
             # Step 3: Download c4 tool
             c4_url = f"https://x-up.s3.amazonaws.com/releases/c4/linux/x86_64/{c4_version}/c4"
