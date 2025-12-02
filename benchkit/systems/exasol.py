@@ -1,15 +1,14 @@
 """Exasol database system implementation."""
 
 import os
-import ssl
 from pathlib import Path
 from typing import Any, Callable, cast
 
 import pyexasol  # type: ignore
 
-from ..package.markers import exclude_from_package
-from ..util import Timer
+from benchkit.common.markers import exclude_from_package
 from .base import SystemUnderTest
+from ..util import Timer
 
 
 class ExasolSystem(SystemUnderTest):
@@ -179,11 +178,10 @@ class ExasolSystem(SystemUnderTest):
         # Check if this is a localhost connection
         is_localhost = dsn.startswith("localhost") or dsn.startswith("127.0.0.1")
 
+        connection_kwargs = kwargs.copy()
+        connection_kwargs["autocommit"] = True
         try:
             # First attempt - normal connection
-            connection_kwargs = kwargs.copy()
-            connection_kwargs["autocommit"] = True
-
             # Disable SSL certificate verification for benchmarks (security not critical)
             connection_kwargs["websocket_sslopt"] = {"cert_reqs": ssl.CERT_NONE}
 
@@ -633,6 +631,7 @@ class ExasolSystem(SystemUnderTest):
 
         # Store original setup_commands to prevent duplicate recording
         original_commands_count = len(self.setup_commands)
+        commands_before: int = 0
 
         for idx, mgr in enumerate(self._cloud_instance_managers):
             self._log(f"\n  [Node {idx}] Setting up storage...")
@@ -1675,7 +1674,7 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
     def load_data(self, table_name: str, data_path: Path, **kwargs: Any) -> bool:
         """Load data into Exasol table using pyexasol import_from_file."""
         schema_name = kwargs.get("schema", "benchmark")
-        columns = kwargs.get("columns", None)
+        columns = kwargs.get("columns", [])
 
         conn = None
 
@@ -1701,6 +1700,37 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
             self._log(f"Loading {data_path} into {table_name}...")
             conn.import_from_file(
                 str(data_path), table=table_name, import_params=import_params
+            )
+
+            # Verify data was loaded
+            result = conn.execute(f"SELECT COUNT(*) FROM {table_name}")
+            row_count = result.fetchone()[0]
+            self._log(f"Successfully loaded {row_count:,} rows into {table_name}")
+            return True
+
+        except Exception as e:
+            self._log(f"Failed to load data into {table_name}: {e}")
+            return False
+        finally:
+            if conn:
+                conn.close()
+
+    def load_data_from_iterable(self, table_name: str, data_source, **kwargs: Any) -> bool:
+        schema_name: str = kwargs.get("schema", "benchmark")
+        conn: pyexasol.ExaConnection | None = None
+
+        try:
+            conn = self._get_connection()
+            if not conn:
+                return False
+            if not self._schema_created:
+                if self._schema_exists(conn, schema_name):
+                    self._schema_created = True
+                    conn.execute(f"OPEN SCHEMA {schema_name}")
+
+            self._log(f"Loading (iterable) into {schema_name}.{table_name}...")
+            conn.import_from_iterable(
+                data_source, table=table_name
             )
 
             # Verify data was loaded

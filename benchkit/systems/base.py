@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Callable
 
-from ..package.markers import exclude_from_package
+from benchkit.common.markers import exclude_from_package
 from ..util import safe_command
 
 
@@ -211,6 +211,10 @@ class SystemUnderTest(ABC):
         Returns:
             True if loading successful, False otherwise
         """
+        pass
+
+    @abstractmethod
+    def load_data_from_iterable(self, table_name: str, data_source, **kwargs: Any) -> bool:
         pass
 
     @abstractmethod

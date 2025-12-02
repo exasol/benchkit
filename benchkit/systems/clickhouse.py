@@ -5,9 +5,9 @@ from typing import Any, Callable, cast
 
 import clickhouse_connect
 
-from ..package.markers import exclude_from_package
-from ..util import Timer
+from benchkit.common.markers import exclude_from_package
 from .base import SystemUnderTest
+from ..util import Timer
 
 
 class ClickHouseSystem(SystemUnderTest):
