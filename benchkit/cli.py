@@ -700,6 +700,18 @@ def infra(
 
     manager = InfraManager(provider, cfg)
 
+    # Display project isolation info
+    project_id = cfg.get("project_id", "default")
+    console.print(f"[bold blue]Infrastructure Management[/bold blue]")
+    console.print(f"  Project: [cyan]{project_id}[/cyan]")
+    console.print(f"  State:   [cyan]{manager.project_state_dir}[/cyan]")
+    if project_id == "default":
+        console.print(
+            "[yellow]  Warning: Using default project_id. "
+            "Specify project_id in config for isolation.[/yellow]"
+        )
+    console.print()
+
     console.print(f"[blue]Running infrastructure {action} on {provider}[/]")
     if action == "apply":
         result = manager.apply(wait_for_init=not no_wait)

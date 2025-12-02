@@ -31,10 +31,22 @@ class InfraManager:
     def __init__(self, provider: str, config: dict[str, Any]):
         self.provider = provider.lower()
         self.config = config
-        self.infra_dir = Path(f"infra/{self.provider}")
 
-        if not self.infra_dir.exists():
-            raise ValueError(f"Infrastructure directory not found: {self.infra_dir}")
+        # Source Terraform configuration (shared, read-only templates)
+        self.tf_source_dir = Path(f"infra/{self.provider}")
+
+        # Per-project state directory for complete isolation
+        # This allows multiple benchmarks to run in parallel without conflicts
+        project_id = config.get("project_id", "default")
+        self.project_state_dir = Path("results") / project_id / "terraform"
+
+        # Legacy compatibility: keep infra_dir for any code that might reference it
+        self.infra_dir = self.tf_source_dir
+
+        if not self.tf_source_dir.exists():
+            raise ValueError(
+                f"Infrastructure directory not found: {self.tf_source_dir}"
+            )
 
     def plan(self) -> InfraResult:
         """Plan infrastructure changes."""
@@ -244,6 +256,29 @@ class InfraManager:
 
         return datetime.now().isoformat()
 
+    def _ensure_terraform_files_copied(self) -> None:
+        """
+        Copy Terraform configuration files to project state directory.
+
+        This enables per-project isolation of Terraform state, allowing
+        multiple benchmarks to run in parallel without conflicts.
+        Only copies if files don't exist (idempotent).
+        """
+        import shutil
+
+        # Ensure project state directory exists
+        self.project_state_dir.mkdir(parents=True, exist_ok=True)
+
+        # Files to copy from source to project directory
+        tf_files = ["main.tf", "user_data.sh"]
+
+        for tf_file in tf_files:
+            source = self.tf_source_dir / tf_file
+            dest = self.project_state_dir / tf_file
+
+            if source.exists() and not dest.exists():
+                shutil.copy2(source, dest)
+
     def _run_terraform_command_raw(
         self, command: str, args: list[Any] | None = None
     ) -> dict[str, Any]:
@@ -251,14 +286,17 @@ class InfraManager:
         args = args or []
 
         try:
-            # Change to infrastructure directory
+            # Ensure Terraform files are copied to project state directory
+            self._ensure_terraform_files_copied()
+
+            # Change to project-specific state directory (not shared infra_dir)
             import os
 
             original_cwd = os.getcwd()
-            os.chdir(self.infra_dir)
+            os.chdir(self.project_state_dir)
 
             try:
-                # Initialize terraform if needed
+                # Initialize terraform if needed (uses project-local .terraform/)
                 if not (Path(".terraform").exists()):
                     init_result = safe_command("terraform init -no-color", timeout=300)
                     if not init_result["success"]:
@@ -307,14 +345,17 @@ class InfraManager:
         args = args or []
 
         try:
-            # Change to infrastructure directory
+            # Ensure Terraform files are copied to project state directory
+            self._ensure_terraform_files_copied()
+
+            # Change to project-specific state directory (not shared infra_dir)
             import os
 
             original_cwd = os.getcwd()
-            os.chdir(self.infra_dir)
+            os.chdir(self.project_state_dir)
 
             try:
-                # Initialize terraform if needed
+                # Initialize terraform if needed (uses project-local .terraform/)
                 if not (Path(".terraform").exists()):
                     init_result = safe_command("terraform init -no-color", timeout=300)
                     if not init_result["success"]:
@@ -513,8 +554,11 @@ class InfraManager:
             import json
             import os
 
+            # Ensure Terraform files exist in project state directory
+            self._ensure_terraform_files_copied()
+
             original_cwd = os.getcwd()
-            os.chdir(self.infra_dir)
+            os.chdir(self.project_state_dir)
             try:
                 # Run terraform output -json to get structured output
                 result = safe_command("terraform output -json", timeout=60)
@@ -551,11 +595,14 @@ class InfraManager:
 
     def _get_aws_instance_info(self) -> dict[str, Any]:
         """Get AWS instance information for both Exasol and ClickHouse instances."""
-        # Use terraform output to get instance info from the correct directory
+        # Ensure Terraform files exist in project state directory
+        self._ensure_terraform_files_copied()
+
+        # Use terraform output to get instance info from project-specific directory
         import os
 
         original_cwd = os.getcwd()
-        os.chdir(self.infra_dir)
+        os.chdir(self.project_state_dir)
 
         try:
             result = safe_command("terraform output -json -no-color", timeout=30)
@@ -638,7 +685,9 @@ class InfraManager:
         return {"error": "GCP instance info not implemented"}
 
     @staticmethod
-    def resolve_ip_from_infrastructure(var_name: str, system_name: str) -> str | None:
+    def resolve_ip_from_infrastructure(
+        var_name: str, system_name: str, project_id: str | None = None
+    ) -> str | None:
         """
         Resolve IP address from infrastructure state files.
 
@@ -648,6 +697,7 @@ class InfraManager:
         Args:
             var_name: Variable name to resolve (e.g., "EXASOL_PUBLIC_IP")
             system_name: System name to match (e.g., "exasol", "clickhouse")
+            project_id: Project ID for project-specific state lookup (optional)
 
         Returns:
             IP address string if found, None otherwise
@@ -663,13 +713,24 @@ class InfraManager:
         # Determine if we need public or private IP based on variable name
         ip_type = "public_ip" if "PUBLIC" in var_name.upper() else "private_ip"
 
-        # Look for infrastructure state files in standard locations
-        state_locations = [
-            Path("infra/aws/terraform.tfstate"),
-            Path("infra/gcp/terraform.tfstate"),
-            Path("infra/azure/terraform.tfstate"),
-            Path("terraform/terraform.tfstate"),
-        ]
+        # Build prioritized list of state file locations
+        state_locations = []
+
+        # Priority 1: Project-specific state (if project_id provided)
+        if project_id:
+            state_locations.append(
+                Path("results") / project_id / "terraform" / "terraform.tfstate"
+            )
+
+        # Priority 2: Legacy shared state locations (backward compatibility)
+        state_locations.extend(
+            [
+                Path("infra/aws/terraform.tfstate"),
+                Path("infra/gcp/terraform.tfstate"),
+                Path("infra/azure/terraform.tfstate"),
+                Path("terraform/terraform.tfstate"),
+            ]
+        )
 
         for state_file in state_locations:
             if not state_file.exists():
