@@ -1,7 +1,6 @@
-title: "Exasol vs ClickHouse Performance Comparison on TPC-H SF100"
+title: "Exasol vs ClickHouse Performance Comparison on TPC-H SF1"
 author: "Oleksandr Kozachuk, Principal Architect at Exasol AG"
 
-# Execution configuration (optional)
 execution:
   parallel: true          # Enable parallel execution of systems (default: false)
   max_workers: 2          # Max concurrent systems (default: number of systems)
@@ -13,25 +12,27 @@ env:
   # Instance configuration per system
   instances:
     exasol:
-      instance_type: "r6id.8xlarge"  # 32 vCPUs, 256GB RAM, 1.9TB NVMe local storage
+      instance_type: "r5d.4xlarge"  # 16 vCPUs, 128GB RAM, 2x300GB NVMe local storage
       disk:
-        type: "local"              # Use local NVMe for best performance
+        type: "local"
       label: "ok-bench-exa"
     clickhouse:
-      instance_type: "r6id.8xlarge"  # 32 vCPUs, 256GB RAM, 1.9TB NVMe local storage
+      instance_type: "r5d.4xlarge"  # 16 vCPUs, 128GB RAM, 2x300GB NVMe local storage
       disk:
-        type: "local"              # Use local NVMe for best performance
+        type: "local"
       label: "ok-bench-ch"
   os_image: "ubuntu-22.04"
   ssh_key_name: "ok-work3"            # AWS key pair name (without .pem extension)
   ssh_private_key_path: "~/.ssh/ok-work3.pem"  # Local private key file path
 
 systems:
+  # Baseline: Exasol with original queries (first system is baseline)
   - name: "exasol"
     kind: "exasol"
     version: "2025.1.0"          # Latest Exasol version
     setup:
       method: "installer"        # Native c4 installation
+      node_count: 2
       use_additional_disk: true  # Auto-detect and use additional NVMe disk
       c4_version: "4.28.2"       # Latest c4 version
       host_addrs: "$EXASOL_PRIVATE_IP"  # Will be resolved from infrastructure
@@ -42,7 +43,7 @@ systems:
       working_copy: "@exasol-2025.1.0"
       license_file: "configs/exasol.license"  # License file path
       extra:
-        dbram: "220g"            # Database RAM allocation (increased for SF100 on 256GB instance)
+        dbram: "32g"             # Database RAM allocation
         optimizer_mode: "analytical"
         # Exasol database parameters for analytical workload optimization
         db_params:
@@ -54,11 +55,13 @@ systems:
           - "-joinOrderMethod=0"
           - "-etlCheckCertsDefault=0"
 
+  # ClickHouse with original queries
   - name: "clickhouse"
     kind: "clickhouse"
-    version: "25.10.2.65"            # Latest stable ClickHouse version
+    version: "25.10.2.65"         # Latest stable ClickHouse version
     setup:
       method: "native"           # Native APT installation
+      node_count: 2
       use_additional_disk: true  # Auto-detect and use additional NVMe disk
       data_dir: "/data/clickhouse"
       host: "$CLICKHOUSE_PUBLIC_IP"  # Use public IP for external access
@@ -66,15 +69,13 @@ systems:
       username: "default"
       password: "clickhouse123"  # Password for benchmark user
       extra:
-        memory_limit: "230g"     # Memory limit for ClickHouse (~90% of 256GB)
-        max_threads: "32"        # Match instance vCPUs
-        max_memory_usage: "200000000000"  # ~200GB per query for large joins
-        max_bytes_before_external_group_by: "100000000000"  # 100GB - use disk for large GROUP BY
-        max_bytes_before_external_sort: "100000000000"      # 100GB - use disk for large sorts
+        memory_limit: "32g"      # Memory limit for ClickHouse
+        max_threads: "16"        # Match instance vCPUs
+        max_memory_usage: "30000000000"  # ~28GB in bytes
 
 workload:
   name: "tpch"
-  scale_factor: 100             # 100GB dataset
+  scale_factor: 1               # 1GB dataset for test
   runs_per_query: 7             # Number of measured runs
   warmup_runs: 1                # Warmup runs before measurement
   data_format: "csv"            # csv or parquet

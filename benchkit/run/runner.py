@@ -241,21 +241,61 @@ class BenchmarkRunner:
             ssh_private_key_path = env_config.get("ssh_private_key_path")
             for system_name, system_info in instance_info.items():
                 if system_name != "error" and system_info:
-                    instance_manager = CloudInstanceManager(
-                        system_info, ssh_private_key_path
-                    )
-                    self._cloud_instance_managers[system_name] = instance_manager
-                    console.print(
-                        f"[green]✅ Connected to {system_name}: {system_info.get('public_ip', 'N/A')}[/green]"
-                    )
+                    # Check if this is a multinode system
+                    if system_info.get("multinode", False):
+                        # Create a list of instance managers for multinode
+                        node_managers = []
+                        for node_info in system_info["nodes"]:
+                            node_manager = CloudInstanceManager(
+                                node_info, ssh_private_key_path
+                            )
+                            node_managers.append(node_manager)
 
-                    # Set environment variables for IP resolution
-                    import os
+                        self._cloud_instance_managers[system_name] = node_managers
+                        node_count = len(node_managers)
+                        primary_ip = node_managers[0].public_ip
+                        console.print(
+                            f"[green]✅ Connected to {system_name}: {node_count} nodes (primary: {primary_ip})[/green]"
+                        )
 
-                    private_ip_var = f"{system_name.upper()}_PRIVATE_IP"
-                    public_ip_var = f"{system_name.upper()}_PUBLIC_IP"
-                    os.environ[private_ip_var] = system_info.get("private_ip", "")
-                    os.environ[public_ip_var] = system_info.get("public_ip", "")
+                        # Set environment variables for IP resolution (use comma-separated lists for multinode)
+                        import os
+
+                        private_ips = ",".join(
+                            [
+                                str(mgr.private_ip)
+                                for mgr in node_managers
+                                if mgr.private_ip
+                            ]
+                        )
+                        public_ips = ",".join(
+                            [
+                                str(mgr.public_ip)
+                                for mgr in node_managers
+                                if mgr.public_ip
+                            ]
+                        )
+                        private_ip_var = f"{system_name.upper()}_PRIVATE_IP"
+                        public_ip_var = f"{system_name.upper()}_PUBLIC_IP"
+                        os.environ[private_ip_var] = private_ips
+                        os.environ[public_ip_var] = public_ips
+                    else:
+                        # Single node system
+                        instance_manager = CloudInstanceManager(
+                            system_info, ssh_private_key_path
+                        )
+                        self._cloud_instance_managers[system_name] = instance_manager
+                        console.print(
+                            f"[green]✅ Connected to {system_name}: {system_info.get('public_ip', 'N/A')}[/green]"
+                        )
+
+                        # Set environment variables for IP resolution
+                        import os
+
+                        private_ip_var = f"{system_name.upper()}_PRIVATE_IP"
+                        public_ip_var = f"{system_name.upper()}_PUBLIC_IP"
+                        os.environ[private_ip_var] = system_info.get("private_ip", "")
+                        os.environ[public_ip_var] = system_info.get("public_ip", "")
 
             if not self._cloud_instance_managers:
                 console.print("[red]❌ No cloud instances found[/red]")
@@ -290,7 +330,9 @@ class BenchmarkRunner:
             console.print(f"\n🔧 Preparing storage for: [bold]{system_name}[/bold]")
 
             try:
-                system = create_system(system_config)
+                system = create_system(
+                    system_config, workload_config=self.config.get("workload", {})
+                )
                 instance_manager = self._cloud_instance_managers.get(system_name)
 
                 if not instance_manager:
@@ -380,7 +422,9 @@ class BenchmarkRunner:
                     "[dim]Using prepared system instance with storage configuration[/dim]"
                 )
             else:
-                system = create_system(system_config)
+                system = create_system(
+                    system_config, workload_config=self.config.get("workload", {})
+                )
 
             # Get cloud instance manager for this system
             if system_name not in self._cloud_instance_managers:
@@ -591,15 +635,25 @@ class BenchmarkRunner:
         system_timings: dict[str, Any] = {}
 
         try:
+            # Create output callback for thread-safe logging
+            def output_callback(msg: str) -> None:
+                executor.add_output(system_name, msg)
+
             # Get prepared system instance (read-only access, thread-safe)
             if (
                 hasattr(self, "_prepared_systems")
                 and system_name in self._prepared_systems
             ):
                 system = self._prepared_systems[system_name]
+                # Set output callback on prepared system for parallel execution
+                system._output_callback = output_callback
                 executor.add_output(system_name, "Using prepared system instance")
             else:
-                system = create_system(system_config)
+                system = create_system(
+                    system_config,
+                    output_callback=output_callback,
+                    workload_config=self.config.get("workload", {}),
+                )
 
             # Get cloud instance manager (read-only access, thread-safe)
             instance_manager = self._cloud_instance_managers.get(system_name)
@@ -1280,22 +1334,55 @@ class BenchmarkRunner:
         system_name = system.name
 
         try:
+            # Handle multinode case: check ALL nodes for multinode systems
+            is_multinode = (
+                isinstance(instance_manager, list) and len(instance_manager) > 1
+            )
+
             # 1. Check system-specific installation marker
             marker_file = system.get_install_marker_path()
             if marker_file:
-                marker_result = instance_manager.run_remote_command(
-                    f"test -f {marker_file} && echo 'marker_found' || echo 'no_marker'",
-                    debug=False,
-                )
+                if is_multinode:
+                    # For multinode, check markers on ALL nodes
+                    # If ANY node is missing the marker, we need to install
+                    missing_markers = []
+                    for idx, node_manager in enumerate(instance_manager):
+                        marker_result = node_manager.run_remote_command(
+                            f"test -f {marker_file} && echo 'marker_found' || echo 'no_marker'",
+                            debug=False,
+                        )
 
-                if not (
-                    marker_result.get("success")
-                    and "marker_found" in marker_result.get("stdout", "")
-                ):
-                    console.print(
-                        f"🔍 {system_name}: No installation marker ({marker_file})"
+                        if not (
+                            marker_result.get("success")
+                            and "marker_found" in marker_result.get("stdout", "")
+                        ):
+                            missing_markers.append(idx)
+
+                    if missing_markers:
+                        console.print(
+                            f"🔍 {system_name}: Missing installation markers on node(s): {missing_markers}"
+                        )
+                        return "NEEDS_INSTALLATION"
+                else:
+                    # Single node check
+                    primary_manager = (
+                        instance_manager[0]
+                        if isinstance(instance_manager, list)
+                        else instance_manager
                     )
-                    return "NEEDS_INSTALLATION"
+                    marker_result = primary_manager.run_remote_command(
+                        f"test -f {marker_file} && echo 'marker_found' || echo 'no_marker'",
+                        debug=False,
+                    )
+
+                    if not (
+                        marker_result.get("success")
+                        and "marker_found" in marker_result.get("stdout", "")
+                    ):
+                        console.print(
+                            f"🔍 {system_name}: No installation marker ({marker_file})"
+                        )
+                        return "NEEDS_INSTALLATION"
 
             # 2. System-specific checks based on system type
             for system_config in self.config["systems"]:
@@ -1325,6 +1412,78 @@ class BenchmarkRunner:
     ) -> bool:
         """Install system via remote commands (recorded for reports)."""
         try:
+            # Check if this is a multinode system
+            is_multinode = (
+                isinstance(instance_manager, list) and len(instance_manager) > 1
+            )
+
+            # For multinode systems, DON'T override execute_command
+            # Let the system handle its own multinode installation logic
+            if is_multinode:
+                # Multinode systems handle their own remote execution
+                self._log_output(
+                    f"Installing on multinode cluster ({len(instance_manager)} nodes)...",
+                    executor,
+                    system_name,
+                )
+                success: bool = system.install()
+
+                if success:
+                    marker_path = system.get_install_marker_path()
+                    if marker_path:
+                        # For multinode, create markers on ALL nodes
+                        markers_created = 0
+                        for idx, node_manager in enumerate(instance_manager):
+                            # Check if marker exists on this node
+                            check_result = node_manager.run_remote_command(
+                                f"test -f {marker_path} && echo 'exists' || echo 'missing'",
+                                debug=False,
+                            )
+
+                            if check_result.get(
+                                "success"
+                            ) and "missing" in check_result.get("stdout", ""):
+                                # Create marker on this node
+                                marker_result = node_manager.run_remote_command(
+                                    f"touch {marker_path}",
+                                    debug=False,
+                                )
+                                if marker_result.get("success"):
+                                    markers_created += 1
+                                    self._log_output(
+                                        f"✅ Node {idx}: Installation marker created: {marker_path}",
+                                        executor,
+                                        system_name,
+                                    )
+                                else:
+                                    self._log_output(
+                                        f"[yellow]⚠️ Node {idx}: Failed to create installation marker[/yellow]",
+                                        executor,
+                                        system_name,
+                                    )
+                            elif "exists" in check_result.get("stdout", ""):
+                                self._log_output(
+                                    f"✓ Node {idx}: Installation marker already exists",
+                                    executor,
+                                    system_name,
+                                )
+
+                        if markers_created > 0:
+                            self._log_output(
+                                f"✅ Created installation markers on {markers_created} node(s)",
+                                executor,
+                                system_name,
+                            )
+
+                return success
+
+            # Single node: override execute_command to use remote execution
+            primary_manager = (
+                instance_manager[0]
+                if isinstance(instance_manager, list)
+                else instance_manager
+            )
+
             # Override the system's execute_command to use remote execution
             original_execute = system.execute_command
 
@@ -1337,7 +1496,7 @@ class BenchmarkRunner:
                 # Show command being executed
                 self._log_output(f"[dim]$ {cmd}[/dim]", executor, system_name)
 
-                result = instance_manager.run_remote_command(
+                result = primary_manager.run_remote_command(
                     cmd,
                     timeout=timeout,
                     debug=is_debug_enabled(),  # Use global debug state
@@ -1366,7 +1525,7 @@ class BenchmarkRunner:
             system.execute_command = remote_execute_command
 
             try:
-                success: bool = system.install()
+                success = system.install()
 
                 if success:
                     marker_path = system.get_install_marker_path()
@@ -1403,6 +1562,13 @@ class BenchmarkRunner:
     ) -> bool:
         """Restart system via remote commands."""
         try:
+            # Handle multinode case: use primary node for command execution
+            primary_manager = (
+                instance_manager[0]
+                if isinstance(instance_manager, list)
+                else instance_manager
+            )
+
             system_kind = system.kind
 
             if system_kind == "exasol":
@@ -1412,7 +1578,7 @@ class BenchmarkRunner:
                     executor,
                     system_name,
                 )
-                restart_result = instance_manager.run_remote_command(
+                restart_result = primary_manager.run_remote_command(
                     "sudo systemctl restart c4_cloud_command", debug=True
                 )
                 if not restart_result.get("success"):
@@ -1441,7 +1607,7 @@ class BenchmarkRunner:
                     executor,
                     system_name,
                 )
-                if not self._wait_for_exasol_ready(instance_manager):
+                if not self._wait_for_exasol_ready(primary_manager):
                     self._log_output(
                         "[red]❌ Exasol cluster failed to become ready after restart[/red]",
                         executor,
@@ -1457,9 +1623,7 @@ class BenchmarkRunner:
                     executor,
                     system_name,
                 )
-                cleanup_success = self._cleanup_exasol_services(
-                    system, instance_manager
-                )
+                cleanup_success = self._cleanup_exasol_services(system, primary_manager)
                 if cleanup_success:
                     self._log_output(
                         "✅ Service cleanup completed after restart",
@@ -1482,7 +1646,7 @@ class BenchmarkRunner:
                     executor,
                     system_name,
                 )
-                restart_result = instance_manager.run_remote_command(
+                restart_result = primary_manager.run_remote_command(
                     "sudo systemctl restart clickhouse-server", debug=True
                 )
                 if not restart_result.get("success"):
@@ -1708,6 +1872,13 @@ class BenchmarkRunner:
     ) -> list[dict[str, Any]] | None:
         """Deploy minimal package and execute workload remotely."""
         try:
+            # Handle multinode case: use primary node for workload execution
+            primary_manager = (
+                instance_manager[0]
+                if isinstance(instance_manager, list)
+                else instance_manager
+            )
+
             project_id = self.config["project_id"]
             system_name = system_config["name"]
 
@@ -1718,7 +1889,7 @@ class BenchmarkRunner:
                 system_name,
             )
             if not self._deploy_minimal_package(
-                instance_manager, package_path, project_id
+                primary_manager, package_path, project_id
             ):
                 return None
 
@@ -1738,7 +1909,7 @@ class BenchmarkRunner:
                 message = prefix if not line else f"{prefix}: {line}"
                 self._log_output(message, executor, system_name)
 
-            workload_result = instance_manager.run_remote_command(
+            workload_result = primary_manager.run_remote_command(
                 f"cd /home/ubuntu/{project_id} && ./execute_workload.sh {system_name}",
                 timeout=execution_timeout,
                 debug=True,
@@ -1754,7 +1925,7 @@ class BenchmarkRunner:
             if command_success:
                 # Normal successful completion
                 return self._collect_workload_results(
-                    instance_manager, project_id, system_name, executor
+                    primary_manager, project_id, system_name, executor
                 )
             elif timed_out:
                 # Command timed out, but workload may have completed successfully
@@ -1776,7 +1947,7 @@ class BenchmarkRunner:
                     )
                     # Attempt to collect results despite timeout
                     results = self._collect_workload_results(
-                        instance_manager, project_id, system_name, executor
+                        primary_manager, project_id, system_name, executor
                     )
                     if results:
                         self._log_output(

@@ -99,6 +99,9 @@
                         {% if tested_system.setup.data_dir %}
                         <li><strong>Data Directory:</strong> {{ tested_system.setup.data_dir }}</li>
                         {% endif %}
+                        {% if setup_summaries and tested_system.name in setup_summaries and setup_summaries[tested_system.name].data_device %}
+                        <li><strong>Data Device:</strong> {{ setup_summaries[tested_system.name].data_device }}</li>
+                        {% endif %}
                     </ul>
                 </div>
             </div>

@@ -16,12 +16,12 @@ env:
       instance_type: "r6id.8xlarge"  # 32 vCPUs, 256GB RAM, 1.9TB NVMe local storage
       disk:
         type: "local"              # Use local NVMe for best performance
-      label: "ok-bench-exa"
+      label: "ok-bench-exa-sn-mu"
     clickhouse:
       instance_type: "r6id.8xlarge"  # 32 vCPUs, 256GB RAM, 1.9TB NVMe local storage
       disk:
         type: "local"              # Use local NVMe for best performance
-      label: "ok-bench-ch"
+      label: "ok-bench-ch-sn-mu"
   os_image: "ubuntu-22.04"
   ssh_key_name: "ok-work3"            # AWS key pair name (without .pem extension)
   ssh_private_key_path: "~/.ssh/ok-work3.pem"  # Local private key file path
@@ -75,10 +75,15 @@ systems:
 workload:
   name: "tpch"
   scale_factor: 100             # 100GB dataset
-  runs_per_query: 7             # Number of measured runs
+  runs_per_query: 15            # Number of measured runs
   warmup_runs: 1                # Warmup runs before measurement
   data_format: "csv"            # csv or parquet
   generator: "dbgen"
+  multiuser:
+    enabled: true
+    num_streams: 10
+    randomize: true
+    random_seed: 42
 
 report:
   show_boxplots: true

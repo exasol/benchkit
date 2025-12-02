@@ -21,7 +21,12 @@
 
 {%- endif -%}
 {%- if clean_desc and clean_desc != clean_cmd and not clean_cmd in clean_desc -%}
+{%- if cmd.node_info and cmd.node_info.startswith('all_nodes_') -%}
+{%- set node_count = cmd.node_info.split('_')[2] -%}
+# [All {{ node_count }} Nodes] {{ clean_desc }}
+{% else -%}
 # {{ clean_desc }}
+{% endif -%}
 {{ clean_cmd }}
 {% else -%}
 {{ clean_cmd }}
