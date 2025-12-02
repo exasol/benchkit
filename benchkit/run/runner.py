@@ -645,6 +645,11 @@ class BenchmarkRunner:
         if kind == "exasol" and setup.get("method") == "installer":
             modified_setup["host_external_addrs"] = public_ip
 
+        # For local-to-remote execution, use local data directory instead of remote /data
+        # This avoids trying to create directories on remote systems
+        modified_setup["use_additional_disk"] = False
+        modified_setup["data_dir"] = "./data"
+
         # Create modified config for system instantiation
         modified_config = copy.deepcopy(system_config)
         modified_config["setup"] = modified_setup
