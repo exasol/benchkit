@@ -2012,29 +2012,6 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
 
         return success
 
-    def get_version_info(self) -> dict[str, str]:
-        """Get detailed version information using pyexasol."""
-        version_info = {"configured_version": self.version}
-
-        try:
-            # Get actual database version using pyexasol
-            result = self.execute_query(
-                "SELECT PARAM_VALUE FROM EXA_METADATA WHERE PARAM_NAME = 'databaseProductVersion'",
-                query_name="get_version",
-            )
-            if result["success"]:
-                version_info["actual_version"] = "version_retrieved_via_pyexasol"
-
-            # Also get pyexasol version info
-            version_info["pyexasol_version"] = getattr(
-                pyexasol, "__version__", "unknown"
-            )
-
-        except Exception as e:
-            version_info["version_error"] = str(e)
-
-        return version_info
-
     @exclude_from_package
     def _resolve_ip_addresses(self, ip_config: str) -> str:
         """Resolve IP address placeholders with actual values from infrastructure."""

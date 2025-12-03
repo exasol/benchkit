@@ -102,19 +102,3 @@ def load_json(path: str | Path) -> Any:
     """Load data from JSON file."""
     with open(path, encoding="utf-8") as f:
         return json.load(f)
-
-
-def format_duration(seconds: float) -> str:
-    """Format duration in seconds as human-readable string."""
-    if seconds < 1:
-        return f"{seconds * 1000:.1f}ms"
-    if seconds < 60:
-        return f"{seconds:.1f}s"
-    if seconds < 3600:
-        minutes = int(seconds // 60)
-        secs = seconds % 60
-        return f"{minutes}m {secs:.1f}s"
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    secs = seconds % 60
-    return f"{hours}h {minutes}m {secs:.1f}s"

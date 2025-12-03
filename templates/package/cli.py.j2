@@ -1,0 +1,94 @@
+"""Unified CLI for benchmark execution (load and run phases)."""
+
+from pathlib import Path
+from typing import Any
+import typer
+import yaml
+from rich.console import Console
+
+app = typer.Typer(
+    name="benchkit",
+    help="Execute benchmark phases against configured systems.",
+    no_args_is_help=True,
+)
+
+console = Console()
+
+def load_workload_config(config_path: str) -> dict[str, Any]:
+    """Load workload config without full validation (minimal fields only)."""
+    with open(config_path, "r") as f:
+        config = yaml.safe_load(f)
+    return config
+
+@app.command()
+def load(
+    config: str = typer.Option(..., "--config", "-c", help="Path to config YAML file"),
+    system: str = typer.Option(..., "--system", "-s", help="System name to load data into"),
+    force: bool = typer.Option(False, "--force", "-f", help="Force reload even if already loaded"),
+    debug: bool = typer.Option(False, "--debug", help="Enable debug output")
+) -> None:
+    """Phase 2: Load benchmark data into the specified system.
+
+    This handles data generation, schema creation, and data loading.
+    """
+    from .load_runner import execute_load
+    from .debug import set_debug
+
+    if debug:
+        set_debug(True)
+
+    cfg = load_workload_config(config)
+    outdir = Path("results") / cfg["project_id"]
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    # Filter config to only include the specified system
+    cfg["systems"] = [s for s in cfg["systems"] if s["name"] == system]
+
+    if not cfg["systems"]:
+        console.print(f"[red]Error: System '{system}' not found in configuration[/]")
+        raise typer.Exit(1)
+
+    console.print(f"[blue]Loading data for system:[/] {system}")
+    console.print(f"[dim]Workload: {cfg['workload']['name']} (SF={cfg['workload']['scale_factor']})[/]")
+
+    execute_load(cfg, outdir, force)
+
+    console.print(f"[green]✓ Data loading completed[/]")
+
+@app.command()
+def run(
+    config: str = typer.Option(..., "--config", "-c", help="Path to config YAML file"),
+    system: str = typer.Option(..., "--system", "-s", help="System name to run queries against"),
+    force: bool = typer.Option(False, "--force", "-f", help="Force run even if results exist"),
+    debug: bool = typer.Option(False, "--debug", help="Enable debug output")
+) -> None:
+    """Phase 3: Execute benchmark queries against the specified system.
+
+    This assumes data is already loaded via the 'load' command.
+    """
+    from .workload_runner import execute_queries
+    from .debug import set_debug
+
+    if debug:
+        set_debug(True)
+
+    cfg = load_workload_config(config)
+    outdir = Path("results") / cfg["project_id"]
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    # Filter config to only include the specified system
+    cfg["systems"] = [s for s in cfg["systems"] if s["name"] == system]
+
+    if not cfg["systems"]:
+        console.print(f"[red]Error: System '{system}' not found in configuration[/]")
+        raise typer.Exit(1)
+
+    console.print(f"[blue]Executing queries for system:[/] {system}")
+    console.print(f"[dim]Workload: {cfg['workload']['name']} (SF={cfg['workload']['scale_factor']})[/]")
+
+    execute_queries(cfg, outdir, force)
+
+    console.print(f"[green]✓ Query execution completed[/]")
+
+if __name__ == "__main__":
+    app()

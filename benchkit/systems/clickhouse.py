@@ -1844,28 +1844,3 @@ class ClickHouseSystem(SystemUnderTest):
             success = success and self.cleanup_data_directory()
 
         return success
-
-    def get_version_info(self) -> dict[str, str]:
-        """Get detailed version information using clickhouse-connect."""
-        version_info = {"configured_version": self.version}
-
-        try:
-            result = self.execute_query("SELECT version()", query_name="get_version")
-            if result["success"]:
-                version_info["actual_version"] = (
-                    "version_retrieved_via_clickhouse_connect"
-                )
-
-            # Also get clickhouse-connect version info
-            if clickhouse_connect is not None:
-                version_info["clickhouse_connect_available"] = "yes"
-                version_info["clickhouse_connect_version"] = getattr(
-                    clickhouse_connect, "__version__", "unknown"
-                )
-            else:
-                version_info["clickhouse_connect_available"] = "no"
-
-        except Exception as e:
-            version_info["version_error"] = str(e)
-
-        return version_info
