@@ -475,9 +475,9 @@ class ReportRenderer:
         if system_names is not None:
             for system_name in system_names:
                 if system_name not in setup_summaries:
-                    console.print(
-                        f"[yellow]Warning: No setup summary found for {system_name}. "
-                        f"Setup commands will be missing from report.[/yellow]"
+                    print(
+                        f"Warning: No setup summary found for {system_name}. "
+                        f"Setup commands will be missing from report."
                     )
 
         return setup_summaries

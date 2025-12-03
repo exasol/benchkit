@@ -347,7 +347,7 @@ class BenchmarkRunner:
         console.print("[bold green]✅ Setup phase completed successfully![/bold green]")
         return True
 
-    def run_load(self, force: bool = False) -> bool:
+    def run_load(self, force: bool = False, local: bool = False) -> bool:
         """
         Phase 2: Generate data, create schema, and load data into databases.
 
@@ -358,6 +358,7 @@ class BenchmarkRunner:
 
         Args:
             force: If True, re-run load even if already complete
+            local: If True, execute locally against remote databases (using public IPs)
 
         Returns:
             True if load completed successfully, False otherwise
@@ -380,6 +381,8 @@ class BenchmarkRunner:
         env_mode = env_config.get("mode", "local")
 
         if env_mode in ["aws", "gcp", "azure"]:
+            if local:
+                return self._run_load_local_to_remote(force)
             return self._run_load_cloud(force)
         else:
             return self._run_load_local(force)
@@ -588,7 +591,240 @@ class BenchmarkRunner:
         console.print("[bold green]✅ Load phase completed successfully![/bold green]")
         return True
 
-    def run_queries(self, force: bool = False) -> bool:
+    def _create_system_for_local_execution(
+        self,
+        system_config: dict[str, Any],
+        instance_manager: Any,
+    ) -> SystemUnderTest:
+        """Create system object configured for local-to-remote execution.
+
+        IMPORTANT: Uses the PUBLIC IP from the cloud instance manager to enable
+        connection from local machine to remote database. This is different from
+        remote execution which uses private IPs (for package running ON the instance).
+
+        IP Selection:
+        - Local-to-remote (--local): Use PUBLIC IP (accessible from internet)
+        - Remote execution (default): Use localhost or private IP (on instance)
+
+        Args:
+            system_config: System configuration dictionary
+            instance_manager: Cloud instance manager (or list for multinode)
+
+        Returns:
+            SystemUnderTest instance configured with public IP
+        """
+        import copy
+
+        kind = system_config["kind"]
+        name = system_config["name"]
+        setup = system_config.get("setup", {})
+
+        # CRITICAL: Use PUBLIC IP for local-to-remote execution
+        # (private IP is only accessible from within the VPC)
+        if isinstance(instance_manager, list):
+            # Multinode: use first/coordinator node's PUBLIC IP
+            public_ip = instance_manager[0].public_ip
+            console.print(
+                f"[dim]  Using public IP for {name}: {public_ip} (coordinator node)[/dim]"
+            )
+        else:
+            public_ip = instance_manager.public_ip
+            console.print(f"[dim]  Using public IP for {name}: {public_ip}[/dim]")
+
+        if not public_ip:
+            raise ValueError(
+                f"No public IP available for {name}. "
+                "Ensure instances have public IPs assigned in infrastructure config."
+            )
+
+        # Create modified setup config with public IP as host
+        modified_setup = copy.deepcopy(setup)
+        modified_setup["host"] = public_ip
+
+        # For Exasol installer method, also set host_external_addrs
+        if kind == "exasol" and setup.get("method") == "installer":
+            modified_setup["host_external_addrs"] = public_ip
+
+        # For local-to-remote execution, use local data directory instead of remote /data
+        # This avoids trying to create directories on remote systems
+        modified_setup["use_additional_disk"] = False
+        modified_setup["data_dir"] = "./data"
+
+        # Create modified config for system instantiation
+        modified_config = copy.deepcopy(system_config)
+        modified_config["setup"] = modified_setup
+
+        return create_system(
+            modified_config, workload_config=self.config.get("workload", {})
+        )
+
+    def _run_load_local_to_remote(self, force: bool = False) -> bool:
+        """Run load phase locally against remote databases.
+
+        This mode executes data generation and loading from the local machine,
+        connecting to remote databases via their public IPs. Useful for:
+        - Faster iteration during workload development
+        - Debugging with local stack traces
+        - System tuning without package redeployment
+
+        Args:
+            force: If True, re-run load even if already complete
+
+        Returns:
+            True if load completed successfully, False otherwise
+        """
+        console.print(
+            "[bold blue]📦 Phase 2: Data Loading (Local-to-Remote)[/bold blue]"
+        )
+
+        # Re-establish cloud connections if needed (to get IPs)
+        if not self._cloud_instance_managers:
+            if not self._setup_cloud_infrastructure():
+                return False
+
+        workload = create_workload(self.config["workload"])
+        console.print(f"Workload: {workload.name} (SF={workload.scale_factor})")
+
+        for system_config in self.config["systems"]:
+            system_name = system_config["name"]
+
+            # Check if already loaded (unless force)
+            if not force and self._is_load_complete(system_name):
+                console.print(
+                    f"[green]✅ {system_name} data already loaded, skipping[/green]"
+                )
+                continue
+
+            console.print(
+                f"\n📤 Loading data on [bold]{system_name}[/bold] (local-to-remote)"
+            )
+
+            # Get instance manager for public IP
+            instance_manager = self._cloud_instance_managers.get(system_name)
+            if not instance_manager:
+                console.print(f"[red]❌ No instance manager for {system_name}[/red]")
+                return False
+
+            # Create system with remote connection info (using public IP)
+            try:
+                system = self._create_system_for_local_execution(
+                    system_config, instance_manager
+                )
+            except ValueError as e:
+                console.print(f"[red]❌ {e}[/red]")
+                return False
+
+            try:
+                # Skip health check - remote system should already be running
+                # and we're connecting via network, not local process
+
+                # Prepare workload (data generation, schema creation, data loading)
+                console.print("  Preparing workload...")
+                if not workload.prepare(system):
+                    console.print(
+                        f"  [red]Workload preparation failed for {system_name}[/red]"
+                    )
+                    return False
+
+                # Get preparation timings if available
+                prep_timings = getattr(workload, "preparation_timings", {})
+
+                # Save load completion marker
+                self._save_load_complete(
+                    system_name,
+                    data_generation_s=prep_timings.get("data_generation_s", 0.0),
+                    schema_creation_s=prep_timings.get("schema_creation_s", 0.0),
+                    data_loading_s=prep_timings.get("data_loading_s", 0.0),
+                )
+                console.print(f"  [green]✓ Data loaded for {system_name}[/green]")
+
+            except Exception as e:
+                console.print(f"  [red]Data load failed for {system_name}: {e}[/red]")
+                return False
+
+        console.print("[bold green]✅ Load phase completed successfully![/bold green]")
+        return True
+
+    def _run_queries_local_to_remote(self) -> bool:
+        """Run query execution phase locally against remote databases.
+
+        This mode executes benchmark queries from the local machine,
+        connecting to remote databases via their public IPs. Useful for:
+        - Faster iteration during workload development
+        - Debugging with local stack traces
+        - System tuning without package redeployment
+
+        Returns:
+            True if queries completed successfully, False otherwise
+        """
+        console.print(
+            "[bold blue]🚀 Phase 3: Query Execution (Local-to-Remote)[/bold blue]"
+        )
+
+        # Re-establish cloud connections if needed (to get IPs)
+        if not self._cloud_instance_managers:
+            if not self._setup_cloud_infrastructure():
+                return False
+
+        workload = create_workload(self.config["workload"])
+        all_results = []
+        all_warmup_results = []
+
+        for system_config in self.config["systems"]:
+            system_name = system_config["name"]
+            console.print(
+                f"\n🚀 Executing queries on [bold]{system_name}[/bold] (local-to-remote)"
+            )
+
+            # Get instance manager for public IP
+            instance_manager = self._cloud_instance_managers.get(system_name)
+            if not instance_manager:
+                console.print(f"[red]❌ No instance manager for {system_name}[/red]")
+                continue
+
+            # Create system with remote connection info (using public IP)
+            try:
+                system = self._create_system_for_local_execution(
+                    system_config, instance_manager
+                )
+            except ValueError as e:
+                console.print(f"[red]❌ {e}[/red]")
+                continue
+
+            try:
+                # Skip health check - remote system should already be running
+                # and we're connecting via network, not local process
+
+                # Execute queries
+                console.print("  Executing queries...")
+                measured_results, warmup_results = self._execute_queries(
+                    system, workload
+                )
+                all_results.extend(measured_results)
+                all_warmup_results.extend(warmup_results)
+
+                console.print(f"  [green]✓ Queries completed for {system_name}[/green]")
+
+            except Exception as e:
+                console.print(
+                    f"  [red]Query execution failed for {system_name}: {e}[/red]"
+                )
+                continue
+
+        # Save results
+        if all_results:
+            self._save_benchmark_results(all_results, all_warmup_results)
+            console.print(f"[green]✅ Results saved to: {self.output_dir}[/green]")
+        else:
+            console.print("[red]❌ No results to save[/red]")
+            return False
+
+        console.print(
+            "[bold green]✅ Query execution completed successfully![/bold green]"
+        )
+        return True
+
+    def run_queries(self, force: bool = False, local: bool = False) -> bool:
         """
         Phase 3: Execute benchmark queries only.
 
@@ -599,6 +835,7 @@ class BenchmarkRunner:
 
         Args:
             force: If True, re-run queries even if results exist
+            local: If True, execute locally against remote databases (using public IPs)
 
         Returns:
             True if queries completed successfully, False otherwise
@@ -632,6 +869,8 @@ class BenchmarkRunner:
         env_mode = env_config.get("mode", "local")
 
         if env_mode in ["aws", "gcp", "azure"]:
+            if local:
+                return self._run_queries_local_to_remote()
             return self._run_queries_cloud()
         else:
             return self._run_queries_local()
@@ -1671,6 +1910,10 @@ class BenchmarkRunner:
         query_names = self.config["workload"]["queries"]["include"]
         runs_per_query = self.config["workload"]["runs_per_query"]
         warmup_runs = self.config["workload"]["warmup_runs"]
+
+        # If no queries specified, use workload's default (all queries)
+        if not query_names:
+            query_names = workload.queries_to_include
 
         # Extract multiuser configuration
         multiuser_config = self.config["workload"].get("multiuser") or {}

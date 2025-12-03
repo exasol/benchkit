@@ -150,6 +150,12 @@ def load(
     force: bool = typer.Option(
         False, "--force", "-f", help="Force reload even if data already loaded"
     ),
+    local: bool = typer.Option(
+        False,
+        "--local",
+        "-l",
+        help="Execute locally against remote databases (skip package deployment)",
+    ),
     debug: bool = typer.Option(
         False, "--debug", help="Enable debug output for detailed command tracing"
     ),
@@ -163,6 +169,10 @@ def load(
 
     Requires setup phase to be completed first.
     After load completes, use 'benchkit run' to execute queries.
+
+    Use --local to execute data loading from your local machine directly
+    against remote databases (using their public IPs). This is useful for
+    faster iteration during workload development and debugging.
     """
     from .run.runner import BenchmarkRunner
 
@@ -182,9 +192,11 @@ def load(
     console.print(
         f"[dim]Workload: {cfg['workload']['name']} (SF={cfg['workload']['scale_factor']})[/]"
     )
+    if local:
+        console.print("[cyan]Mode: Local-to-remote (connecting to remote DBs)[/]")
 
     runner = BenchmarkRunner(cfg, outdir)
-    success = runner.run_load(force=force)
+    success = runner.run_load(force=force, local=local)
 
     if success:
         console.print("[green]✓ Load phase completed successfully[/]")
@@ -208,6 +220,12 @@ def run(
     full: bool = typer.Option(
         False, "--full", help="Run full benchmark (setup + load + run)"
     ),
+    local: bool = typer.Option(
+        False,
+        "--local",
+        "-l",
+        help="Execute locally against remote databases (skip package deployment)",
+    ),
     debug: bool = typer.Option(
         False, "--debug", help="Enable debug output for detailed command tracing"
     ),
@@ -218,6 +236,10 @@ def run(
     Requires setup and load phases to be completed first.
 
     Use --full flag to run the complete benchmark (setup + load + run).
+
+    Use --local to execute queries from your local machine directly
+    against remote databases (using their public IPs). This is useful for
+    faster iteration during workload development and debugging.
     """
     from .run.runner import BenchmarkRunner
 
@@ -241,6 +263,8 @@ def run(
     console.print(
         f"[dim]Workload: {cfg['workload']['name']} (SF={cfg['workload']['scale_factor']})[/]"
     )
+    if local:
+        console.print("[cyan]Mode: Local-to-remote (connecting to remote DBs)[/]")
 
     runner = BenchmarkRunner(cfg, outdir)
 
@@ -254,16 +278,16 @@ def run(
             console.print("[red]✗ Setup phase failed[/]")
             raise typer.Exit(1)
 
-        if not runner.run_load():
+        if not runner.run_load(local=local):
             console.print("[red]✗ Load phase failed[/]")
             raise typer.Exit(1)
 
-        if not runner.run_queries(force=force):
+        if not runner.run_queries(force=force, local=local):
             console.print("[red]✗ Query execution failed[/]")
             raise typer.Exit(1)
     else:
         # Run queries only (strict mode - check prerequisites)
-        if not runner.run_queries(force=force):
+        if not runner.run_queries(force=force, local=local):
             raise typer.Exit(1)
 
     console.print(f"[green]✓ Benchmark completed:[/] {outdir / 'runs.csv'}")
