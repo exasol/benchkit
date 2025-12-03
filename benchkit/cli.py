@@ -97,6 +97,103 @@ def probe(
 
 
 @app.command()
+def setup(
+    config: str = typer.Option(..., "--config", "-c", help="Path to config YAML file"),
+    systems: str | None = typer.Option(
+        None, "--systems", help="Comma-separated list of systems to setup"
+    ),
+    debug: bool = typer.Option(
+        False, "--debug", help="Enable debug output for detailed command tracing"
+    ),
+) -> None:
+    """Set up and install database systems.
+
+    This is Phase 1 of the benchmark workflow. It handles:
+    - Cloud infrastructure provisioning (if cloud mode)
+    - Storage preparation (disk partitioning, RAID setup)
+    - Database system installation and configuration
+
+    After setup completes, use 'benchkit load' to load data.
+    """
+    from .run.runner import BenchmarkRunner
+
+    set_debug(debug)
+
+    cfg = load_config(config)
+    outdir = Path("results") / cfg["project_id"]
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    # Override config with CLI options
+    if systems:
+        system_names = [s.strip() for s in systems.split(",")]
+        cfg["systems"] = [s for s in cfg["systems"] if s["name"] in system_names]
+
+    console.print(f"[blue]Setting up systems for project:[/] {cfg['project_id']}")
+    console.print(f"[dim]Systems: {[s['name'] for s in cfg['systems']]}[/]")
+
+    runner = BenchmarkRunner(cfg, outdir)
+    success = runner.run_setup()
+
+    if success:
+        console.print("[green]✓ Setup phase completed successfully[/]")
+    else:
+        console.print("[red]✗ Setup phase failed[/]")
+        raise typer.Exit(1)
+
+
+@app.command()
+def load(
+    config: str = typer.Option(..., "--config", "-c", help="Path to config YAML file"),
+    systems: str | None = typer.Option(
+        None, "--systems", help="Comma-separated list of systems to load data into"
+    ),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Force reload even if data already loaded"
+    ),
+    debug: bool = typer.Option(
+        False, "--debug", help="Enable debug output for detailed command tracing"
+    ),
+) -> None:
+    """Load benchmark data into configured systems.
+
+    This is Phase 2 of the benchmark workflow. It handles:
+    - Data generation (TPC-H data files)
+    - Schema creation (tables, indexes)
+    - Data loading (bulk insert)
+
+    Requires setup phase to be completed first.
+    After load completes, use 'benchkit run' to execute queries.
+    """
+    from .run.runner import BenchmarkRunner
+
+    set_debug(debug)
+
+    cfg = load_config(config)
+    outdir = Path("results") / cfg["project_id"]
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    # Override config with CLI options
+    if systems:
+        system_names = [s.strip() for s in systems.split(",")]
+        cfg["systems"] = [s for s in cfg["systems"] if s["name"] in system_names]
+
+    console.print(f"[blue]Loading data for project:[/] {cfg['project_id']}")
+    console.print(f"[dim]Systems: {[s['name'] for s in cfg['systems']]}[/]")
+    console.print(
+        f"[dim]Workload: {cfg['workload']['name']} (SF={cfg['workload']['scale_factor']})[/]"
+    )
+
+    runner = BenchmarkRunner(cfg, outdir)
+    success = runner.run_load(force=force)
+
+    if success:
+        console.print("[green]✓ Load phase completed successfully[/]")
+    else:
+        console.print("[red]✗ Load phase failed[/]")
+        raise typer.Exit(1)
+
+
+@app.command()
 def run(
     config: str = typer.Option(..., "--config", "-c", help="Path to config YAML file"),
     systems: str | None = typer.Option(
@@ -108,27 +205,27 @@ def run(
     force: bool = typer.Option(
         False, "--force", "-f", help="Force run even if results already exist"
     ),
+    full: bool = typer.Option(
+        False, "--full", help="Run full benchmark (setup + load + run)"
+    ),
     debug: bool = typer.Option(
         False, "--debug", help="Enable debug output for detailed command tracing"
     ),
 ) -> None:
-    """Run the benchmark workload against configured systems."""
+    """Execute benchmark queries against configured systems.
 
-    # Set global debug state
+    This is Phase 3 of the benchmark workflow (query execution only).
+    Requires setup and load phases to be completed first.
+
+    Use --full flag to run the complete benchmark (setup + load + run).
+    """
+    from .run.runner import BenchmarkRunner
+
     set_debug(debug)
 
     cfg = load_config(config)
     outdir = Path("results") / cfg["project_id"]
     outdir.mkdir(parents=True, exist_ok=True)
-
-    # Check if results already exist (skip by default unless --force)
-    runs_file = outdir / "runs.csv"
-    if runs_file.exists() and not force:
-        console.print(
-            f"[yellow]Skipping benchmark - results already exist:[/] {runs_file}"
-        )
-        console.print("[dim]Use --force to overwrite existing results[/]")
-        return
 
     # Override config with CLI options
     if systems:
@@ -145,7 +242,29 @@ def run(
         f"[dim]Workload: {cfg['workload']['name']} (SF={cfg['workload']['scale_factor']})[/]"
     )
 
-    run_benchmark(cfg, outdir)
+    runner = BenchmarkRunner(cfg, outdir)
+
+    if full:
+        # Run all phases: setup -> load -> run
+        console.print(
+            "[bold blue]Running full benchmark (setup + load + run)[/bold blue]"
+        )
+
+        if not runner.run_setup():
+            console.print("[red]✗ Setup phase failed[/]")
+            raise typer.Exit(1)
+
+        if not runner.run_load():
+            console.print("[red]✗ Load phase failed[/]")
+            raise typer.Exit(1)
+
+        if not runner.run_queries(force=force):
+            console.print("[red]✗ Query execution failed[/]")
+            raise typer.Exit(1)
+    else:
+        # Run queries only (strict mode - check prerequisites)
+        if not runner.run_queries(force=force):
+            raise typer.Exit(1)
 
     console.print(f"[green]✓ Benchmark completed:[/] {outdir / 'runs.csv'}")
 
@@ -366,7 +485,8 @@ def check(
     if env.get("region"):
         env_table.add_row("Region", env.get("region"))
     env_table.add_row(
-        "External DB Access", "Yes" if env.get("allow_external_database_access") else "No"
+        "External DB Access",
+        "Yes" if env.get("allow_external_database_access") else "No",
     )
     if env.get("ssh_key_name"):
         env_table.add_row("SSH Key", env.get("ssh_key_name"))

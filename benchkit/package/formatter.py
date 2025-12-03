@@ -189,9 +189,9 @@ allow_untyped_calls = true
 
     def create_readme(self) -> bool:
         """Create README for the package."""
-        readme_content = """# Workload Execution Package
+        readme_content = """# Benchmark Execution Package
 
-This is a minimal, self-contained package for executing database benchmark workloads.
+This is a minimal, self-contained package for executing database benchmarks.
 
 ## Quick Start
 
@@ -201,23 +201,28 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-# Execute workload (auto-detects running database)
-./execute_workload.sh
+# Phase 2: Load data (auto-detects running database)
+./load_data.sh
+
+# Phase 3: Run queries (auto-detects running database)
+./run_queries.sh
 
 # Or specify system explicitly
-./execute_workload.sh exasol
-./execute_workload.sh clickhouse
+./load_data.sh exasol
+./run_queries.sh exasol
 
 # Debug mode
-./execute_workload.sh exasol --debug
+./load_data.sh exasol --debug
+./run_queries.sh exasol --debug
 ```
 
 ## Package Contents
 
-- `benchkit/` - Minimal framework for workload execution
+- `benchkit/` - Minimal framework for benchmark execution
 - `workloads/` - Workload definitions and queries
 - `config.yaml` - Workload configuration
-- `execute_workload.sh` - Main execution script
+- `load_data.sh` - Data loading script (Phase 2)
+- `run_queries.sh` - Query execution script (Phase 3)
 - `requirements.txt` - Python dependencies
 
 ## Code Quality
