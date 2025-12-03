@@ -1,0 +1,66 @@
+title: "Exasol Standalone for estuary warehouse benchmark"
+author: "Stefan Reich, Principal Database Consultant at Exasol AG"
+
+# Execution configuration (optional)
+execution:
+  parallel: true          # Enable parallel execution of systems (default: false)
+  max_workers: 3          # Max concurrent systems (default: number of systems)
+
+env:
+  mode: "aws"                    # aws, gcp, azure, or local
+  region: "eu-west-1"
+  allow_external_database_access: true  # Allow external access to database ports
+  # Instance configuration per system
+  instances:
+    exasol:
+      instance_type: "r5d.2xlarge"  # 16 vCPUs, 128GB RAM, 2x300GB NVMe local storage
+      disk:
+        type: "local"
+      label: "sr-bench-exa"
+  os_image: "ubuntu-22.04"
+  ssh_key_name: "sr-testkey"            # AWS key pair name (without .pem extension)
+  ssh_private_key_path: "~/.ssh/sr-testkey.pem"  # Local private key file path
+
+systems:
+  # Baseline: Exasol with original queries (first system is baseline)
+  - name: "exasol"
+    kind: "exasol"
+    version: "2025.1.0"          # Latest Exasol version
+    setup:
+      method: "installer"        # Native c4 installation
+      use_additional_disk: true  # Auto-detect and use additional NVMe disk
+      c4_version: "4.28.2"       # Latest c4 version
+      host_addrs: "$EXASOL_PRIVATE_IP"  # Will be resolved from infrastructure
+      host_external_addrs: "$EXASOL_PUBLIC_IP"
+      image_password: "exasol123"
+      db_password: "exasol456"
+      admin_password: "exasol789"
+      working_copy: "@exasol-2025.1.0"
+      license_file: "configs/exasol.license"  # License file path
+      schema: "estuary"
+      extra:
+        dbram: "32g"             # Database RAM allocation
+        optimizer_mode: "analytical"
+        # Exasol database parameters for analytical workload optimization
+        db_params:
+          - "-writeTouchInit=1"
+          - "-cacheMonitorLimit=0"
+          - "-maxOverallSlbUsageRatio=0.95"
+          - "-useQueryCache=0"
+          - "-query_log_timeout=0"
+          - "-joinOrderMethod=0"
+          - "-etlCheckCertsDefault=0"
+
+workload:
+  name: "estuary"
+  scale_factor: 10              # 1GB dataset for test
+  runs_per_query: 3             # Number of measured runs
+  warmup_runs: 1                # Warmup runs before measurement
+  generator: "faker"            # estuary supports 'faker' and 'dbgen' (to be done)
+  schema: "estuary"
+
+report:
+  show_boxplots: true
+  show_latency_cdf: true
+  show_bar_chart: true
+  show_heatmap: true
