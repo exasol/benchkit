@@ -48,4 +48,3 @@ FROM customer_ratios
 WHERE shipped_ratio > 0.5
 ORDER BY avg_revenue_per_order DESC
 LIMIT 1000;
-

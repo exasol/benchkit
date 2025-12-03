@@ -19,4 +19,3 @@ FROM customer_sales
 WHERE price_rank <= 3 OR quantity_rank <= 3
 ORDER BY order_month, price_rank, quantity_rank
 LIMIT 1000;
-

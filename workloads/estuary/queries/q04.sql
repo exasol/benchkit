@@ -21,4 +21,3 @@ SELECT
     ROW_NUMBER() OVER (PARTITION BY L_SHIPMODE ORDER BY avg) AS row_number_by_ship_mode
 FROM base_table
 LIMIT 1000;
-
