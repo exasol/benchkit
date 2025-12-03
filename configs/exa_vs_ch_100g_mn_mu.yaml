@@ -1,4 +1,4 @@
-title: "Exasol vs ClickHouse Performance Comparison on TPC-H SF1"
+title: "Exasol vs ClickHouse Performance Comparison on TPC-H SF100"
 author: "Oleksandr Kozachuk, Principal Architect at Exasol AG"
 
 # Execution configuration (optional)
@@ -13,26 +13,26 @@ env:
   # Instance configuration per system
   instances:
     exasol:
-      instance_type: "r5d.4xlarge"  # 16 vCPUs, 128GB RAM, 2x300GB NVMe local storage
+      instance_type: "r5d.2xlarge"  # 8 vCPUs, 64GB RAM, 1x300GB NVMe local storage (4 nodes = 256GB total)
       disk:
-        type: "local"
-      label: "ok-bench-exa"
+        type: "local"              # Use local NVMe for best performance
+      label: "ok-bench-exa-mn-mu"
     clickhouse:
-      instance_type: "r5d.4xlarge"  # 16 vCPUs, 128GB RAM, 2x300GB NVMe local storage
+      instance_type: "r5d.2xlarge"  # 8 vCPUs, 64GB RAM, 1x300GB NVMe local storage (4 nodes = 256GB total)
       disk:
-        type: "local"
-      label: "ok-bench-ch"
+        type: "local"              # Use local NVMe for best performance
+      label: "ok-bench-ch-mn-mu"
   os_image: "ubuntu-22.04"
   ssh_key_name: "ok-work3"            # AWS key pair name (without .pem extension)
   ssh_private_key_path: "~/.ssh/ok-work3.pem"  # Local private key file path
 
 systems:
-  # Baseline: Exasol with original queries (first system is baseline)
   - name: "exasol"
     kind: "exasol"
     version: "2025.1.0"          # Latest Exasol version
     setup:
       method: "installer"        # Native c4 installation
+      node_count: 4              # 4-node cluster
       use_additional_disk: true  # Auto-detect and use additional NVMe disk
       c4_version: "4.28.2"       # Latest c4 version
       host_addrs: "$EXASOL_PRIVATE_IP"  # Will be resolved from infrastructure
@@ -43,7 +43,7 @@ systems:
       working_copy: "@exasol-2025.1.0"
       license_file: "configs/exasol.license"  # License file path
       extra:
-        dbram: "32g"             # Database RAM allocation
+        dbram: "220g"
         optimizer_mode: "analytical"
         # Exasol database parameters for analytical workload optimization
         db_params:
@@ -55,12 +55,12 @@ systems:
           - "-joinOrderMethod=0"
           - "-etlCheckCertsDefault=0"
 
-  # ClickHouse with original queries
   - name: "clickhouse"
     kind: "clickhouse"
-    version: "25.10.2.65"         # Latest stable ClickHouse version
+    version: "25.10.2.65"            # Latest stable ClickHouse version
     setup:
       method: "native"           # Native APT installation
+      node_count: 4              # 4-node cluster
       use_additional_disk: true  # Auto-detect and use additional NVMe disk
       data_dir: "/data/clickhouse"
       host: "$CLICKHOUSE_PUBLIC_IP"  # Use public IP for external access
@@ -68,17 +68,26 @@ systems:
       username: "default"
       password: "clickhouse123"  # Password for benchmark user
       extra:
-        memory_limit: "32g"      # Memory limit for ClickHouse
-        max_threads: "16"        # Match instance vCPUs
-        max_memory_usage: "30000000000"  # ~28GB in bytes
+        memory_limit: "50g"     # Memory limit for ClickHouse
+        max_threads: "8"        # Match instance vCPUs (r5d.2xlarge = 8 vCPUs)
+        max_memory_usage: "4000000000"  # 4GB per query (50GB/10 streams * 0.8)
+        max_bytes_before_external_group_by: "2000000000"
+        max_bytes_before_external_sort: "2000000000"
+        join_algorithm: "grace_hash"  # Spill joins to disk when memory exceeded
+        max_bytes_in_join: "1000000000"  # 1GB before spilling to disk
 
 workload:
   name: "tpch"
-  scale_factor: 1               # 1GB dataset for test
-  runs_per_query: 7             # Number of measured runs
+  scale_factor: 100             # 100GB dataset
+  runs_per_query: 15            # Number of measured runs
   warmup_runs: 1                # Warmup runs before measurement
   data_format: "csv"            # csv or parquet
   generator: "dbgen"
+  multiuser:
+    enabled: true
+    num_streams: 10
+    randomize: true
+    random_seed: 42
 
 report:
   show_boxplots: true

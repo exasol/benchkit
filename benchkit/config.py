@@ -1,11 +1,12 @@
 """Configuration management for the benchmark framework."""
 
 import os
+import re
 from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, root_validator, validator
 
 
 class SystemConfig(BaseModel):
@@ -15,6 +16,28 @@ class SystemConfig(BaseModel):
     kind: str
     version: str
     setup: dict[str, Any]
+
+    @validator("name")
+    def validate_name(cls, v: str) -> str:
+        """Ensure system name is valid for bash variable names."""
+        if not v:
+            raise ValueError("System name cannot be empty")
+        if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", v):
+            raise ValueError(
+                f"System name '{v}' must be a valid bash variable name: "
+                "start with letter/underscore, contain only alphanumeric/underscores"
+            )
+        return v
+
+    @validator("kind")
+    def validate_kind(cls, v: str) -> str:
+        """Ensure system kind is supported."""
+        valid_kinds = {"exasol", "clickhouse"}
+        if v not in valid_kinds:
+            raise ValueError(
+                f"Unknown system kind '{v}'. Supported: {', '.join(sorted(valid_kinds))}"
+            )
+        return v
 
 
 class WorkloadConfig(BaseModel):
@@ -31,6 +54,66 @@ class WorkloadConfig(BaseModel):
     system_variants: dict[str, str] | None = None  # Per-system variant overrides
     multiuser: dict[str, Any] | None = None  # Multiuser execution configuration
 
+    @validator("name")
+    def validate_workload_name(cls, v: str) -> str:
+        """Ensure workload name is valid."""
+        valid_workloads = {"tpch", "tpcc"}
+        if v not in valid_workloads:
+            raise ValueError(
+                f"Unknown workload '{v}'. Supported: {', '.join(sorted(valid_workloads))}"
+            )
+        return v
+
+    @validator("scale_factor")
+    def validate_scale_factor(cls, v: int) -> int:
+        """Ensure scale factor is positive."""
+        if v < 1:
+            raise ValueError(f"scale_factor must be positive (got {v})")
+        return v
+
+    @validator("runs_per_query")
+    def validate_runs_per_query(cls, v: int) -> int:
+        """Ensure runs_per_query is positive."""
+        if v < 1:
+            raise ValueError(f"runs_per_query must be positive (got {v})")
+        return v
+
+    @validator("warmup_runs")
+    def validate_warmup_runs(cls, v: int) -> int:
+        """Ensure warmup_runs is non-negative."""
+        if v < 0:
+            raise ValueError(f"warmup_runs must be non-negative (got {v})")
+        return v
+
+    @validator("data_format")
+    def validate_data_format(cls, v: str) -> str:
+        """Ensure data format is valid."""
+        valid_formats = {"csv", "parquet"}
+        if v not in valid_formats:
+            raise ValueError(
+                f"Unknown data_format '{v}'. Supported: {', '.join(sorted(valid_formats))}"
+            )
+        return v
+
+    @validator("multiuser")
+    def validate_multiuser(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
+        """Validate multiuser configuration."""
+        if v is None:
+            return v
+        # Multiuser uses num_streams for concurrent execution
+        num_streams = v.get("num_streams", 1)
+        if not isinstance(num_streams, int) or num_streams < 1:
+            raise ValueError(
+                f"multiuser.num_streams must be a positive integer (got {num_streams})"
+            )
+        # random_seed should be an integer if provided
+        random_seed = v.get("random_seed")
+        if random_seed is not None and not isinstance(random_seed, int):
+            raise ValueError(
+                f"multiuser.random_seed must be an integer (got {type(random_seed).__name__})"
+            )
+        return v
+
 
 class EnvironmentConfig(BaseModel):
     """Configuration for execution environment."""
@@ -44,6 +127,16 @@ class EnvironmentConfig(BaseModel):
     allow_external_database_access: bool = (
         False  # Allow external access to database ports
     )
+
+    @validator("mode")
+    def validate_mode(cls, v: str) -> str:
+        """Ensure environment mode is valid."""
+        valid_modes = {"local", "aws", "gcp", "azure"}
+        if v not in valid_modes:
+            raise ValueError(
+                f"Unknown environment mode '{v}'. Supported: {', '.join(sorted(valid_modes))}"
+            )
+        return v
 
 
 class ReportConfig(BaseModel):
@@ -98,10 +191,19 @@ class BenchmarkConfig(BaseModel):
         if len(v) < 1:
             raise ValueError("At least one system must be configured")
 
+        # Check for unique system names
+        names = [s.name for s in v]
+        if len(names) != len(set(names)):
+            duplicates = [n for n in names if names.count(n) > 1]
+            raise ValueError(f"Duplicate system names: {', '.join(set(duplicates))}")
+
+        # Collect all system names (uppercase) for IP variable validation
+        system_names_upper = {s.name.upper() for s in v}
+
         # Import here to avoid circular dependency
         from .systems.base import get_system_class
 
-        # Validate multinode configuration for each system
+        # Validate each system configuration
         for system_config in v:
             node_count = system_config.setup.get("node_count", 1)
 
@@ -126,7 +228,65 @@ class BenchmarkConfig(BaseModel):
                         f"Set node_count to 1 or remove it (defaults to 1)."
                     )
 
+            # Validate IP variable references
+            ip_fields = ["host", "host_addrs", "host_external_addrs"]
+            for field in ip_fields:
+                value = system_config.setup.get(field, "")
+                if isinstance(value, str) and value.startswith("$"):
+                    var_name = value[1:]  # Remove $ prefix
+                    # Check if it matches the IP variable pattern
+                    match = re.match(
+                        r"^([A-Z_][A-Z0-9_]*)_(PRIVATE|PUBLIC)_IP$", var_name
+                    )
+                    if match:
+                        ref_system = match.group(1)
+                        if ref_system not in system_names_upper:
+                            valid_vars = [
+                                f"${name}_PRIVATE_IP, ${name}_PUBLIC_IP"
+                                for name in sorted(system_names_upper)
+                            ]
+                            raise ValueError(
+                                f"System '{system_config.name}': IP variable '{value}' "
+                                f"references unknown system '{ref_system}'. "
+                                f"Valid IP variables: {'; '.join(valid_vars)}"
+                            )
+
+            # Validate method-specific required fields
+            method = system_config.setup.get("method", "")
+            kind = system_config.kind
+
+            if kind == "exasol" and method == "installer":
+                required_fields = [
+                    "c4_version",
+                    "working_copy",
+                    "image_password",
+                    "db_password",
+                ]
+                missing = [f for f in required_fields if not system_config.setup.get(f)]
+                if missing:
+                    raise ValueError(
+                        f"System '{system_config.name}': Exasol installer method requires: "
+                        f"{', '.join(missing)}"
+                    )
+
         return v
+
+    @root_validator(skip_on_failure=True)
+    def validate_instance_config_matches_systems(cls, values: dict) -> dict:
+        """Validate that instance configs reference valid system names."""
+        env = values.get("env")
+        systems = values.get("systems", [])
+
+        if env and env.instances and systems:
+            system_names = {s.name for s in systems}
+            for instance_name in env.instances:
+                if instance_name not in system_names:
+                    raise ValueError(
+                        f"Instance config '{instance_name}' does not match any system. "
+                        f"Valid systems: {', '.join(sorted(system_names))}"
+                    )
+
+        return values
 
 
 def load_config(path: str | Path) -> dict[str, Any]:

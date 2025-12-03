@@ -116,7 +116,14 @@ class ClickHouseSystem(SystemUnderTest):
     ):
         super().__init__(config, output_callback, workload_config)
         self.setup_method = self.setup_config.get("method", "docker")
-        self.container_name = f"clickhouse_{self.name}"
+
+        # Include project_id in container name for parallel project isolation
+        project_id = config.get("project_id", "")
+        if project_id:
+            self.container_name = f"clickhouse_{project_id}_{self.name}"
+        else:
+            self.container_name = f"clickhouse_{self.name}"
+
         # Use 'or {}' to handle case where 'extra' exists but is None
         self.config_profile = (self.setup_config.get("extra") or {}).get(
             "config_profile", "default"
@@ -395,9 +402,11 @@ class ClickHouseSystem(SystemUnderTest):
         """Install ClickHouse on the current node (works for both single and multinode)."""
         # Defensive: ensure setup_config is not None (can happen in parallel execution)
         if self.setup_config is None:
-            self._log("ERROR: setup_config is None, attempting to recover from self.config")
-            if hasattr(self, 'config') and self.config and 'setup' in self.config:
-                self.setup_config = self.config['setup']
+            self._log(
+                "ERROR: setup_config is None, attempting to recover from self.config"
+            )
+            if hasattr(self, "config") and self.config and "setup" in self.config:
+                self.setup_config = self.config["setup"]
                 self._log("✓ Recovered setup_config from self.config")
             else:
                 raise RuntimeError("setup_config is None and cannot be recovered")
@@ -556,9 +565,11 @@ class ClickHouseSystem(SystemUnderTest):
             # Step 7: Calculate optimal settings based on hardware
             # Defensive: ensure setup_config is still not None
             if self.setup_config is None:
-                self._log("ERROR: setup_config is None, attempting to recover from self.config")
-                if hasattr(self, 'config') and self.config and 'setup' in self.config:
-                    self.setup_config = self.config['setup']
+                self._log(
+                    "ERROR: setup_config is None, attempting to recover from self.config"
+                )
+                if hasattr(self, "config") and self.config and "setup" in self.config:
+                    self.setup_config = self.config["setup"]
                     self._log("✓ Recovered setup_config from self.config")
                 else:
                     raise RuntimeError("setup_config is None and cannot be recovered")
@@ -653,6 +664,7 @@ class ClickHouseSystem(SystemUnderTest):
             self._log(f"Native ClickHouse installation failed: {e}")
             # Log full traceback for debugging
             import traceback
+
             self._log(f"Traceback:\n{traceback.format_exc()}")
             return False
 
@@ -1019,7 +1031,9 @@ class ClickHouseSystem(SystemUnderTest):
                 cpu_cores = int(cpu_result["stdout"].strip())
                 # Sanity check: CPU cores should be reasonable (between 1 and 512)
                 if cpu_cores < 1 or cpu_cores > 512:
-                    self._log(f"⚠️  WARNING: Detected {cpu_cores} CPU cores - this seems wrong, using default 16")
+                    self._log(
+                        f"⚠️  WARNING: Detected {cpu_cores} CPU cores - this seems wrong, using default 16"
+                    )
                     cpu_cores = 16
             except (ValueError, KeyError):
                 cpu_cores = 16  # Fallback default

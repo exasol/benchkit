@@ -1,4 +1,4 @@
-title: "Exasol vs ClickHouse Performance Comparison on TPC-H SF1"
+title: "Exasol vs ClickHouse Performance Comparison on TPC-H SF1 (EBS Storage)"
 author: "Oleksandr Kozachuk, Principal Architect at Exasol AG"
 
 # Execution configuration (optional)
@@ -11,16 +11,19 @@ env:
   region: "eu-west-1"
   allow_external_database_access: true  # Allow external access to database ports
   # Instance configuration per system
+  # Using m7i instances (no local NVMe) with EBS storage
   instances:
     exasol:
-      instance_type: "r5d.4xlarge"  # 16 vCPUs, 128GB RAM, 2x300GB NVMe local storage
+      instance_type: "m7i.4xlarge"  # 16 vCPUs, 64GB RAM, no local storage
       disk:
-        type: "local"
+        type: "ebs"        # EBS gp3 volume with auto-tuned IOPS
+        size_gb: 100       # 100GB EBS volume
       label: "ok-bench-exa"
     clickhouse:
-      instance_type: "r5d.4xlarge"  # 16 vCPUs, 128GB RAM, 2x300GB NVMe local storage
+      instance_type: "m7i.4xlarge"  # 16 vCPUs, 64GB RAM, no local storage
       disk:
-        type: "local"
+        type: "ebs"        # EBS gp3 volume with auto-tuned IOPS
+        size_gb: 100       # 100GB EBS volume
       label: "ok-bench-ch"
   os_image: "ubuntu-22.04"
   ssh_key_name: "ok-work3"            # AWS key pair name (without .pem extension)
@@ -33,7 +36,7 @@ systems:
     version: "2025.1.0"          # Latest Exasol version
     setup:
       method: "installer"        # Native c4 installation
-      use_additional_disk: true  # Auto-detect and use additional NVMe disk
+      use_additional_disk: true  # Auto-detect and use additional EBS disk
       c4_version: "4.28.2"       # Latest c4 version
       host_addrs: "$EXASOL_PRIVATE_IP"  # Will be resolved from infrastructure
       host_external_addrs: "$EXASOL_PUBLIC_IP"
@@ -61,7 +64,7 @@ systems:
     version: "25.10.2.65"         # Latest stable ClickHouse version
     setup:
       method: "native"           # Native APT installation
-      use_additional_disk: true  # Auto-detect and use additional NVMe disk
+      use_additional_disk: true  # Auto-detect and use additional EBS disk
       data_dir: "/data/clickhouse"
       host: "$CLICKHOUSE_PUBLIC_IP"  # Use public IP for external access
       port: 8123                 # HTTP port for clickhouse-connect

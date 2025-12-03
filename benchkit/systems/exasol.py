@@ -99,7 +99,14 @@ class ExasolSystem(SystemUnderTest):
     ):
         super().__init__(config, output_callback, workload_config)
         self.setup_method = self.setup_config.get("method", "docker")
-        self.container_name = f"exasol_{self.name}"
+
+        # Include project_id in container name for parallel project isolation
+        project_id = config.get("project_id", "")
+        if project_id:
+            self.container_name = f"exasol_{project_id}_{self.name}"
+        else:
+            self.container_name = f"exasol_{self.name}"
+
         self.license_file = self.setup_config.get("license_file")
         self.cluster_config = self.setup_config.get("cluster", {})
 
@@ -1274,34 +1281,133 @@ echo "Symlink: %s -> $INSTANCE_STORE"
                         use_additional_disk = False
 
             if not use_additional_disk:
-                # Fallback: Create data directory and storage disk file
+                # Fallback: Create data directory and storage disk file with loopback device
                 storage_disk_size = self.setup_config.get("storage_disk_size", "100GB")
                 data_dir = self.setup_config.get("data_dir", "/tmp/exasol_storage")
+                storage_file_path = f"{data_dir}/storage_disk1"
 
+                # Determine if multinode
+                is_multinode = (
+                    self._cloud_instance_managers
+                    and len(self._cloud_instance_managers) > 1
+                )
+                node_info = (
+                    f"all_nodes_{len(self._cloud_instance_managers)}"
+                    if is_multinode
+                    else None
+                )
+
+                # Step 2a: Create data directory on all nodes
                 self.record_setup_command(
                     f"sudo mkdir -p {data_dir}",
                     "Create Exasol data directory",
                     "storage_setup",
+                    node_info=node_info,
                 )
-                self.execute_command(f"sudo mkdir -p {data_dir}")
+                if not self.execute_command_on_all_nodes(
+                    f"sudo mkdir -p {data_dir}",
+                    description="Creating data directory on all nodes",
+                ):
+                    self._log("Failed to create data directory on some nodes")
+                    return False
 
-                storage_disk_path = f"{data_dir}/storage_disk1"
-                self.data_device = storage_disk_path  # Store for report display
+                # Step 2b: Create storage file on all nodes
                 self.record_setup_command(
-                    f"sudo truncate -s {storage_disk_size} {storage_disk_path}",
+                    f"sudo truncate -s {storage_disk_size} {storage_file_path}",
                     f"Create {storage_disk_size} storage disk file",
                     "storage_setup",
+                    node_info=node_info,
                 )
-                self.execute_command(
-                    f"sudo truncate -s {storage_disk_size} {storage_disk_path}"
-                )
+                if not self.execute_command_on_all_nodes(
+                    f"sudo truncate -s {storage_disk_size} {storage_file_path}",
+                    description="Creating storage file on all nodes",
+                ):
+                    self._log("Failed to create storage file on some nodes")
+                    return False
 
+                # Step 2c: Set ownership on all nodes
                 self.record_setup_command(
                     f"sudo chown -R exasol:exasol {data_dir}",
                     "Set ownership of data directory to exasol user",
                     "storage_setup",
+                    node_info=node_info,
                 )
-                self.execute_command(f"sudo chown -R exasol:exasol {data_dir}")
+                if not self.execute_command_on_all_nodes(
+                    f"sudo chown -R exasol:exasol {data_dir}",
+                    description="Setting ownership on all nodes",
+                ):
+                    self._log(
+                        "Warning: Failed to set ownership on some nodes, continuing..."
+                    )
+
+                # Step 2d: Setup loopback device on all nodes
+                # Use losetup --find --show to find first available loop device
+                # and create a consistent symlink for c4 config
+                exasol_storage_link = "/dev/exasol.storage"
+
+                # First, detach any existing setup for this storage file
+                self.record_setup_command(
+                    f"sudo losetup -d $(losetup -j {storage_file_path} | cut -d: -f1) 2>/dev/null || true",
+                    "Detach existing loopback for storage file if present",
+                    "storage_setup",
+                    node_info=node_info,
+                )
+                if not self.execute_command_on_all_nodes(
+                    f"sudo losetup -d $(losetup -j {storage_file_path} | cut -d: -f1) 2>/dev/null || true",
+                    description="Detaching existing loopback on all nodes",
+                ):
+                    self._log("Warning: Failed to detach loopback on some nodes")
+
+                # Remove old symlink if exists
+                self.record_setup_command(
+                    f"sudo rm -f {exasol_storage_link}",
+                    "Remove old storage symlink if present",
+                    "storage_setup",
+                    node_info=node_info,
+                )
+                if not self.execute_command_on_all_nodes(
+                    f"sudo rm -f {exasol_storage_link}",
+                    description="Removing old symlink on all nodes",
+                ):
+                    self._log("Warning: Failed to remove old symlink on some nodes")
+
+                # Setup loopback device using --find --show to get first available
+                # Then create consistent symlink for c4 config
+                losetup_cmd = (
+                    f"LOOP_DEV=$(sudo losetup --find --show {storage_file_path}) && "
+                    f"sudo ln -sf $LOOP_DEV {exasol_storage_link} && "
+                    f"echo $LOOP_DEV"
+                )
+                self.record_setup_command(
+                    f"sudo losetup --find --show {storage_file_path} && "
+                    f"sudo ln -sf <loop_device> {exasol_storage_link}",
+                    f"Setup loopback device for storage file with symlink {exasol_storage_link}",
+                    "storage_setup",
+                    node_info=node_info,
+                )
+                if not self.execute_command_on_all_nodes(
+                    losetup_cmd,
+                    description="Setting up loopback device on all nodes",
+                ):
+                    self._log("Failed to setup loopback device on some nodes")
+                    return False
+
+                # Verify loopback setup
+                self.record_setup_command(
+                    f"ls -la {exasol_storage_link} && sudo losetup -a | grep {storage_file_path}",
+                    "Verify loopback device setup",
+                    "storage_setup",
+                    node_info=node_info,
+                )
+                if not self.execute_command_on_all_nodes(
+                    f"ls -la {exasol_storage_link} && sudo losetup -a | grep {storage_file_path}",
+                    description="Verifying loopback setup on all nodes",
+                ):
+                    self._log("Warning: Could not verify loopback setup on some nodes")
+
+                # Use consistent symlink for c4 config
+                storage_disk_path = exasol_storage_link
+                self.data_device = f"{storage_file_path} (via {exasol_storage_link})"  # For report display
 
             # Step 3: Download c4 tool
             c4_url = f"https://x-up.s3.amazonaws.com/releases/c4/linux/x86_64/{c4_version}/c4"

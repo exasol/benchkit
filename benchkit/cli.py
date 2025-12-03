@@ -97,6 +97,115 @@ def probe(
 
 
 @app.command()
+def setup(
+    config: str = typer.Option(..., "--config", "-c", help="Path to config YAML file"),
+    systems: str | None = typer.Option(
+        None, "--systems", help="Comma-separated list of systems to setup"
+    ),
+    debug: bool = typer.Option(
+        False, "--debug", help="Enable debug output for detailed command tracing"
+    ),
+) -> None:
+    """Set up and install database systems.
+
+    This is Phase 1 of the benchmark workflow. It handles:
+    - Cloud infrastructure provisioning (if cloud mode)
+    - Storage preparation (disk partitioning, RAID setup)
+    - Database system installation and configuration
+
+    After setup completes, use 'benchkit load' to load data.
+    """
+    from .run.runner import BenchmarkRunner
+
+    set_debug(debug)
+
+    cfg = load_config(config)
+    outdir = Path("results") / cfg["project_id"]
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    # Override config with CLI options
+    if systems:
+        system_names = [s.strip() for s in systems.split(",")]
+        cfg["systems"] = [s for s in cfg["systems"] if s["name"] in system_names]
+
+    console.print(f"[blue]Setting up systems for project:[/] {cfg['project_id']}")
+    console.print(f"[dim]Systems: {[s['name'] for s in cfg['systems']]}[/]")
+
+    runner = BenchmarkRunner(cfg, outdir)
+    success = runner.run_setup()
+
+    if success:
+        console.print("[green]✓ Setup phase completed successfully[/]")
+    else:
+        console.print("[red]✗ Setup phase failed[/]")
+        raise typer.Exit(1)
+
+
+@app.command()
+def load(
+    config: str = typer.Option(..., "--config", "-c", help="Path to config YAML file"),
+    systems: str | None = typer.Option(
+        None, "--systems", help="Comma-separated list of systems to load data into"
+    ),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Force reload even if data already loaded"
+    ),
+    local: bool = typer.Option(
+        False,
+        "--local",
+        "-l",
+        help="Execute locally against remote databases (skip package deployment)",
+    ),
+    debug: bool = typer.Option(
+        False, "--debug", help="Enable debug output for detailed command tracing"
+    ),
+) -> None:
+    """Load benchmark data into configured systems.
+
+    This is Phase 2 of the benchmark workflow. It handles:
+    - Data generation (TPC-H data files)
+    - Schema creation (tables, indexes)
+    - Data loading (bulk insert)
+
+    Requires setup phase to be completed first.
+    After load completes, use 'benchkit run' to execute queries.
+
+    Use --local to execute data loading from your local machine directly
+    against remote databases (using their public IPs). This is useful for
+    faster iteration during workload development and debugging.
+    """
+    from .run.runner import BenchmarkRunner
+
+    set_debug(debug)
+
+    cfg = load_config(config)
+    outdir = Path("results") / cfg["project_id"]
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    # Override config with CLI options
+    if systems:
+        system_names = [s.strip() for s in systems.split(",")]
+        cfg["systems"] = [s for s in cfg["systems"] if s["name"] in system_names]
+
+    console.print(f"[blue]Loading data for project:[/] {cfg['project_id']}")
+    console.print(f"[dim]Systems: {[s['name'] for s in cfg['systems']]}[/]")
+    console.print(
+        f"[dim]Workload: {cfg['workload']['name']} (SF={cfg['workload']['scale_factor']})[/]"
+    )
+    if local:
+        console.print("[cyan]Mode: Local-to-remote (connecting to remote DBs)[/]")
+
+    runner = BenchmarkRunner(cfg, outdir)
+    success = runner.run_load(force=force, local=local)
+
+    if success:
+        console.print("[green]✓ Load phase completed successfully[/]")
+    else:
+        console.print("[red]✗ Load phase failed[/]")
+        raise typer.Exit(1)
+
+
+@app.command()
 def run(
     config: str = typer.Option(..., "--config", "-c", help="Path to config YAML file"),
     systems: str | None = typer.Option(
@@ -108,27 +217,37 @@ def run(
     force: bool = typer.Option(
         False, "--force", "-f", help="Force run even if results already exist"
     ),
+    full: bool = typer.Option(
+        False, "--full", help="Run full benchmark (setup + load + run)"
+    ),
+    local: bool = typer.Option(
+        False,
+        "--local",
+        "-l",
+        help="Execute locally against remote databases (skip package deployment)",
+    ),
     debug: bool = typer.Option(
         False, "--debug", help="Enable debug output for detailed command tracing"
     ),
 ) -> None:
-    """Run the benchmark workload against configured systems."""
+    """Execute benchmark queries against configured systems.
 
-    # Set global debug state
+    This is Phase 3 of the benchmark workflow (query execution only).
+    Requires setup and load phases to be completed first.
+
+    Use --full flag to run the complete benchmark (setup + load + run).
+
+    Use --local to execute queries from your local machine directly
+    against remote databases (using their public IPs). This is useful for
+    faster iteration during workload development and debugging.
+    """
+    from .run.runner import BenchmarkRunner
+
     set_debug(debug)
 
     cfg = load_config(config)
     outdir = Path("results") / cfg["project_id"]
     outdir.mkdir(parents=True, exist_ok=True)
-
-    # Check if results already exist (skip by default unless --force)
-    runs_file = outdir / "runs.csv"
-    if runs_file.exists() and not force:
-        console.print(
-            f"[yellow]Skipping benchmark - results already exist:[/] {runs_file}"
-        )
-        console.print("[dim]Use --force to overwrite existing results[/]")
-        return
 
     # Override config with CLI options
     if systems:
@@ -144,8 +263,32 @@ def run(
     console.print(
         f"[dim]Workload: {cfg['workload']['name']} (SF={cfg['workload']['scale_factor']})[/]"
     )
+    if local:
+        console.print("[cyan]Mode: Local-to-remote (connecting to remote DBs)[/]")
 
-    run_benchmark(cfg, outdir)
+    runner = BenchmarkRunner(cfg, outdir)
+
+    if full:
+        # Run all phases: setup -> load -> run
+        console.print(
+            "[bold blue]Running full benchmark (setup + load + run)[/bold blue]"
+        )
+
+        if not runner.run_setup():
+            console.print("[red]✗ Setup phase failed[/]")
+            raise typer.Exit(1)
+
+        if not runner.run_load(local=local):
+            console.print("[red]✗ Load phase failed[/]")
+            raise typer.Exit(1)
+
+        if not runner.run_queries(force=force, local=local):
+            console.print("[red]✗ Query execution failed[/]")
+            raise typer.Exit(1)
+    else:
+        # Run queries only (strict mode - check prerequisites)
+        if not runner.run_queries(force=force, local=local):
+            raise typer.Exit(1)
 
     console.print(f"[green]✓ Benchmark completed:[/] {outdir / 'runs.csv'}")
 
@@ -283,6 +426,245 @@ def status(
 
 
 @app.command()
+def check(
+    config: str = typer.Option(..., "--config", "-c", help="Path to config YAML file"),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Show all configuration details"
+    ),
+) -> None:
+    """Check and display configuration file contents."""
+    from pathlib import Path
+
+    import yaml
+    from rich.panel import Panel
+    from rich.text import Text
+
+    config_path = Path(config)
+
+    # Try to load and validate the config
+    validation_errors: list[str] = []
+    cfg: dict[str, Any] | None = None
+
+    try:
+        cfg = load_config(config)
+    except FileNotFoundError as e:
+        console.print(
+            Panel(
+                f"[red]Configuration file not found:[/red] {config_path}",
+                title="Configuration Check",
+                border_style="red",
+            )
+        )
+        raise typer.Exit(1) from e
+    except ValueError as e:
+        # Parse validation errors from the exception
+        error_msg = str(e)
+        validation_errors.append(error_msg)
+    except Exception as e:
+        validation_errors.append(f"Unexpected error: {e}")
+
+    # Display header with validation status
+    if validation_errors:
+        status_text = Text()
+        status_text.append("Configuration: ", style="bold")
+        status_text.append(str(config_path), style="cyan")
+        status_text.append("\nStatus: ", style="bold")
+        status_text.append("✗ Invalid", style="red bold")
+        console.print(Panel(status_text, border_style="red"))
+
+        console.print("\n[red bold]Errors found:[/red bold]")
+        for i, error in enumerate(validation_errors, 1):
+            # Clean up the error message
+            error = error.replace("Invalid configuration: ", "")
+            console.print(f"  {i}. {error}")
+
+        raise typer.Exit(1)
+
+    # Config is valid - display it
+    status_text = Text()
+    status_text.append("Configuration: ", style="bold")
+    status_text.append(str(config_path), style="cyan")
+    status_text.append("\nStatus: ", style="bold")
+    status_text.append("✓ Valid", style="green bold")
+    console.print(Panel(status_text, border_style="green"))
+
+    if cfg is None:
+        raise typer.Exit(1)
+
+    # Display Project section
+    project_table = Table(show_header=False, box=None, padding=(0, 2))
+    project_table.add_column("Key", style="bold")
+    project_table.add_column("Value")
+    project_table.add_row("ID", cfg.get("project_id", "-"))
+    project_table.add_row("Title", cfg.get("title", "-"))
+    project_table.add_row("Author", cfg.get("author", "-"))
+    console.print(Panel(project_table, title="Project", border_style="blue"))
+
+    # Display Environment section
+    env = cfg.get("env", {})
+    env_table = Table(show_header=False, box=None, padding=(0, 2))
+    env_table.add_column("Key", style="bold")
+    env_table.add_column("Value")
+    env_table.add_row("Mode", env.get("mode", "local"))
+    if env.get("region"):
+        env_table.add_row("Region", env.get("region"))
+    env_table.add_row(
+        "External DB Access",
+        "Yes" if env.get("allow_external_database_access") else "No",
+    )
+    if env.get("ssh_key_name"):
+        env_table.add_row("SSH Key", env.get("ssh_key_name"))
+    console.print(Panel(env_table, title="Environment", border_style="blue"))
+
+    # Display Systems section
+    systems = cfg.get("systems", [])
+    instances = env.get("instances", {}) or {}
+
+    # Collect all system names for IP variable validation display
+    system_names_upper = {s["name"].upper() for s in systems}
+
+    systems_content = []
+    for i, system in enumerate(systems, 1):
+        name = system.get("name", "unnamed")
+        kind = system.get("kind", "unknown")
+        version = system.get("version", "unknown")
+        setup = system.get("setup", {})
+        method = setup.get("method", "default")
+        node_count = setup.get("node_count", 1)
+
+        system_lines = [
+            f"[bold cyan]{i}. {name}[/bold cyan]",
+            f"   Kind:     {kind}",
+            f"   Version:  {version}",
+            f"   Method:   {method}",
+        ]
+
+        # Node count
+        node_desc = "single-node" if node_count == 1 else f"{node_count}-node cluster"
+        system_lines.append(f"   Nodes:    {node_count} ({node_desc})")
+
+        # Instance type if available
+        instance_config = instances.get(name, {})
+        if instance_config.get("instance_type"):
+            system_lines.append(f"   Instance: {instance_config.get('instance_type')}")
+
+        # IP variables
+        ip_vars = []
+        ip_fields = ["host", "host_addrs", "host_external_addrs"]
+        for field in ip_fields:
+            value = setup.get(field, "")
+            if isinstance(value, str) and value.startswith("$"):
+                ip_vars.append(value)
+
+        if ip_vars:
+            # Check if IP vars are valid
+            all_valid = True
+            for var in ip_vars:
+                var_name = var[1:]  # Remove $
+                import re
+
+                match = re.match(r"^([A-Z_][A-Z0-9_]*)_(PRIVATE|PUBLIC)_IP$", var_name)
+                if match and match.group(1) not in system_names_upper:
+                    all_valid = False
+                    break
+
+            status = "[green]✓[/green]" if all_valid else "[red]✗[/red]"
+            system_lines.append(f"   IP Vars:  {', '.join(ip_vars)} {status}")
+
+        # Verbose mode: show all setup params
+        if verbose:
+            system_lines.append("   [dim]Setup:[/dim]")
+            for key, value in setup.items():
+                if key not in ["method", "node_count"]:
+                    # Mask passwords
+                    if "password" in key.lower():
+                        value = "********"
+                    system_lines.append(f"      {key}: {value}")
+
+        systems_content.append("\n".join(system_lines))
+
+    console.print(
+        Panel(
+            "\n\n".join(systems_content),
+            title=f"Systems ({len(systems)})",
+            border_style="blue",
+        )
+    )
+
+    # Display Workload section
+    workload = cfg.get("workload", {})
+    workload_table = Table(show_header=False, box=None, padding=(0, 2))
+    workload_table.add_column("Key", style="bold")
+    workload_table.add_column("Value")
+    workload_table.add_row("Name", workload.get("name", "-"))
+    sf = workload.get("scale_factor", 1)
+    workload_table.add_row("Scale Factor", f"{sf} ({sf} GB for TPC-H)")
+    workload_table.add_row("Data Format", workload.get("data_format", "csv"))
+    workload_table.add_row("Runs/Query", str(workload.get("runs_per_query", 3)))
+    workload_table.add_row("Warmup Runs", str(workload.get("warmup_runs", 1)))
+
+    # Query info
+    queries = workload.get("queries", {})
+    include = queries.get("include", [])
+    exclude = queries.get("exclude", [])
+    if include:
+        workload_table.add_row("Queries", f"Include: {', '.join(include)}")
+    elif exclude:
+        workload_table.add_row("Queries", f"All except: {', '.join(exclude)}")
+    else:
+        workload_table.add_row("Queries", "All (22 queries for TPC-H)")
+
+    # Multiuser
+    multiuser = workload.get("multiuser")
+    if multiuser and multiuser.get("enabled", True):
+        num_streams = multiuser.get("num_streams", 1)
+        randomize = multiuser.get("randomize", False)
+        random_seed = multiuser.get("random_seed", "-")
+        workload_table.add_row(
+            "Multiuser",
+            f"{num_streams} streams, randomize: {randomize}, seed: {random_seed}",
+        )
+
+    console.print(Panel(workload_table, title="Workload", border_style="blue"))
+
+    # Display Execution section
+    execution = cfg.get("execution", {})
+    if execution.get("parallel"):
+        exec_table = Table(show_header=False, box=None, padding=(0, 2))
+        exec_table.add_column("Key", style="bold")
+        exec_table.add_column("Value")
+        exec_table.add_row("Parallel", "Yes")
+        if execution.get("max_workers"):
+            exec_table.add_row("Max Workers", str(execution.get("max_workers")))
+        console.print(Panel(exec_table, title="Execution", border_style="blue"))
+
+    # Display Report section
+    report = cfg.get("report", {})
+    if report:
+        report_table = Table(show_header=False, box=None, padding=(0, 2))
+        report_table.add_column("Key", style="bold")
+        report_table.add_column("Value")
+        report_table.add_row("Output", report.get("output_path", "-"))
+        report_table.add_row("Figures", report.get("figures_dir", "-"))
+
+        # Charts enabled
+        charts = []
+        if report.get("show_boxplots", True):
+            charts.append("boxplots")
+        if report.get("show_latency_cdf"):
+            charts.append("latency CDF")
+        if report.get("show_bar_chart", True):
+            charts.append("bar chart")
+        if report.get("show_heatmap", True):
+            charts.append("heatmap")
+        report_table.add_row("Charts", ", ".join(charts) if charts else "none")
+
+        console.print(Panel(report_table, title="Report Settings", border_style="blue"))
+
+    console.print("\n[green]Configuration is valid and ready to use.[/green]")
+
+
+@app.command()
 def infra(
     action: str = typer.Argument(..., help="Action: plan, apply, destroy"),
     provider: str = typer.Option("aws", "--provider", "-p", help="Cloud provider"),
@@ -317,6 +699,18 @@ def infra(
             console.print("[yellow]Warning: No systems found in config to filter[/]")
 
     manager = InfraManager(provider, cfg)
+
+    # Display project isolation info
+    project_id = cfg.get("project_id", "default")
+    console.print(f"[bold blue]Infrastructure Management[/bold blue]")
+    console.print(f"  Project: [cyan]{project_id}[/cyan]")
+    console.print(f"  State:   [cyan]{manager.project_state_dir}[/cyan]")
+    if project_id == "default":
+        console.print(
+            "[yellow]  Warning: Using default project_id. "
+            "Specify project_id in config for isolation.[/yellow]"
+        )
+    console.print()
 
     console.print(f"[blue]Running infrastructure {action} on {provider}[/]")
     if action == "apply":

@@ -326,6 +326,9 @@ class WorkloadPackage:
             "run": [
                 "parsers.py"
             ],  # Only parsers, no __init__.py to avoid import issues
+            "package": [
+                "markers.py", # imported by systems/base
+            ],
             "systems": None,  # Copy all - needed for database connections
             "workloads": None,  # Copy all - needed for workload execution
             "common": None,
@@ -413,12 +416,13 @@ class WorkloadPackage:
         pass
 
     def _create_workload_runner_script(self) -> None:
-        """Create a script specifically for workload execution."""
+        """Create scripts for load (Phase 2) and run (Phase 3) execution."""
         systems = [s["name"] for s in self.config["systems"]]
 
-        script_content = f"""#!/bin/bash
-# Workload execution script for {self.project_id}
-# This script executes only the workload against pre-configured systems
+        # Create load_data.sh script (Phase 2)
+        load_script_content = f"""#!/bin/bash
+# Data loading script for {self.project_id}
+# This script loads data into pre-configured systems (Phase 2)
 set -e
 
 # Parse command line arguments
@@ -455,8 +459,8 @@ if [ -z "$SYSTEM_NAME" ]; then
     fi
 fi
 
-echo "=== Workload Execution: {self.project_id} ==="
-echo "Running workload for system: $SYSTEM_NAME"
+echo "=== Data Loading: {self.project_id} ==="
+echo "Loading data for system: $SYSTEM_NAME"
 echo ""
 
 # Install dependencies if needed
@@ -466,21 +470,89 @@ if [ ! -d "venv" ]; then
 fi
 
 source venv/bin/activate
-pip install -r requirements.txt
+pip install -q -r requirements.txt
 
 echo ""
-echo "Executing workload for $SYSTEM_NAME..."
+echo "Loading data for $SYSTEM_NAME..."
 
-python -m benchkit --config config.yaml --system "$SYSTEM_NAME" $DEBUG_FLAG
+python -m benchkit load --config config.yaml --system "$SYSTEM_NAME" $DEBUG_FLAG
 
 echo ""
-echo "=== Workload Completed ==="
+echo "=== Data Loading Completed ==="
+echo "Load completion marker saved in results/{self.project_id}/"
+"""
+
+        load_script_path = self.package_dir / "load_data.sh"
+        load_script_path.write_text(load_script_content)
+        load_script_path.chmod(0o755)
+
+        # Create run_queries.sh script (Phase 3)
+        run_script_content = f"""#!/bin/bash
+# Query execution script for {self.project_id}
+# This script executes benchmark queries only (Phase 3)
+# Assumes data is already loaded via load_data.sh
+set -e
+
+# Parse command line arguments
+SYSTEM_NAME=""
+DEBUG_FLAG=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --debug)
+            DEBUG_FLAG="--debug"
+            shift
+            ;;
+        *)
+            if [ -z "$SYSTEM_NAME" ]; then
+                SYSTEM_NAME="$1"
+            fi
+            shift
+            ;;
+    esac
+done
+
+# Auto-detect system if not provided
+if [ -z "$SYSTEM_NAME" ]; then
+    # Auto-detect system based on what's running locally
+    if systemctl is-active --quiet c4_cloud_command 2>/dev/null || pgrep -f "c4" >/dev/null 2>&1; then
+        SYSTEM_NAME="exasol"
+    elif systemctl is-active --quiet clickhouse-server 2>/dev/null || pgrep -f "clickhouse" >/dev/null 2>&1; then
+        SYSTEM_NAME="clickhouse"
+    else
+        echo "Error: Could not auto-detect system. Please specify system name as parameter."
+        echo "Usage: $0 [system_name] [--debug]"
+        echo "Available systems: {", ".join(systems)}"
+        exit 1
+    fi
+fi
+
+echo "=== Query Execution: {self.project_id} ==="
+echo "Running queries for system: $SYSTEM_NAME"
+echo ""
+
+# Install dependencies if needed
+if [ ! -d "venv" ]; then
+    echo "Setting up Python virtual environment..."
+    python3 -m venv venv
+fi
+
+source venv/bin/activate
+pip install -q -r requirements.txt
+
+echo ""
+echo "Executing queries for $SYSTEM_NAME..."
+
+python -m benchkit run --config config.yaml --system "$SYSTEM_NAME" $DEBUG_FLAG
+
+echo ""
+echo "=== Query Execution Completed ==="
 echo "Results available in results/{self.project_id}/"
 """
 
-        script_path = self.package_dir / "execute_workload.sh"
-        script_path.write_text(script_content)
-        script_path.chmod(0o755)
+        run_script_path = self.package_dir / "run_queries.sh"
+        run_script_path.write_text(run_script_content)
+        run_script_path.chmod(0o755)
 
     def _create_minimal_requirements_file(self) -> None:
         """Create requirements.txt with only database drivers and execution dependencies."""
@@ -592,19 +664,19 @@ echo "Results available in results/{self.project_id}/"
             return None
 
     def _create_workload_cli(self) -> None:
-        """Create a minimal CLI for workload execution only."""
-        workload_cli_content = '''"""Minimal CLI for workload execution only."""
+        """Create a unified CLI with load and run subcommands."""
+        unified_cli_content = '''"""Unified CLI for benchmark execution (load and run phases)."""
 
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 import typer
 import yaml
 from rich.console import Console
 
 app = typer.Typer(
     name="benchkit",
-    help="Minimal workload execution framework",
-    no_args_is_help=True
+    help="Execute benchmark phases against configured systems.",
+    no_args_is_help=True,
 )
 
 console = Console()
@@ -616,17 +688,19 @@ def load_workload_config(config_path: str) -> dict[str, Any]:
     return config
 
 @app.command()
-def execute(
+def load(
     config: str = typer.Option(..., "--config", "-c", help="Path to config YAML file"),
-    system: str = typer.Option(..., "--system", "-s", help="System name to run workload against"),
-    force: bool = typer.Option(False, "--force", "-f", help="Force run even if results exist"),
-    debug: bool = typer.Option(False, "--debug", help="Enable debug output for query execution")
+    system: str = typer.Option(..., "--system", "-s", help="System name to load data into"),
+    force: bool = typer.Option(False, "--force", "-f", help="Force reload even if already loaded"),
+    debug: bool = typer.Option(False, "--debug", help="Enable debug output")
 ) -> None:
-    """Execute workload against the specified system."""
-    from .workload_runner import execute_workload
+    """Phase 2: Load benchmark data into the specified system.
+
+    This handles data generation, schema creation, and data loading.
+    """
+    from .load_runner import execute_load
     from .debug import set_debug
 
-    # Set debug mode globally
     if debug:
         set_debug(True)
 
@@ -639,24 +713,146 @@ def execute(
 
     if not cfg["systems"]:
         console.print(f"[red]Error: System '{system}' not found in configuration[/]")
-        return
+        raise typer.Exit(1)
 
-    console.print(f"[blue]Executing workload for system:[/] {system}")
+    console.print(f"[blue]Loading data for system:[/] {system}")
     console.print(f"[dim]Workload: {cfg['workload']['name']} (SF={cfg['workload']['scale_factor']})[/]")
 
-    execute_workload(cfg, outdir, force)
+    execute_load(cfg, outdir, force)
 
-    console.print(f"[green]✓ Workload execution completed[/]")
+    console.print(f"[green]✓ Data loading completed[/]")
+
+@app.command()
+def run(
+    config: str = typer.Option(..., "--config", "-c", help="Path to config YAML file"),
+    system: str = typer.Option(..., "--system", "-s", help="System name to run queries against"),
+    force: bool = typer.Option(False, "--force", "-f", help="Force run even if results exist"),
+    debug: bool = typer.Option(False, "--debug", help="Enable debug output")
+) -> None:
+    """Phase 3: Execute benchmark queries against the specified system.
+
+    This assumes data is already loaded via the 'load' command.
+    """
+    from .workload_runner import execute_queries
+    from .debug import set_debug
+
+    if debug:
+        set_debug(True)
+
+    cfg = load_workload_config(config)
+    outdir = Path("results") / cfg["project_id"]
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    # Filter config to only include the specified system
+    cfg["systems"] = [s for s in cfg["systems"] if s["name"] == system]
+
+    if not cfg["systems"]:
+        console.print(f"[red]Error: System '{system}' not found in configuration[/]")
+        raise typer.Exit(1)
+
+    console.print(f"[blue]Executing queries for system:[/] {system}")
+    console.print(f"[dim]Workload: {cfg['workload']['name']} (SF={cfg['workload']['scale_factor']})[/]")
+
+    execute_queries(cfg, outdir, force)
+
+    console.print(f"[green]✓ Query execution completed[/]")
 
 if __name__ == "__main__":
     app()
 '''
 
         cli_file = self.package_dir / "benchkit" / "cli.py"
-        cli_file.write_text(workload_cli_content)
+        cli_file.write_text(unified_cli_content)
 
-        # Create workload runner module
-        workload_runner_content = '''"""Workload execution runner for minimal packages."""
+        # Create load runner module (Phase 2 - data loading)
+        load_runner_content = '''"""Data loading runner for minimal packages (Phase 2)."""
+
+from pathlib import Path
+from typing import Any
+import json
+from rich.console import Console
+
+console = Console()
+
+def execute_load(config: dict[str, Any], output_dir: Path, force: bool = False) -> None:
+    """Execute data loading for configured systems."""
+    from .systems.base import get_system_class
+    from .workloads.base import get_workload_class
+    from .debug import is_debug_enabled
+
+    workload_name = config["workload"]["name"]
+    workload_class = get_workload_class(workload_name)
+
+    if not workload_class:
+        console.print(f"[red]Error: Unknown workload '{workload_name}'[/]")
+        return
+
+    for system_config in config["systems"]:
+        system_name = system_config["name"]
+        system_kind = system_config["kind"]
+
+        # Check if already loaded
+        load_complete_file = output_dir / f"load_complete_{system_name}.json"
+        if load_complete_file.exists() and not force:
+            console.print(f"[green]✅ {system_name} data already loaded, skipping[/]")
+            continue
+
+        console.print(f"[blue]Loading data on {system_name}...[/]")
+
+        # Get system class and create instance
+        system_class = get_system_class(system_kind)
+        if not system_class:
+            console.print(f"[red]Error: Unknown system kind '{system_kind}'[/]")
+            continue
+
+        system = system_class(system_config)
+
+        # Create workload instance
+        workload = workload_class(config["workload"])
+
+        # Prepare workload (generate data, create schema, load data)
+        console.print(f"[dim]Preparing workload (data generation & loading)...[/]")
+        try:
+            if not workload.prepare(system):
+                console.print(f"[red]✗ Failed to prepare workload for {system_name}[/]")
+                continue
+            console.print(f"[green]✓ Workload preparation completed[/]")
+        except Exception as e:
+            console.print(f"[red]✗ Workload preparation failed: {e}[/]")
+            if is_debug_enabled():
+                import traceback
+                console.print(f"[dim]{traceback.format_exc()}[/]")
+            continue
+
+        # Save load completion marker
+        load_complete_data = {
+            "system_name": system_name,
+            "data_generation_s": 0.0,
+            "schema_creation_s": 0.0,
+            "data_loading_s": 0.0,
+        }
+
+        # Get preparation timings if available
+        if hasattr(workload, 'preparation_timings'):
+            prep_timings = workload.preparation_timings
+            load_complete_data["data_generation_s"] = prep_timings.get("data_generation_s", 0.0)
+            load_complete_data["schema_creation_s"] = prep_timings.get("schema_creation_s", 0.0)
+            load_complete_data["data_loading_s"] = prep_timings.get("data_loading_s", 0.0)
+
+        from datetime import datetime
+        load_complete_data["timestamp"] = datetime.now().isoformat()
+
+        with open(load_complete_file, 'w') as f:
+            json.dump(load_complete_data, f, indent=2)
+
+        console.print(f"[green]✓ Load completion marker saved for {system_name}[/]")
+'''
+
+        load_runner_file = self.package_dir / "benchkit" / "load_runner.py"
+        load_runner_file.write_text(load_runner_content)
+
+        # Create workload runner module (Phase 3 - query execution)
+        workload_runner_content = '''"""Workload execution runner for minimal packages (Phase 3 - queries only)."""
 
 from pathlib import Path
 from typing import Any
@@ -664,8 +860,8 @@ from rich.console import Console
 
 console = Console()
 
-def execute_workload(config: dict[str, Any], output_dir: Path, force: bool = False) -> None:
-    """Execute workload against configured systems."""
+def execute_queries(config: dict[str, Any], output_dir: Path, force: bool = False) -> None:
+    """Execute benchmark queries only (assumes data is already loaded)."""
     from .systems.base import get_system_class
     from .workloads.base import get_workload_class
     from .debug import is_debug_enabled
@@ -691,7 +887,7 @@ def execute_workload(config: dict[str, Any], output_dir: Path, force: bool = Fal
         system_name = system_config["name"]
         system_kind = system_config["kind"]
 
-        console.print(f"[blue]Running workload on {system_name}...[/]")
+        console.print(f"[blue]Running queries on {system_name}...[/]")
 
         # Get system class and create instance
         system_class = get_system_class(system_kind)
@@ -703,34 +899,6 @@ def execute_workload(config: dict[str, Any], output_dir: Path, force: bool = Fal
 
         # Create workload instance
         workload = workload_class(config["workload"])
-
-        # Prepare workload (generate data, create schema, load data)
-        console.print(f"[dim]Preparing workload (data generation & loading)...[/dim]")
-        try:
-            if not workload.prepare(system):
-                console.print(f"[red]✗ Failed to prepare workload for {system_name}[/red]")
-                continue
-            console.print(f"[green]✓ Workload preparation completed[/green]")
-        except Exception as e:
-            console.print(f"[red]✗ Workload preparation failed: {e}[/red]")
-            if is_debug_enabled():
-                import traceback
-                console.print(f"[dim]{traceback.format_exc()}[/dim]")
-            continue
-
-        # Save preparation timings
-        if hasattr(workload, 'preparation_timings'):
-            prep_timings = workload.preparation_timings.copy()
-            prep_timings['system'] = system_name
-            prep_timings['workload'] = workload.name
-            prep_timings['scale_factor'] = workload.scale_factor
-
-            # Save preparation timings to JSON
-            import json
-            prep_file = output_dir / f"preparation_{system_name}.json"
-            with open(prep_file, 'w') as f:
-                json.dump(prep_timings, f, indent=2)
-            console.print(f"[dim]Preparation timings saved to {prep_file}[/dim]")
 
         # Get workload configuration
         workload_config = config["workload"]
@@ -752,7 +920,7 @@ def execute_workload(config: dict[str, Any], output_dir: Path, force: bool = Fal
         # Get query names from workload object (which handles include/exclude logic)
         query_names = workload.queries_to_include if hasattr(workload, 'queries_to_include') else []
 
-        # Execute workload
+        # Execute queries only (data should already be loaded)
         console.print(f"[dim]Running queries...[/dim]")
         try:
             result_dict = workload.run_workload(
@@ -764,9 +932,9 @@ def execute_workload(config: dict[str, Any], output_dir: Path, force: bool = Fal
             warmup_results = result_dict.get("warmup", [])
             all_results.extend(measured_results)
             all_warmup_results.extend(warmup_results)
-            console.print(f"[green]✓ Completed workload on {system_name}[/]")
+            console.print(f"[green]✓ Completed queries on {system_name}[/]")
         except Exception as e:
-            console.print(f"[red]✗ Failed to run workload on {system_name}: {e}[/]")
+            console.print(f"[red]✗ Failed to run queries on {system_name}: {e}[/]")
             if is_debug_enabled():
                 import traceback
                 console.print(f"[dim]{traceback.format_exc()}[/dim]")
@@ -792,7 +960,7 @@ def execute_workload(config: dict[str, Any], output_dir: Path, force: bool = Fal
         runner_file.write_text(workload_runner_content)
 
         # Create minimal __main__.py
-        main_content = '''"""Entry point for minimal workload execution."""
+        main_content = '''"""Entry point for benchmark execution."""
 
 from .cli import app
 

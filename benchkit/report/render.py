@@ -471,6 +471,15 @@ class ReportRenderer:
 
             setup_summaries[system_name] = load_json(setup_file)
 
+        # Warn about missing setup summaries for expected systems
+        if system_names is not None:
+            for system_name in system_names:
+                if system_name not in setup_summaries:
+                    print(
+                        f"Warning: No setup summary found for {system_name}. "
+                        f"Setup commands will be missing from report."
+                    )
+
         return setup_summaries
 
     def _load_preparation_timings(
