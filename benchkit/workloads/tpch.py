@@ -1,7 +1,7 @@
 """TPC-H benchmark workload implementation."""
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from jinja2 import Environment, FileSystemLoader
 
