@@ -20,7 +20,8 @@ tokenized_words AS (
     SELECT
         order_month,
         cleaned_comment,
-        helpers.string_split(cleaned_comment, ' ') as word
+        -- tuned: use Lua UDF for string splitting
+        string_split(cleaned_comment, ' ') as word
     FROM combined_comments
 ),
 word_counts AS (

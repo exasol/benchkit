@@ -7,7 +7,7 @@ from .tpch import TPCH
 from ..systems import SystemUnderTest
 
 
-## TODO -- probably do not inherit from TPCH any more
+## TODO -- refactoring #14
 class Estuary(TPCH):
     """Inherits all but very few methods from the TPC-H benchmark"""
 
@@ -28,6 +28,8 @@ class Estuary(TPCH):
             trim_blocks=True,
             lstrip_blocks=True,
         )
+
+        assert 1 <= self.scale_factor <= 1000, "estuary benchmark only supports scale factors 1 to 1000"
 
     def get_workload_description(self) -> dict[str, Any]:
         """Return Estuary workload description."""
@@ -86,8 +88,8 @@ class Estuary(TPCH):
             print(f"Loading {table_name}...")
 
             generator = TableGenerator(table_name)
-            # NOMERGE, NOCOMMIT: reduce scale factor for testing
-            generator.total_rows /= 1000
+            # generator configuration is set up for SF 1000
+            generator.total_rows /= (1000 / self.scale_factor)
 
             success = system.load_data_from_iterable(
                 table_name,

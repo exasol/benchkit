@@ -16,16 +16,12 @@ WITH customer_sales AS (
         ON O.O_CUSTKEY = C.C_CUSTKEY
     GROUP BY TO_CHAR(O.O_ORDERDATE, 'yyyy - MMMM'), C.C_NAME
 ),
-number_extraction AS (
-    SELECT customer_sales.*,
-        REGEXP_REPLACE(C_NAME, '[^0-9]', '') AS customer_number
-    FROM customer_sales
-),
 digit_sum_calc AS (
     SELECT
         order_month, C_NAME, total_spent, total_quantity, price_rank, quantity_rank, customer_number,
-        helpers.digit_sum(customer_number) AS number_sum
-    FROM number_extraction
+        -- tuned: Lua UDF
+        quersumme(C_NAME) AS number_sum
+    FROM customer_sales
 )
 SELECT order_month, C_NAME, total_spent, total_quantity, price_rank, quantity_rank
 FROM digit_sum_calc
