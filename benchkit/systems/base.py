@@ -219,6 +219,17 @@ class SystemUnderTest(ABC):
 
     @abstractmethod
     def load_data_from_iterable(self, table_name: str, data_source, **kwargs: Any) -> bool:
+        """
+        Load data into a table.
+
+        Args:
+            table_name: Name of the target table
+            data_source: An iterable containing row data (could be list[list[Any]] or list[str] or ...)
+            **kwargs: Additional parameters for data loading
+
+        Returns:
+            True if loading successful, False otherwise
+        """
         pass
 
     @abstractmethod

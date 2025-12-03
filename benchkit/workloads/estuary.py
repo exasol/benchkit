@@ -13,7 +13,7 @@ class Estuary(TPCH):
 
     @classmethod
     def get_python_dependencies(cls) -> list[str]:
-        """Return Python packages required for TPC-H workload."""
+        """Return Python packages required for Estuary workload."""
         return ["Faker>=38.0.0"]  # For data generation
 
     def __init__(self, config: dict[str, Any]):
@@ -76,7 +76,7 @@ class Estuary(TPCH):
         return True
 
     def load_data(self, system: SystemUnderTest) -> bool:
-        """Load Estuary data into the database system."""
+        """Load Estuary data into the database system, directly streaming from generator to database"""
         from .dbgen_estuary import TableGenerator
 
         schema_name = self.get_schema_name()

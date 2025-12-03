@@ -2,6 +2,7 @@ from typing import Generator, Any
 
 
 class TableGenerator:
+    """Wrapper class to generate row data for the TPC-H tables using the estuary generator classes"""
     def __init__(self, table_name: str):
         from faker import Faker
         from .customer import generate_customer_batch
@@ -32,6 +33,7 @@ class TableGenerator:
         }[table_name]
 
     def rows(self) -> Generator[list[Any], None, None]:
+        """row generator"""
         from . import config as cfg
 
         remaining_rows: int = self.total_rows

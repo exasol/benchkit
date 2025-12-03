@@ -1604,6 +1604,9 @@ class ClickHouseSystem(SystemUnderTest):
             self._log(f"Failed to load data into {table_name}: {e}")
             return False
 
+    def load_data_from_iterable(self, table_name: str, data_source, **kwargs: Any) -> bool:
+        raise NotImplementedError("clickhouse.load_data_from_iterable")
+
     def execute_query(
         self,
         query: str,
