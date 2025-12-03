@@ -100,7 +100,14 @@ class ExasolSystem(SystemUnderTest):
     ):
         super().__init__(config, output_callback, workload_config)
         self.setup_method = self.setup_config.get("method", "docker")
-        self.container_name = f"exasol_{self.name}"
+
+        # Include project_id in container name for parallel project isolation
+        project_id = config.get("project_id", "")
+        if project_id:
+            self.container_name = f"exasol_{project_id}_{self.name}"
+        else:
+            self.container_name = f"exasol_{self.name}"
+
         self.license_file = self.setup_config.get("license_file")
         self.cluster_config = self.setup_config.get("cluster", {})
 

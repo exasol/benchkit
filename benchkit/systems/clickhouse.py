@@ -116,7 +116,14 @@ class ClickHouseSystem(SystemUnderTest):
     ):
         super().__init__(config, output_callback, workload_config)
         self.setup_method = self.setup_config.get("method", "docker")
-        self.container_name = f"clickhouse_{self.name}"
+
+        # Include project_id in container name for parallel project isolation
+        project_id = config.get("project_id", "")
+        if project_id:
+            self.container_name = f"clickhouse_{project_id}_{self.name}"
+        else:
+            self.container_name = f"clickhouse_{self.name}"
+
         # Use 'or {}' to handle case where 'extra' exists but is None
         self.config_profile = (self.setup_config.get("extra") or {}).get(
             "config_profile", "default"
