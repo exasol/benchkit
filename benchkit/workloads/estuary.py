@@ -82,9 +82,6 @@ class Estuary(TPCH):
         schema_name = self.get_schema_name()
 
         for table_name in self.get_table_names():
-            if table_name == "nation":
-                # estuary does not use nation, and there is no data generator for it
-                continue
             print(f"Loading {table_name}...")
 
             generator = TableGenerator(table_name)
