@@ -13,7 +13,7 @@ env:
   # Instance configuration per system
   instances:
     exasol:
-      instance_type: "r5d.2xlarge"  # 16 vCPUs, 128GB RAM, 2x300GB NVMe local storage
+      instance_type: "r5ad.xlarge"  # 4 vCPUs, 32GB RAM, 1x150 GB NVMe local storage
       disk:
         type: "local"
       label: "sr-bench-exa"
@@ -39,7 +39,7 @@ systems:
       license_file: "configs/exasol.license"  # License file path
       schema: "estuary"
       extra:
-        dbram: "32g"             # Database RAM allocation
+        dbram: "16g"             # Database RAM allocation
         optimizer_mode: "analytical"
         # Exasol database parameters for analytical workload optimization
         db_params:
@@ -53,7 +53,7 @@ systems:
 
 workload:
   name: "estuary"
-  scale_factor: 10              # 1GB dataset for test
+  scale_factor: 10              # 10GB dataset for test
   runs_per_query: 3             # Number of measured runs
   warmup_runs: 1                # Warmup runs before measurement
   generator: "faker"            # estuary supports 'faker' and 'dbgen' (to be done)
