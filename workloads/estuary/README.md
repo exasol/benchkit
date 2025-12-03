@@ -8,7 +8,7 @@ This is a benchmark using the TPC-H schema and data, but different queries.
 
 > [!WARNING]
 > The benchmark is currently non-functional for the official scale factor of 1000:
-> The generator classes try top create unique numbers, which is simply not possible given the
+> The generator classes try to create unique numbers, which is simply not possible given the
 > required number of rows and data types.
 
 ## Main Focus
