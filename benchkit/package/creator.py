@@ -9,11 +9,11 @@ from typing import Any, Literal, cast
 
 from rich.console import Console
 
+from ..systems.base import SystemUnderTest
+from ..util import ensure_directory
 from .code_minimizer import CodeMinimizer
 from .formatter import PackageFormatter
 from .import_cleaner import ImportCleaner
-from ..systems.base import SystemUnderTest
-from ..util import ensure_directory
 
 console = Console()
 
@@ -327,7 +327,7 @@ class WorkloadPackage:
                 "parsers.py"
             ],  # Only parsers, no __init__.py to avoid import issues
             "package": [
-                "markers.py", # imported by systems/base
+                "markers.py",  # imported by systems/base
             ],
             "systems": None,  # Copy all - needed for database connections
             "workloads": None,  # Copy all - needed for workload execution

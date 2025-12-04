@@ -1,13 +1,13 @@
 """TPC-H benchmark workload implementation."""
 
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
 
-from .base import Workload
 from ..systems.base import SystemUnderTest
 from ..util import safe_command
+from .base import Workload
 
 
 class TPCH(Workload):
@@ -406,7 +406,7 @@ class TPCH(Workload):
 
         return True
 
-    def get_queries(self, system: Optional[SystemUnderTest] = None) -> dict[str, str]:
+    def get_queries(self, system: SystemUnderTest|None = None) -> dict[str, str]:
         """Get TPC-H queries with templates and variants resolved for the target system."""
         # Use provided system or stored system
         target_system = system or self._current_system

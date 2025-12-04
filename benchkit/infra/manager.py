@@ -610,9 +610,9 @@ class InfraManager:
             os.chdir(original_cwd)
 
         if result["success"]:
-            try:
-                import json
+            import json
 
+            try:
                 outputs = json.loads(result["stdout"])
 
                 # Extract generic system information from Terraform outputs
@@ -848,11 +848,6 @@ class InfraManager:
                         else "unknown"
                     )
                     priv_ip = private_ip[idx]
-                    ssh_cmd = (
-                        system_ssh_commands.get(system_name, [])[idx]
-                        if isinstance(system_ssh_commands.get(system_name), list)
-                        else f"ssh ubuntu@{pub_ip}"
-                    )
                     print(f"       Node {idx}: {pub_ip} ({priv_ip})")
             else:
                 # Extract single values from lists if needed
@@ -920,7 +915,7 @@ class InfraManager:
 
         # Timeout reached
         failed_instances = []
-        for system_name, node_idx, public_ip in instances_to_check:
+        for system_name, node_idx, _public_ip in instances_to_check:
             if (system_name, node_idx) not in ready_instances:
                 node_label = (
                     f"-node{node_idx}"

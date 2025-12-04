@@ -3,8 +3,8 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
 
-from .tpch import TPCH
 from ..systems import SystemUnderTest
+from .tpch import TPCH
 
 
 ## TODO -- refactoring #14
@@ -20,7 +20,9 @@ class Estuary(TPCH):
         super().__init__(config)
 
         # Override workload folders
-        self.workload_dir = Path(__file__).parent.parent.parent / "workloads" / "estuary"
+        self.workload_dir = (
+            Path(__file__).parent.parent.parent / "workloads" / "estuary"
+        )
         self.template_env = Environment(
             loader=FileSystemLoader(
                 [self.workload_dir / "queries", self.workload_dir / "setup"]
@@ -29,7 +31,9 @@ class Estuary(TPCH):
             lstrip_blocks=True,
         )
 
-        assert 1 <= self.scale_factor <= 1000, "estuary benchmark only supports scale factors 1 to 1000"
+        assert (
+            1 <= self.scale_factor <= 1000
+        ), "estuary benchmark only supports scale factors 1 to 1000"
 
     def get_workload_description(self) -> dict[str, Any]:
         """Return Estuary workload description."""
@@ -86,7 +90,7 @@ class Estuary(TPCH):
 
             generator = TableGenerator(table_name)
             # generator configuration is set up for SF 1000
-            generator.total_rows /= (1000 / self.scale_factor)
+            generator.total_rows /= 1000 / self.scale_factor
 
             success = system.load_data_from_iterable(
                 table_name,

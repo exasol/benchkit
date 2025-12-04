@@ -3,9 +3,11 @@
 import re
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable, Iterable
 
 from benchkit.common.markers import exclude_from_package
+
 from ..util import safe_command
 
 
@@ -218,7 +220,9 @@ class SystemUnderTest(ABC):
         pass
 
     @abstractmethod
-    def load_data_from_iterable(self, table_name: str, data_source, **kwargs: Any) -> bool:
+    def load_data_from_iterable(
+        self, table_name: str, data_source: Iterable[Any], **kwargs: Any
+    ) -> bool:
         """
         Load data into a table.
 

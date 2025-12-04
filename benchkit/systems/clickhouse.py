@@ -1,13 +1,14 @@
 """ClickHouse database system implementation."""
 
 from pathlib import Path
-from typing import Any, Callable, cast
-
+from typing import Any, cast
+from collections.abc import Callable, Iterable
 import clickhouse_connect
 
 from benchkit.common.markers import exclude_from_package
-from .base import SystemUnderTest
+
 from ..util import Timer
+from .base import SystemUnderTest
 
 
 class ClickHouseSystem(SystemUnderTest):
@@ -215,8 +216,6 @@ class ClickHouseSystem(SystemUnderTest):
                 )
                 return False
 
-        return False
-
     def _get_client(self) -> Any:
         """Get a client connection to ClickHouse database using clickhouse-connect."""
         if clickhouse_connect is None:
@@ -345,8 +344,7 @@ class ClickHouseSystem(SystemUnderTest):
                 self._external_host = mgr.public_ip
 
                 # For nodes after the first, temporarily disable recording to avoid duplicates
-                if idx > 0:
-                    commands_before = len(self.setup_commands)
+                commands_before: int = len(self.setup_commands) if idx > 0 else 0
 
                 try:
                     # Run core installation on this node
@@ -917,7 +915,7 @@ class ClickHouseSystem(SystemUnderTest):
             if idx == 0:
                 self.record_setup_command(
                     f"sudo tee {macros_path} > /dev/null << 'EOF'\n{macros_xml}\nEOF",
-                    f"Create node-specific macros (example for node 0)",
+                    "Create node-specific macros (example for node 0)",
                     "cluster_configuration",
                 )
 
@@ -947,7 +945,7 @@ class ClickHouseSystem(SystemUnderTest):
         Each shard has only 1 replica.
         """
         shard_entries = []
-        for idx, ip in enumerate(node_ips):
+        for _idx, ip in enumerate(node_ips):
             shard_entry = f"""        <shard>
             <replica>
                 <host>{ip}</host>
@@ -1196,8 +1194,7 @@ class ClickHouseSystem(SystemUnderTest):
             self._cloud_instance_manager = mgr
 
             # For nodes after the first, temporarily disable recording to avoid duplicates
-            if idx > 0:
-                commands_before = len(self.setup_commands)
+            commands_before = len(self.setup_commands) if idx > 0 else 0
 
             try:
                 # Run single-node storage setup on this node
@@ -1604,7 +1601,9 @@ class ClickHouseSystem(SystemUnderTest):
             self._log(f"Failed to load data into {table_name}: {e}")
             return False
 
-    def load_data_from_iterable(self, table_name: str, data_source, **kwargs: Any) -> bool:
+    def load_data_from_iterable(
+        self, table_name: str, data_source: Iterable[Any], **kwargs: Any
+    ) -> bool:
         raise NotImplementedError("clickhouse.load_data_from_iterable")
 
     def execute_query(

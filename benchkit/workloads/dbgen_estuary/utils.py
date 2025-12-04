@@ -4,25 +4,25 @@ import logging
 import os
 import random
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
+from typing import Any
 
 
 def setup_logging(level: int = logging.INFO) -> None:
     """Configure logging for the data generation process."""
     logging.basicConfig(
         level=level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
 
 
 def random_date(start: datetime, end: datetime) -> datetime:
     """Generate a random date between start and end dates.
-    
+
     Args:
         start: The earliest possible date
         end: The latest possible date
-        
+
     Returns:
         A random datetime between start and end
     """
@@ -33,10 +33,10 @@ def random_date(start: datetime, end: datetime) -> datetime:
 
 def ensure_output_directory(output_dir: str) -> None:
     """Ensure the output directory exists, create if it doesn't.
-    
+
     Args:
         output_dir: Path to the output directory
-        
+
     Raises:
         OSError: If directory cannot be created
     """
@@ -49,14 +49,16 @@ def ensure_output_directory(output_dir: str) -> None:
             raise
 
 
-def save_batch_to_csv(data: List[Dict[str, Any]], filename: str, output_dir: str) -> None:
+def save_batch_to_csv(
+    data: list[dict[str, Any]], filename: str, output_dir: str
+) -> None:
     """Save a batch of data to CSV file.
-    
+
     Args:
         data: List of dictionaries containing the data
         filename: Name of the output file
         output_dir: Directory to save the file in
-        
+
     Raises:
         Exception: If file cannot be written
     """
@@ -74,11 +76,11 @@ def save_batch_to_csv(data: List[Dict[str, Any]], filename: str, output_dir: str
 
 def calculate_batches(total_records: int, records_per_batch: int) -> int:
     """Calculate the number of batches needed.
-    
+
     Args:
         total_records: Total number of records to generate
         records_per_batch: Number of records per batch
-        
+
     Returns:
         Number of batches needed
     """

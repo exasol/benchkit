@@ -23,24 +23,56 @@ END_DATE = "1998-12-31"
 
 # Domain values
 NATION_KEYS: List[int] = list(range(1, 26))  # 25 nations
-CUSTOMER_SEGMENTS: List[str] = ['AUTOMOBILE', 'BUILDING', 'FURNITURE', 'HOUSEHOLD', 'MACHINERY']
+CUSTOMER_SEGMENTS: List[str] = [
+    "AUTOMOBILE",
+    "BUILDING",
+    "FURNITURE",
+    "HOUSEHOLD",
+    "MACHINERY",
+]
 
 # Orders
-ORDER_STATUSES: List[str] = ['O', 'F', 'P']
-ORDER_PRIORITIES: List[str] = ['1-URGENT', '2-HIGH', '3-MEDIUM', '4-NOT SPECIFIED', '5-LOW']
+ORDER_STATUSES: List[str] = ["O", "F", "P"]
+ORDER_PRIORITIES: List[str] = [
+    "1-URGENT",
+    "2-HIGH",
+    "3-MEDIUM",
+    "4-NOT SPECIFIED",
+    "5-LOW",
+]
 
 # Line items
-RETURN_FLAGS: List[str] = ['R', 'A', 'N']
-LINE_STATUSES: List[str] = ['O', 'F']
-SHIP_INSTRUCTIONS: List[str] = ['DELIVER IN PERSON', 'COLLECT COD', 'TAKE BACK RETURN', 'NONE']
-SHIP_MODES: List[str] = ['TRUCK', 'MAIL', 'SHIP', 'RAIL', 'AIR', 'FOB', 'REG AIR']
+RETURN_FLAGS: List[str] = ["R", "A", "N"]
+LINE_STATUSES: List[str] = ["O", "F"]
+SHIP_INSTRUCTIONS: List[str] = [
+    "DELIVER IN PERSON",
+    "COLLECT COD",
+    "TAKE BACK RETURN",
+    "NONE",
+]
+SHIP_MODES: List[str] = ["TRUCK", "MAIL", "SHIP", "RAIL", "AIR", "FOB", "REG AIR"]
 
 # Parts
-MANUFACTURERS: List[str] = ['Manufacturer#1', 'Manufacturer#2', 'Manufacturer#3', 'Manufacturer#4', 'Manufacturer#5']
-BRANDS: List[str] = ['Brand#1', 'Brand#2', 'Brand#3', 'Brand#4', 'Brand#5']
-PART_TYPES: List[str] = ['Type#1', 'Type#2', 'Type#3', 'Type#4', 'Type#5']
+MANUFACTURERS: List[str] = [
+    "Manufacturer#1",
+    "Manufacturer#2",
+    "Manufacturer#3",
+    "Manufacturer#4",
+    "Manufacturer#5",
+]
+BRANDS: List[str] = ["Brand#1", "Brand#2", "Brand#3", "Brand#4", "Brand#5"]
+PART_TYPES: List[str] = ["Type#1", "Type#2", "Type#3", "Type#4", "Type#5"]
 PART_SIZES: List[int] = [1, 2, 3, 4, 5, 6, 7, 8]
-CONTAINERS: List[str] = ['SM CASE', 'SM BOX', 'SM PACK', 'SM PKG', 'LG CASE', 'LG BOX', 'LG PACK', 'LG PKG']
+CONTAINERS: List[str] = [
+    "SM CASE",
+    "SM BOX",
+    "SM PACK",
+    "SM PKG",
+    "LG CASE",
+    "LG BOX",
+    "LG PACK",
+    "LG PKG",
+]
 
 # Value ranges
 ACCOUNT_BALANCE_RANGE = (-999.99, 9999.99)

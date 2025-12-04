@@ -2,13 +2,15 @@
 
 import os
 from pathlib import Path
-from typing import Any, Callable, cast
+from typing import Any, cast
+from collections.abc import Callable, Iterable
 
 import pyexasol  # type: ignore
 
 from benchkit.common.markers import exclude_from_package
-from .base import SystemUnderTest
+
 from ..util import Timer
+from .base import SystemUnderTest
 
 
 class ExasolSystem(SystemUnderTest):
@@ -1821,7 +1823,9 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
             if conn:
                 conn.close()
 
-    def load_data_from_iterable(self, table_name: str, data_source, **kwargs: Any) -> bool:
+    def load_data_from_iterable(
+        self, table_name: str, data_source: Iterable[Any], **kwargs: Any
+    ) -> bool:
         schema_name: str = kwargs.get("schema", "benchmark")
         conn: pyexasol.ExaConnection | None = None
 
@@ -1835,9 +1839,7 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
                     conn.execute(f"OPEN SCHEMA {schema_name}")
 
             self._log(f"Loading (iterable) into {schema_name}.{table_name}...")
-            conn.import_from_iterable(
-                data_source, table=table_name
-            )
+            conn.import_from_iterable(data_source, table=table_name)
 
             # Verify data was loaded
             result = conn.execute(f"SELECT COUNT(*) FROM {table_name}")

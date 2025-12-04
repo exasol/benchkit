@@ -58,6 +58,7 @@ class WorkloadConfig(BaseModel):
     def validate_workload_name(cls, v: str) -> str:
         """Ensure workload name is valid."""
         from benchkit.workloads import WORKLOAD_IMPLEMENTATIONS
+
         valid_workloads = WORKLOAD_IMPLEMENTATIONS.keys()
 
         if v not in valid_workloads:

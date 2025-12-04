@@ -8,42 +8,48 @@ import argparse
 import logging
 import random
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
 from faker import Faker
 
 from .config import (
-    LINEITEM_TOTAL_RECORDS,
-    DEFAULT_RECORDS_PER_BATCH,
     DEFAULT_OUTPUT_DIR,
-    RETURN_FLAGS,
+    DEFAULT_RECORDS_PER_BATCH,
+    DISCOUNT_RANGE,
+    END_DATE,
+    LINE_NUMBER_RANGE,
     LINE_STATUSES,
+    LINEITEM_EXTENDED_PRICE_RANGE,
+    LINEITEM_TOTAL_RECORDS,
+    QUANTITY_RANGE,
+    RETURN_FLAGS,
     SHIP_INSTRUCTIONS,
     SHIP_MODES,
-    LINEITEM_EXTENDED_PRICE_RANGE,
-    DISCOUNT_RANGE,
-    TAX_RANGE,
-    QUANTITY_RANGE,
-    LINE_NUMBER_RANGE,
     START_DATE,
-    END_DATE
+    TAX_RANGE,
 )
-from .utils import save_batch_to_csv, calculate_batches, ensure_output_directory, setup_logging, random_date
+from .utils import (
+    calculate_batches,
+    ensure_output_directory,
+    random_date,
+    save_batch_to_csv,
+    setup_logging,
+)
 
 
 def generate_lineitem_batch(fake: Faker, batch_size: int) -> List[Dict[str, Any]]:
     """Generate a batch of lineitem data.
-    
+
     Args:
         fake: Faker instance for generating synthetic data
         batch_size: Number of lineitem records to generate
-        
+
     Returns:
         List of dictionaries containing lineitem data
     """
     data = []
-    start_date = datetime.strptime(START_DATE, '%Y-%m-%d')
-    end_date = datetime.strptime(END_DATE, '%Y-%m-%d')
+    start_date = datetime.strptime(START_DATE, "%Y-%m-%d")
+    end_date = datetime.strptime(END_DATE, "%Y-%m-%d")
 
     for _ in range(batch_size):
         orderkey = fake.unique.random_number(digits=8)
@@ -63,34 +69,36 @@ def generate_lineitem_batch(fake: Faker, batch_size: int) -> List[Dict[str, Any]
         shipmode = random.choice(SHIP_MODES)
         comment = fake.text()
 
-        data.append({
-            'orderkey': orderkey,
-            'partkey': partkey,
-            'suppkey': suppkey,
-            'linenumber': linenumber,
-            'quantity': quantity,
-            'extendedprice': extendedprice,
-            'discount': discount,
-            'tax': tax,
-            'returnflag': returnflag,
-            'linestatus': linestatus,
-            'shipdate': shipdate.strftime('%Y-%m-%d'),
-            'commitdate': commitdate.strftime('%Y-%m-%d'),
-            'receiptdate': receiptdate.strftime('%Y-%m-%d'),
-            'shipinstruct': shipinstruct,
-            'shipmode': shipmode,
-            'comment': comment
-        })
+        data.append(
+            {
+                "orderkey": orderkey,
+                "partkey": partkey,
+                "suppkey": suppkey,
+                "linenumber": linenumber,
+                "quantity": quantity,
+                "extendedprice": extendedprice,
+                "discount": discount,
+                "tax": tax,
+                "returnflag": returnflag,
+                "linestatus": linestatus,
+                "shipdate": shipdate.strftime("%Y-%m-%d"),
+                "commitdate": commitdate.strftime("%Y-%m-%d"),
+                "receiptdate": receiptdate.strftime("%Y-%m-%d"),
+                "shipinstruct": shipinstruct,
+                "shipmode": shipmode,
+                "comment": comment,
+            }
+        )
     return data
 
 
 def generate_lineitem_data(
-        total_records: int = LINEITEM_TOTAL_RECORDS,
-        records_per_batch: int = DEFAULT_RECORDS_PER_BATCH,
-        output_dir: str = DEFAULT_OUTPUT_DIR
+    total_records: int = LINEITEM_TOTAL_RECORDS,
+    records_per_batch: int = DEFAULT_RECORDS_PER_BATCH,
+    output_dir: str = DEFAULT_OUTPUT_DIR,
 ) -> None:
     """Generate lineitem data and save to CSV files.
-    
+
     Args:
         total_records: Total number of lineitem records to generate
         records_per_batch: Number of records per batch
@@ -99,7 +107,9 @@ def generate_lineitem_data(
     setup_logging()
     logger = logging.getLogger(__name__)
 
-    logger.info(f"Starting lineitem data generation: {total_records} records in batches of {records_per_batch}")
+    logger.info(
+        f"Starting lineitem data generation: {total_records} records in batches of {records_per_batch}"
+    )
 
     ensure_output_directory(output_dir)
     fake = Faker()
@@ -108,7 +118,7 @@ def generate_lineitem_data(
     for i in range(num_batches):
         logger.info(f"Generating lineitem batch {i + 1}/{num_batches}")
         batch_data = generate_lineitem_batch(fake, records_per_batch)
-        filename = f'lineitem_batch_{i + 1}.csv'
+        filename = f"lineitem_batch_{i + 1}.csv"
         save_batch_to_csv(batch_data, filename, output_dir)
 
     logger.info(f"Lineitem data generation completed. Generated {num_batches} batches.")
@@ -116,24 +126,24 @@ def generate_lineitem_data(
 
 def main() -> None:
     """Main entry point for the lineitem data generator."""
-    parser = argparse.ArgumentParser(description='Generate TPC-H lineitem data')
+    parser = argparse.ArgumentParser(description="Generate TPC-H lineitem data")
     parser.add_argument(
-        '--total-records',
+        "--total-records",
         type=int,
         default=LINEITEM_TOTAL_RECORDS,
-        help=f'Total number of records to generate (default: {LINEITEM_TOTAL_RECORDS})'
+        help=f"Total number of records to generate (default: {LINEITEM_TOTAL_RECORDS})",
     )
     parser.add_argument(
-        '--batch-size',
+        "--batch-size",
         type=int,
         default=DEFAULT_RECORDS_PER_BATCH,
-        help=f'Number of records per batch (default: {DEFAULT_RECORDS_PER_BATCH})'
+        help=f"Number of records per batch (default: {DEFAULT_RECORDS_PER_BATCH})",
     )
     parser.add_argument(
-        '--output-dir',
+        "--output-dir",
         type=str,
         default=DEFAULT_OUTPUT_DIR,
-        help=f'Output directory for CSV files (default: {DEFAULT_OUTPUT_DIR})'
+        help=f"Output directory for CSV files (default: {DEFAULT_OUTPUT_DIR})",
     )
 
     args = parser.parse_args()
@@ -141,9 +151,9 @@ def main() -> None:
     generate_lineitem_data(
         total_records=args.total_records,
         records_per_batch=args.batch_size,
-        output_dir=args.output_dir
+        output_dir=args.output_dir,
     )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

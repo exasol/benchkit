@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from ..systems.base import SystemUnderTest
 
@@ -60,7 +60,7 @@ class Workload(ABC):
         pass
 
     @abstractmethod
-    def get_queries(self, system: Optional[SystemUnderTest] = None) -> dict[str, str]:
+    def get_queries(self, system: SystemUnderTest|None = None) -> dict[str, str]:
         """
         Get the benchmark queries.
 

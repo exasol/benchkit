@@ -435,7 +435,6 @@ def check(
     """Check and display configuration file contents."""
     from pathlib import Path
 
-    import yaml
     from rich.panel import Panel
     from rich.text import Text
 
@@ -702,7 +701,7 @@ def infra(
 
     # Display project isolation info
     project_id = cfg.get("project_id", "default")
-    console.print(f"[bold blue]Infrastructure Management[/bold blue]")
+    console.print("[bold blue]Infrastructure Management[/bold blue]")
     console.print(f"  Project: [cyan]{project_id}[/cyan]")
     console.print(f"  State:   [cyan]{manager.project_state_dir}[/cyan]")
     if project_id == "default":
@@ -868,7 +867,6 @@ def _show_project_status_basic(project: str, project_dir: Path) -> None:
 def _show_detailed_status(cfg: dict[str, Any], config_file: Path) -> None:
     """Show detailed status for a benchmark including config information."""
     import json
-    from datetime import datetime
 
     project_id = cfg.get("project_id", "unknown")
     results_dir = Path("results") / project_id
@@ -1261,7 +1259,7 @@ def _probe_remote_systems(config: dict[str, Any], outdir: Path) -> bool:
         success_count = 0
         total_instances = len(instances_to_probe)
 
-        for system_name, node_idx, public_ip, private_ip in instances_to_probe:
+        for system_name, node_idx, public_ip, _private_ip in instances_to_probe:
             # Show node index for multinode systems
             node_label = (
                 f"-node{node_idx}"
