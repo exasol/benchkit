@@ -11,8 +11,8 @@ from typing import Any, Literal
 import pandas as pd
 from rich.console import Console
 
+from ..common.markers import exclude_from_package
 from ..debug import is_debug_enabled
-from ..package.markers import exclude_from_package
 from ..systems import create_system
 from ..systems.base import SystemUnderTest
 from ..util import ensure_directory, load_json, save_json
@@ -106,8 +106,6 @@ class BenchmarkRunner:
 
     def _load_provisioning_timing(self) -> float:
         """Load infrastructure provisioning timing from saved file."""
-        import json
-
         timing_file = self.output_dir / "infrastructure_provisioning.json"
         if timing_file.exists():
             try:
@@ -126,8 +124,6 @@ class BenchmarkRunner:
         self, system_name: str, elapsed_seconds: float
     ) -> None:
         """Save installation timing for a system to a dedicated file."""
-        import json
-
         timing_file = self.output_dir / f"installation_{system_name}.json"
         timing_data = {
             "system_name": system_name,
@@ -145,8 +141,6 @@ class BenchmarkRunner:
 
     def _load_installation_timing(self, system_name: str) -> float:
         """Load installation timing for a system from saved file."""
-        import json
-
         timing_file = self.output_dir / f"installation_{system_name}.json"
         if timing_file.exists():
             try:

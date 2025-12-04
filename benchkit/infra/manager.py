@@ -831,7 +831,7 @@ class InfraManager:
         system_private_ips = terraform_outputs.get("system_private_ips", {})
         system_ssh_commands = terraform_outputs.get("system_ssh_commands", {})
 
-        for system_name in set(s for s, _, _ in instances_to_check):
+        for system_name in {s for s, _, _ in instances_to_check}:
             instance_id = system_instance_ids.get(system_name, "unknown")
             private_ip = system_private_ips.get(system_name, "unknown")
             ssh_command = system_ssh_commands.get(system_name, "unknown")

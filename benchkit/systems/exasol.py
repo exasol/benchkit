@@ -120,8 +120,6 @@ class ExasolSystem(SystemUnderTest):
 
     def _resolve_ip_address(self, var_name: str) -> str | None:
         """Resolve IP address from configuration or infrastructure state."""
-        from typing import cast
-
         from benchkit.infra.manager import InfraManager
 
         # Use infrastructure manager to resolve IP addresses
@@ -159,9 +157,7 @@ class ExasolSystem(SystemUnderTest):
                     "SSL error on localhost, attempting connection without SSL verification"
                 )
                 kwargs["websocket_sslopt"] = {"cert_reqs": ssl.CERT_NONE}
-                return pyexasol.connect(
-                    dsn=dsn, user=user, password=password, **kwargs
-                )
+                return pyexasol.connect(dsn=dsn, user=user, password=password, **kwargs)
 
             # Check for certificate/PKIX error and extract fingerprint
             if any(
@@ -714,7 +710,7 @@ sudo rm -f %s
 sudo ln -sf "$INSTANCE_STORE" %s
 
 echo "Symlink: %s -> $INSTANCE_STORE"
-""" % (
+""" % (  # noqa: UP031
                     target_device,
                     symlink_path,
                     symlink_path,

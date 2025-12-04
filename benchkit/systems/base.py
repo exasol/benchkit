@@ -277,7 +277,7 @@ class SystemUnderTest(ABC):
             node_info = f"all_nodes_{len(managers)}" if len(managers) > 1 else None
             self.record_setup_command(
                 self._sanitize_command_for_report(command),
-                description or f"Execute on all nodes",
+                description or "Execute on all nodes",
                 "setup",
                 node_info,
             )
@@ -753,7 +753,7 @@ class SystemUnderTest(ABC):
         """Override in subclasses if password key varies (e.g., db_password vs password)."""
         return "password"
 
-    @classmethod
+    @classmethod  # noqa: B027
     def _extend_connection_info(
         cls, conn_info: dict[str, Any], setup_config: dict[str, Any]
     ) -> None:
@@ -1501,7 +1501,7 @@ class SystemUnderTest(ABC):
             # Allow subclasses to update credentials from config
             self._update_credentials_from_config()
 
-    @exclude_from_package
+    @exclude_from_package  # noqa: B027
     def _update_credentials_from_config(self) -> None:
         """
         Hook for subclasses to update credentials after cloud manager is set.

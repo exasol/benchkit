@@ -2,7 +2,7 @@
 
 from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import clickhouse_connect
 
