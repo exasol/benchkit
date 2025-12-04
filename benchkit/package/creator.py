@@ -327,10 +327,11 @@ class WorkloadPackage:
                 "parsers.py"
             ],  # Only parsers, no __init__.py to avoid import issues
             "package": [
-                "markers.py", # imported by systems/base
+                "markers.py",  # imported by systems/base
             ],
             "systems": None,  # Copy all - needed for database connections
             "workloads": None,  # Copy all - needed for workload execution
+            "common": None,
         }
 
         for module, files in workload_modules.items():

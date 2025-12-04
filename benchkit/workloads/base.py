@@ -60,7 +60,7 @@ class Workload(ABC):
         pass
 
     @abstractmethod
-    def get_queries(self, system: "SystemUnderTest | None" = None) -> dict[str, str]:
+    def get_queries(self, system: SystemUnderTest | None = None) -> dict[str, str]:
         """
         Get the benchmark queries.
 
@@ -489,7 +489,7 @@ class Workload(ABC):
                 f.stat().st_size for f in self.data_dir.rglob("*") if f.is_file()
             )
             info["total_size_bytes"] = total_size
-            info["total_size_mb"] = round(total_size / (1024 * 1024), 2)
+            info["total_size_mb"] = int(round(total_size / (1024 * 1024), 2))
 
         return info
 

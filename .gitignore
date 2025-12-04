@@ -47,9 +47,9 @@ ehthumbs.db
 Thumbs.db
 
 # Results and generated content
-results/*/reports/*/workload-package
+results/
 docs/*/reports/*/workload-package
-packages/*/
+packages/
 !posts/.gitkeep
 
 # Temporary files

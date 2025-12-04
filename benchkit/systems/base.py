@@ -2,10 +2,12 @@
 
 import re
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
-from ..package.markers import exclude_from_package
+from benchkit.common.markers import exclude_from_package
+
 from ..util import safe_command
 
 
@@ -210,6 +212,23 @@ class SystemUnderTest(ABC):
         Args:
             table_name: Name of the target table
             data_path: Path to the data file
+            **kwargs: Additional parameters for data loading
+
+        Returns:
+            True if loading successful, False otherwise
+        """
+        pass
+
+    @abstractmethod
+    def load_data_from_iterable(
+        self, table_name: str, data_source: Iterable[Any], **kwargs: Any
+    ) -> bool:
+        """
+        Load data into a table.
+
+        Args:
+            table_name: Name of the target table
+            data_source: An iterable containing row data (could be list[list[Any]] or list[str] or ...)
             **kwargs: Additional parameters for data loading
 
         Returns:

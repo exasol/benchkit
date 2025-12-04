@@ -57,7 +57,10 @@ class WorkloadConfig(BaseModel):
     @validator("name")
     def validate_workload_name(cls, v: str) -> str:
         """Ensure workload name is valid."""
-        valid_workloads = {"tpch", "tpcc"}
+        from benchkit.workloads import WORKLOAD_IMPLEMENTATIONS
+
+        valid_workloads = WORKLOAD_IMPLEMENTATIONS.keys()
+
         if v not in valid_workloads:
             raise ValueError(
                 f"Unknown workload '{v}'. Supported: {', '.join(sorted(valid_workloads))}"

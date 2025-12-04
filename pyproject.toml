@@ -50,6 +50,8 @@ dev = [
     # Database drivers for testing framework (not needed in generated packages)
     "pyexasol>=0.25.0",
     "clickhouse-connect>=0.6.0",
+    # data generator for estuary workload
+    "Faker>=38.2.0",
 ]
 
 [project.scripts]
@@ -94,6 +96,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 "tests/**/*" = ["B011"]
+"**/estuary/dbgen_faker/*" = ["UP006", "UP035"]
 
 [tool.bandit]
 exclude_dirs = ["tests"]
