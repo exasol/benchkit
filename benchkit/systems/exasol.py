@@ -1,6 +1,6 @@
 """Exasol database system implementation."""
 
-import os
+import ssl
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any, cast
@@ -25,56 +25,20 @@ class ExasolSystem(SystemUnderTest):
         return ["pyexasol>=0.25.0"]
 
     @classmethod
-    def extract_workload_connection_info(
-        cls, setup_config: dict[str, Any], for_local_execution: bool = False
-    ) -> dict[str, Any]:
-        """
-        Extract Exasol connection info with proper defaults and password handling.
-
-        Args:
-            setup_config: The setup section from system config
-            for_local_execution: If True, use localhost (for packages running on DB machine).
-                                If False, preserve configured host with env var resolution (for remote execution).
-        """
-        import os
-
-        def resolve_env_var(value: str) -> str:
-            """Resolve environment variable placeholders like $VAR_NAME."""
-            if isinstance(value, str) and value.startswith("$"):
-                var_name = value[1:]  # Remove $ prefix
-                return os.environ.get(var_name, value)
-            return value
-
-        setup_method = setup_config.get("method", "docker")
-
-        # For installer method, password comes from db_password, not password
-        if setup_method == "installer":
-            password = setup_config.get("db_password", "exasol")
-        else:
-            password = setup_config.get("password", "exasol")
-
-        # Determine host based on execution context
-        if for_local_execution:
-            # Workload packages run ON the remote machine, so always use localhost
-            host = "localhost"
-        else:
-            # For external/remote execution, resolve env vars and use configured host
-            host = resolve_env_var(setup_config.get("host", "localhost"))
-
-        # Return connection info with defaults matching __init__
-        connection_info = {
-            "host": host,
-            "port": setup_config.get("port", 8563),
-            "username": setup_config.get("username", "sys"),
-            "password": password,
-            "schema": setup_config.get("schema", "benchmark"),
+    def _get_connection_defaults(cls) -> dict[str, Any]:
+        return {
+            "port": 8563,
+            "username": "sys",
+            "password": "exasol",
+            "schema_key": "schema",
+            "schema": "benchmark",
         }
 
-        # Preserve use_additional_disk setting for data generation on remote instances
-        if setup_config.get("use_additional_disk", False):
-            connection_info["use_additional_disk"] = True
-
-        return connection_info
+    @classmethod
+    def _get_password_key(cls, setup_config: dict[str, Any]) -> str:
+        return (
+            "db_password" if setup_config.get("method") == "installer" else "password"
+        )
 
     @classmethod
     def get_required_ports(cls) -> dict[str, int]:
@@ -145,13 +109,6 @@ class ExasolSystem(SystemUnderTest):
 
         self._connection = None
         self._schema_created = False
-        self._cloud_instance_manager = (
-            None  # Primary node (node 0) for single-node or multinode
-        )
-        self._cloud_instance_managers: list[Any] = (
-            []
-        )  # All nodes for multinode clusters
-        self._external_host = None  # Initialize for cloud instance external IP
         self._certificate_fingerprint: str | None = (
             None  # Cache for TLS certificate fingerprint
         )
@@ -182,21 +139,17 @@ class ExasolSystem(SystemUnderTest):
         fingerprint from error and retries if certificate error occurs.
         """
         import re
-        import ssl
 
         # Check if this is a localhost connection
         is_localhost = dsn.startswith("localhost") or dsn.startswith("127.0.0.1")
 
-        connection_kwargs = kwargs.copy()
-        connection_kwargs["autocommit"] = True
+        kwargs = {
+            **kwargs,
+            "autocommit": True,
+            "websocket_sslopt": {"cert_reqs": ssl.CERT_NONE},
+        }
         try:
-            # First attempt - normal connection
-            # Disable SSL certificate verification for benchmarks (security not critical)
-            connection_kwargs["websocket_sslopt"] = {"cert_reqs": ssl.CERT_NONE}
-
-            return pyexasol.connect(
-                dsn=dsn, user=user, password=password, **connection_kwargs
-            )
+            return pyexasol.connect(dsn=dsn, user=user, password=password, **kwargs)
         except Exception as e:
             error_msg = str(e)
 
@@ -205,65 +158,33 @@ class ExasolSystem(SystemUnderTest):
                 self._log(
                     "SSL error on localhost, attempting connection without SSL verification"
                 )
-                connection_kwargs["websocket_sslopt"] = {"cert_reqs": ssl.CERT_NONE}
+                kwargs["websocket_sslopt"] = {"cert_reqs": ssl.CERT_NONE}
                 return pyexasol.connect(
-                    dsn=dsn, user=user, password=password, **connection_kwargs
+                    dsn=dsn, user=user, password=password, **kwargs
                 )
 
-            # Check if this is a certificate/PKIX error for remote connections
-            if (
-                "PKIX path building failed" in error_msg
-                or "unable to find valid certification path" in error_msg
-                or "TLS connection to host" in error_msg
+            # Check for certificate/PKIX error and extract fingerprint
+            if any(
+                x in error_msg for x in ["PKIX", "certification path", "TLS connection"]
             ):
-                # Extract fingerprint from error message
-                # Patterns to try:
-                # 1. "fingerprint in the connection string: hostname/FINGERPRINT"
-                # 2. "localhost/FINGERPRINT"
-                # 3. "hostname:port/FINGERPRINT"
-                patterns = [
-                    r"connection string: [^/]+/([A-F0-9]+)",  # Original pattern
-                    r"localhost/([A-F0-9]+)",  # Direct localhost pattern
-                    r"[^/]+:?\d*/([A-F0-9]+)",  # Host:port/fingerprint pattern
-                ]
-
-                fingerprint_match = None
-                for pattern in patterns:
-                    fingerprint_match = re.search(pattern, error_msg)
-                    if fingerprint_match:
-                        break
-
-                if fingerprint_match:
-                    fingerprint = fingerprint_match.group(1)
-                    if fingerprint is None:
-                        self._certificate_fingerprint = ""
-                    else:
-                        self._certificate_fingerprint = fingerprint
-
-                    # Build DSN with fingerprint
-                    if "/" in dsn:
-                        # Already has fingerprint or other suffix
-                        dsn_with_fingerprint = dsn
-                    else:
-                        dsn_with_fingerprint = f"{dsn}/{fingerprint}"
-
-                    self._log(
-                        f"TLS certificate issue detected, retrying with fingerprint: {dsn_with_fingerprint}"
-                    )
-
-                    # Retry with fingerprint
-                    return pyexasol.connect(
-                        dsn=dsn_with_fingerprint, user=user, password=password, **kwargs
-                    )
-                else:
-                    # Certificate error but couldn't extract fingerprint
-                    self._log(
-                        f"Certificate error but couldn't extract fingerprint: {error_msg}"
-                    )
-                    raise
-            else:
-                # Some other error, re-raise
-                raise
+                for pattern in [
+                    r"connection string: [^/]+/([A-F0-9]+)",
+                    r"localhost/([A-F0-9]+)",
+                    r"[^/]+:?\d*/([A-F0-9]+)",
+                ]:
+                    if m := re.search(pattern, error_msg):
+                        self._certificate_fingerprint = m.group(1) or ""
+                        return pyexasol.connect(
+                            dsn=(
+                                f"{dsn}/{self._certificate_fingerprint}"
+                                if "/" not in dsn
+                                else dsn
+                            ),
+                            user=user,
+                            password=password,
+                            **kwargs,
+                        )
+            raise
 
     def _build_dsn(self, host: str, port: int) -> str:
         """Build DSN with cached fingerprint if available."""
@@ -631,53 +552,6 @@ class ExasolSystem(SystemUnderTest):
         return self._setup_single_node_storage(scale_factor)
 
     @exclude_from_package
-    def _setup_multinode_storage(self, scale_factor: int) -> bool:
-        """
-        Setup storage on all nodes in a multinode cluster.
-        Each node gets its own RAID0 and partitioned disk.
-        """
-        all_success = True
-
-        # Store original setup_commands to prevent duplicate recording
-        original_commands_count = len(self.setup_commands)
-        commands_before: int = 0
-
-        for idx, mgr in enumerate(self._cloud_instance_managers):
-            self._log(f"\n  [Node {idx}] Setting up storage...")
-
-            # Temporarily override execute_command to use this specific node
-            original_mgr = self._cloud_instance_manager
-            self._cloud_instance_manager = mgr
-
-            # For nodes after the first, temporarily disable recording to avoid duplicates
-            if idx > 0:
-                commands_before = len(self.setup_commands)
-
-            try:
-                # Run single-node storage setup on this node
-                success = self._setup_single_node_storage(scale_factor)
-                if not success:
-                    self._log(f"  [Node {idx}] ✗ Storage setup failed")
-                    all_success = False
-                else:
-                    self._log(f"  [Node {idx}] ✓ Storage setup completed")
-            finally:
-                # For nodes after the first, remove any commands that were recorded
-                if idx > 0:
-                    self.setup_commands = self.setup_commands[:commands_before]
-
-                # Restore primary manager
-                self._cloud_instance_manager = original_mgr
-
-        # Add node_info to all commands recorded during storage setup if multinode
-        if len(self._cloud_instance_managers) > 1:
-            node_info = f"all_nodes_{len(self._cloud_instance_managers)}"
-            for i in range(original_commands_count, len(self.setup_commands)):
-                self.setup_commands[i]["node_info"] = node_info
-
-        return all_success
-
-    @exclude_from_package
     def _setup_single_node_storage(self, scale_factor: int) -> bool:
         """
         Setup storage on a single node. Used by both single-node and multinode setups.
@@ -893,60 +767,13 @@ echo "Symlink: %s -> $INSTANCE_STORE"
                 return target_device
 
     def get_data_generation_directory(self, workload: Any) -> Path | None:
-        """
-        Get directory for TPC-H data generation.
-
-        Priority order:
-        1. If data_dir explicitly specified in config → use that
-        2. If use_additional_disk=true → use /data/tpch_gen for data generation
-        3. Otherwise → use default local path (None)
-
-        Args:
-            workload: The workload object (for scale factor)
-
-        Returns:
-            Path to data generation directory, or None for default
-        """
-        # Priority 1: If data_dir is explicitly configured, use it for data generation
-        explicit_data_dir = self.setup_config.get("data_dir")
-        if explicit_data_dir:
-            data_gen_path = (
-                Path(str(explicit_data_dir))
-                / "tpch_gen"
-                / workload.name
-                / f"sf{workload.scale_factor}"
-            )
-            self._log(
-                f"Exasol: Using configured data_dir for data generation: {data_gen_path}"
-            )
-            return cast(Path, data_gen_path)
-
-        # Priority 2: If use_additional_disk=true, use /data/tpch_gen for data generation
-        use_additional_disk = self.setup_config.get("use_additional_disk", False)
-        if use_additional_disk:
-            # Use shared /data/tpch_gen for TPC-H data generation
-            tpch_gen_dir = "/data/tpch_gen"
-
-            # Create directory with proper ownership
-            self.execute_command(
-                f"sudo mkdir -p {tpch_gen_dir} && sudo chown -R $(whoami):$(whoami) {tpch_gen_dir}",
-                record=False,
-            )
-
-            # Store for potential later use
-            if self._data_generation_mount_point is None:
-                self._data_generation_mount_point = tpch_gen_dir
-
-            data_gen_path = (
-                Path(tpch_gen_dir) / workload.name / f"sf{workload.scale_factor}"
-            )
-            self._log(
-                f"Exasol: Using additional disk for data generation: {data_gen_path}"
-            )
-            return cast(Path, data_gen_path)
-
-        # Priority 3: Use default local path
-        return None
+        """Get directory for TPC-H data generation (uses base class, adds caching)."""
+        result = super().get_data_generation_directory(workload)
+        if result and self._data_generation_mount_point is None:
+            self._data_generation_mount_point = str(
+                result.parent.parent.parent
+            )  # Cache /data/tpch_gen
+        return result
 
     @exclude_from_package
     def is_already_installed(self) -> bool:
@@ -1014,96 +841,18 @@ echo "Symlink: %s -> $INSTANCE_STORE"
         return self._connect_with_fingerprint_retry(**connection_params)
 
     @exclude_from_package
-    def install(self) -> bool:
-        """Install Exasol using the configured method."""
-        self.prepare_data_directory()
-
-        if self.setup_method == "docker":
-            return self._install_docker()
-        elif self.setup_method == "installer":
-            return self._install_native()
-        elif self.setup_method == "preinstalled":
-            return self._verify_preinstalled()
-        else:
-            self._log(f"Unknown setup method: {self.setup_method}")
-            return False
-
-    @exclude_from_package
     def _install_docker(self) -> bool:
         """Install Exasol using Docker."""
-        # Record setup notes
-        self.record_setup_note("Installing Exasol using Docker container")
-
-        if self.data_dir:
-            # Create data directory first
-            self.record_setup_command(
-                f"sudo mkdir -p {self.data_dir}",
-                "Create Exasol data directory",
-                "preparation",
-            )
-            self.record_setup_command(
-                f"sudo chown $(whoami):$(whoami) {self.data_dir}",
-                "Set data directory permissions",
-                "preparation",
-            )
-        else:
-            self.record_setup_note(
-                "Using additional NVMe disk for storage (no data directory)"
-            )
-
-        # Remove existing container if it exists
-        self.execute_command(f"docker rm -f {self.container_name} || true", record=True)
-
-        # Prepare Docker command
-        docker_cmd = [
-            "docker",
-            "run",
-            "-d",
-            "--name",
-            self.container_name,
-        ]
-
-        # Add data directory mount only if using file storage
-        if self.data_dir:
-            docker_cmd.extend(["-v", f"{self.data_dir}:/exa/data"])
-
-        docker_cmd.extend(
-            [
-                "-p",
-                "8563:8563",  # Database port
-                "-p",
-                "6583:6583",  # BucketFS port
-            ]
-        )
-
-        # Add environment variables
-        docker_cmd.extend(["-e", "EXA_PRIVILEGED=yes"])
-
+        volumes = {str(self.data_dir): "/exa/data"} if self.data_dir else {}
         if self.license_file and Path(self.license_file).exists():
-            docker_cmd.extend(["-v", f"{self.license_file}:/exa/etc/license.xml:ro"])
+            volumes[self.license_file] = "/exa/etc/license.xml:ro"
             self.record_setup_note(f"Using license file: {self.license_file}")
-
-        # Use specified Docker image version
-        image_tag = self.version if self.version != "latest" else "latest"
-        docker_cmd.append(f"exasol/docker-db:{image_tag}")
-
-        # Record and execute the docker run command
-        full_cmd = " ".join(docker_cmd)
-        result = self.execute_command(full_cmd)
-        if not result["success"]:
-            self._log(f"Failed to start Exasol container: {result['stderr']}")
-            return False
-
-        # Record configuration applied
-        extra_config = self.setup_config.get("extra", {})
-        if extra_config:
-            self.record_setup_note("Exasol configuration applied:")
-            for key, value in extra_config.items():
-                self.record_setup_note(f"  {key}: {value}")
-
-        # Wait for container to be ready
-        self._log("Waiting for Exasol to start...")
-        return self.wait_for_health(max_attempts=60, delay=5.0)
+        image = (
+            f"exasol/docker-db:{self.version if self.version != 'latest' else 'latest'}"
+        )
+        return self._install_docker_common(
+            image, {8563: 8563, 6583: 6583}, volumes, {"EXA_PRIVILEGED": "yes"}
+        )
 
     @exclude_from_package
     def _install_native(self) -> bool:
@@ -1724,19 +1473,7 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
     def is_healthy(self, quiet: bool = False) -> bool:
         """Check if Exasol is running and accepting connections."""
         try:
-            # Determine health check host with priority:
-            # 1. _external_host if explicitly set
-            # 2. public_ip from cloud instance manager if available
-            # 3. self.host as final fallback
-            health_check_host = getattr(self, "_external_host", None)
-
-            if not health_check_host and self._cloud_instance_manager:
-                health_check_host = getattr(
-                    self._cloud_instance_manager, "public_ip", None
-                )
-
-            if not health_check_host:
-                health_check_host = self.host
+            health_check_host = self._get_health_check_host()
 
             dsn = self._build_dsn(health_check_host, self.port)
             if not quiet:
@@ -2013,22 +1750,6 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
         return success
 
     @exclude_from_package
-    def _resolve_ip_addresses(self, ip_config: str) -> str:
-        """Resolve IP address placeholders with actual values from infrastructure."""
-        if not ip_config:
-            return "localhost"
-
-        # Handle environment variable substitution
-        if ip_config.startswith("$"):
-            env_var = ip_config[1:]  # Remove $ prefix
-            resolved = os.environ.get(env_var, ip_config)
-            self.record_setup_note(f"Resolved {ip_config} to {resolved}")
-            return resolved
-
-        # If it's already an IP address, return as-is
-        return ip_config
-
-    @exclude_from_package
     def _get_cluster_play_id(self) -> str | None:
         """Get the cluster play_id from c4 ps command."""
         self.record_setup_command(
@@ -2222,216 +1943,43 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
 
         return False
 
-    def set_cloud_instance_manager(self, instance_manager: Any | list[Any]) -> None:
-        """
-        Set the cloud instance manager(s) for remote command execution.
-
-        Args:
-            instance_manager: Single CloudInstanceManager for single-node systems,
-                            or list of CloudInstanceManagers for multinode systems
-        """
-        # Handle both single instance and list of instances
-        if isinstance(instance_manager, list):
-            # Multinode setup
-            self._cloud_instance_managers = instance_manager
-            self._cloud_instance_manager = (
-                instance_manager[0] if instance_manager else None
-            )
-        else:
-            # Single node setup
-            self._cloud_instance_manager = instance_manager
-            self._cloud_instance_managers = (
-                [instance_manager] if instance_manager else []
-            )
-
-        # Set external host for health checks from local machine
-        # This is critical for pre-existing installations where install() doesn't run
-        if self._cloud_instance_manager and hasattr(
-            self._cloud_instance_manager, "public_ip"
-        ):
-            self._external_host = self._cloud_instance_manager.public_ip
-            # Keep self.host as localhost for remote execution
-            self.host = "localhost"
-
-            # For preinstalled systems, update credentials from config
-            # Use db_password if specified (what c4 installer uses), otherwise keep current password
-            db_password = self.setup_config.get("db_password")
-            if db_password:
-                self.password = db_password
-
-    def execute_command_on_all_nodes(
-        self,
-        command: str,
-        timeout: float | None = None,
-        description: str | None = None,
-    ) -> bool:
-        """
-        Execute a command on all nodes in a multinode cluster.
-
-        Args:
-            command: Command to execute
-            timeout: Timeout in seconds
-            description: Description for logging
-
-        Returns:
-            True if command succeeded on all nodes, False otherwise
-        """
-        if not self._cloud_instance_managers:
-            # Fallback to single node execution
-            result = self.execute_command(command, timeout=timeout, record=False)
-            return bool(result.get("success", False))
-
-        if description:
-            self._log(
-                f"{description} (on {len(self._cloud_instance_managers)} nodes)..."
-            )
-
-        all_success = True
-        for idx, mgr in enumerate(self._cloud_instance_managers):
-            result = mgr.run_remote_command(
-                command, timeout=int(timeout) if timeout else 300
-            )
-            if not result.get("success", False):
-                self._log(
-                    f"  ✗ Failed on node {idx}: {result.get('stderr', 'Unknown error')}"
-                )
-                all_success = False
-            else:
-                self._log(f"  ✓ Success on node {idx}")
-
-        return all_success
-
-    def execute_command(
-        self,
-        command: str,
-        timeout: float | None = None,
-        record: bool = True,
-        category: str = "setup",
-        node_info: str | None = None,
-    ) -> dict[str, Any]:
-        """Execute a command, either locally or remotely depending on setup."""
-        if self._cloud_instance_manager:
-            # Execute on remote instance (primary node for multinode)
-            result = self._cloud_instance_manager.run_remote_command(
-                command, timeout=int(timeout) if timeout else 300
-            )
-
-            # Record command for report reproduction if requested
-            if record:
-                command_record = {
-                    "command": self._sanitize_command_for_report(command),
-                    "success": result.get("success", False),
-                    "description": f"Execute {command.split()[0]} command on remote system",
-                    "category": category,
-                }
-                if node_info:
-                    command_record["node_info"] = node_info
-                self.setup_commands.append(command_record)
-
-            return dict(result)
-        else:
-            return super().execute_command(
-                command, timeout, record, category, node_info
-            )
+    @exclude_from_package
+    def _update_credentials_from_config(self) -> None:
+        """Update Exasol credentials from config after cloud manager is set."""
+        db_password = self.setup_config.get("db_password")
+        if db_password:
+            self.password = db_password
 
     @exclude_from_package
     def _cleanup_disturbing_services(self, play_id: str) -> bool:
-        """
-        Cleanup services that could disturb benchmark execution.
-        Removes rapid, eventd, and healthd services using cosrm command.
-        This is not recorded in the report as it's internal cleanup.
-        """
-        self._log(
-            "🧹 Cleaning up services that could interfere with benchmark performance..."
-        )
-        self._log("   Targeting services: rapid, eventd, healthd")
-
+        """Remove rapid, eventd, healthd services that interfere with benchmarks."""
         try:
-            # Step 1: Get list of running services with cosps
             cosps_result = self.execute_command(
                 f"c4 connect -s cos -i {play_id} -- cosps", timeout=30, record=False
             )
-
             if not cosps_result.get("success", False):
-                self._log(
-                    f"⚠ Warning: Could not get service list: {cosps_result.get('stderr', '')}"
-                )
                 return False
-
-            cosps_output = cosps_result.get("stdout", "")
-            self._log("📝 Current Exasol services:")
-            # Only show relevant lines to avoid clutter
-            for line in cosps_output.split("\n")[:10]:  # Show first 10 lines
-                if line.strip():
-                    self._log(f"   {line}")
-            if len(cosps_output.split("\n")) > 10:
-                self._log("   ... (truncated)")
-            self._log("")
-
-            # Step 2: Parse output to find service IDs for rapid, eventd, healthd
-            services_to_remove = ["rapid", "eventd", "healthd"]
             service_ids = {}
-
-            for line in cosps_output.split("\n"):
-                line = line.strip()
-                if (
-                    not line
-                    or line.startswith("ROOT")
-                    or line.startswith("--")
-                    or line.startswith("ID")
-                ):
-                    continue
-
+            for line in cosps_result.get("stdout", "").split("\n"):
                 parts = line.split()
-                if len(parts) >= 7:  # Make sure line has enough parts
-                    service_id = parts[0]
-                    service_name = parts[6] if len(parts) > 6 else ""
-
-                    for target_service in services_to_remove:
-                        if target_service in service_name:
-                            service_ids[target_service] = service_id
+                if len(parts) >= 7 and not line.strip().startswith(
+                    ("ROOT", "--", "ID")
+                ):
+                    for target in ["rapid", "eventd", "healthd"]:
+                        if target in parts[6]:
+                            service_ids[target] = parts[0]
                             break
-
-            if service_ids:
-                self._log(
-                    f"🎯 Found interfering services to remove: {list(service_ids.keys())}"
-                )
-            else:
-                self._log("✓ No interfering services found (this is good!)")
+            if not service_ids:
                 return True
-
-            # Step 3: Remove each identified service
-            removed_count = 0
-            for service_name, service_id in service_ids.items():
-                self._log(f"   🗑️  Removing {service_name} (ID: {service_id})...")
-                remove_result = self.execute_command(
-                    f"c4 connect -s cos -i {play_id} -- cosrm -a {service_id}",
+            removed = sum(
+                1
+                for sid in service_ids.values()
+                if self.execute_command(
+                    f"c4 connect -s cos -i {play_id} -- cosrm -a {sid}",
                     timeout=30,
-                    record=False,  # Don't record cleanup in report
-                )
-
-                if remove_result.get("success", False):
-                    self._log(f"      ✅ Successfully removed {service_name}")
-                    removed_count += 1
-                else:
-                    self._log(
-                        f"      ❌ Failed to remove {service_name}: {remove_result.get('stderr', '')}"
-                    )
-
-            self._log(
-                f"🧹 Service cleanup summary: {removed_count}/{len(service_ids)} services removed"
+                    record=False,
+                ).get("success", False)
             )
-
-            if removed_count == len(service_ids):
-                self._log("✅ All interfering services successfully removed!")
-                return True
-            elif removed_count > 0:
-                self._log("⚠️ Some services removed, but some failures occurred")
-                return True
-            else:
-                self._log("❌ Failed to remove any interfering services")
-                return False
-
-        except Exception as e:
-            self._log(f"❌ Service cleanup failed with exception: {e}")
+            return removed > 0
+        except Exception:
             return False

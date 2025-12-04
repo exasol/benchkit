@@ -24,56 +24,21 @@ class ClickHouseSystem(SystemUnderTest):
         return ["clickhouse-connect>=0.6.0"]
 
     @classmethod
-    def extract_workload_connection_info(
-        cls, setup_config: dict[str, Any], for_local_execution: bool = False
-    ) -> dict[str, Any]:
-        """
-        Extract ClickHouse connection info with proper defaults.
-
-        Args:
-            setup_config: The setup section from system config
-            for_local_execution: If True, use localhost (for packages running on DB machine).
-                                If False, preserve configured host with env var resolution (for remote execution).
-        """
-        import os
-
-        def resolve_env_var(value: str) -> str:
-            """Resolve environment variable placeholders like $VAR_NAME."""
-            if isinstance(value, str) and value.startswith("$"):
-                var_name = value[1:]  # Remove $ prefix
-                return os.environ.get(var_name, value)
-            return value
-
-        # Determine host based on execution context
-        if for_local_execution:
-            # Workload packages run ON the remote machine, so always use localhost
-            host = "localhost"
-        else:
-            # For external/remote execution, resolve env vars and use configured host
-            host = resolve_env_var(setup_config.get("host", "localhost"))
-
-        # Return connection info with defaults matching __init__ (lines 71-80)
-        # ClickHouse uses 'database' not 'schema'
-        connection_info = {
-            "host": host,
-            "port": setup_config.get("port", 8123),
-            "username": setup_config.get("username", "default"),
-            "password": setup_config.get("password", ""),
-            "database": setup_config.get(
-                "database", "benchmark"
-            ),  # Default to benchmark for workload compatibility
+    def _get_connection_defaults(cls) -> dict[str, Any]:
+        return {
+            "port": 8123,
+            "username": "default",
+            "password": "",
+            "schema_key": "database",
+            "schema": "benchmark",
         }
 
-        # Preserve use_additional_disk setting for data generation on remote instances
-        if setup_config.get("use_additional_disk", False):
-            connection_info["use_additional_disk"] = True
-
-        # Preserve extra configuration (includes settings like allow_statistics_optimize)
-        # This is needed for conditional features in workload setup scripts
+    @classmethod
+    def _extend_connection_info(
+        cls, conn_info: dict[str, Any], setup_config: dict[str, Any]
+    ) -> None:
         if "extra" in setup_config:
-            connection_info["extra"] = setup_config["extra"]
-
-        return connection_info
+            conn_info["extra"] = setup_config["extra"]
 
     @classmethod
     def get_required_ports(cls) -> dict[str, int]:
@@ -153,15 +118,6 @@ class ClickHouseSystem(SystemUnderTest):
         self.database = self.setup_config.get("database", "benchmark")
 
         self._client = None
-        self._cloud_instance_manager: Any = (
-            None  # Primary node (node 0) for single-node or multinode
-        )
-        self._cloud_instance_managers: list[Any] = (
-            []
-        )  # All nodes for multinode clusters
-        self._external_host: str | None = (
-            None  # Initialize for cloud instance external IP
-        )
 
         # Cluster configuration for multinode
         self.cluster_name = "benchmark_cluster"  # Default cluster name
@@ -233,169 +189,34 @@ class ClickHouseSystem(SystemUnderTest):
         )
 
     @exclude_from_package
-    def install(self) -> bool:
-        """Install ClickHouse using the configured method."""
-        self.prepare_data_directory()
-
-        if self.setup_method == "docker":
-            return self._install_docker()
-        elif self.setup_method == "native":
-            return self._install_native()
-        elif self.setup_method == "preinstalled":
-            return self._verify_preinstalled()
-        else:
-            self._log(f"Unknown setup method: {self.setup_method}")
-            return False
-
-    @exclude_from_package
     def _install_docker(self) -> bool:
         """Install ClickHouse using Docker."""
-        # Record setup notes
-        self.record_setup_note("Installing ClickHouse using Docker container")
-
-        # Create data directory first
-        self.record_setup_command(
-            f"sudo mkdir -p {self.data_dir}",
-            "Create ClickHouse data directory",
-            "preparation",
-        )
-        self.record_setup_command(
-            f"sudo chown $(whoami):$(whoami) {self.data_dir}",
-            "Set data directory permissions",
-            "preparation",
-        )
-
-        # Remove existing container if it exists
-        self.execute_command(f"docker rm -f {self.container_name} || true", record=True)
-
-        # Prepare Docker command
-        docker_cmd = [
-            "docker",
-            "run",
-            "-d",
-            "--name",
-            self.container_name,
-            "-v",
-            f"{self.data_dir}:/var/lib/clickhouse",
-            "-p",
-            f"{self.http_port}:8123",
-            "-p",
-            f"{self.native_port}:9000",
-        ]
-
-        # Add memory limits for consistent benchmarking
-        # Use 'or {}' to handle case where 'extra' exists but is None
         memory_limit = (self.setup_config.get("extra") or {}).get("memory_limit", "32g")
-        docker_cmd.extend(["--memory", memory_limit])
-
-        # Use specified Docker image version
-        image_tag = self.version if self.version != "latest" else "latest"
-        docker_cmd.append(f"clickhouse/clickhouse-server:{image_tag}")
-
-        # Record and execute the docker run command
-        full_cmd = " ".join(docker_cmd)
-        result = self.execute_command(full_cmd)
-        if not result["success"]:
-            self._log(f"Failed to start ClickHouse container: {result['stderr']}")
-            return False
-
-        # Record configuration applied
-        # Use 'or {}' to handle case where 'extra' exists but is None
-        extra_config = self.setup_config.get("extra") or {}
-        if extra_config:
-            self.record_setup_note("ClickHouse configuration applied:")
-            for key, value in extra_config.items():
-                self.record_setup_note(f"  {key}: {value}")
-
-        # Wait for container to be ready
-        self._log("Waiting for ClickHouse to start...")
-        return self.wait_for_health(max_attempts=30, delay=2.0)
+        image = f"clickhouse/clickhouse-server:{self.version if self.version != 'latest' else 'latest'}"
+        return self._install_docker_common(
+            image,
+            {self.http_port: 8123, self.native_port: 9000},
+            {str(self.data_dir): "/var/lib/clickhouse"},
+            extra_args=["--memory", memory_limit],
+        )
 
     @exclude_from_package
     def _install_native(self) -> bool:
         """Install ClickHouse using official APT repository."""
         self.record_setup_note("Installing ClickHouse using official APT repository")
-
-        # Check if multinode setup
         is_multinode = (
             self._cloud_instance_managers and len(self._cloud_instance_managers) > 1
         )
-
+        if not self._install_on_all_nodes(self._install_native_on_node):
+            return False
         if is_multinode:
-            # Install on all nodes
-            self._log(
-                f"Installing ClickHouse on all {len(self._cloud_instance_managers)} nodes..."
-            )
-            all_success = True
-
-            # Store original setup_commands to prevent duplicate recording
-            original_commands_count = len(self.setup_commands)
-
-            for idx, mgr in enumerate(self._cloud_instance_managers):
-                self._log(f"\n[Node {idx}] Installing ClickHouse...")
-
-                # Temporarily override execute_command to use this specific node
-                original_mgr = self._cloud_instance_manager
-                original_external_host = getattr(self, "_external_host", None)
-
-                self._cloud_instance_manager = mgr
-
-                # Set external host to this node's IP for health checks
-                # This ensures wait_for_health() connects to the correct node
-                self._external_host = mgr.public_ip
-
-                # For nodes after the first, temporarily disable recording to avoid duplicates
-                commands_before: int = len(self.setup_commands) if idx > 0 else 0
-
-                try:
-                    # Run core installation on this node
-                    success = self._install_native_on_node()
-                    if not success:
-                        self._log(f"[Node {idx}] ✗ Installation failed")
-                        all_success = False
-                    else:
-                        self._log(f"[Node {idx}] ✓ Installation completed")
-                finally:
-                    # For nodes after the first, remove any commands that were recorded
-                    if idx > 0:
-                        self.setup_commands = self.setup_commands[:commands_before]
-
-                    # Restore primary manager and external host
-                    self._cloud_instance_manager = original_mgr
-                    if original_external_host:
-                        self._external_host = original_external_host
-
-            # Add node_info to all commands recorded during installation if multinode
-            if len(self._cloud_instance_managers) > 1:
-                node_info = f"all_nodes_{len(self._cloud_instance_managers)}"
-                for i in range(original_commands_count, len(self.setup_commands)):
-                    self.setup_commands[i]["node_info"] = node_info
-
-            if not all_success:
-                return False
-
-            # Configure cluster topology on all nodes
-            self._log(f"\n⚙️  Configuring {self.node_count}-node ClickHouse cluster...")
             if not self._configure_multinode_cluster():
-                self._log("Failed to configure multinode cluster")
                 return False
-            self._log("✓ Cluster configuration complete on all nodes")
-
-            # Restart all nodes to apply cluster config
-            self._log("\n🔄 Restarting ClickHouse on all nodes...")
-            for idx, mgr in enumerate(self._cloud_instance_managers):
-                result = mgr.run_remote_command(
-                    "sudo systemctl restart clickhouse-server"
-                )
-                if not result.get("success"):
-                    self._log(f"[Node {idx}] ✗ Failed to restart ClickHouse")
-                else:
-                    self._log(f"[Node {idx}] ✓ ClickHouse restarted")
-
-            return True
-        else:
-            # Single node installation
-            return self._install_native_on_node()
+            self.execute_command_on_all_nodes(
+                "sudo systemctl restart clickhouse-server",
+                "Restart ClickHouse on all nodes",
+            )
+        return True
 
     def _install_native_on_node(self) -> bool:
         """Install ClickHouse on the current node (works for both single and multinode)."""
@@ -982,78 +803,6 @@ class ClickHouseSystem(SystemUnderTest):
     </macros>
 </clickhouse>"""
 
-    @exclude_from_package
-    def _parse_memory_size(self, memory_str: str) -> int:
-        """Parse memory size string like '32g', '1024m' to bytes."""
-        memory_str = memory_str.lower().strip()
-
-        if memory_str.endswith("g"):
-            return int(memory_str[:-1]) * 1024 * 1024 * 1024
-        elif memory_str.endswith("m"):
-            return int(memory_str[:-1]) * 1024 * 1024
-        elif memory_str.endswith("k"):
-            return int(memory_str[:-1]) * 1024
-        else:
-            # Assume bytes
-            return int(memory_str)
-
-    @exclude_from_package
-    def _get_int_config(self, config: dict[str, Any], key: str, default: int) -> int:
-        """
-        Safely get an integer value from config, handling both string and int inputs.
-
-        Args:
-            config: Configuration dictionary
-            key: Key to look up
-            default: Default value if key not present
-
-        Returns:
-            Integer value (converted from string if necessary)
-        """
-        value = config.get(key, default)
-        if isinstance(value, str):
-            return int(value)
-        return int(value)
-
-    @exclude_from_package
-    def _detect_hardware_specs(self) -> dict[str, int]:
-        """
-        Detect actual CPU cores and memory from the system.
-
-        Returns:
-            Dictionary with 'cpu_cores' and 'total_memory_bytes' keys
-        """
-        # Get CPU count
-        cpu_result = self.execute_command("nproc", record=False)
-        if cpu_result.get("success", False):
-            try:
-                cpu_cores = int(cpu_result["stdout"].strip())
-                # Sanity check: CPU cores should be reasonable (between 1 and 512)
-                if cpu_cores < 1 or cpu_cores > 512:
-                    self._log(
-                        f"⚠️  WARNING: Detected {cpu_cores} CPU cores - this seems wrong, using default 16"
-                    )
-                    cpu_cores = 16
-            except (ValueError, KeyError):
-                cpu_cores = 16  # Fallback default
-        else:
-            cpu_cores = 16  # Fallback default
-
-        # Get total memory in bytes
-        mem_result = self.execute_command(
-            "grep MemTotal /proc/meminfo | awk '{print $2}'", record=False
-        )
-        if mem_result.get("success", False):
-            try:
-                mem_kb = int(mem_result["stdout"].strip())
-                mem_bytes = mem_kb * 1024
-            except (ValueError, KeyError):
-                mem_bytes = 64 * 1024 * 1024 * 1024  # 64GB fallback
-        else:
-            mem_bytes = 64 * 1024 * 1024 * 1024  # 64GB fallback
-
-        return {"cpu_cores": cpu_cores, "total_memory_bytes": mem_bytes}
-
     def _calculate_max_concurrent_queries(self, cpu_cores: int) -> int:
         """
         Calculate max_concurrent_queries based on workload configuration.
@@ -1177,51 +926,6 @@ class ClickHouseSystem(SystemUnderTest):
         return self._setup_single_node_storage(scale_factor)
 
     @exclude_from_package
-    def _setup_multinode_storage(self, scale_factor: int) -> bool:
-        """
-        Setup storage on all nodes in a multinode cluster.
-        Each node gets its own RAID0 and ClickHouse data directory.
-        """
-        all_success = True
-
-        # Store original setup_commands to prevent duplicate recording
-        original_commands_count = len(self.setup_commands)
-
-        for idx, mgr in enumerate(self._cloud_instance_managers):
-            self._log(f"\n  [Node {idx}] Setting up storage...")
-
-            # Temporarily override execute_command to use this specific node
-            original_mgr = self._cloud_instance_manager
-            self._cloud_instance_manager = mgr
-
-            # For nodes after the first, temporarily disable recording to avoid duplicates
-            commands_before = len(self.setup_commands) if idx > 0 else 0
-
-            try:
-                # Run single-node storage setup on this node
-                success = self._setup_single_node_storage(scale_factor)
-                if not success:
-                    self._log(f"  [Node {idx}] ✗ Storage setup failed")
-                    all_success = False
-                else:
-                    self._log(f"  [Node {idx}] ✓ Storage setup completed")
-            finally:
-                # For nodes after the first, remove any commands that were recorded
-                if idx > 0:
-                    self.setup_commands = self.setup_commands[:commands_before]
-
-                # Restore primary manager
-                self._cloud_instance_manager = original_mgr
-
-        # Add node_info to all commands recorded during storage setup if multinode
-        if len(self._cloud_instance_managers) > 1:
-            node_info = f"all_nodes_{len(self._cloud_instance_managers)}"
-            for i in range(original_commands_count, len(self.setup_commands)):
-                self.setup_commands[i]["node_info"] = node_info
-
-        return all_success
-
-    @exclude_from_package
     def _setup_single_node_storage(self, scale_factor: int) -> bool:
         """
         Setup storage on a single node. Used by both single-node and multinode setups.
@@ -1309,127 +1013,18 @@ class ClickHouseSystem(SystemUnderTest):
 
         return True
 
-    def get_data_generation_directory(self, workload: Any) -> Path | None:
-        """
-        Get directory for TPC-H data generation on additional disk.
+    @exclude_from_package
+    def _update_credentials_from_config(self) -> None:
+        """Update ClickHouse credentials from config after cloud manager is set."""
+        password = self.setup_config.get("password")
+        if password is not None:  # Allow empty string password
+            self.password = password
 
-        Returns:
-            Path to data generation directory on additional disk, or None for default
-        """
-        use_additional_disk = self.setup_config.get("use_additional_disk", False)
-
-        if use_additional_disk:
-            # Use shared /data/tpch_gen for TPC-H data generation (same as Exasol)
-            tpch_gen_dir = "/data/tpch_gen"
-
-            # Create directory with proper ownership
-            self.execute_command(
-                f"sudo mkdir -p {tpch_gen_dir} && sudo chown -R $(whoami):$(whoami) {tpch_gen_dir}",
-                record=False,
-            )
-
-            data_gen_dir = (
-                Path(tpch_gen_dir) / workload.name / f"sf{workload.scale_factor}"
-            )
-            self._log(
-                f"ClickHouse: Using additional disk for data generation: {data_gen_dir}"
-            )
-            return cast(Path, data_gen_dir)
-
-        # Use default local path
-        return None
-
-    def set_cloud_instance_manager(self, instance_manager: Any | list[Any]) -> None:
-        """
-        Set the cloud instance manager(s) for remote command execution.
-
-        Args:
-            instance_manager: Single CloudInstanceManager for single-node systems,
-                            or list of CloudInstanceManagers for multinode systems
-        """
-        # Handle both single instance and list of instances
-        if isinstance(instance_manager, list):
-            # Multinode setup
-            self._cloud_instance_managers = instance_manager
-            self._cloud_instance_manager = (
-                instance_manager[0] if instance_manager else None
-            )
-        else:
-            # Single node setup
-            self._cloud_instance_manager = instance_manager
-            self._cloud_instance_managers = (
-                [instance_manager] if instance_manager else []
-            )
-
-        # Set external host for health checks from local machine
-        # This is critical for pre-existing installations where install() doesn't run
-        if self._cloud_instance_manager and hasattr(
-            self._cloud_instance_manager, "public_ip"
-        ):
-            self._external_host = self._cloud_instance_manager.public_ip
-            # Keep self.host as localhost for remote execution
-            self.host = "localhost"
-
-            # For preinstalled systems, ensure we have the correct password from config
-            # (ClickHouse uses setup_config password directly)
-            password = self.setup_config.get("password")
-            if password is not None:  # Allow empty string password
-                self.password = password
-
-    def execute_command(
-        self,
-        command: str,
-        timeout: float | None = None,
-        record: bool = True,
-        category: str = "setup",
-        node_info: str | None = None,
-    ) -> dict[str, Any]:
-        """Execute command with remote execution support if cloud instance manager is available."""
-        if self._cloud_instance_manager and self.setup_method == "native":
-            # Execute on remote instance
-            result = self._cloud_instance_manager.run_remote_command(
-                command, timeout=int(timeout) if timeout else 300
-            )
-
-            # Record command for report reproduction if requested
-            if record:
-                command_record = {
-                    "command": self._sanitize_command_for_report(command),
-                    "success": result.get("success", False),
-                    "description": f"Execute {command.split()[0]} command on remote system",
-                    "category": category,
-                }
-                if node_info:
-                    command_record["node_info"] = node_info
-                self.setup_commands.append(command_record)
-
-            return dict(result)
-        else:
-            return super().execute_command(
-                command, timeout, record, category, node_info
-            )
-
-    def _resolve_ip_addresses(self, ip_config: str) -> str:
-        """Resolve IP address placeholders with actual values from infrastructure."""
-        if not ip_config:
-            return "localhost"
-
-        # Handle environment variable substitution
-        if ip_config.startswith("$"):
-            from typing import cast
-
-            from benchkit.infra.manager import InfraManager
-
-            env_var = ip_config[1:]  # Remove $ prefix
-            resolved = InfraManager.resolve_ip_from_infrastructure(env_var, self.name)
-
-            if resolved:
-                return cast(str, resolved)
-            else:
-                return ip_config
-
-        # If it's already an IP address, return as-is
-        return ip_config
+    def _should_execute_remotely(self) -> bool:
+        """ClickHouse only executes remotely for native installations."""
+        return (
+            self._cloud_instance_manager is not None and self.setup_method == "native"
+        )
 
     def _verify_preinstalled(self) -> bool:
         """Verify that ClickHouse is already installed and accessible."""
@@ -1449,19 +1044,7 @@ class ClickHouseSystem(SystemUnderTest):
     def is_healthy(self, quiet: bool = False) -> bool:
         """Check if ClickHouse is running and accepting connections."""
         try:
-            # Determine health check host with priority:
-            # 1. _external_host if explicitly set
-            # 2. public_ip from cloud instance manager if available
-            # 3. self.host as final fallback
-            health_check_host = getattr(self, "_external_host", None)
-
-            if not health_check_host and self._cloud_instance_manager:
-                health_check_host = getattr(
-                    self._cloud_instance_manager, "public_ip", None
-                )
-
-            if not health_check_host:
-                health_check_host = self.host
+            health_check_host = self._get_health_check_host()
 
             if clickhouse_connect is None:
                 self._log(
