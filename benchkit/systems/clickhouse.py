@@ -1,8 +1,9 @@
 """ClickHouse database system implementation."""
 
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any, cast
-from collections.abc import Callable, Iterable
+
 import clickhouse_connect
 
 from benchkit.common.markers import exclude_from_package

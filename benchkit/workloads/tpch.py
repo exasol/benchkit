@@ -406,7 +406,7 @@ class TPCH(Workload):
 
         return True
 
-    def get_queries(self, system: SystemUnderTest|None = None) -> dict[str, str]:
+    def get_queries(self, system: SystemUnderTest | None = None) -> dict[str, str]:
         """Get TPC-H queries with templates and variants resolved for the target system."""
         # Use provided system or stored system
         target_system = system or self._current_system

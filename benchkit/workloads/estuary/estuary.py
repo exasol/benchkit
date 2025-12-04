@@ -3,8 +3,8 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
 
-from ..systems import SystemUnderTest
-from .tpch import TPCH
+from benchkit.systems import SystemUnderTest
+from benchkit.workloads.tpch import TPCH
 
 
 ## TODO -- refactoring #14
@@ -81,7 +81,7 @@ class Estuary(TPCH):
 
     def load_data(self, system: SystemUnderTest) -> bool:
         """Load Estuary data into the database system, directly streaming from generator to database"""
-        from .dbgen_estuary import TableGenerator
+        from .dbgen_faker import TableGenerator
 
         schema_name = self.get_schema_name()
 

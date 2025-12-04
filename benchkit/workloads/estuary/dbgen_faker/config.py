@@ -4,7 +4,7 @@ from typing import List
 
 # Batch configuration
 DEFAULT_RECORDS_PER_BATCH = 1000
-DEFAULT_OUTPUT_DIR = "."
+DEFAULT_OUTPUT_DIR = ""
 
 # Table-specific record counts
 CUSTOMER_TOTAL_RECORDS = 15000000

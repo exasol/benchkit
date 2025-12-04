@@ -1,9 +1,9 @@
 """Exasol database system implementation."""
 
 import os
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any, cast
-from collections.abc import Callable, Iterable
 
 import pyexasol  # type: ignore
 

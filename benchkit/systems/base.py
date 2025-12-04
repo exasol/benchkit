@@ -2,9 +2,9 @@
 
 import re
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
-from collections.abc import Callable, Iterable
 
 from benchkit.common.markers import exclude_from_package
 

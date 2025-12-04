@@ -2,7 +2,7 @@ from time import time
 
 
 def test_supplier():
-    from benchkit.workloads.dbgen_estuary import TableGenerator
+    from benchkit.workloads.estuary import TableGenerator
 
     start_time_seconds: float = time()
     generator = TableGenerator(table_name="supplier")

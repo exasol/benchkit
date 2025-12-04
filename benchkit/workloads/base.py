@@ -60,7 +60,7 @@ class Workload(ABC):
         pass
 
     @abstractmethod
-    def get_queries(self, system: SystemUnderTest|None = None) -> dict[str, str]:
+    def get_queries(self, system: SystemUnderTest | None = None) -> dict[str, str]:
         """
         Get the benchmark queries.
 
