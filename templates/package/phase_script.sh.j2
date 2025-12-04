@@ -1,0 +1,60 @@
+#!/bin/bash
+# {{ phase.header }} script for {{ project_id }}
+# {{ phase.description }}
+set -e
+
+# Parse command line arguments
+SYSTEM_NAME=""
+DEBUG_FLAG=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --debug)
+            DEBUG_FLAG="--debug"
+            shift
+            ;;
+        *)
+            if [ -z "$SYSTEM_NAME" ]; then
+                SYSTEM_NAME="$1"
+            fi
+            shift
+            ;;
+    esac
+done
+
+# Auto-detect system if not provided
+if [ -z "$SYSTEM_NAME" ]; then
+    # Auto-detect system based on what's running locally
+    if systemctl is-active --quiet c4_cloud_command 2>/dev/null || pgrep -f "c4" >/dev/null 2>&1; then
+        SYSTEM_NAME="exasol"
+    elif systemctl is-active --quiet clickhouse-server 2>/dev/null || pgrep -f "clickhouse" >/dev/null 2>&1; then
+        SYSTEM_NAME="clickhouse"
+    else
+        echo "Error: Could not auto-detect system. Please specify system name as parameter."
+        echo "Usage: $0 [system_name] [--debug]"
+        echo "Available systems: {{ systems | join(', ') }}"
+        exit 1
+    fi
+fi
+
+echo "=== {{ phase.header }}: {{ project_id }} ==="
+echo "{{ phase.action }} for system: $SYSTEM_NAME"
+echo ""
+
+# Install dependencies if needed
+if [ ! -d "venv" ]; then
+    echo "Setting up Python virtual environment..."
+    python3 -m venv venv
+fi
+
+source venv/bin/activate
+pip install -q -r requirements.txt
+
+echo ""
+echo "{{ phase.action }} for $SYSTEM_NAME..."
+
+python -m benchkit {{ phase.command }} --config config.yaml --system "$SYSTEM_NAME" $DEBUG_FLAG
+
+echo ""
+echo "=== {{ phase.header }} Completed ==="
+echo "{{ phase.result_msg }} saved in results/{{ project_id }}/"

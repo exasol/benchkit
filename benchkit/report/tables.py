@@ -119,17 +119,26 @@ def create_comparison_table(
         system_values = medians_pivot[system]
 
         for query in medians_pivot.index:
-            if pd.notna(baseline_values[query]) and pd.notna(system_values[query]):
-                ratio = system_values[query] / baseline_values[query]
-                speedup = baseline_values[query] / system_values[query]
+            baseline_val = baseline_values[query]
+            system_val = system_values[query]
+
+            # Skip if either value is NaN or zero (prevents ZeroDivisionError)
+            if (
+                pd.notna(baseline_val)
+                and pd.notna(system_val)
+                and baseline_val > 0
+                and system_val > 0
+            ):
+                ratio = system_val / baseline_val
+                speedup = baseline_val / system_val
 
                 comparison_data.append(
                     {
                         "query": query,
                         "baseline_system": baseline_system,
                         "comparison_system": system,
-                        "baseline_ms": round(baseline_values[query], 1),
-                        "comparison_ms": round(system_values[query], 1),
+                        "baseline_ms": round(baseline_val, 1),
+                        "comparison_ms": round(system_val, 1),
                         "ratio": round(ratio, 2),
                         "speedup": round(speedup, 2),
                         "faster": speedup > 1.0,
@@ -162,7 +171,11 @@ def create_ranking_table(df: pd.DataFrame) -> pd.DataFrame:
 
         for rank, (_, row) in enumerate(query_data.iterrows(), 1):
             fastest_time = query_data.iloc[0]["elapsed_ms"]
-            slowdown = row["elapsed_ms"] / fastest_time
+            # Avoid division by zero
+            if fastest_time > 0:
+                slowdown = row["elapsed_ms"] / fastest_time
+            else:
+                slowdown = float("nan")
 
             ranking_data.append(
                 {
@@ -170,7 +183,7 @@ def create_ranking_table(df: pd.DataFrame) -> pd.DataFrame:
                     "rank": rank,
                     "system": row["system"],
                     "time_ms": round(row["elapsed_ms"], 1),
-                    "slowdown": round(slowdown, 2),
+                    "slowdown": round(slowdown, 2) if pd.notna(slowdown) else None,
                 }
             )
 

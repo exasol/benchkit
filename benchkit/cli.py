@@ -3,9 +3,12 @@
 import json
 import os
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import typer
+
+if TYPE_CHECKING:
+    import pandas as pd
 from rich.console import Console
 from rich.table import Table
 
@@ -814,6 +817,223 @@ def _collect_report_files(report_dir: Path) -> list[Path]:
     return report_files
 
 
+# =============================================================================
+# Status Command Helper Functions
+# =============================================================================
+
+
+def _extract_error_summary(error_msg: str | None) -> str:
+    """
+    Extract key error type from verbose error messages.
+
+    Examples:
+        'MEMORY_LIMIT_EXCEEDED (14.07 GiB > 13.97 GiB)'
+        'Query timeout'
+        'Connection refused'
+    """
+    if not error_msg:
+        return "-"
+
+    error_lower = error_msg.lower()
+
+    # ClickHouse specific errors
+    if "memory_limit_exceeded" in error_lower:
+        # Extract memory values if present
+        import re
+
+        match = re.search(
+            r"would use ([\d.]+\s*\w+).*maximum:\s*([\d.]+\s*\w+)", error_msg
+        )
+        if match:
+            return f"MEMORY_LIMIT_EXCEEDED ({match.group(1)} > {match.group(2)})"
+        return "MEMORY_LIMIT_EXCEEDED"
+
+    if "timeout" in error_lower:
+        return "Query timeout"
+
+    if "connection refused" in error_lower:
+        return "Connection refused"
+
+    if "syntax error" in error_lower:
+        return "Syntax error"
+
+    # Exasol specific errors
+    if "exasol" in error_lower and "exception" in error_lower:
+        # Try to extract error code
+        import re
+
+        match = re.search(r"error code:\s*(\w+)", error_msg, re.IGNORECASE)
+        if match:
+            return f"Exasol: {match.group(1)}"
+
+    # Generic truncation for unknown errors
+    if len(error_msg) > 50:
+        return error_msg[:47] + "..."
+    return error_msg
+
+
+def _load_phase_data(
+    results_dir: Path, system_names: list[str]
+) -> dict[str, dict[str, Any]]:
+    """
+    Load phase completion data for all systems.
+
+    Returns dict: {system_name: {'setup': {...}, 'load': {...}}}
+    """
+    from .util import load_json
+
+    phase_data: dict[str, dict[str, Any]] = {}
+
+    for system_name in system_names:
+        phase_data[system_name] = {"setup": None, "load": None}
+
+        # Load setup completion data
+        setup_path = results_dir / f"setup_complete_{system_name}.json"
+        if setup_path.exists():
+            try:
+                phase_data[system_name]["setup"] = load_json(setup_path)
+            except Exception:
+                phase_data[system_name]["setup"] = {"exists": True}
+
+        # Load load completion data
+        load_path = results_dir / f"load_complete_{system_name}.json"
+        if load_path.exists():
+            try:
+                phase_data[system_name]["load"] = load_json(load_path)
+            except Exception:
+                phase_data[system_name]["load"] = {"exists": True}
+
+    return phase_data
+
+
+def _load_runs_data(results_dir: Path) -> "pd.DataFrame | None":
+    """Load runs.csv and return as DataFrame, or None if not found."""
+    import pandas as pd
+
+    runs_csv = results_dir / "runs.csv"
+    if not runs_csv.exists():
+        return None
+
+    try:
+        return pd.read_csv(runs_csv)
+    except Exception:
+        return None
+
+
+def _get_query_stats_per_system(
+    df: "pd.DataFrame",
+) -> dict[str, dict[str, Any]]:
+    """
+    Compute query statistics per system.
+
+    Returns: {system: {total, success, failed, avg_ms, errors: [(query, failed, total, error)]}}
+    """
+    stats: dict[str, dict[str, Any]] = {}
+
+    for system in df["system"].unique():
+        system_df = df[df["system"] == system]
+        total = len(system_df)
+        success = len(system_df[system_df["success"] == True])  # noqa: E712
+        failed = total - success
+
+        # Calculate average for successful queries only
+        success_df = system_df[system_df["success"] == True]  # noqa: E712
+        avg_ms = success_df["elapsed_ms"].mean() if len(success_df) > 0 else 0
+
+        # Get error details for failed queries
+        errors: list[tuple[str, int, int, str]] = []
+        if failed > 0:
+            failed_df = system_df[system_df["success"] == False]  # noqa: E712
+            for query in failed_df["query"].unique():
+                query_df = system_df[system_df["query"] == query]
+                query_failed = len(query_df[query_df["success"] == False])  # noqa: E712
+                query_total = len(query_df)
+                # Get first error message
+                first_error = failed_df[failed_df["query"] == query]["error"].iloc[0]
+                error_summary = _extract_error_summary(first_error)
+                errors.append((query, query_failed, query_total, error_summary))
+
+        stats[system] = {
+            "total": total,
+            "success": success,
+            "failed": failed,
+            "avg_ms": avg_ms,
+            "errors": errors,
+        }
+
+    return stats
+
+
+def _check_infra_available(
+    cfg: dict[str, Any], system_name: str, infra_ips: dict[str, Any] | None
+) -> tuple[str, str]:
+    """
+    Check if infrastructure for system is still running.
+
+    Returns (status, display):
+    - ('up', '[green]✓ up[/]') - SSH connectivity confirmed
+    - ('down', '[red]✗ down[/]') - Cannot reach instance
+    - ('na', '[dim]-[/]') - Local mode, N/A
+    - ('unknown', '[yellow]?[/]') - No IP info available
+    """
+    import subprocess
+
+    env_mode = cfg.get("env", {}).get("mode", "local")
+
+    # Local mode - infrastructure N/A
+    if env_mode == "local":
+        return ("na", "[dim]-[/]")
+
+    # No infrastructure IPs available
+    if not infra_ips or system_name not in infra_ips:
+        return ("unknown", "[yellow]?[/]")
+
+    system_ips = infra_ips[system_name]
+
+    # Get the public IP (handle both single and multinode)
+    if "public_ip" in system_ips:
+        ip = system_ips["public_ip"]
+    elif "public_ips" in system_ips:
+        ip = system_ips["public_ips"][0]  # Check first node
+    else:
+        return ("unknown", "[yellow]?[/]")
+
+    # Get SSH key
+    ssh_key = cfg.get("env", {}).get("ssh_private_key_path", "")
+    if ssh_key:
+        ssh_key = os.path.expanduser(ssh_key)
+
+    # Quick SSH connectivity check (5 second timeout)
+    ssh_opts = "-o ConnectTimeout=5 -o StrictHostKeyChecking=no -o BatchMode=yes"
+    if ssh_key and os.path.exists(ssh_key):
+        ssh_opts += f" -i {ssh_key}"
+
+    cmd = f'ssh {ssh_opts} ubuntu@{ip} "echo ok" 2>/dev/null'
+
+    try:
+        result = subprocess.run(
+            cmd, shell=True, capture_output=True, text=True, timeout=10
+        )
+        if result.returncode == 0 and "ok" in result.stdout:
+            return ("up", "[green]✓ up[/]")
+        else:
+            return ("down", "[red]✗ down[/]")
+    except subprocess.TimeoutExpired:
+        return ("down", "[red]✗ down[/]")
+    except Exception:
+        return ("unknown", "[yellow]?[/]")
+
+
+def _format_timing(seconds: float | None) -> str:
+    """Format timing value for display."""
+    if seconds is None or seconds == 0:
+        return ""
+    if seconds < 60:
+        return f"({seconds:.1f}s)"
+    minutes = seconds / 60
+    return f"({minutes:.1f}m)"
+
+
 def _show_project_status_basic(project: str, project_dir: Path) -> None:
     """Show basic status for a single project (without config)."""
     console.print(f"\n[bold]Project: {project}[/bold]")
@@ -866,8 +1086,6 @@ def _show_project_status_basic(project: str, project_dir: Path) -> None:
 
 def _show_detailed_status(cfg: dict[str, Any], config_file: Path) -> None:
     """Show detailed status for a benchmark including config information."""
-    import json
-
     project_id = cfg.get("project_id", "unknown")
     results_dir = Path("results") / project_id
 
@@ -900,149 +1118,142 @@ def _show_detailed_status(cfg: dict[str, Any], config_file: Path) -> None:
     console.print(info_table)
     console.print()
 
-    # Status Table
-    status_table = Table(show_header=True, header_style="bold blue", title="Status")
-    status_table.add_column("Component", style="bold")
-    status_table.add_column("Status", justify="center")
-    status_table.add_column("Details")
-
+    # Check if results directory exists
     if not results_dir.exists():
-        status_table.add_row("Results", "[red]✗[/]", "No results directory")
-        console.print(status_table)
+        console.print("[red]No results directory found[/red]")
+        console.print("[dim]Run 'benchkit setup' to begin[/dim]")
         return
 
-    # System Info Status
-    system_json = results_dir / "system.json"
-    system_pattern_files = list(results_dir.glob("system_*.json"))
+    # Load phase data and run results
+    phase_data = _load_phase_data(results_dir, system_names)
+    runs_df = _load_runs_data(results_dir)
+    query_stats = _get_query_stats_per_system(runs_df) if runs_df is not None else {}
 
-    if system_json.exists():
-        status_table.add_row(
-            "System Info",
-            "[green]✓[/]",
-            f"1 system ({system_json.stat().st_size:,} bytes)",
-        )
-    elif system_pattern_files:
-        total_size = sum(f.stat().st_size for f in system_pattern_files)
-        status_table.add_row(
-            "System Info",
-            "[green]✓[/]",
-            f"{len(system_pattern_files)} systems ({total_size:,} bytes)",
-        )
-    else:
-        status_table.add_row("System Info", "[red]✗[/]", "Not gathered")
-
-    # Benchmark Results
-    runs_csv = results_dir / "runs.csv"
-    summary_json = results_dir / "summary.json"
-
-    if runs_csv.exists() and summary_json.exists():
+    # Get infrastructure IPs for availability check (cloud mode only)
+    env_mode = cfg.get("env", {}).get("mode", "local")
+    infra_ips: dict[str, Any] | None = None
+    if env_mode in ["aws", "gcp", "azure"]:
         try:
-            with open(summary_json) as f:
-                summary = json.load(f)
-            total_queries = summary.get("total_queries", 0)
-            systems_run = summary.get("systems", [])
-            status_table.add_row(
-                "Benchmark",
-                "[green]✓[/]",
-                f"{total_queries} queries across {len(systems_run)} systems",
-            )
+            infra_manager = InfraManager(env_mode, cfg)
+            infra_ips = infra_manager.get_infrastructure_ips()
         except Exception:
-            status_table.add_row(
-                "Benchmark",
-                "[green]✓[/]",
-                f"Results available ({runs_csv.stat().st_size:,} bytes)",
-            )
-    else:
-        status_table.add_row("Benchmark", "[red]✗[/]", "Not run")
+            infra_ips = None
 
-    # Report - use output_path from config
+    # Phase Status Table
+    phase_table = Table(
+        show_header=True, header_style="bold blue", title="Phase Status by System"
+    )
+    phase_table.add_column("System", style="bold")
+    phase_table.add_column("Setup", justify="center")
+    phase_table.add_column("Load", justify="center")
+    phase_table.add_column("Run", justify="center")
+    if env_mode in ["aws", "gcp", "azure"]:
+        phase_table.add_column("Infra", justify="center")
+
+    # Track overall health
+    has_errors = False
+    all_phases_complete = True
+    total_failed_queries = 0
+
+    for system_name in system_names:
+        system_phase = phase_data.get(system_name, {"setup": None, "load": None})
+
+        # Setup status
+        setup_data = system_phase.get("setup")
+        if setup_data:
+            timing = setup_data.get("installation_s", 0)
+            setup_cell = f"[green]✓[/] {_format_timing(timing)}"
+        else:
+            setup_cell = "[dim]-[/]"
+            all_phases_complete = False
+
+        # Load status
+        load_data = system_phase.get("load")
+        if load_data:
+            load_timing = (
+                load_data.get("data_generation_s", 0)
+                + load_data.get("schema_creation_s", 0)
+                + load_data.get("data_loading_s", 0)
+            )
+            load_cell = f"[green]✓[/] {_format_timing(load_timing)}"
+        else:
+            load_cell = "[dim]-[/]"
+            all_phases_complete = False
+
+        # Run status
+        if system_name in query_stats:
+            stats = query_stats[system_name]
+            total = stats["total"]
+            failed = stats["failed"]
+            total_failed_queries += failed
+
+            if failed == 0:
+                run_cell = f"[green]✓[/] {total} queries"
+            elif failed == total:
+                run_cell = f"[red]✗[/] {total} failed"
+                has_errors = True
+            else:
+                run_cell = f"[yellow]⚠[/] {total - failed}/{total}"
+                has_errors = True
+        else:
+            run_cell = "[dim]-[/]"
+            all_phases_complete = False
+
+        # Infrastructure availability (cloud only)
+        if env_mode in ["aws", "gcp", "azure"]:
+            _, infra_cell = _check_infra_available(cfg, system_name, infra_ips)
+            phase_table.add_row(
+                system_name, setup_cell, load_cell, run_cell, infra_cell
+            )
+        else:
+            phase_table.add_row(system_name, setup_cell, load_cell, run_cell)
+
+    console.print(phase_table)
+
+    # Show error details (only when there are failures)
+    if has_errors:
+        for system_name in system_names:
+            if system_name in query_stats and query_stats[system_name]["errors"]:
+                errors = query_stats[system_name]["errors"]
+                error_table = Table(
+                    show_header=True,
+                    header_style="bold red",
+                    title=f"Failed Queries: {system_name}",
+                )
+                error_table.add_column("Query", style="bold")
+                error_table.add_column("Failed", justify="center")
+                error_table.add_column("Error", style="dim")
+
+                for query, failed_count, total_count, error_msg in errors:
+                    error_table.add_row(
+                        query, f"{failed_count}/{total_count}", error_msg
+                    )
+
+                console.print()
+                console.print(error_table)
+
+    # Overall status line
+    console.print()
+    if has_errors:
+        console.print(
+            f"[yellow]Overall: ⚠ {total_failed_queries} query failures detected[/yellow]"
+        )
+    elif all_phases_complete:
+        console.print("[green]Overall: ✓ All phases completed successfully[/green]")
+    else:
+        console.print("[dim]Overall: Some phases pending[/dim]")
+
+    # Report status (compact)
     report_config = cfg.get("report", {})
     output_path = Path(
         report_config.get("output_path", f"results/{project_id}/reports")
     )
     report_dir = output_path.parent / output_path.stem
     report_files = _collect_report_files(report_dir)
-
     if report_files:
-        report_file = report_files[0]
-        extra_variants = len(report_files) - 1
-        details = f"{report_file} ({report_file.stat().st_size:,} bytes)"
-        if extra_variants > 0:
-            suffix = "variants" if extra_variants > 1 else "variant"
-            details = f"{details} + {extra_variants} {suffix}"
-        status_table.add_row(
-            "Report",
-            "[green]✓[/]",
-            details,
-        )
-    else:
-        status_table.add_row("Report", "[red]✗[/]", "Not generated")
-
-    # Infrastructure Status
-    infra_prov = results_dir / "infrastructure_provisioning.json"
-
-    if infra_prov.exists():
-        try:
-            with open(infra_prov) as f:
-                infra_data = json.load(f)
-            # Get timing and timestamp
-            duration = infra_data.get("infrastructure_provisioning_s", 0)
-            timestamp = infra_data.get("timestamp", "")
-
-            # Format the details
-            if timestamp:
-                from datetime import datetime
-
-                try:
-                    dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
-                    time_str = dt.strftime("%Y-%m-%d %H:%M")
-                    details = f"Provisioned in {duration:.1f}s at {time_str}"
-                except Exception:
-                    details = f"Provisioned in {duration:.1f}s"
-            else:
-                details = f"Provisioned in {duration:.1f}s"
-
-            status_table.add_row("Infrastructure", "[green]✓[/]", details)
-        except Exception:
-            status_table.add_row(
-                "Infrastructure", "[green]~[/]", "Provisioning data available"
-            )
-    else:
-        env_mode = cfg.get("env", {}).get("mode", "local")
-        if env_mode == "local":
-            status_table.add_row("Infrastructure", "[dim]-[/]", "Local mode")
-        else:
-            status_table.add_row("Infrastructure", "[red]✗[/]", "Not provisioned")
-
-    console.print(status_table)
-
-    # System-specific installation status
-    if results_dir.exists():
-        system_status = []
-        for system in systems:
-            system_name = system["name"]
-            install_file = results_dir / f"installation_{system_name}.json"
-            setup_file = results_dir / f"setup_{system_name}.json"
-
-            if install_file.exists() and setup_file.exists():
-                try:
-                    with open(install_file) as f:
-                        install_data = json.load(f)
-                    # Use correct field name
-                    install_duration = install_data.get("installation_s", 0)
-                    system_status.append(f"{system_name}: ✓ ({install_duration:.1f}s)")
-                except Exception:
-                    system_status.append(f"{system_name}: ✓")
-            else:
-                system_status.append(f"{system_name}: ✗")
-
-        if system_status:
-            console.print(
-                f"\n[dim]System Installations: {', '.join(system_status)}[/dim]"
-            )
+        console.print(f"[dim]Report: {report_files[0]}[/dim]")
 
     # Show infrastructure details (IPs and connection strings) for cloud environments
-    env_mode = cfg.get("env", {}).get("mode", "local")
     if env_mode in ["aws", "gcp", "azure"]:
         console.print()
         _show_infrastructure_details(cfg, systems)
@@ -1084,8 +1295,22 @@ def _show_infrastructure_details(
             if not ips:
                 continue
 
-            public_ip = ips["public_ip"]
-            private_ip = ips["private_ip"]
+            # Handle both single-node and multi-node formats
+            if "public_ips" in ips:
+                # Multi-node: show all IPs
+                public_ip_list = ips["public_ips"]
+                private_ip_list = ips["private_ips"]
+                public_ip = ", ".join(public_ip_list)
+                private_ip = ", ".join(private_ip_list)
+                # Use first IP for connection string
+                first_public_ip = public_ip_list[0]
+                first_private_ip = private_ip_list[0]
+            else:
+                # Single-node
+                public_ip = ips["public_ip"]
+                private_ip = ips["private_ip"]
+                first_public_ip = public_ip
+                first_private_ip = private_ip
 
             # Get connection string from system class
             connection_str = "-"
@@ -1099,15 +1324,15 @@ def _show_infrastructure_details(
                         "version": system.get("version", "unknown"),
                         "setup": system.get("setup", {}).copy(),
                     }
-                    # Override host with public IP
-                    system_config["setup"]["host"] = public_ip
+                    # Override host with first public IP
+                    system_config["setup"]["host"] = first_public_ip
 
                     system_instance = system_class(system_config)
                     connection_str = system_instance.get_connection_string(
-                        public_ip, private_ip
+                        first_public_ip, first_private_ip
                     )
                 except Exception:
-                    connection_str = f"{system_kind}://{public_ip}"
+                    connection_str = f"{system_kind}://{first_public_ip}"
 
             infra_table.add_row(system_name, public_ip, private_ip, connection_str)
 
@@ -1691,21 +1916,9 @@ def verify(
 @app.command()
 def cleanup(
     config: str = typer.Option(..., "--config", "-c", help="Path to config YAML file"),
-    confirm: bool = typer.Option(False, "--confirm", help="Skip confirmation prompt"),
 ) -> None:
     """Clean up running systems after manual benchmark execution."""
     cfg = load_config(config)
-
-    if not confirm:
-        console.print(
-            f"[yellow]This will clean up all running systems for project: {cfg['project_id']}[/yellow]"
-        )
-        console.print("[yellow]This action cannot be undone![/yellow]")
-
-        confirm_input = typer.prompt("Continue with cleanup? (yes/no)")
-        if confirm_input.lower() not in ["yes", "y"]:
-            console.print("[blue]Cleanup cancelled[/blue]")
-            return
 
     console.print(f"[blue]Cleaning up systems for project:[/] {cfg['project_id']}")
 
@@ -1718,6 +1931,17 @@ def cleanup(
         # Create runner and set up infrastructure
         runner = BenchmarkRunner(cfg, Path("results") / cfg["project_id"])
         runner._setup_infrastructure()
+
+        # For cloud environments, check if any systems were connected
+        env_mode = cfg.get("env", {}).get("mode", "local")
+        if env_mode in ["aws", "gcp", "azure"] and not runner._cloud_instance_managers:
+            console.print(
+                "[yellow]No running systems found. Infrastructure may already be destroyed.[/yellow]"
+            )
+            console.print(
+                "[yellow]Use 'benchkit infra destroy' to clean up any remaining infrastructure.[/yellow]"
+            )
+            return
 
         # Clean up each configured system
         for system_config in cfg["systems"]:

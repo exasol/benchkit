@@ -32,7 +32,7 @@ We compared {{ data.summary.systems | length }} database systems:
 {% set fastest_system = systems_list | min(attribute='1.median_runtime_ms') %}
 {% set slowest_system = systems_list | max(attribute='1.median_runtime_ms') %}
 - {{ fastest_system[0] }} was the fastest overall with {{ fastest_system[1].median_runtime_ms | format_number }}ms median runtime
-- {{ slowest_system[0] }} was {{ (slowest_system[1].median_runtime_ms / fastest_system[1].median_runtime_ms) | format_number(1) }}x slower
+{% if fastest_system[1].median_runtime_ms > 0 %}- {{ slowest_system[0] }} was {{ (slowest_system[1].median_runtime_ms / fastest_system[1].median_runtime_ms) | format_number(1) }}x slower{% endif %}
 {% if cfg.workload.queries and cfg.workload.queries.include %}
 - Tested {{ data.summary.total_queries }} total queries across {{ cfg.workload.queries.include | length }} different query types
 {% else %}
@@ -265,7 +265,7 @@ The following table shows the time taken to provision cloud instances and instal
 {% set fastest_install = install_times | min(attribute='1') %}
 {% set slowest_install = install_times | max(attribute='1') %}
 - {{ fastest_install[0] | title }} had the fastest software installation at {{ "%.2f"|format(fastest_install[1]) }}s
-- {{ slowest_install[0] | title }} took {{ "%.2f"|format(slowest_install[1]) }}s to install ({{ "%.1f"|format(slowest_install[1] / fastest_install[1]) }}x slower)
+{% if fastest_install[1] > 0 %}- {{ slowest_install[0] | title }} took {{ "%.2f"|format(slowest_install[1]) }}s to install ({{ "%.1f"|format(slowest_install[1] / fastest_install[1]) }}x slower){% endif %}
 {% endif %}
 {% endif %}
 
@@ -288,7 +288,7 @@ The following table shows the time taken for data generation, schema creation, a
 {% set fastest_prep = prep_list | min(attribute='1.total_preparation_s') %}
 {% set slowest_prep = prep_list | max(attribute='1.total_preparation_s') %}
 - {{ fastest_prep[0] | title }} had the fastest preparation time at {{ "%.2f"|format(fastest_prep[1].total_preparation_s) }}s
-- {{ slowest_prep[0] | title }} took {{ "%.2f"|format(slowest_prep[1].total_preparation_s) }}s ({{ "%.1f"|format(slowest_prep[1].total_preparation_s / fastest_prep[1].total_preparation_s) }}x slower)
+{% if fastest_prep[1].total_preparation_s > 0 %}- {{ slowest_prep[0] | title }} took {{ "%.2f"|format(slowest_prep[1].total_preparation_s) }}s ({{ "%.1f"|format(slowest_prep[1].total_preparation_s / fastest_prep[1].total_preparation_s) }}x slower){% endif %}
 {% endif %}
 
 {% endif %}
@@ -327,8 +327,8 @@ This benchmark was executed using **{{ data.summary.multiuser.num_streams }} con
 {% set slowest_stream = stream_stats | max(attribute='median_runtime_ms') %}
 - Fastest stream median: {{ fastest_stream.median_runtime_ms | format_number }}ms
 - Slowest stream median: {{ slowest_stream.median_runtime_ms | format_number }}ms
-- Stream performance variation: {{ ((slowest_stream.median_runtime_ms / fastest_stream.median_runtime_ms - 1) * 100) | format_number(1) }}% difference between fastest and slowest streams
-- This demonstrates {% if ((slowest_stream.median_runtime_ms / fastest_stream.median_runtime_ms - 1) * 100) < 20 %}**consistent** performance{% else %}**varying** performance{% endif %} across concurrent streams
+{% if fastest_stream.median_runtime_ms > 0 %}- Stream performance variation: {{ ((slowest_stream.median_runtime_ms / fastest_stream.median_runtime_ms - 1) * 100) | format_number(1) }}% difference between fastest and slowest streams
+- This demonstrates {% if ((slowest_stream.median_runtime_ms / fastest_stream.median_runtime_ms - 1) * 100) < 20 %}**consistent** performance{% else %}**varying** performance{% endif %} across concurrent streams{% endif %}
 
 {% endfor %}
 

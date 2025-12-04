@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, root_validator, validator
+from pydantic import BaseModel, field_validator, model_validator
 
 
 class SystemConfig(BaseModel):
@@ -17,7 +17,8 @@ class SystemConfig(BaseModel):
     version: str
     setup: dict[str, Any]
 
-    @validator("name")
+    @field_validator("name")
+    @classmethod
     def validate_name(cls, v: str) -> str:
         """Ensure system name is valid for bash variable names."""
         if not v:
@@ -29,7 +30,8 @@ class SystemConfig(BaseModel):
             )
         return v
 
-    @validator("kind")
+    @field_validator("kind")
+    @classmethod
     def validate_kind(cls, v: str) -> str:
         """Ensure system kind is supported."""
         valid_kinds = {"exasol", "clickhouse"}
@@ -54,7 +56,8 @@ class WorkloadConfig(BaseModel):
     system_variants: dict[str, str] | None = None  # Per-system variant overrides
     multiuser: dict[str, Any] | None = None  # Multiuser execution configuration
 
-    @validator("name")
+    @field_validator("name")
+    @classmethod
     def validate_workload_name(cls, v: str) -> str:
         """Ensure workload name is valid."""
         from benchkit.workloads import WORKLOAD_IMPLEMENTATIONS
@@ -67,28 +70,32 @@ class WorkloadConfig(BaseModel):
             )
         return v
 
-    @validator("scale_factor")
+    @field_validator("scale_factor")
+    @classmethod
     def validate_scale_factor(cls, v: int) -> int:
         """Ensure scale factor is positive."""
         if v < 1:
             raise ValueError(f"scale_factor must be positive (got {v})")
         return v
 
-    @validator("runs_per_query")
+    @field_validator("runs_per_query")
+    @classmethod
     def validate_runs_per_query(cls, v: int) -> int:
         """Ensure runs_per_query is positive."""
         if v < 1:
             raise ValueError(f"runs_per_query must be positive (got {v})")
         return v
 
-    @validator("warmup_runs")
+    @field_validator("warmup_runs")
+    @classmethod
     def validate_warmup_runs(cls, v: int) -> int:
         """Ensure warmup_runs is non-negative."""
         if v < 0:
             raise ValueError(f"warmup_runs must be non-negative (got {v})")
         return v
 
-    @validator("data_format")
+    @field_validator("data_format")
+    @classmethod
     def validate_data_format(cls, v: str) -> str:
         """Ensure data format is valid."""
         valid_formats = {"csv", "parquet"}
@@ -98,7 +105,8 @@ class WorkloadConfig(BaseModel):
             )
         return v
 
-    @validator("multiuser")
+    @field_validator("multiuser")
+    @classmethod
     def validate_multiuser(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
         """Validate multiuser configuration."""
         if v is None:
@@ -131,7 +139,8 @@ class EnvironmentConfig(BaseModel):
         False  # Allow external access to database ports
     )
 
-    @validator("mode")
+    @field_validator("mode")
+    @classmethod
     def validate_mode(cls, v: str) -> str:
         """Ensure environment mode is valid."""
         valid_modes = {"local", "aws", "gcp", "azure"}
@@ -177,7 +186,8 @@ class BenchmarkConfig(BaseModel):
     metrics: dict[str, Any] = {}
     report: ReportConfig | None = None
 
-    @validator("project_id")
+    @field_validator("project_id")
+    @classmethod
     def validate_project_id(cls, v: str | None) -> str | None:
         """Ensure project_id is filesystem-safe."""
         if v is None:
@@ -188,7 +198,8 @@ class BenchmarkConfig(BaseModel):
             )
         return v
 
-    @validator("systems")
+    @field_validator("systems")
+    @classmethod
     def validate_systems(cls, v: list[SystemConfig]) -> list[SystemConfig]:
         """Ensure at least one system is configured and validate multinode support."""
         if len(v) < 1:
@@ -274,22 +285,19 @@ class BenchmarkConfig(BaseModel):
 
         return v
 
-    @root_validator(skip_on_failure=True)
-    def validate_instance_config_matches_systems(cls, values: dict) -> dict:
+    @model_validator(mode="after")
+    def validate_instance_config_matches_systems(self) -> "BenchmarkConfig":
         """Validate that instance configs reference valid system names."""
-        env = values.get("env")
-        systems = values.get("systems", [])
-
-        if env and env.instances and systems:
-            system_names = {s.name for s in systems}
-            for instance_name in env.instances:
+        if self.env and self.env.instances and self.systems:
+            system_names = {s.name for s in self.systems}
+            for instance_name in self.env.instances:
                 if instance_name not in system_names:
                     raise ValueError(
                         f"Instance config '{instance_name}' does not match any system. "
                         f"Valid systems: {', '.join(sorted(system_names))}"
                     )
 
-        return values
+        return self
 
 
 def load_config(path: str | Path) -> dict[str, Any]:
@@ -336,7 +344,7 @@ def load_config(path: str | Path) -> dict[str, Any]:
     # Validate using Pydantic model
     try:
         validated_config = BenchmarkConfig(**raw_config)
-        result: dict[str, Any] = validated_config.dict()
+        result: dict[str, Any] = validated_config.model_dump()
         return result
     except Exception as e:
         raise ValueError(f"Invalid configuration: {e}") from e

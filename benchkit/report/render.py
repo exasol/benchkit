@@ -51,6 +51,7 @@ class ReportRenderer:
         self.jinja_env.filters["format_number_ceil"] = self._format_number_ceil
         self.jinja_env.filters["format_duration"] = self._format_duration
         self.jinja_env.filters["sanitize"] = self._sanitize_for_report
+        self.jinja_env.filters["safe_divide"] = self._safe_divide
 
         # Shared setup rendering configuration
         self.setup_category_order = [
@@ -704,6 +705,14 @@ class ReportRenderer:
             minutes = int(seconds // 60)
             secs = seconds % 60
             return f"{minutes}m {secs:.1f}s"
+
+    def _safe_divide(self, numerator: float, denominator: float, default: float = 0.0) -> float:
+        """Safe division that returns default if denominator is zero or None."""
+        if denominator is None or denominator == 0:
+            return default
+        if numerator is None:
+            return default
+        return numerator / denominator
 
     def _extract_sensitive_values(self, setup_summaries: dict[str, Any]) -> None:
         """Extract sensitive values from setup summaries and config for sanitization."""

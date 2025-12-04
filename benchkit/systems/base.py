@@ -45,6 +45,13 @@ class SystemUnderTest(ABC):
         self.config = config
         self._connection = None
         self._is_running = False
+        # Container name for Docker-based installations (can be overridden in subclasses)
+        project_id = config.get("project_id", "")
+        self.container_name = (
+            f"{self.kind}_{project_id}_{self.name}"
+            if project_id
+            else f"{self.kind}_{self.name}"
+        )
 
         # Output callback for thread-safe logging in parallel execution
         self._output_callback = output_callback
@@ -59,6 +66,11 @@ class SystemUnderTest(ABC):
         # Multinode configuration
         self.node_count: int = self.setup_config.get("node_count", 1)
 
+        # Cloud instance management for remote execution
+        self._cloud_instance_manager: Any = None
+        self._cloud_instance_managers: list[Any] = []
+        self._external_host: str | None = None
+
     def _log(self, message: str) -> None:
         """
         Thread-safe logging that respects parallel execution context.
@@ -66,8 +78,20 @@ class SystemUnderTest(ABC):
         Use this method instead of print() to ensure correct system name tagging
         when systems are being installed/configured in parallel.
 
+        When output_callback is set (e.g., by BenchmarkRunner during parallel execution),
+        output is routed directly to the ParallelExecutor's task buffer, bypassing
+        the thread-unsafe contextlib.redirect_stdout mechanism. This prevents the
+        race condition where output from one system could get tagged with another
+        system's name.
+
         Args:
             message: Message to log
+
+        Note:
+            - Always use _log() instead of print() in system implementations
+            - When output_callback is None, falls back to print() (sequential execution)
+            - The callback is automatically set by BenchmarkRunner._get_system_for_context()
+              when running in parallel mode
         """
         if self._output_callback:
             self._output_callback(message)
@@ -132,13 +156,159 @@ class SystemUnderTest(ABC):
 
     @exclude_from_package
     def install(self) -> bool:
-        """
-        Install and configure the database system.
+        """Install database system. Routes to _install_docker/_install_native/_verify_preinstalled."""
+        self.prepare_data_directory()
+        method = self.setup_config.get("method", "docker")
+        handlers = {
+            "docker": self._install_docker,
+            "native": self._install_native,
+            "installer": self._install_native,
+            "preinstalled": self._verify_preinstalled,
+        }
+        handler = handlers.get(method)
+        if not handler:
+            self._log(f"Unknown setup method: {method}")
+            return False
+        return handler()
 
-        Returns:
-            True if installation successful, False otherwise
-        """
-        return False
+    def _install_docker(self) -> bool:
+        """Install using Docker. Override in subclasses or use _install_docker_common()."""
+        raise NotImplementedError("Subclass must implement _install_docker()")
+
+    def _install_native(self) -> bool:
+        """Install natively. Override in subclasses."""
+        raise NotImplementedError("Subclass must implement _install_native()")
+
+    def _verify_preinstalled(self) -> bool:
+        """Verify preinstalled system is accessible. Default: check health."""
+        return self.is_healthy()
+
+    @exclude_from_package
+    def _install_docker_common(
+        self,
+        image: str,
+        port_mappings: dict[int, int],
+        volume_mappings: dict[str, str] | None = None,
+        env_vars: dict[str, str] | None = None,
+        extra_args: list[str] | None = None,
+    ) -> bool:
+        """Common Docker installation pattern. Call from subclass _install_docker()."""
+        self.record_setup_note(f"Installing {self.kind} using Docker container")
+        if self.data_dir:
+            self.record_setup_command(
+                f"sudo mkdir -p {self.data_dir}",
+                f"Create {self.kind} data directory",
+                "preparation",
+            )
+            self.record_setup_command(
+                f"sudo chown $(whoami):$(whoami) {self.data_dir}",
+                "Set data directory permissions",
+                "preparation",
+            )
+        self.execute_command(f"docker rm -f {self.container_name} || true", record=True)
+        docker_cmd = ["docker", "run", "-d", "--name", self.container_name]
+        if volume_mappings:
+            docker_cmd.extend(f"-v {h}:{c}" for h, c in volume_mappings.items())
+        for host_port, container_port in port_mappings.items():
+            docker_cmd.extend(["-p", f"{host_port}:{container_port}"])
+        if env_vars:
+            docker_cmd.extend(f"-e {k}={v}" for k, v in env_vars.items())
+        if extra_args:
+            docker_cmd.extend(extra_args)
+        docker_cmd.append(image)
+        result = self.execute_command(" ".join(docker_cmd))
+        if not result["success"]:
+            self._log(f"Failed to start {self.kind} container: {result['stderr']}")
+            return False
+        self._log(f"Waiting for {self.kind} to start...")
+        return self.wait_for_health(max_attempts=60, delay=5.0)
+
+    @exclude_from_package
+    def _install_on_all_nodes(self, install_single_node_fn: Any) -> bool:
+        """Execute installation on all nodes in a multinode cluster. Use for multinode native installs."""
+        if not self._cloud_instance_managers or len(self._cloud_instance_managers) <= 1:
+            return bool(install_single_node_fn())
+        self._log(f"Installing on all {len(self._cloud_instance_managers)} nodes...")
+        original_commands_count, all_success = len(self.setup_commands), True
+        for idx, mgr in enumerate(self._cloud_instance_managers):
+            self._log(f"\n[Node {idx}] Starting installation...")
+            original_mgr, original_external_host = (
+                self._cloud_instance_manager,
+                getattr(self, "_external_host", None),
+            )
+            self._cloud_instance_manager, self._external_host = mgr, mgr.public_ip
+            commands_before = len(self.setup_commands) if idx > 0 else None
+            try:
+                if not install_single_node_fn():
+                    self._log(f"[Node {idx}] Installation failed")
+                    all_success = False
+                else:
+                    self._log(f"[Node {idx}] Installation completed")
+            finally:
+                if idx > 0 and commands_before is not None:
+                    self.setup_commands = self.setup_commands[:commands_before]
+                self._cloud_instance_manager = original_mgr
+                if original_external_host:
+                    self._external_host = original_external_host
+        node_info = f"all_nodes_{len(self._cloud_instance_managers)}"
+        for i in range(original_commands_count, len(self.setup_commands)):
+            self.setup_commands[i]["node_info"] = node_info
+        return bool(all_success)
+
+    @exclude_from_package
+    def execute_command_on_all_nodes(
+        self,
+        command: str,
+        description: str = "",
+        timeout: int = 300,
+        record: bool = True,
+    ) -> bool:
+        """Execute a command on all nodes. Returns True if all succeed."""
+        managers = (
+            self._cloud_instance_managers
+            if self._cloud_instance_managers
+            else (
+                [self._cloud_instance_manager] if self._cloud_instance_manager else []
+            )
+        )
+        if not managers:
+            return bool(
+                self.execute_command(
+                    command, timeout=float(timeout), record=record
+                ).get("success", False)
+            )
+        all_success = True
+        for idx, mgr in enumerate(managers):
+            result = mgr.run_remote_command(command, timeout=timeout)
+            if not result.get("success", False):
+                self._log(
+                    f"[Node {idx}] Command failed: {result.get('stderr', 'Unknown error')}"
+                )
+                all_success = False
+        if record and managers:
+            node_info = f"all_nodes_{len(managers)}" if len(managers) > 1 else None
+            self.record_setup_command(
+                self._sanitize_command_for_report(command),
+                description or "Execute on all nodes",
+                "setup",
+                node_info,
+            )
+        return bool(all_success)
+
+    @exclude_from_package
+    def _write_remote_config_file(
+        self,
+        path: str,
+        content: str,
+        description: str,
+        category: str = "configuration",
+        use_sudo: bool = True,
+    ) -> bool:
+        """Write a config file remotely using heredoc (no escaping needed)."""
+        prefix = "sudo " if use_sudo else ""
+        cmd = f"{prefix}tee {path} > /dev/null << 'EOF'\n{content}\nEOF"
+        self.record_setup_command(cmd, description, category)
+        return bool(self.execute_command(cmd).get("success", False))
 
     @abstractmethod
     @exclude_from_package
@@ -191,17 +361,24 @@ class SystemUnderTest(ABC):
         return f"{self.kind}://{host}:{port}"
 
     def get_data_generation_directory(self, workload: Any) -> Path | None:
-        """
-        Get the directory where benchmark data should be generated.
-
-        Override this method in subclasses to provide custom paths on additional disks.
-
-        Args:
-            workload: The workload object that needs data generation
-
-        Returns:
-            Path where data should be generated, or None to use default local path
-        """
+        """Get directory for data generation. Uses /data/tpch_gen if use_additional_disk is set."""
+        explicit_data_dir = self.setup_config.get("data_dir")
+        if explicit_data_dir:
+            return (
+                Path(str(explicit_data_dir))
+                / "tpch_gen"
+                / str(workload.name)
+                / f"sf{workload.scale_factor}"
+            )
+        if self.setup_config.get("use_additional_disk", False):
+            tpch_gen_dir = "/data/tpch_gen"
+            self.execute_command(
+                f"sudo mkdir -p {tpch_gen_dir} && sudo chown -R $(whoami):$(whoami) {tpch_gen_dir}",
+                record=False,
+            )
+            return (
+                Path(tpch_gen_dir) / str(workload.name) / f"sf{workload.scale_factor}"
+            )
         return None
 
     @abstractmethod
@@ -323,6 +500,9 @@ class SystemUnderTest(ABC):
     ) -> dict[str, Any]:
         """Execute a system command safely and optionally record it.
 
+        Commands are executed either locally or remotely depending on whether
+        a cloud instance manager is set and _should_execute_remotely() returns True.
+
         Args:
             command: Command to execute
             timeout: Command timeout in seconds
@@ -330,6 +510,25 @@ class SystemUnderTest(ABC):
             category: Category for organizing commands in report
             node_info: Node information (e.g., "node0", "all nodes", "node1,node2")
         """
+        # Check if should execute remotely (on cloud instance)
+        if self._should_execute_remotely():
+            return self._execute_remote_command(
+                command, timeout, record, category, node_info
+            )
+        else:
+            return self._execute_local_command(
+                command, timeout, record, category, node_info
+            )
+
+    def _execute_local_command(
+        self,
+        command: str,
+        timeout: float | None = None,
+        record: bool = True,
+        category: str = "setup",
+        node_info: str | None = None,
+    ) -> dict[str, Any]:
+        """Execute a command locally using safe_command."""
         result = safe_command(command, timeout=timeout)
 
         # Record command for report reproduction
@@ -346,6 +545,33 @@ class SystemUnderTest(ABC):
             self.setup_commands.append(command_record)
 
         return result
+
+    def _execute_remote_command(
+        self,
+        command: str,
+        timeout: float | None = None,
+        record: bool = True,
+        category: str = "setup",
+        node_info: str | None = None,
+    ) -> dict[str, Any]:
+        """Execute a command on remote cloud instance via instance manager."""
+        result = self._cloud_instance_manager.run_remote_command(
+            command, timeout=int(timeout) if timeout else 300
+        )
+
+        # Record command for report reproduction if requested
+        if record:
+            command_record = {
+                "command": self._sanitize_command_for_report(command),
+                "success": result.get("success", False),
+                "description": f"Execute {command.split()[0]} command on remote system",
+                "category": category,
+            }
+            if node_info:
+                command_record["node_info"] = node_info
+            self.setup_commands.append(command_record)
+
+        return dict(result)
 
     def wait_for_health(self, max_attempts: int = 30, delay: float = 2.0) -> bool:
         """
@@ -514,47 +740,63 @@ class SystemUnderTest(ABC):
         """Return list of Python packages required by this system."""
         return []
 
+    @staticmethod
+    def _resolve_env_var(value: str) -> str:
+        """Resolve environment variable placeholders like $VAR_NAME."""
+        import os
+
+        if isinstance(value, str) and value.startswith("$"):
+            return os.environ.get(value[1:], value)
+        return value
+
+    @classmethod
+    def _get_connection_defaults(cls) -> dict[str, Any]:
+        """Override in subclasses to provide system-specific connection defaults."""
+        return {
+            "port": None,
+            "username": None,
+            "password": "",
+            "schema_key": "schema",
+            "schema": None,
+        }
+
+    @classmethod
+    def _get_password_key(cls, setup_config: dict[str, Any]) -> str:
+        """Override in subclasses if password key varies (e.g., db_password vs password)."""
+        return "password"
+
+    @classmethod  # noqa: B027
+    def _extend_connection_info(
+        cls, conn_info: dict[str, Any], setup_config: dict[str, Any]
+    ) -> None:
+        """Override in subclasses to add system-specific connection info."""
+        pass
+
     @classmethod
     def extract_workload_connection_info(
         cls, setup_config: dict[str, Any], for_local_execution: bool = False
     ) -> dict[str, Any]:
-        """
-        Extract connection information from setup config for workload execution.
+        """Extract connection info using template method pattern. Subclasses override hooks."""
+        defaults = cls._get_connection_defaults()
+        host = (
+            "localhost"
+            if for_local_execution
+            else cls._resolve_env_var(setup_config.get("host", "localhost"))
+        )
+        password_key = cls._get_password_key(setup_config)
+        schema_key = defaults.get("schema_key", "schema")
 
-        This method extracts only the minimal connection parameters needed for
-        workload execution, with proper defaults and environment variable resolution.
-
-        Args:
-            setup_config: The setup section from system config
-            for_local_execution: If True, use localhost (for packages running on DB machine).
-                                If False, preserve configured host with env var resolution (for remote execution).
-
-        Returns:
-            Dictionary with connection parameters (host, port, username, password, etc.)
-        """
-        import os
-
-        def resolve_env_var(value: str) -> str:
-            """Resolve environment variable placeholders like $VAR_NAME."""
-            if isinstance(value, str) and value.startswith("$"):
-                var_name = value[1:]  # Remove $ prefix
-                return os.environ.get(var_name, value)
-            return value
-
-        # Determine host based on execution context
-        if for_local_execution:
-            host = "localhost"
-        else:
-            host = resolve_env_var(setup_config.get("host", "localhost"))
-
-        # Generic fallback - subclasses should override with system-specific logic
-        return {
+        conn_info = {
             "host": host,
-            "port": setup_config.get("port"),
-            "username": setup_config.get("username"),
-            "password": setup_config.get("password"),
-            "schema": setup_config.get("schema"),
+            "port": setup_config.get("port", defaults["port"]),
+            "username": setup_config.get("username", defaults["username"]),
+            "password": setup_config.get(password_key, defaults["password"]),
+            schema_key: setup_config.get(schema_key, defaults["schema"]),
         }
+        if setup_config.get("use_additional_disk", False):
+            conn_info["use_additional_disk"] = True
+        cls._extend_connection_info(conn_info, setup_config)
+        return conn_info
 
     @classmethod
     def get_required_ports(cls) -> dict[str, int]:
@@ -1230,6 +1472,281 @@ class SystemUnderTest(ABC):
         self._log(f"✓ Directory storage setup complete: {self.data_dir}")
 
         return True
+
+    # ===================================================================
+    # Cloud Instance Management Methods
+    # ===================================================================
+
+    @exclude_from_package
+    def set_cloud_instance_manager(self, instance_manager: Any | list[Any]) -> None:
+        """
+        Set the cloud instance manager(s) for remote command execution.
+
+        Args:
+            instance_manager: Single CloudInstanceManager for single-node systems,
+                            or list of CloudInstanceManagers for multinode systems
+        """
+        # Handle both single instance and list of instances
+        if isinstance(instance_manager, list):
+            # Multinode setup
+            self._cloud_instance_managers = instance_manager
+            self._cloud_instance_manager = (
+                instance_manager[0] if instance_manager else None
+            )
+        else:
+            # Single node setup
+            self._cloud_instance_manager = instance_manager
+            self._cloud_instance_managers = (
+                [instance_manager] if instance_manager else []
+            )
+
+        # Set external host for health checks from local machine
+        # This is critical for pre-existing installations where install() doesn't run
+        if self._cloud_instance_manager and hasattr(
+            self._cloud_instance_manager, "public_ip"
+        ):
+            self._external_host = self._cloud_instance_manager.public_ip
+            # Keep self.host as localhost for remote execution
+            if hasattr(self, "host"):
+                self.host = "localhost"
+
+            # Allow subclasses to update credentials from config
+            self._update_credentials_from_config()
+
+    @exclude_from_package  # noqa: B027
+    def _update_credentials_from_config(self) -> None:
+        """
+        Hook for subclasses to update credentials after cloud manager is set.
+
+        Override this method in subclasses to update system-specific credentials
+        (e.g., password) from the setup_config when running on cloud instances.
+        """
+        pass  # Subclasses override if needed
+
+    @exclude_from_package
+    def _get_health_check_host(self) -> str:
+        """
+        Get the host to use for health checks, preferring external IP for remote systems.
+
+        Priority:
+        1. _external_host if explicitly set
+        2. public_ip from cloud instance manager if available
+        3. self.host as final fallback
+
+        Returns:
+            Host string to use for health checks
+        """
+        health_check_host: str | None = self._external_host
+
+        if not health_check_host and self._cloud_instance_manager:
+            health_check_host = getattr(self._cloud_instance_manager, "public_ip", None)
+
+        if not health_check_host:
+            health_check_host = getattr(self, "host", "localhost")
+
+        return str(health_check_host) if health_check_host else "localhost"
+
+    def _should_execute_remotely(self) -> bool:
+        """
+        Check if commands should be executed remotely.
+
+        Override in subclasses if remote execution depends on additional conditions
+        (e.g., ClickHouse checks setup_method == "native").
+
+        Returns:
+            True if commands should be executed on remote cloud instance
+        """
+        return self._cloud_instance_manager is not None
+
+    @exclude_from_package
+    def _setup_multinode_storage(self, scale_factor: int) -> bool:
+        """
+        Setup storage on all nodes in a multinode cluster.
+
+        Each node gets its own storage setup via _setup_single_node_storage().
+        Commands are recorded only for the first node to avoid duplicates in reports.
+
+        Args:
+            scale_factor: Workload scale factor for sizing calculations
+
+        Returns:
+            True if successful on all nodes, False otherwise
+        """
+        all_success = True
+
+        # Store original setup_commands to prevent duplicate recording
+        original_commands_count = len(self.setup_commands)
+
+        for idx, mgr in enumerate(self._cloud_instance_managers):
+            self._log(f"\n  [Node {idx}] Setting up storage...")
+
+            # Temporarily override execute_command to use this specific node
+            original_mgr = self._cloud_instance_manager
+            self._cloud_instance_manager = mgr
+
+            # For nodes after the first, temporarily disable recording to avoid duplicates
+            if idx > 0:
+                commands_before = len(self.setup_commands)
+
+            try:
+                # Run single-node storage setup on this node
+                success = self._setup_single_node_storage(scale_factor)
+                if not success:
+                    self._log(f"  [Node {idx}] ✗ Storage setup failed")
+                    all_success = False
+                else:
+                    self._log(f"  [Node {idx}] ✓ Storage setup completed")
+            finally:
+                # For nodes after the first, remove any commands that were recorded
+                if idx > 0:
+                    self.setup_commands = self.setup_commands[:commands_before]
+
+                # Restore primary manager
+                self._cloud_instance_manager = original_mgr
+
+        # Add node_info to all commands recorded during storage setup if multinode
+        if len(self._cloud_instance_managers) > 1:
+            node_info = f"all_nodes_{len(self._cloud_instance_managers)}"
+            for i in range(original_commands_count, len(self.setup_commands)):
+                self.setup_commands[i]["node_info"] = node_info
+
+        return all_success
+
+    @exclude_from_package
+    def _setup_single_node_storage(self, scale_factor: int) -> bool:
+        """
+        Setup storage on a single node.
+
+        Override this method in subclasses for system-specific storage setup.
+        Called by _setup_multinode_storage() for each node in a cluster.
+
+        Args:
+            scale_factor: Workload scale factor for sizing calculations
+
+        Returns:
+            True if successful, False otherwise
+        """
+        # Default implementation uses the base class database storage setup
+        # Subclasses should override this method for system-specific storage
+        return self._setup_database_storage(scale_factor)
+
+    def _detect_hardware_specs(self) -> dict[str, int]:
+        """
+        Detect actual CPU cores and memory from the system.
+
+        Returns:
+            Dictionary with 'cpu_cores' and 'total_memory_bytes' keys
+        """
+        # Get CPU count
+        cpu_result = self.execute_command("nproc", record=False)
+        if cpu_result.get("success", False):
+            try:
+                cpu_cores = int(cpu_result["stdout"].strip())
+                # Sanity check: CPU cores should be reasonable (between 1 and 512)
+                if cpu_cores < 1 or cpu_cores > 512:
+                    self._log(
+                        f"⚠️  WARNING: Detected {cpu_cores} CPU cores - this seems wrong, using default 16"
+                    )
+                    cpu_cores = 16
+            except (ValueError, KeyError):
+                cpu_cores = 16  # Fallback default
+        else:
+            cpu_cores = 16  # Fallback default
+
+        # Get total memory in bytes
+        mem_result = self.execute_command(
+            "grep MemTotal /proc/meminfo | awk '{print $2}'", record=False
+        )
+        if mem_result.get("success", False):
+            try:
+                mem_kb = int(mem_result["stdout"].strip())
+                mem_bytes = mem_kb * 1024
+            except (ValueError, KeyError):
+                mem_bytes = 64 * 1024 * 1024 * 1024  # 64GB fallback
+        else:
+            mem_bytes = 64 * 1024 * 1024 * 1024  # 64GB fallback
+
+        return {"cpu_cores": cpu_cores, "total_memory_bytes": mem_bytes}
+
+    def _parse_memory_size(self, memory_str: str) -> int:
+        """
+        Parse memory size string like '32g', '1024m' to bytes.
+
+        Args:
+            memory_str: Memory size string with optional unit suffix (g, m, k)
+
+        Returns:
+            Memory size in bytes
+        """
+        memory_str = memory_str.lower().strip()
+
+        if memory_str.endswith("g"):
+            return int(memory_str[:-1]) * 1024 * 1024 * 1024
+        elif memory_str.endswith("m"):
+            return int(memory_str[:-1]) * 1024 * 1024
+        elif memory_str.endswith("k"):
+            return int(memory_str[:-1]) * 1024
+        else:
+            # Assume bytes
+            return int(memory_str)
+
+    def _get_int_config(self, config: dict[str, Any], key: str, default: int) -> int:
+        """
+        Safely get an integer value from config, handling both string and int inputs.
+
+        Args:
+            config: Configuration dictionary
+            key: Key to look up
+            default: Default value if key not present
+
+        Returns:
+            Integer value (converted from string if necessary)
+        """
+        value = config.get(key, default)
+        if isinstance(value, str):
+            return int(value)
+        return int(value)
+
+    def _resolve_ip_addresses(self, ip_config: str) -> str:
+        """
+        Resolve IP address placeholders with actual values from infrastructure.
+
+        Handles environment variable substitution (e.g., $EXASOL_PUBLIC_IP)
+        and InfraManager-based resolution.
+
+        Args:
+            ip_config: IP address string or environment variable placeholder
+
+        Returns:
+            Resolved IP address string
+        """
+        import os
+
+        if not ip_config:
+            return "localhost"
+
+        # Handle environment variable substitution
+        if ip_config.startswith("$"):
+            env_var = ip_config[1:]  # Remove $ prefix
+
+            # Try InfraManager first for infrastructure-managed IPs
+            try:
+                from benchkit.infra.manager import InfraManager
+
+                project_id = self.config.get("project_id", "")
+                resolved = InfraManager.resolve_ip_from_infrastructure(
+                    env_var, self.name, project_id
+                )
+                if resolved:
+                    return str(resolved)
+            except ImportError:
+                pass  # InfraManager not available, fall back to env var
+
+            # Fall back to environment variable
+            return os.environ.get(env_var, ip_config)
+
+        # If it's already an IP address, return as-is
+        return ip_config
 
 
 def get_system_class(system_kind: str) -> type | None:

@@ -82,7 +82,7 @@ This report presents the complete query-by-query performance results for {{ data
 
 **Key Findings:**
 - **{{ fastest_system[0] }}** was the fastest overall with **{{ fastest_system[1].median_runtime_ms | format_number }}ms** median runtime
-- **{{ slowest_system[0] }}** was **{{ (slowest_system[1].median_runtime_ms / fastest_system[1].median_runtime_ms) | format_number(1) }}×** slower
+{% if fastest_system[1].median_runtime_ms > 0 %}- **{{ slowest_system[0] }}** was **{{ (slowest_system[1].median_runtime_ms / fastest_system[1].median_runtime_ms) | format_number(1) }}×** slower{% endif %}
 - Tested **{{ data.summary.total_queries }}** total query executions across {{ cfg.workload.queries.include | length if cfg.workload.queries and cfg.workload.queries.include else '22' }} different query types
 {% if data.summary.execution_mode == "multiuser" and data.summary.multiuser %}
 - **Execution mode:** Multiuser with **{{ data.summary.multiuser.num_streams }} concurrent streams** ({% if data.summary.multiuser.randomize %}randomized distribution{% else %}round-robin distribution{% endif %})
@@ -168,8 +168,8 @@ This benchmark was executed using **{{ data.summary.multiuser.num_streams }} con
 {% set slowest_stream = stream_stats | max(attribute='median_runtime_ms') %}
 - **Best stream median:** {{ fastest_stream.median_runtime_ms | format_number }}ms
 - **Worst stream median:** {{ slowest_stream.median_runtime_ms | format_number }}ms
-- **Performance variance:** {{ ((slowest_stream.median_runtime_ms / fastest_stream.median_runtime_ms - 1) * 100) | format_number(1) }}% difference between fastest and slowest streams
-- This demonstrates {{ system_name | title }}'s ability to handle concurrent query loads with {% if ((slowest_stream.median_runtime_ms / fastest_stream.median_runtime_ms - 1) * 100) < 20 %}**consistent**{% else %}**varying**{% endif %} performance across streams
+{% if fastest_stream.median_runtime_ms > 0 %}- **Performance variance:** {{ ((slowest_stream.median_runtime_ms / fastest_stream.median_runtime_ms - 1) * 100) | format_number(1) }}% difference between fastest and slowest streams
+- This demonstrates {{ system_name | title }}'s ability to handle concurrent query loads with {% if ((slowest_stream.median_runtime_ms / fastest_stream.median_runtime_ms - 1) * 100) < 20 %}**consistent**{% else %}**varying**{% endif %} performance across streams{% endif %}
 
 {% endfor %}
 

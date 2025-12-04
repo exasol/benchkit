@@ -686,18 +686,18 @@ class InfraManager:
 
     @staticmethod
     def resolve_ip_from_infrastructure(
-        var_name: str, system_name: str, project_id: str | None = None
+        var_name: str, system_name: str, project_id: str
     ) -> str | None:
         """
-        Resolve IP address from infrastructure state files.
+        Resolve IP address from project-specific infrastructure state files.
 
-        This is a generic utility that checks various infrastructure state files
-        to resolve IP addresses when environment variables are not set.
+        This utility checks the project-specific Terraform state file to resolve
+        IP addresses when environment variables are not set.
 
         Args:
             var_name: Variable name to resolve (e.g., "EXASOL_PUBLIC_IP")
             system_name: System name to match (e.g., "exasol", "clickhouse")
-            project_id: Project ID for project-specific state lookup (optional)
+            project_id: Project ID for project-specific state lookup (required)
 
         Returns:
             IP address string if found, None otherwise
@@ -713,24 +713,13 @@ class InfraManager:
         # Determine if we need public or private IP based on variable name
         ip_type = "public_ip" if "PUBLIC" in var_name.upper() else "private_ip"
 
-        # Build prioritized list of state file locations
-        state_locations = []
+        # Only use project-specific state location (no legacy fallbacks)
+        if not project_id:
+            return None
 
-        # Priority 1: Project-specific state (if project_id provided)
-        if project_id:
-            state_locations.append(
-                Path("results") / project_id / "terraform" / "terraform.tfstate"
-            )
-
-        # Priority 2: Legacy shared state locations (backward compatibility)
-        state_locations.extend(
-            [
-                Path("infra/aws/terraform.tfstate"),
-                Path("infra/gcp/terraform.tfstate"),
-                Path("infra/azure/terraform.tfstate"),
-                Path("terraform/terraform.tfstate"),
-            ]
-        )
+        state_locations = [
+            Path("results") / project_id / "terraform" / "terraform.tfstate"
+        ]
 
         for state_file in state_locations:
             if not state_file.exists():
@@ -831,7 +820,7 @@ class InfraManager:
         system_private_ips = terraform_outputs.get("system_private_ips", {})
         system_ssh_commands = terraform_outputs.get("system_ssh_commands", {})
 
-        for system_name in set(s for s, _, _ in instances_to_check):
+        for system_name in {s for s, _, _ in instances_to_check}:
             instance_id = system_instance_ids.get(system_name, "unknown")
             private_ip = system_private_ips.get(system_name, "unknown")
             ssh_command = system_ssh_commands.get(system_name, "unknown")
