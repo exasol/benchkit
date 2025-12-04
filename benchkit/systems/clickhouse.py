@@ -2,14 +2,20 @@
 
 from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, TYPE_CHECKING, cast
 
-import clickhouse_connect
+try:
+    import clickhouse_connect
+except ModuleNotFoundError:
+    pass
 
 from benchkit.common.markers import exclude_from_package
-
-from ..util import Timer
 from .base import SystemUnderTest
+
+if TYPE_CHECKING:
+    # avoid cyclic dependency problems
+    from ..util import Timer
+    from ..workloads import Workload
 
 
 class ClickHouseSystem(SystemUnderTest):
@@ -1154,7 +1160,7 @@ class ClickHouseSystem(SystemUnderTest):
         return settings
 
     @exclude_from_package
-    def _setup_database_storage(self, scale_factor: int) -> bool:
+    def _setup_database_storage(self, workload: Workload) -> bool:
         """
         Override base class to setup ClickHouse storage on additional disk.
 
@@ -1171,13 +1177,13 @@ class ClickHouseSystem(SystemUnderTest):
             self._log(
                 f"Setting up storage on all {len(self._cloud_instance_managers)} nodes..."
             )
-            return self._setup_multinode_storage(scale_factor)
+            return self._setup_multinode_storage(workload)
 
         # Single node setup
-        return self._setup_single_node_storage(scale_factor)
+        return self._setup_single_node_storage(workload)
 
     @exclude_from_package
-    def _setup_multinode_storage(self, scale_factor: int) -> bool:
+    def _setup_multinode_storage(self, workload: Workload) -> bool:
         """
         Setup storage on all nodes in a multinode cluster.
         Each node gets its own RAID0 and ClickHouse data directory.
@@ -1199,7 +1205,7 @@ class ClickHouseSystem(SystemUnderTest):
 
             try:
                 # Run single-node storage setup on this node
-                success = self._setup_single_node_storage(scale_factor)
+                success = self._setup_single_node_storage(workload)
                 if not success:
                     self._log(f"  [Node {idx}] ✗ Storage setup failed")
                     all_success = False
@@ -1222,7 +1228,7 @@ class ClickHouseSystem(SystemUnderTest):
         return all_success
 
     @exclude_from_package
-    def _setup_single_node_storage(self, scale_factor: int) -> bool:
+    def _setup_single_node_storage(self, workload: Workload) -> bool:
         """
         Setup storage on a single node. Used by both single-node and multinode setups.
         """
@@ -1247,7 +1253,7 @@ class ClickHouseSystem(SystemUnderTest):
             return True
 
         # Use base class to mount disk/RAID at /data
-        if not super()._setup_database_storage(scale_factor):
+        if not super()._setup_database_storage(workload):
             return False
 
         # Create clickhouse subdirectory under /data
@@ -1271,7 +1277,7 @@ class ClickHouseSystem(SystemUnderTest):
         return True
 
     @exclude_from_package
-    def _setup_directory_storage(self, scale_factor: int) -> bool:
+    def _setup_directory_storage(self, workload: Workload) -> bool:
         """
         Override to use clickhouse user ownership instead of ubuntu.
 
@@ -1320,7 +1326,7 @@ class ClickHouseSystem(SystemUnderTest):
 
         if use_additional_disk:
             # Use shared /data/tpch_gen for TPC-H data generation (same as Exasol)
-            tpch_gen_dir = "/data/tpch_gen"
+            tpch_gen_dir = "/data/generated"
 
             # Create directory with proper ownership
             self.execute_command(
@@ -1328,9 +1334,7 @@ class ClickHouseSystem(SystemUnderTest):
                 record=False,
             )
 
-            data_gen_dir = (
-                Path(tpch_gen_dir) / workload.name / f"sf{workload.scale_factor}"
-            )
+            data_gen_dir = Path(tpch_gen_dir) / workload.safe_display_name()
             self._log(
                 f"ClickHouse: Using additional disk for data generation: {data_gen_dir}"
             )

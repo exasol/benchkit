@@ -5,15 +5,16 @@ import json
 import shutil
 import zipfile
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from rich.console import Console
 
-from ..systems.base import SystemUnderTest
-from ..util import ensure_directory
-from .code_minimizer import CodeMinimizer
-from .formatter import PackageFormatter
-from .import_cleaner import ImportCleaner
+if TYPE_CHECKING:
+    from ..systems.base import SystemUnderTest
+    from ..util import ensure_directory
+    from .code_minimizer import CodeMinimizer
+    from .formatter import PackageFormatter
+    from .import_cleaner import ImportCleaner
 
 console = Console()
 
