@@ -4,11 +4,14 @@ import re
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from benchkit.common.markers import exclude_from_package
 
-from ..util import safe_command
+if TYPE_CHECKING:
+    # avoid cyclic dependency problems
+    from ..util import safe_command
+    from ..workloads import Workload
 
 
 class SystemUnderTest(ABC):
@@ -1261,7 +1264,7 @@ class SystemUnderTest(ABC):
         return True
 
     @exclude_from_package
-    def setup_storage(self, scale_factor: int) -> bool:
+    def setup_storage(self, workload: Workload) -> bool:
         """
         Setup storage based on configuration.
 
@@ -1284,10 +1287,10 @@ class SystemUnderTest(ABC):
         result = False
         if use_additional_disk:
             self._log(f"Setting up additional disk storage for {self.name}...")
-            result = self._setup_database_storage(scale_factor)
+            result = self._setup_database_storage(workload)
         else:
             self._log(f"Setting up directory-based storage for {self.name}...")
-            result = self._setup_directory_storage(scale_factor)
+            result = self._setup_directory_storage(workload)
 
         # Mark storage setup as complete if successful
         if result:
@@ -1296,7 +1299,7 @@ class SystemUnderTest(ABC):
         return result
 
     @exclude_from_package
-    def _setup_database_storage(self, scale_factor: int) -> bool:
+    def _setup_database_storage(self, workload: Workload) -> bool:
         """
         System-specific storage setup for databases using additional disks.
 
@@ -1388,7 +1391,7 @@ class SystemUnderTest(ABC):
                 self._log(
                     f"Warning: No additional storage devices found for {self.name}, using directory storage"
                 )
-                return self._setup_directory_storage(scale_factor)
+                return self._setup_directory_storage(workload)
 
             # Prefer stable_path for multinode consistency
             device_to_use = all_devices[0].get("stable_path", all_devices[0]["path"])
@@ -1438,7 +1441,7 @@ class SystemUnderTest(ABC):
         return True
 
     @exclude_from_package
-    def _setup_directory_storage(self, scale_factor: int) -> bool:
+    def _setup_directory_storage(self, workload: Workload) -> bool:
         """
         Setup directory-based storage (no additional disks).
 

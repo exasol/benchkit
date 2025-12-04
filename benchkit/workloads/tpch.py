@@ -1,13 +1,16 @@
 """TPC-H benchmark workload implementation."""
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from jinja2 import Environment, FileSystemLoader
 
-from ..systems.base import SystemUnderTest
-from ..util import safe_command
 from .base import Workload
+
+if TYPE_CHECKING:
+    # avoid cyclic dependency problems
+    from ..systems.base import SystemUnderTest
+    from ..util import safe_command
 
 
 class TPCH(Workload):
@@ -760,3 +763,24 @@ class TPCH(Workload):
             return str(self._current_system.database)
         else:
             return "benchmark"
+
+    def estimate_filesystem_usage_gb(self, system: SystemUnderTest) -> int:
+        """
+        Estimate required storage size for TPC-H data at specific scale factor
+
+        # SF1 ≈ 1GB, add 20% safety margin
+        # estimated_gb = max(int(scale_factor * 1.3), 3)
+        """
+
+        def scale_multiplier(sf: float) -> float:
+            # 2.0 at very small sf (≈1–10), ~1.6 at 30, →1.3 for sf ≥ 100
+            # f(sf) = 1.3 + 0.7 / (1 + (sf/K)^p), with K≈26.8537, p≈2.5966
+            if sf <= 10:
+                return 2.0
+            val = 1.3 + 0.7 / (1.0 + (sf / 26.853725639548) ** 2.5965770266157073)
+            return float(max(1.3, min(val, 2.0)))
+
+        def estimate_gb(sf: float) -> int:
+            return int(max(sf * scale_multiplier(sf), 3.0))
+
+        return estimate_gb(float(self.scale_factor))
