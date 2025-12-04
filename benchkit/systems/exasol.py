@@ -123,7 +123,10 @@ class ExasolSystem(SystemUnderTest):
         from benchkit.infra.manager import InfraManager
 
         # Use infrastructure manager to resolve IP addresses
-        result = InfraManager.resolve_ip_from_infrastructure(var_name, self.name)
+        project_id = self.config.get("project_id", "")
+        result = InfraManager.resolve_ip_from_infrastructure(
+            var_name, self.name, project_id
+        )
         return cast(str | None, result)
 
     def _connect_with_fingerprint_retry(
@@ -685,24 +688,36 @@ class ExasolSystem(SystemUnderTest):
                 # Detect the actual device on THIS node (may differ from primary node)
                 # This detection happens remotely on each node
                 detect_cmd = """
-# Find the instance store device (not root disk) using stable by-id path
-INSTANCE_STORE=$(
-    # Find Instance_Storage devices (exclude _1 namespace variants, prefer shortest path)
-    for byid in $(ls -1 /dev/disk/by-id/ 2>/dev/null | grep 'Instance_Storage' | grep -v '_1' | grep -v -- '-part'); do
-        # Check if this device or its partition 2 exists
-        if [ -b "/dev/disk/by-id/${byid}-part2" ]; then
-            echo "/dev/disk/by-id/${byid}-part2"
-            break
-        elif [ -b "/dev/disk/by-id/${byid}" ]; then
-            echo "/dev/disk/by-id/${byid}"
-            break
-        fi
-    done | head -1
-)
+# Determine storage device based on type
+TARGET_DEV="%s"
 
-# If detection failed, fall back to provided device (shouldn't happen)
-if [ -z "$INSTANCE_STORE" ]; then
-    INSTANCE_STORE="%s"
+# RAID devices: use directly (naming is consistent across nodes: /dev/md0, /dev/md0p2)
+if [[ "$TARGET_DEV" =~ ^/dev/md[0-9]+ ]]; then
+    INSTANCE_STORE="$TARGET_DEV"
+
+# EBS/attached volumes: use directly (naming is consistent via Terraform)
+elif [[ "$TARGET_DEV" =~ ^/dev/(xvd|sd)[a-z] ]]; then
+    INSTANCE_STORE="$TARGET_DEV"
+
+# Single local NVMe: need Instance_Storage detection (device naming may differ between nodes)
+else
+    INSTANCE_STORE=$(
+        # Find Instance_Storage devices (exclude _1 namespace variants, prefer shortest path)
+        for byid in $(ls -1 /dev/disk/by-id/ 2>/dev/null | grep 'Instance_Storage' | grep -v '_1' | grep -v -- '-part'); do
+            # Check if this device or its partition 2 exists
+            if [ -b "/dev/disk/by-id/${byid}-part2" ]; then
+                echo "/dev/disk/by-id/${byid}-part2"
+                break
+            elif [ -b "/dev/disk/by-id/${byid}" ]; then
+                echo "/dev/disk/by-id/${byid}"
+                break
+            fi
+        done | head -1
+    )
+    # Fallback if detection fails
+    if [ -z "$INSTANCE_STORE" ]; then
+        INSTANCE_STORE="$TARGET_DEV"
+    fi
 fi
 
 # Create symlink in /dev (no directory creation needed - /dev already exists)

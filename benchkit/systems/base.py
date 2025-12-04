@@ -78,8 +78,20 @@ class SystemUnderTest(ABC):
         Use this method instead of print() to ensure correct system name tagging
         when systems are being installed/configured in parallel.
 
+        When output_callback is set (e.g., by BenchmarkRunner during parallel execution),
+        output is routed directly to the ParallelExecutor's task buffer, bypassing
+        the thread-unsafe contextlib.redirect_stdout mechanism. This prevents the
+        race condition where output from one system could get tagged with another
+        system's name.
+
         Args:
             message: Message to log
+
+        Note:
+            - Always use _log() instead of print() in system implementations
+            - When output_callback is None, falls back to print() (sequential execution)
+            - The callback is automatically set by BenchmarkRunner._get_system_for_context()
+              when running in parallel mode
         """
         if self._output_callback:
             self._output_callback(message)
@@ -1721,8 +1733,9 @@ class SystemUnderTest(ABC):
             try:
                 from benchkit.infra.manager import InfraManager
 
+                project_id = self.config.get("project_id", "")
                 resolved = InfraManager.resolve_ip_from_infrastructure(
-                    env_var, self.name
+                    env_var, self.name, project_id
                 )
                 if resolved:
                     return str(resolved)

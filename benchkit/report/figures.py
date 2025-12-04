@@ -252,7 +252,9 @@ def _create_heatmap(df: pd.DataFrame, output_dir: Path) -> str:
     pivot_data.index = pivot_data.index.str.title()
 
     # Calculate relative performance (normalized by column minimum for horizontal layout)
-    relative_data = pivot_data.div(pivot_data.min(axis=0), axis=1)
+    # Replace zeros with NaN to avoid division by zero
+    min_values = pivot_data.min(axis=0).replace(0, float("nan"))
+    relative_data = pivot_data.div(min_values, axis=1)
 
     fig = px.imshow(
         relative_data,
@@ -293,6 +295,10 @@ def create_speedup_plot(
     # Add speedup traces for each system
     for system in pivot_data.columns:
         if system == baseline_system:
+            continue
+
+        # Skip systems with zero values to avoid division by zero
+        if (pivot_data[system] == 0).any() or (pivot_data[baseline_system] == 0).any():
             continue
 
         speedups = pivot_data[baseline_system] / pivot_data[system]
@@ -448,7 +454,9 @@ def create_system_overview_plot(df: pd.DataFrame, output_dir: Path) -> str:
     )
 
     # 3. Coefficient of variation (moved to col 3)
-    cv = (system_stats["std"] / system_stats["mean"]) * 100
+    # Replace zeros with NaN to avoid division by zero
+    mean_safe = system_stats["mean"].replace(0, float("nan"))
+    cv = (system_stats["std"] / mean_safe) * 100
     fig.add_trace(
         go.Bar(
             x=system_stats["system_label"], y=cv, marker_color=colors_list, name="CV"

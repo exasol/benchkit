@@ -89,9 +89,9 @@ The following steps were performed to install and configure {{ tested_system.nam
 | Metric | {{ tested_system.name | title }} | {{ winner_system_name | title }} | Difference |
 |--------|{% for _ in tested_system.name %}--{% endfor %}|{% for _ in winner_system_name %}--{% endfor %}|------------|
 | Median Runtime | {{ stats.median_runtime_ms | format_number }}ms | {{ winner_median | format_number }}ms | {{ speedup_factor | format_number(1) }}× slower |
-| Average Runtime | {{ stats.avg_runtime_ms | format_number }}ms | {{ winner_avg | format_number }}ms | {{ (stats.avg_runtime_ms / winner_avg) | format_number(1) }}× slower |
-| Fastest Query | {{ stats.min_runtime_ms | format_number }}ms | {{ winner_min | format_number }}ms | {{ (stats.min_runtime_ms / winner_min) | format_number(1) }}× slower |
-| Slowest Query | {{ stats.max_runtime_ms | format_number }}ms | {{ winner_max | format_number }}ms | {{ (stats.max_runtime_ms / winner_max) | format_number(1) }}× slower |
+| Average Runtime | {{ stats.avg_runtime_ms | format_number }}ms | {{ winner_avg | format_number }}ms | {% if winner_avg > 0 %}{{ (stats.avg_runtime_ms / winner_avg) | format_number(1) }}× slower{% else %}N/A{% endif %} |
+| Fastest Query | {{ stats.min_runtime_ms | format_number }}ms | {{ winner_min | format_number }}ms | {% if winner_min > 0 %}{{ (stats.min_runtime_ms / winner_min) | format_number(1) }}× slower{% else %}N/A{% endif %} |
+| Slowest Query | {{ stats.max_runtime_ms | format_number }}ms | {{ winner_max | format_number }}ms | {% if winner_max > 0 %}{{ (stats.max_runtime_ms / winner_max) | format_number(1) }}× slower{% else %}N/A{% endif %} |
 
 {% endif %}
 

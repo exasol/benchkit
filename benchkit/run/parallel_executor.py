@@ -81,6 +81,10 @@ class ParallelExecutor:
         self._stdout_original = sys.stdout
         self._stderr_original = sys.stderr
 
+        # Thread-local storage for current task identification
+        # This provides defense-in-depth for output attribution
+        self._thread_local = threading.local()
+
     def execute_parallel(
         self,
         tasks: dict[str, Callable[[], Any]],
@@ -129,7 +133,15 @@ class ParallelExecutor:
         return dict(self.results)
 
     def _wrap_task(self, name: str, task: Callable[[], Any]) -> Any:
-        """Run a single task with stdout/stderr capture."""
+        """Run a single task with stdout/stderr capture.
+
+        Sets thread-local task name for defense-in-depth output attribution.
+        Even if redirect_stdout races with another thread, we can still identify
+        which task this thread is running via get_current_task_name().
+        """
+        # Set thread-local task name for defense-in-depth
+        self._thread_local.current_task = name
+
         with self._state_lock:
             self.start_times[name] = time.time()
         self.update_status(name, "🔄 Running...")
@@ -153,12 +165,81 @@ class ParallelExecutor:
             finally:
                 stdout_stream.flush()
                 stderr_stream.flush()
+                # Clear thread-local task name
+                self._thread_local.current_task = None
 
         return result
 
     def add_output(self, name: str, message: str) -> None:
         """Record a log line for a task."""
         self._record_line(name, message)
+
+    def create_output_callback(self, task_name: str) -> Callable[[str], None]:
+        """
+        Create a thread-safe output callback for a specific task.
+
+        This callback routes output directly to _record_line(), bypassing
+        the thread-unsafe redirect_stdout mechanism. Use this when creating
+        SystemUnderTest instances during parallel execution to ensure output
+        is correctly attributed to the right task.
+
+        Args:
+            task_name: Name of the task this callback is for
+
+        Returns:
+            A callable that takes a message string and records it for the task
+
+        Example:
+            callback = executor.create_output_callback("exasol")
+            system = create_system(config, output_callback=callback)
+            # Now system._log() will route to the correct task buffer
+        """
+
+        def callback(message: str) -> None:
+            self._record_line(task_name, message)
+
+        return callback
+
+    def get_current_task_name(self) -> str | None:
+        """
+        Get the name of the task currently executing in this thread.
+
+        Returns:
+            Task name if in a task context, None otherwise
+        """
+        return getattr(self._thread_local, "current_task", None)
+
+    def _validate_output_isolation(self) -> list[str]:
+        """
+        Validate that no output cross-contamination occurred.
+
+        Checks output buffers for obvious signs of contamination, such as
+        one task's output appearing in another task's buffer.
+
+        Returns:
+            List of warning messages if contamination detected, empty list if clean
+        """
+        warnings: list[str] = []
+
+        for name, lines in self.output_buffers.items():
+            for other_name in self.output_buffers:
+                if other_name != name:
+                    # Check for obvious contamination patterns:
+                    # 1. Other task's tag appearing in this buffer
+                    # 2. "Processing {other_name}" appearing in this buffer
+                    for line in lines:
+                        if f"[{other_name}]" in line:
+                            warnings.append(
+                                f"Possible contamination: [{other_name}] tag found in {name}'s buffer"
+                            )
+                            break
+                        if f"Processing {other_name}" in line:
+                            warnings.append(
+                                f"Possible contamination: '{other_name}' processing message in {name}'s buffer"
+                            )
+                            break
+
+        return warnings
 
     def update_status(self, name: str, status: str) -> None:
         """Update task status and record it."""
