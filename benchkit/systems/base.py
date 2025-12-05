@@ -20,6 +20,8 @@ class SystemUnderTest(ABC):
     # Class attribute indicating if this system supports multinode clusters
     # Subclasses should override this to True if they support multinode
     SUPPORTS_MULTINODE: bool = False
+    # attribute indicating capability (or implementation) of streaming data import
+    SUPPORTS_STREAMLOAD: bool = False
 
     def __init__(
         self,

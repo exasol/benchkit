@@ -21,6 +21,8 @@ class ExasolSystem(SystemUnderTest):
 
     # Exasol supports multinode clusters via c4 tool
     SUPPORTS_MULTINODE = True
+    # streaming import implemented using pyexasol
+    SUPPORTS_STREAMLOAD = True
 
     @classmethod
     def get_python_dependencies(cls) -> list[str]:
