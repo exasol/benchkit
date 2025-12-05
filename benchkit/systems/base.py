@@ -3,8 +3,9 @@
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
+from datetime import timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from benchkit.common.markers import exclude_from_package
 
@@ -12,6 +13,12 @@ if TYPE_CHECKING:
     # avoid cyclic dependency problems
     from ..util import safe_command
     from ..workloads import Workload
+
+TableOperation = Literal[
+    "DEFAULT",
+    "OPTIMIZE TABLE",
+    "MATERIALIZE STATISTICS",
+]
 
 
 class SystemUnderTest(ABC):
@@ -70,6 +77,7 @@ class SystemUnderTest(ABC):
 
         # Multinode configuration
         self.node_count: int = self.setup_config.get("node_count", 1)
+        assert self.node_count >= 1, "node_count must be positive"
 
         # Cloud instance management for remote execution
         self._cloud_instance_manager: Any = None
@@ -1747,6 +1755,21 @@ class SystemUnderTest(ABC):
 
         # If it's already an IP address, return as-is
         return ip_config
+
+    def estimate_execution_time(
+        self, operation: TableOperation, data_size_gb: float
+    ) -> timedelta:
+        """
+        Calculate an estimated (pessimistic) execution time for the given operation,
+        based on system properties and table size.
+
+        The default implementation returns a fixed value of 5 minutes
+
+        Args:
+            operation: The operation to take place
+            data_size_gb: estimated size of data to operate on
+        """
+        return timedelta(minutes=5)
 
 
 def get_system_class(system_kind: str) -> type | None:

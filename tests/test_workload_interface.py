@@ -1,3 +1,4 @@
+from datetime import timedelta
 from itertools import product
 
 import pytest
@@ -7,7 +8,7 @@ from benchkit.systems import (
     SystemUnderTest,
     _lazy_import_system,
 )
-from benchkit.workloads import WORKLOAD_IMPLEMENTATIONS, Workload, create_workload
+from benchkit.workloads import TPCH, WORKLOAD_IMPLEMENTATIONS, Workload, create_workload
 
 
 @pytest.fixture(params=WORKLOAD_IMPLEMENTATIONS.keys())
@@ -63,3 +64,41 @@ def test_size_estimations(
     assert workload.estimate_filesystem_usage_gb(system) == default_gb
     workload.scale_factor = 100
     assert workload.estimate_filesystem_usage_gb(system) == sf100_gb
+
+
+@pytest.mark.parametrize(
+    "system_kind, node_count, scale_factor, orders_timeout_seconds",
+    [
+        # exasol always has default timeout
+        ("exasol", 1, 100, 300),
+        ("exasol", 10, 100, 300),
+        ("exasol", 1, 1000, 300),
+        ("exasol", 3, 1000, 300),
+        # clickhouse differs
+        ("clickhouse", 1, 100, 1500),
+        ("clickhouse", 10, 100, 300),  # hits lower bound
+        ("clickhouse", 1, 1000, 7200),  # hits upper bound
+        ("clickhouse", 3, 1000, 5000),
+    ],
+)
+def test_timeout_calculation(
+    system_kind: str, node_count: int, scale_factor: int, orders_timeout_seconds: int
+):
+    """Currently only implemented in TCPH workload -- will move to base class soon"""
+    system: SystemUnderTest = make_bare_system(system_kind)
+    workload: TPCH = TPCH({"name": "tpch", "scale_factor": scale_factor})
+    system.node_count = node_count
+
+    assert workload._calculate_statement_timeout(
+        "OPTIMIZE TABLE ORDERS", system
+    ) == timedelta(seconds=orders_timeout_seconds)
+
+    assert workload._calculate_statement_timeout(
+        "SELECT * FROM ORDERS", system
+    ) == timedelta(minutes=5), "should be default timeout"
+
+    assert (
+        timedelta(minutes=5)
+        <= workload._calculate_statement_timeout("MATERIALIZE STATISTICS", system)
+        <= timedelta(hours=1)
+    ), "timeout should be within bounds"

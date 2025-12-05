@@ -1,5 +1,6 @@
 """TPC-H benchmark workload implementation."""
 
+from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -173,8 +174,8 @@ class TPCH(Workload):
 
                 # Calculate dynamic timeout for OPTIMIZE operations
                 # These can take a long time for large tables
-                timeout = self._calculate_statement_timeout(
-                    statement, system.kind, node_count
+                timeout: int = int(
+                    self._calculate_statement_timeout(statement, system).total_seconds()
                 )
 
                 # Execute each statement individually with calculated timeout
@@ -198,31 +199,28 @@ class TPCH(Workload):
             return False
 
     def _calculate_statement_timeout(
-        self, statement: str, system_kind: str, node_count: int
-    ) -> int:
+        self, statement: str, system: SystemUnderTest
+    ) -> timedelta:
         """
         Calculate dynamic timeout for a SQL statement based on scale factor and node count.
 
         For OPTIMIZE TABLE operations on large datasets, the default timeout is often
-        insufficient. This method calculates appropriate timeouts based on:
-        - Scale factor: larger data = longer merge/optimize time
-        - Node count: more nodes can mean faster parallel processing
-        - Table size: lineitem is ~6x larger than orders, etc.
+        insufficient. This method calculates appropriate timeouts based on
+        - expected table/data size
+        - the operation
+        - the system executing the operation (kind and node count)
 
         Args:
             statement: SQL statement to execute
-            system_kind: Type of database system (e.g., 'clickhouse')
-            node_count: Number of nodes in the cluster
+            system: System under test, with its own characteristics
 
         Returns:
-            Timeout in seconds
+            Recommended statement timeout
         """
-        # Default timeout for regular queries
-        base_timeout = 300  # 5 minutes
 
         # Check if this is an OPTIMIZE operation (ClickHouse specific)
         statement_upper = statement.upper().strip()
-        if system_kind == "clickhouse" and "OPTIMIZE TABLE" in statement_upper:
+        if "OPTIMIZE TABLE" in statement_upper:
             # Base timeout for OPTIMIZE: 10 minutes per SF1
             # Scale factor 100 = ~1000 minutes base for lineitem
             # But we apply table-specific multipliers
@@ -246,30 +244,19 @@ class TPCH(Workload):
                     multiplier = table_mult
                     break
 
-            # Calculate timeout:
-            # - Base: 60 seconds per SF1 for lineitem
-            # - Adjusted by table multiplier
-            # - Divided by node_count (parallel processing)
-            # - Minimum 300 seconds (5 min), maximum 7200 seconds (2 hours)
-
-            sf_factor = max(1, self.scale_factor)
-            timeout = int(60 * sf_factor * multiplier / max(1, node_count))
-
-            # Apply bounds
-            timeout = max(300, min(7200, timeout))
-
-            return timeout
+            return system.estimate_execution_time(
+                "OPTIMIZE TABLE", self.scale_factor * multiplier
+            )
 
         # For MATERIALIZE STATISTICS, also needs longer timeout
-        if system_kind == "clickhouse" and "MATERIALIZE STATISTICS" in statement_upper:
-            # Similar to OPTIMIZE but typically faster
-            sf_factor = max(1, self.scale_factor)
-            timeout = int(30 * sf_factor / max(1, node_count))
-            timeout = max(300, min(3600, timeout))
-            return timeout
+        if "MATERIALIZE STATISTICS" in statement_upper:
+            return system.estimate_execution_time(
+                "MATERIALIZE STATISTICS", self.scale_factor
+            )
 
-        return base_timeout
+        return system.estimate_execution_time("DEFAULT", self.scale_factor)
 
+    # note: method is not not static in case systems use different split semantics
     def _split_sql_statements(self, sql: str) -> list[str]:
         """
         Split SQL script into individual statements.
