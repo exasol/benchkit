@@ -369,10 +369,8 @@ class SystemUnderTest(ABC):
         """Get directory for data generation. Uses /data/tpch_gen if use_additional_disk is set."""
         explicit_data_dir = self.setup_config.get("data_dir")
         if explicit_data_dir:
-            return (
-                Path(str(explicit_data_dir))
-                / "generated"
-                / workload.safe_display_name()
+            return Path(
+                str(explicit_data_dir), "generated", workload.safe_display_name()
             )
         if self.setup_config.get("use_additional_disk", False):
             tpch_gen_dir = "/data/generated"
@@ -380,7 +378,7 @@ class SystemUnderTest(ABC):
                 f"sudo mkdir -p {tpch_gen_dir} && sudo chown -R $(whoami):$(whoami) {tpch_gen_dir}",
                 record=False,
             )
-            return Path(tpch_gen_dir) / workload.safe_display_name()
+            return Path(tpch_gen_dir, workload.safe_display_name())
         return None
 
     @abstractmethod
