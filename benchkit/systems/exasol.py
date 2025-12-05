@@ -16,6 +16,11 @@ if TYPE_CHECKING:
     from ..util import Timer
     from ..workloads import Workload
 
+if TYPE_CHECKING:
+    # avoid cyclic dependency problems
+    from ..util import Timer
+    from ..workloads import Workload
+
 
 class ExasolSystem(SystemUnderTest):
     """Exasol database system implementation."""
