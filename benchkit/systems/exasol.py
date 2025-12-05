@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, cast
 import pyexasol  # type: ignore
 
 from benchkit.common.markers import exclude_from_package
+
 from .base import SystemUnderTest
 
 if TYPE_CHECKING:

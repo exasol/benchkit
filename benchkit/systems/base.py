@@ -4,7 +4,7 @@ import re
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from benchkit.common.markers import exclude_from_package
 

@@ -2,7 +2,7 @@
 
 from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Any, TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 try:
     import clickhouse_connect
@@ -10,6 +10,7 @@ except ModuleNotFoundError:
     pass
 
 from benchkit.common.markers import exclude_from_package
+
 from .base import SystemUnderTest
 
 if TYPE_CHECKING:

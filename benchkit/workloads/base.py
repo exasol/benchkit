@@ -27,6 +27,7 @@ class Workload(ABC):
     def safe_display_name(self) -> str:
         """Return filesystem-friendly full name for workload"""
         from re import sub
+
         return sub("[^0-9a-zA-Z_]", "_", self.display_name())
 
     @abstractmethod
