@@ -4,7 +4,7 @@ import re
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from benchkit.common.markers import exclude_from_package
 
@@ -371,19 +371,16 @@ class SystemUnderTest(ABC):
         if explicit_data_dir:
             return (
                 Path(str(explicit_data_dir))
-                / "tpch_gen"
-                / str(workload.name)
-                / f"sf{workload.scale_factor}"
+                / "generated"
+                / workload.safe_display_name()
             )
         if self.setup_config.get("use_additional_disk", False):
-            tpch_gen_dir = "/data/tpch_gen"
+            tpch_gen_dir = "/data/generated"
             self.execute_command(
                 f"sudo mkdir -p {tpch_gen_dir} && sudo chown -R $(whoami):$(whoami) {tpch_gen_dir}",
                 record=False,
             )
-            return (
-                Path(tpch_gen_dir) / str(workload.name) / f"sf{workload.scale_factor}"
-            )
+            return Path(tpch_gen_dir) / workload.safe_display_name()
         return None
 
     @abstractmethod
@@ -1564,7 +1561,7 @@ class SystemUnderTest(ABC):
         return self._cloud_instance_manager is not None
 
     @exclude_from_package
-    def _setup_multinode_storage(self, scale_factor: int) -> bool:
+    def _setup_multinode_storage(self, workload: Workload) -> bool:
         """
         Setup storage on all nodes in a multinode cluster.
 
@@ -1572,7 +1569,7 @@ class SystemUnderTest(ABC):
         Commands are recorded only for the first node to avoid duplicates in reports.
 
         Args:
-            scale_factor: Workload scale factor for sizing calculations
+            workload: Workload with scale factor for sizing calculations
 
         Returns:
             True if successful on all nodes, False otherwise
@@ -1595,7 +1592,7 @@ class SystemUnderTest(ABC):
 
             try:
                 # Run single-node storage setup on this node
-                success = self._setup_single_node_storage(scale_factor)
+                success = self._setup_single_node_storage(workload)
                 if not success:
                     self._log(f"  [Node {idx}] ✗ Storage setup failed")
                     all_success = False
@@ -1618,7 +1615,7 @@ class SystemUnderTest(ABC):
         return all_success
 
     @exclude_from_package
-    def _setup_single_node_storage(self, scale_factor: int) -> bool:
+    def _setup_single_node_storage(self, workload: Workload) -> bool:
         """
         Setup storage on a single node.
 
@@ -1626,14 +1623,14 @@ class SystemUnderTest(ABC):
         Called by _setup_multinode_storage() for each node in a cluster.
 
         Args:
-            scale_factor: Workload scale factor for sizing calculations
+            workload: Workload with scale factor for sizing calculations
 
         Returns:
             True if successful, False otherwise
         """
         # Default implementation uses the base class database storage setup
         # Subclasses should override this method for system-specific storage
-        return self._setup_database_storage(scale_factor)
+        return self._setup_database_storage(workload)
 
     def _detect_hardware_specs(self) -> dict[str, int]:
         """
