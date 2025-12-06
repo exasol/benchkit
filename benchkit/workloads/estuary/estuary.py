@@ -114,3 +114,12 @@ class Estuary(TPCH):
             "orders",
             "lineitem",
         ]
+
+    def estimate_filesystem_usage_gb(self, system: SystemUnderTest) -> int:
+        """
+        Estuary workload uses streaming import where possible,
+        in which case it does not require local storage.
+        """
+        if system.SUPPORTS_STREAMLOAD:
+            return 0
+        return super().estimate_filesystem_usage_gb(system)

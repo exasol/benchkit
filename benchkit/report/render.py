@@ -706,7 +706,9 @@ class ReportRenderer:
             secs = seconds % 60
             return f"{minutes}m {secs:.1f}s"
 
-    def _safe_divide(self, numerator: float, denominator: float, default: float = 0.0) -> float:
+    def _safe_divide(
+        self, numerator: float, denominator: float, default: float = 0.0
+    ) -> float:
         """Safe division that returns default if denominator is zero or None."""
         if denominator is None or denominator == 0:
             return default

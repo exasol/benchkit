@@ -1405,7 +1405,7 @@ class BenchmarkRunner:
 
                 # First setup storage (RAID0 if multiple disks)
                 # This must happen BEFORE get_data_generation_directory which partitions the disk
-                system.setup_storage(workload.scale_factor)
+                system.setup_storage(workload)
 
                 # Then partition the disk/RAID and get data generation directory
                 # This will partition disks if needed and store partition info in system instance

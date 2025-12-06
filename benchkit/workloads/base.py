@@ -20,6 +20,29 @@ class Workload(ABC):
         self.config = config
         self.data_dir = Path(f"data/{self.name}/sf{self.scale_factor}")
 
+    def display_name(self) -> str:
+        """Return user-friendly display name for workload"""
+        return f"{self.name} SF{self.scale_factor}"
+
+    def safe_display_name(self) -> str:
+        """Return filesystem-friendly full name for workload"""
+        from re import sub
+
+        return sub("[^0-9a-zA-Z_]", "_", self.display_name())
+
+    @abstractmethod
+    def estimate_filesystem_usage_gb(self, system: SystemUnderTest) -> int:
+        """
+        Estimate file system usage for generating workload data before load.
+
+        Args:
+            system: the system to receive the workload. System features may
+                    affect required file size (0 for streaming load)
+        Returns:
+            Estimated file system usage for generated data in GB
+        """
+        pass
+
     @abstractmethod
     def generate_data(self, output_dir: Path) -> bool:
         """
