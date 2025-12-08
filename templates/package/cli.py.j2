@@ -16,6 +16,7 @@ console = Console()
 
 def load_workload_config(config_path: str) -> dict[str, Any]:
     """Load workload config without full validation (minimal fields only)."""
+    config: dict
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
     return config

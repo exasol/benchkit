@@ -1,14 +1,11 @@
 from pathlib import Path
 from typing import Any
 
-from jinja2 import Environment, FileSystemLoader
-
 from benchkit.systems import SystemUnderTest
-from benchkit.workloads.tpch import TPCH
+from benchkit.workloads import Workload
 
 
-## TODO -- refactoring #14
-class Estuary(TPCH):
+class Estuary(Workload):
     """Inherits all but very few methods from the TPC-H benchmark"""
 
     @classmethod
@@ -19,18 +16,7 @@ class Estuary(TPCH):
     def __init__(self, config: dict[str, Any]):
         super().__init__(config)
 
-        # Override workload folders
-        self.workload_dir = (
-            Path(__file__).parent.parent.parent / "workloads" / "estuary"
-        )
-        self.template_env = Environment(
-            loader=FileSystemLoader(
-                [self.workload_dir / "queries", self.workload_dir / "setup"]
-            ),
-            trim_blocks=True,
-            lstrip_blocks=True,
-        )
-
+        # arbitrary restriction introduced by the row calculation in load_data
         assert (
             1 <= self.scale_factor <= 1000
         ), "estuary benchmark only supports scale factors 1 to 1000"

@@ -1,13 +1,15 @@
 """Benchmark workloads."""
 
 from .base import Workload
+from .clickbench import Clickbench
 from .estuary import Estuary
 from .tpch import TPCH
 
 # Workload factory mapping
-WORKLOAD_IMPLEMENTATIONS = {
+WORKLOAD_IMPLEMENTATIONS: dict[str, type[Workload]] = {
     "tpch": TPCH,
     "estuary": Estuary,
+    "clickbench": Clickbench,
 }
 
 
@@ -32,4 +34,11 @@ def create_workload(config: dict) -> Workload:
     return WORKLOAD_IMPLEMENTATIONS[name](config)
 
 
-__all__ = ["Workload", "TPCH", "Estuary", "create_workload", "WORKLOAD_IMPLEMENTATIONS"]
+__all__ = [
+    "Workload",
+    "TPCH",
+    "Estuary",
+    "Clickbench",
+    "create_workload",
+    "WORKLOAD_IMPLEMENTATIONS",
+]

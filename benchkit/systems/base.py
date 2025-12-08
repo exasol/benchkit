@@ -6,7 +6,7 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
-from benchkit.common.markers import exclude_from_package
+from benchkit.common import exclude_from_package
 
 from ..util import safe_command
 
@@ -58,6 +58,8 @@ class SystemUnderTest(ABC):
 
         # Workload configuration for dynamic tuning
         self.workload_config = workload_config or {}
+        # default schema for queries
+        self.schema: str | None = None
 
         # Command recording for report reproduction
         self.setup_commands: list[dict[str, Any]] = []
@@ -412,6 +414,64 @@ class SystemUnderTest(ABC):
             True if loading successful, False otherwise
         """
         pass
+
+    def load_data_from_url_with_download(
+        self,
+        schema_name: str,
+        table_name: str,
+        data_url: str | list[str],
+        /,
+        extension: str = ".csv",
+        **kwargs: Any,
+    ) -> bool:
+        """
+        Download given resources to host filesystem
+        and then load files into database using `load_data()` above
+        """
+        from benchkit.common import download_file_to_storage
+
+        local_storage: Path = self.data_dir or Path("/var/tmp")
+        downloaded_files: list[Path] = []
+        file_part: int = 0
+        ## download files locally
+        url_list: list[str] = [data_url] if isinstance(data_url, str) else data_url
+        for url in url_list:
+            file_name: str = f"{table_name}_{file_part}{extension}"
+            target_path: Path = local_storage / file_name
+            if target_path.exists():
+                self._log(f"Download: reusing existing file {target_path}")
+                downloaded_files.append(target_path)
+                continue
+            self._log(f"Downloading {file_name} from {url}")
+            try:
+                download_file_to_storage(url, target_path)
+                downloaded_files.append(target_path)
+            except Exception as e:
+                self._log(f"Error downloading {file_name}: {e}")
+                return False
+
+        ## then, import files one by one
+        for file in downloaded_files:
+            if not self.load_data(table_name, file, schema=schema_name):
+                return False
+        return True
+
+    def load_data_from_url(
+        self,
+        schema_name: str,
+        table_name: str,
+        data_url: str | list[str],
+        /,
+        extension: str = ".csv",
+        **kwargs: Any,
+    ) -> bool:
+        """
+        Load table data from a URL or a set of URLs.
+        Default implementation downloads data to local storage and then imports the downloaded file(s) using load_data()
+        """
+        return self.load_data_from_url_with_download(
+            schema_name, table_name, data_url, extension=extension, **kwargs
+        )
 
     @abstractmethod
     def execute_query(

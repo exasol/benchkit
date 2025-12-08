@@ -6,19 +6,24 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import pandas as pd
 from rich.console import Console
 
-from ..common.markers import exclude_from_package
+from benchkit.common import exclude_from_package
+from benchkit.util import ensure_directory, load_json, save_json
+
 from ..debug import is_debug_enabled
 from ..systems import create_system
-from ..systems.base import SystemUnderTest
-from ..util import ensure_directory, load_json, save_json
 from ..workloads import create_workload
 from .parallel_executor import ParallelExecutor
 from .parsers import normalize_runs
+
+if TYPE_CHECKING:
+    from benchkit.systems import SystemUnderTest
+    from benchkit.workloads import Workload
+
 
 console = Console()
 
@@ -1437,16 +1442,11 @@ class BenchmarkRunner:
         return True
 
     def _execute_queries(
-        self, system: Any, workload: Any
+        self, system: SystemUnderTest, workload: Workload
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         """Execute benchmark queries with timing and monitoring."""
-        query_names = self.config["workload"]["queries"]["include"]
         runs_per_query = self.config["workload"]["runs_per_query"]
         warmup_runs = self.config["workload"]["warmup_runs"]
-
-        # If no queries specified, use workload's default (all queries)
-        if not query_names:
-            query_names = workload.queries_to_include
 
         # Extract multiuser configuration
         multiuser_config = self.config["workload"].get("multiuser") or {}
@@ -1462,7 +1462,7 @@ class BenchmarkRunner:
         # Execute queries
         result_dict = workload.run_workload(
             system=system,
-            query_names=query_names,
+            query_names=workload.get_included_queries(),
             runs_per_query=runs_per_query,
             warmup_runs=warmup_runs,
             num_streams=num_streams,

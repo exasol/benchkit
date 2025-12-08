@@ -3,8 +3,6 @@
 from pathlib import Path
 from typing import Any
 
-from jinja2 import Environment, FileSystemLoader
-
 from ..systems.base import SystemUnderTest
 from ..util import safe_command
 from .base import Workload
@@ -20,43 +18,6 @@ class TPCH(Workload):
 
     def __init__(self, config: dict[str, Any]):
         super().__init__(config)
-        self.data_format = config.get("data_format", "tbl")  # TPC-H standard format
-        self.variant = config.get("variant", "official")  # Query variant to use
-        self.system_variants = (
-            config.get("system_variants") or {}
-        )  # Per-system variant overrides
-
-        # Determine which queries to include based on include/exclude logic
-        queries_config = config.get("queries", {})
-        queries_include = queries_config.get("include", [])
-        queries_exclude = queries_config.get("exclude", [])
-
-        all_queries = list(self.get_all_query_names())
-
-        if queries_include:
-            # If include is specified, use only those queries
-            self.queries_to_include = queries_include
-        elif queries_exclude:
-            # If exclude is specified, use all queries except excluded ones
-            self.queries_to_include = [
-                q for q in all_queries if q not in queries_exclude
-            ]
-        else:
-            # If neither is specified, use all queries
-            self.queries_to_include = all_queries
-
-        # Setup template environment for TPC-H workload
-        self.workload_dir = Path(__file__).parent.parent.parent / "workloads" / "tpch"
-        self.template_env = Environment(
-            loader=FileSystemLoader(
-                [self.workload_dir / "queries", self.workload_dir / "setup"]
-            ),
-            trim_blocks=True,
-            lstrip_blocks=True,
-        )
-
-        # Store system for template resolution
-        self._current_system: SystemUnderTest | None = None
 
     def generate_data(self, output_dir: Path) -> bool:
         """Generate TPC-H data using tpchgen-cli (modern Python approach)."""
@@ -111,115 +72,24 @@ class TPCH(Workload):
             print(f"Data generation failed: {e}")
             return False
 
-    def create_schema(self, system: SystemUnderTest) -> bool:
-        """Create TPC-H schema and tables using templated setup scripts."""
-        # Use TPC-H specific schema name (e.g., tpch_sf100)
-        schema = self.get_schema_name()
-
-        # First, create the schema using the system's method
-        if hasattr(system, "create_schema"):
-            print(f"Creating schema '{schema}'...")
-            if not system.create_schema(schema):
-                print(f"Failed to create schema '{schema}'")
-                return False
-            print(f"✓ Schema '{schema}' created successfully")
-
-        # Then create the tables using the templated script
-        print("Creating TPC-H tables...")
-        return self._execute_setup_script(system, "create_tables.sql")
-
     def create_indexes(self, system: SystemUnderTest) -> bool:
         """Create TPC-H indexes using templated setup scripts."""
-        return self._execute_setup_script(system, "create_indexes.sql")
+        return self.execute_setup_script(system, "create_indexes.sql")
 
     def analyze_tables(self, system: SystemUnderTest) -> bool:
         """Analyze TPC-H tables using templated setup scripts."""
-        return self._execute_setup_script(system, "analyze_tables.sql")
+        return self.execute_setup_script(system, "analyze_tables.sql")
 
-    def _execute_setup_script(self, system: SystemUnderTest, script_name: str) -> bool:
-        """Execute a templated setup script by splitting into individual statements."""
-        try:
-            # Get system extra config for conditional features
-            system_extra = {}
-            if hasattr(system, "setup_config"):
-                system_extra = system.setup_config.get("extra", {})
-
-            # Load and render the template
-            template = self.template_env.get_template(script_name)
-
-            # Get node_count and cluster for multinode support
-            node_count = getattr(system, "node_count", 1)
-            cluster = getattr(system, "cluster_name", "benchmark_cluster")
-
-            rendered_sql = template.render(
-                system_kind=system.kind,
-                scale_factor=self.scale_factor,
-                schema=self.get_schema_name(),
-                system_extra=system_extra,
-                node_count=node_count,
-                cluster=cluster,
-            )
-
-            # Split SQL into individual statements and execute them one by one
-            statements = self._split_sql_statements(rendered_sql)
-
-            for idx, statement in enumerate(statements):
-                # Skip empty statements
-                if not statement.strip():
-                    continue
-
-                # Calculate dynamic timeout for OPTIMIZE operations
-                # These can take a long time for large tables
-                timeout = self._calculate_statement_timeout(
-                    statement, system.kind, node_count
-                )
-
-                # Execute each statement individually with calculated timeout
-                result = system.execute_query(
-                    statement,
-                    query_name=f"setup_{script_name.replace('.sql', '')}_{idx+1}",
-                    timeout=timeout,
-                )
-
-                if not result["success"]:
-                    print(
-                        f"Failed to execute statement {idx+1} in {script_name}: {result.get('error', 'Unknown error')}"
-                    )
-                    print(f"Statement was: {statement[:200]}...")
-                    return False
-
-            return True
-
-        except Exception as e:
-            print(f"Error executing setup script {script_name}: {e}")
-            return False
-
-    def _calculate_statement_timeout(
-        self, statement: str, system_kind: str, node_count: int
+    def calculate_statement_timeout(
+        self, statement: str, system: SystemUnderTest
     ) -> int:
-        """
-        Calculate dynamic timeout for a SQL statement based on scale factor and node count.
-
-        For OPTIMIZE TABLE operations on large datasets, the default timeout is often
-        insufficient. This method calculates appropriate timeouts based on:
-        - Scale factor: larger data = longer merge/optimize time
-        - Node count: more nodes can mean faster parallel processing
-        - Table size: lineitem is ~6x larger than orders, etc.
-
-        Args:
-            statement: SQL statement to execute
-            system_kind: Type of database system (e.g., 'clickhouse')
-            node_count: Number of nodes in the cluster
-
-        Returns:
-            Timeout in seconds
-        """
         # Default timeout for regular queries
         base_timeout = 300  # 5 minutes
 
         # Check if this is an OPTIMIZE operation (ClickHouse specific)
         statement_upper = statement.upper().strip()
-        if system_kind == "clickhouse" and "OPTIMIZE TABLE" in statement_upper:
+
+        if system.kind == "clickhouse" and "OPTIMIZE TABLE" in statement_upper:
             # Base timeout for OPTIMIZE: 10 minutes per SF1
             # Scale factor 100 = ~1000 minutes base for lineitem
             # But we apply table-specific multipliers
@@ -250,7 +120,7 @@ class TPCH(Workload):
             # - Minimum 300 seconds (5 min), maximum 7200 seconds (2 hours)
 
             sf_factor = max(1, self.scale_factor)
-            timeout = int(60 * sf_factor * multiplier / max(1, node_count))
+            timeout = int(60 * sf_factor * multiplier / max(1, system.node_count))
 
             # Apply bounds
             timeout = max(300, min(7200, timeout))
@@ -258,68 +128,14 @@ class TPCH(Workload):
             return timeout
 
         # For MATERIALIZE STATISTICS, also needs longer timeout
-        if system_kind == "clickhouse" and "MATERIALIZE STATISTICS" in statement_upper:
+        if system.kind == "clickhouse" and "MATERIALIZE STATISTICS" in statement_upper:
             # Similar to OPTIMIZE but typically faster
             sf_factor = max(1, self.scale_factor)
-            timeout = int(30 * sf_factor / max(1, node_count))
+            timeout = int(30 * sf_factor / max(1, system.node_count))
             timeout = max(300, min(3600, timeout))
             return timeout
 
         return base_timeout
-
-    def _split_sql_statements(self, sql: str) -> list[str]:
-        """
-        Split SQL script into individual statements.
-
-        Handles:
-        - Semicolon-separated statements
-        - SQL comments (-- and /* */)
-        - Empty lines
-
-        Returns:
-            List of individual SQL statements
-        """
-        statements = []
-        current_statement = []
-        in_comment = False
-
-        for line in sql.split("\n"):
-            stripped = line.strip()
-
-            # Skip SQL comments
-            if stripped.startswith("--"):
-                continue
-
-            # Handle multi-line comments
-            if "/*" in stripped:
-                in_comment = True
-            if "*/" in stripped:
-                in_comment = False
-                continue
-            if in_comment:
-                continue
-
-            # Skip empty lines
-            if not stripped:
-                continue
-
-            # Check if line ends with semicolon (statement terminator)
-            if stripped.endswith(";"):
-                # Add the line without semicolon to current statement
-                current_statement.append(stripped[:-1])
-                # Join and add to statements list
-                statements.append("\n".join(current_statement))
-                # Reset for next statement
-                current_statement = []
-            else:
-                # Add line to current statement
-                current_statement.append(stripped)
-
-        # Add any remaining statement (for scripts without trailing semicolon)
-        if current_statement:
-            statements.append("\n".join(current_statement))
-
-        return statements
 
     def prepare(self, system: SystemUnderTest) -> bool:
         """Complete TPC-H setup process: generate data, create tables, load data, create indexes, analyze tables."""
@@ -406,30 +222,6 @@ class TPCH(Workload):
 
         return True
 
-    def get_queries(self, system: SystemUnderTest | None = None) -> dict[str, str]:
-        """Get TPC-H queries with templates and variants resolved for the target system."""
-        # Use provided system or stored system
-        target_system = system or self._current_system
-        if target_system is None:
-            raise ValueError(
-                "System must be provided either as parameter or stored from previous call"
-            )
-
-        # Store system for future template resolution
-        self._current_system = target_system
-
-        # Get and log the variant being used for this system
-        variant = self._get_query_variant_for_system(target_system)
-        if variant != "official":
-            print(f"Loading '{variant}' variant queries for {target_system.kind}")
-
-        queries = {}
-        for query_name in self.get_all_query_names():
-            if query_name in self.queries_to_include:
-                queries[query_name] = self._get_query_sql(query_name, target_system)
-
-        return queries
-
     def run_workload(
         self,
         system: "SystemUnderTest",
@@ -466,16 +258,6 @@ class TPCH(Workload):
             result["variant"] = variant_for_system
 
         return result_dict
-
-    def run_query(
-        self, system: SystemUnderTest, query_name: str, query_sql: str
-    ) -> dict[str, Any]:
-        """Execute a TPC-H query."""
-        # Substitute schema name in query
-        schema_name = self.get_schema_name()
-        formatted_sql = query_sql.format(schema=schema_name)
-
-        return system.execute_query(formatted_sql, query_name=query_name)
 
     def get_workload_description(self) -> dict[str, Any]:
         """Return TPC-H workload description."""
@@ -648,7 +430,7 @@ class TPCH(Workload):
 
         for script_name in ["create_tables", "create_indexes", "analyze_tables"]:
             try:
-                template = self.template_env.get_template(f"{script_name}.sql")
+                template = self.get_template_env().get_template(f"{script_name}.sql")
                 system_extra = {}
                 if hasattr(system, "setup_config"):
                     system_extra = system.setup_config.get("extra", {})
@@ -675,78 +457,6 @@ class TPCH(Workload):
     def get_all_query_names(self) -> list[str]:
         """Get list of all TPC-H query names."""
         return [f"Q{i:02d}" for i in range(1, 23)]  # Q01 through Q22
-
-    # Note: Table DDLs are now handled by templated setup scripts
-
-    def _get_query_variant_for_system(self, system: SystemUnderTest) -> str:
-        """
-        Determine which query variant to use for a given system.
-
-        Args:
-            system: System under test
-
-        Returns:
-            Variant name to use for this system
-        """
-        # Check if system has a specific variant override
-        if self.system_variants and system.name in self.system_variants:
-            return str(self.system_variants[system.name])
-        # Otherwise use global variant
-        return str(self.variant)
-
-    def _get_query_sql(self, query_name: str, system: SystemUnderTest) -> str:
-        """
-        Get SQL text for a specific TPC-H query with variant and templates resolved.
-
-        Priority order for loading queries:
-        1. variants/{variant}/{system_kind}/{query_name}.sql (system-specific variant)
-        2. variants/{variant}/{query_name}.sql (generic variant)
-        3. {query_name}.sql (default/official with inline conditionals)
-        """
-        try:
-            variant = self._get_query_variant_for_system(system)
-
-            # Build priority-ordered list of query paths
-            query_paths = [
-                f"variants/{variant}/{system.kind}/{query_name}.sql",
-                f"variants/{variant}/{query_name}.sql",
-                f"{query_name}.sql",
-            ]
-
-            template = None
-
-            # Try each path in order until one succeeds
-            for path in query_paths:
-                try:
-                    template = self.template_env.get_template(path)
-                    break
-                except Exception:
-                    continue
-
-            if template is None:
-                raise FileNotFoundError(
-                    f"Query {query_name} not found in any variant path"
-                )
-
-            # Get system extra config for conditional features
-            system_extra = {}
-            if hasattr(system, "setup_config"):
-                system_extra = system.setup_config.get("extra", {})
-
-            # Render template with variant context
-            rendered_sql = template.render(
-                system_kind=system.kind,
-                scale_factor=self.scale_factor,
-                schema=self.get_schema_name(),
-                variant=variant,
-                system_extra=system_extra,
-            )
-
-            return rendered_sql
-
-        except Exception as e:
-            print(f"Error loading query {query_name}: {e}")
-            return f"-- Error loading query {query_name}: {e}"
 
     def get_schema_name(self) -> str:
         """Get the schema name for TPC-H workload."""
