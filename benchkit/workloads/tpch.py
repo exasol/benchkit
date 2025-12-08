@@ -84,22 +84,8 @@ class TPCH(Workload):
     def calculate_statement_timeout(
         self, statement: str, system: SystemUnderTest
     ) -> timedelta:
-        """
-        Calculate dynamic timeout for a SQL statement based on scale factor and node count.
-
-        For OPTIMIZE TABLE operations on large datasets, the default timeout is often
-        insufficient. This method calculates appropriate timeouts based on
-        - expected table/data size
-        - the operation
-        - the system executing the operation (kind and node count)
-
-        Args:
-            statement: SQL statement to execute
-            system: System under test, with its own characteristics
-
-        Returns:
-            Recommended statement timeout
-        """
+        # Default timeout for regular queries
+        base_timeout = 300  # 5 minutes
 
         # Check if this is an OPTIMIZE operation (ClickHouse specific)
         statement_upper = statement.upper().strip()
