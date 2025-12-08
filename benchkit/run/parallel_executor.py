@@ -14,6 +14,27 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
+# Module-level executor reference for thread-local task identification
+# Used by debug.py to get the current task name for proper output tagging
+_current_executor: ParallelExecutor | None = None
+
+
+def get_current_task_name() -> str | None:
+    """
+    Get the current task name from thread-local storage.
+
+    This function allows code outside the ParallelExecutor (like debug.py)
+    to identify which task is currently running in the calling thread.
+    This enables thread-safe output tagging when using raw print() statements.
+
+    Returns:
+        The current task name if running within a ParallelExecutor task,
+        None otherwise (sequential execution or not within a task).
+    """
+    if _current_executor is None:
+        return None
+    return getattr(_current_executor._thread_local, "current_task", None)
+
 
 class _TaskStream:
     """Capture stdout/stderr for a single task and forward lines to the executor."""
@@ -92,8 +113,13 @@ class ParallelExecutor:
         log_dir: Path | str | None = None,
     ) -> dict[str, Any]:
         """Execute tasks in parallel while capturing all output per task."""
+        global _current_executor
+
         if not tasks:
             return {}
+
+        # Set module-level executor reference so get_current_task_name() works
+        _current_executor = self
 
         self._reset_state(tasks)
         self._start_consumer(phase_name)
@@ -126,6 +152,8 @@ class ParallelExecutor:
                         self._record_line(name, f"[status] ❌ Failed: {exc}")
         finally:
             self._stop_consumer()
+            # Clear module-level executor reference
+            _current_executor = None
 
         log_paths = self._write_logs(phase_name, log_dir)
         self._print_summary(phase_name, log_paths)
@@ -320,11 +348,17 @@ class ParallelExecutor:
                     self._queue.task_done()
                     break
                 name, message = item
-                prefix = f"[{name}]"
-                if message:
-                    line = f"{prefix} {message}"
+                # Check if message is already tagged from remote side
+                # to avoid double-tagging (e.g., "[exasol] [exasol] message")
+                expected_prefix = f"[{name}]"
+                if message and message.startswith(expected_prefix):
+                    # Message already has the correct tag, pass through
+                    line = message
+                elif message:
+                    # Add tag prefix for untagged messages
+                    line = f"{expected_prefix} {message}"
                 else:
-                    line = prefix
+                    line = expected_prefix
                 self._print_line(line, use_original=True)
             except Exception:
                 # Ensure task_done is always called even if printing fails

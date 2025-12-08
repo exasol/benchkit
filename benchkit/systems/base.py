@@ -803,6 +803,9 @@ class SystemUnderTest(ABC):
         }
         if setup_config.get("use_additional_disk", False):
             conn_info["use_additional_disk"] = True
+        # Include node_count for multinode support (critical for distributed table creation)
+        if setup_config.get("node_count", 1) > 1:
+            conn_info["node_count"] = setup_config["node_count"]
         cls._extend_connection_info(conn_info, setup_config)
         return conn_info
 
