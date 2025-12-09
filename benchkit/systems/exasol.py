@@ -10,10 +10,10 @@ import pyexasol  # type: ignore
 from benchkit.common.markers import exclude_from_package
 
 from .base import SystemUnderTest
+from ..util import Timer
 
 if TYPE_CHECKING:
     # avoid cyclic dependency problems
-    from ..util import Timer
     from ..workloads import Workload
 
 

@@ -34,3 +34,9 @@ class Clickbench(Workload):
 
     def get_schema_name(self) -> str:
         return "clickbench"
+
+    def estimate_filesystem_usage_gb(self, system: SystemUnderTest) -> int:
+        if system.SUPPORTS_STREAMLOAD:
+            return 0
+        # if system.SUPPORTS_LOAD_FROM_COMPRESSED:
+        return 90

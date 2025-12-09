@@ -1,5 +1,6 @@
 title: "Exasol Standalone for estuary warehouse benchmark"
 author: "Stefan Reich, Principal Database Consultant at Exasol AG"
+note: "WORK IN PROGRESS -- not stable yet"
 
 # Execution configuration (optional)
 execution:

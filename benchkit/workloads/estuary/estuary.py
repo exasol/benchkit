@@ -1,8 +1,8 @@
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from benchkit.systems import SystemUnderTest
 from benchkit.workloads import Workload
+from benchkit.systems import SystemUnderTest
 
 
 class Estuary(Workload):
@@ -105,7 +105,20 @@ class Estuary(Workload):
         """
         Estuary workload uses streaming import where possible,
         in which case it does not require local storage.
+        Otherwise, same code as TPC-H (although not 100% correct, as Estuary loads table-by-table)
         """
         if system.SUPPORTS_STREAMLOAD:
             return 0
-        return super().estimate_filesystem_usage_gb(system)
+
+        def scale_multiplier(sf: float) -> float:
+            # 2.0 at very small sf (≈1–10), ~1.6 at 30, →1.3 for sf ≥ 100
+            # f(sf) = 1.3 + 0.7 / (1 + (sf/K)^p), with K≈26.8537, p≈2.5966
+            if sf <= 10:
+                return 2.0
+            val = 1.3 + 0.7 / (1.0 + (sf / 26.853725639548) ** 2.5965770266157073)
+            return float(max(1.3, min(val, 2.0)))
+
+        def estimate_gb(sf: float) -> int:
+            return int(max(sf * scale_multiplier(sf), 3.0))
+
+        return estimate_gb(float(self.scale_factor))

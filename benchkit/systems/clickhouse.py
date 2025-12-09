@@ -14,12 +14,11 @@ except ModuleNotFoundError:
 from benchkit.common.markers import exclude_from_package
 
 from .base import SystemUnderTest, TableOperation
+from ..util import Timer
 
 if TYPE_CHECKING:
     # avoid cyclic dependency problems
-    from ..util import Timer
     from ..workloads import Workload
-
 
 class ClickHouseSystem(SystemUnderTest):
     """ClickHouse database system implementation."""

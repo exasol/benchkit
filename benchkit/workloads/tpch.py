@@ -84,9 +84,6 @@ class TPCH(Workload):
     def calculate_statement_timeout(
         self, statement: str, system: SystemUnderTest
     ) -> timedelta:
-        # Default timeout for regular queries
-        base_timeout = 300  # 5 minutes
-
         # Check if this is an OPTIMIZE operation (ClickHouse specific)
         statement_upper = statement.upper().strip()
 

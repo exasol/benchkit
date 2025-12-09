@@ -89,16 +89,16 @@ def test_timeout_calculation(
     workload: TPCH = TPCH({"name": "tpch", "scale_factor": scale_factor})
     system.node_count = node_count
 
-    assert workload._calculate_statement_timeout(
+    assert workload.calculate_statement_timeout(
         "OPTIMIZE TABLE ORDERS", system
     ) == timedelta(seconds=orders_timeout_seconds)
 
-    assert workload._calculate_statement_timeout(
+    assert workload.calculate_statement_timeout(
         "SELECT * FROM ORDERS", system
     ) == timedelta(minutes=5), "should be default timeout"
 
     assert (
         timedelta(minutes=5)
-        <= workload._calculate_statement_timeout("MATERIALIZE STATISTICS", system)
+        <= workload.calculate_statement_timeout("MATERIALIZE STATISTICS", system)
         <= timedelta(hours=1)
     ), "timeout should be within bounds"

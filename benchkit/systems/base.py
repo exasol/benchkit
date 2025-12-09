@@ -8,11 +8,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from benchkit.common import exclude_from_package
+from ..util import safe_command
 
 if TYPE_CHECKING:
     # avoid cyclic dependency problems
-    from ..util import safe_command
     from ..workloads import Workload
+
 
 TableOperation = Literal[
     "DEFAULT",
@@ -1830,6 +1831,62 @@ class SystemUnderTest(ABC):
             data_size_gb: estimated size of data to operate on
         """
         return timedelta(minutes=5)
+
+    # noinspection PyMethodMayBeStatic
+    def split_sql_statements(self, sql: str) -> list[str]:
+        """
+        Split SQL script into individual statements.
+        Method is not static in case some system uses different syntax for splitting
+
+        Handles:
+        - Semicolon-separated statements
+        - SQL comments (-- and /* */)
+        - Empty lines
+
+        Returns:
+            List of individual SQL statements
+        """
+        statements = []
+        current_statement = []
+        in_comment = False
+
+        for line in sql.split("\n"):
+            stripped = line.strip()
+
+            # Skip SQL comments
+            if stripped.startswith("--"):
+                continue
+
+            # Handle multi-line comments
+            if "/*" in stripped:
+                in_comment = True
+            if "*/" in stripped:
+                in_comment = False
+                continue
+            if in_comment:
+                continue
+
+            # Skip empty lines
+            if not stripped:
+                continue
+
+            # Check if line ends with semicolon (statement terminator)
+            if stripped.endswith(";"):
+                # Add the line without semicolon to current statement
+                current_statement.append(stripped[:-1])
+                # Join and add to statements list
+                statements.append("\n".join(current_statement))
+                # Reset for next statement
+                current_statement = []
+            else:
+                # Add line to current statement
+                current_statement.append(stripped)
+
+        # Add any remaining statement (for scripts without trailing semicolon)
+        if current_statement:
+            statements.append("\n".join(current_statement))
+
+        return statements
 
 
 def get_system_class(system_kind: str) -> type | None:

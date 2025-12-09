@@ -5,6 +5,7 @@ import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
@@ -710,7 +711,7 @@ class Workload(ABC):
             )
 
             # Split SQL into individual statements and execute them one by one
-            statements = split_sql_statements(rendered_sql)
+            statements = system.split_sql_statements(rendered_sql)
 
             for idx, statement in enumerate(statements):
                 # Skip empty statements
@@ -719,15 +720,13 @@ class Workload(ABC):
 
                 # Calculate dynamic timeout for OPTIMIZE operations
                 # These can take a long time for large tables
-                timeout = self._calculate_statement_timeout(
-                    statement, system.kind, node_count
-                )
+                timeout = self.calculate_statement_timeout(statement, system)
 
                 # Execute each statement individually with calculated timeout
                 result = system.execute_query(
                     statement,
                     query_name=f"setup_{script_name.replace('.sql', '')}_{idx+1}",
-                    timeout=timeout,
+                    timeout=int(timeout.total_seconds()),
                 )
 
                 if not result["success"]:
@@ -742,12 +741,6 @@ class Workload(ABC):
         except Exception as e:
             print(f"Error executing setup script {script_name}: {e}")
             return False
-
-    def _calculate_statement_timeout(
-        self, statement: str, system_kind: str, node_count: int
-    ) -> int | None:
-        ### dummy until workload-sizing is merged
-        return None
 
     def _get_query_variant_for_system(self, system: SystemUnderTest) -> str:
         """
@@ -819,60 +812,11 @@ class Workload(ABC):
             print(f"Error loading query {query_name}: {e}")
             return f"-- Error loading query {query_name}: {e}"
 
-
-def split_sql_statements(sql: str) -> list[str]:
-    """
-    Split SQL script into individual statements.
-
-    Handles:
-    - Semicolon-separated statements
-    - SQL comments (-- and /* */)
-    - Empty lines
-
-    Returns:
-        List of individual SQL statements
-    """
-    statements = []
-    current_statement = []
-    in_comment = False
-
-    for line in sql.split("\n"):
-        stripped = line.strip()
-
-        # Skip SQL comments
-        if stripped.startswith("--"):
-            continue
-
-        # Handle multi-line comments
-        if "/*" in stripped:
-            in_comment = True
-        if "*/" in stripped:
-            in_comment = False
-            continue
-        if in_comment:
-            continue
-
-        # Skip empty lines
-        if not stripped:
-            continue
-
-        # Check if line ends with semicolon (statement terminator)
-        if stripped.endswith(";"):
-            # Add the line without semicolon to current statement
-            current_statement.append(stripped[:-1])
-            # Join and add to statements list
-            statements.append("\n".join(current_statement))
-            # Reset for next statement
-            current_statement = []
-        else:
-            # Add line to current statement
-            current_statement.append(stripped)
-
-    # Add any remaining statement (for scripts without trailing semicolon)
-    if current_statement:
-        statements.append("\n".join(current_statement))
-
-    return statements
+    def calculate_statement_timeout(
+        self, statement: str, system: SystemUnderTest
+    ) -> timedelta:
+        """Default implementation: 5 minutes for any statement"""
+        return timedelta(minutes=5)
 
 
 def get_workload_class(workload_name: str) -> type | None:
