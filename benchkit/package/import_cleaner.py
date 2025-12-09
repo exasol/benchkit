@@ -181,5 +181,6 @@ class UnusedImportRemover(ast.NodeTransformer):
             node.body = new_body
             return node
 
-        # Normal if statement - process normally
-        return self.generic_visit(node)
+        # Normal if statement - process children and return the node
+        self.generic_visit(node)
+        return node
