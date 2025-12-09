@@ -280,7 +280,9 @@ class ClickHouseSystem(SystemUnderTest):
                     "systemctl is-active clickhouse-server",
                     timeout=10,
                 )
-                if not result.get("success") or "active" not in result.get("stdout", ""):
+                if not result.get("success") or "active" not in result.get(
+                    "stdout", ""
+                ):
                     all_healthy = False
                     break
 
@@ -1052,7 +1054,9 @@ class ClickHouseSystem(SystemUnderTest):
             )
             result = mgr.run_remote_command(create_keeper_cmd, timeout=60)
             if result.get("success"):
-                self._log(f"  ✓ keeper.xml created on node {idx} (server_id={server_id})")
+                self._log(
+                    f"  ✓ keeper.xml created on node {idx} (server_id={server_id})"
+                )
             else:
                 self._log(f"  ✗ Failed to create keeper.xml on node {idx}")
                 return False
@@ -1066,9 +1070,7 @@ class ClickHouseSystem(SystemUnderTest):
         )
 
         for idx, mgr in enumerate(self._cloud_instance_managers):
-            create_zk_cmd = (
-                f"sudo tee {use_keeper_path} > /dev/null << 'EOF'\n{zk_client_config}\nEOF"
-            )
+            create_zk_cmd = f"sudo tee {use_keeper_path} > /dev/null << 'EOF'\n{zk_client_config}\nEOF"
             result = mgr.run_remote_command(create_zk_cmd, timeout=60)
             if result.get("success"):
                 self._log(f"  ✓ use_keeper.xml created on node {idx}")
@@ -1381,10 +1383,11 @@ class ClickHouseSystem(SystemUnderTest):
             # For multinode clusters, create database on all nodes
             # Check node_count from setup_config (works in package context)
             # or fall back to cloud_instance_managers (works in cloud setup context)
-            node_count = self.setup_config.get("node_count", 1) if self.setup_config else 1
+            node_count = (
+                self.setup_config.get("node_count", 1) if self.setup_config else 1
+            )
             is_multinode = node_count > 1 or (
-                self._cloud_instance_managers
-                and len(self._cloud_instance_managers) > 1
+                self._cloud_instance_managers and len(self._cloud_instance_managers) > 1
             )
             if is_multinode:
                 sql = f"CREATE DATABASE IF NOT EXISTS {schema_name} ON CLUSTER '{self.cluster_name}'"

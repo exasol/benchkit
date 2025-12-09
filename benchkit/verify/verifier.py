@@ -15,7 +15,9 @@ from ..workloads import create_workload
 console = Console()
 
 
-def _resolve_infrastructure_ips(config: dict[str, Any], output_dir: Path) -> dict[str, Any]:
+def _resolve_infrastructure_ips(
+    config: dict[str, Any], output_dir: Path
+) -> dict[str, Any]:
     """
     Load IPs from Terraform state and inject into system configs.
 
@@ -91,9 +93,7 @@ def _resolve_infrastructure_ips(config: dict[str, Any], output_dir: Path) -> dic
                         f"Resolved {system_name} host_external_addrs to {resolved_ip}"
                     )
 
-        console.print(
-            f"[dim]Resolved infrastructure IPs from {terraform_dir}[/dim]"
-        )
+        console.print(f"[dim]Resolved infrastructure IPs from {terraform_dir}[/dim]")
         return resolved_config
 
     except Exception as e:

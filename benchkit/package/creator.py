@@ -519,7 +519,7 @@ class WorkloadPackage:
         requirements_file = self.package_dir / "requirements.txt"
         requirements_file.write_text("\n".join(unique_requirements))
 
-    def _get_system_class(self, system_kind: str) -> type[SystemUnderTest] | None:
+    def _get_system_class(self, system_kind: str) -> "type[SystemUnderTest] | None":
         """Dynamically import and return the system class for the given system kind."""
         import importlib
         import inspect
