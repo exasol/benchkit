@@ -17,31 +17,54 @@ class ImportCleaner:
             Cleaned source code as string
         """
         source = filepath.read_text()
+        return self._clean_source(source)
 
-        try:
-            tree = ast.parse(source)
-        except SyntaxError:
-            # If we can't parse it, return unchanged
-            return source
+    def _clean_source(self, source: str) -> str:
+        """Clean unused imports from source code.
 
-        # 1. Collect all imports
-        import_collector = ImportCollector()
-        import_collector.visit(tree)
+        Runs multiple passes to handle cascading removals (e.g., removing
+        a TYPE_CHECKING block makes TYPE_CHECKING itself unused).
 
-        # 2. Collect all name usages
-        name_collector = NameCollector()
-        name_collector.visit(tree)
+        Args:
+            source: Python source code
 
-        # 3. Remove unused imports
-        cleaner = UnusedImportRemover(
-            import_collector.imports, name_collector.used_names
-        )
-        new_tree = cleaner.visit(tree)
+        Returns:
+            Cleaned source code
+        """
+        max_passes = 3  # Prevent infinite loops
+        for _ in range(max_passes):
+            try:
+                tree = ast.parse(source)
+            except SyntaxError:
+                # If we can't parse it, return unchanged
+                return source
 
-        try:
-            return ast.unparse(new_tree)
-        except Exception:
-            return source
+            # 1. Collect all imports
+            import_collector = ImportCollector()
+            import_collector.visit(tree)
+
+            # 2. Collect all name usages
+            name_collector = NameCollector()
+            name_collector.visit(tree)
+
+            # 3. Remove unused imports
+            cleaner = UnusedImportRemover(
+                import_collector.imports, name_collector.used_names
+            )
+            new_tree = cleaner.visit(tree)
+
+            try:
+                new_source = ast.unparse(new_tree)
+            except Exception:
+                return source
+
+            # If no changes, we're done
+            if new_source == source:
+                return source
+
+            source = new_source
+
+        return source
 
 
 class ImportCollector(ast.NodeVisitor):
@@ -139,3 +162,24 @@ class UnusedImportRemover(ast.NodeTransformer):
 
         node.names = used_aliases
         return node
+
+    def visit_If(self, node: ast.If) -> ast.If | None:
+        """Handle if TYPE_CHECKING blocks - remove if body becomes empty."""
+        # Check if this is "if TYPE_CHECKING:"
+        if isinstance(node.test, ast.Name) and node.test.id == "TYPE_CHECKING":
+            # Process body - remove unused imports
+            new_body = []
+            for stmt in node.body:
+                result = self.visit(stmt)
+                if result is not None:
+                    new_body.append(result)
+
+            # If body is now empty, remove entire if block
+            if not new_body:
+                return None
+
+            node.body = new_body
+            return node
+
+        # Normal if statement - process normally
+        return self.generic_visit(node)
