@@ -1,6 +1,10 @@
 SELECT WatchID, ClientIP, COUNT(*) AS c, SUM(IsRefresh), AVG(ResolutionWidth)
 FROM hits 
-WHERE SearchPhrase <> '' 
+{% if system_kind == 'exasol' %}
+WHERE SearchPhrase IS NOT NULL
+{% else %}
+WHERE SearchPhrase <> ''
+{% endif %}
 GROUP BY WatchID, ClientIP 
 ORDER BY c DESC LIMIT 10;
 

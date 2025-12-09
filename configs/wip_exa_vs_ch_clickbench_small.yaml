@@ -14,13 +14,13 @@ env:
   # Instance configuration per system
   instances:
     exasol_s:
-      instance_type: "c6a.4xlarge"  # 16 vCPUs, 32GB RAM, $0.612 per hour (+ EBS)
+      instance_type: "c6a.8xlarge"  # 32 vCPUs, 64GB RAM, $1.224 per hour (+ EBS)
       disk:
         type: "ebs"              # Use local NVMe for best performance
         size_gb: 150
       label: "ok-bench-exa"
     clickhouse_s:
-      instance_type: "c6a.4xlarge"  # 16 vCPUs, 32GB RAM, $0.612 per hour (+ EBS)
+      instance_type: "c6a.8xlarge"  # 32 vCPUs, 64GB RAM, $1.224 per hour (+ EBS)
       disk:
         type: "ebs"
         size_gb: 150
@@ -47,7 +47,7 @@ systems:
       ## current code NEEDS this schema name here
       schema: "clickbench"
       extra:
-        dbram: "28g"            # Database RAM allocation
+        dbram: "50g"            # Database RAM allocation
         optimizer_mode: "analytical"
         # Exasol database parameters for analytical workload optimization
         db_params:
@@ -71,9 +71,9 @@ systems:
       password: "clickhouse123"  # Password for benchmark user
       database: "clickbench"
       extra:
-        memory_limit: "28g"      # Memory limit for ClickHouse
-        max_threads: "16"        # Match instance vCPUs
-        max_memory_usage: "28000000000"  # ~128GB in bytes
+        memory_limit: "50g"      # Memory limit for ClickHouse
+        max_threads: "32"        # Match instance vCPUs
+        max_memory_usage: "50000000000"  # ~128GB in bytes
 
 workload:
   name: "clickbench"

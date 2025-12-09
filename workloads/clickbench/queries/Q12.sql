@@ -1,6 +1,10 @@
 SELECT SearchPhrase, COUNT(*) AS c 
 FROM hits 
-WHERE SearchPhrase <> '' 
-GROUP BY SearchPhrase 
+{% if system_kind == 'exasol' %}
+WHERE SearchPhrase IS NOT NULL
+{% else %}
+WHERE SearchPhrase <> ''
+{% endif %}
+GROUP BY SearchPhrase
 ORDER BY c DESC LIMIT 10;
 
