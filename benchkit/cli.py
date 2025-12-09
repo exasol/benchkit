@@ -428,14 +428,359 @@ def status(
         _show_configs_summary(config_files)
 
 
+def _dump_config_yaml(cfg: dict[str, Any], config_path: Path | str) -> None:
+    """Dump configuration as commented YAML to stdout.
+
+    Outputs a fully expanded configuration with all defaults filled in,
+    along with comments explaining each section and marking default values.
+    The output is pure YAML suitable for redirection to a file.
+    """
+    # Define known default values for marking
+    DEFAULTS = {
+        # WorkloadConfig defaults
+        "workload.queries": {"include": []},
+        "workload.runs_per_query": 3,
+        "workload.warmup_runs": 1,
+        "workload.data_format": "csv",
+        "workload.generator": "dbgen",
+        "workload.variant": "official",
+        "workload.system_variants": None,
+        "workload.multiuser": None,
+        # EnvironmentConfig defaults
+        "env.mode": "local",
+        "env.region": None,
+        "env.instances": None,
+        "env.os_image": None,
+        "env.ssh_key_name": None,
+        "env.ssh_private_key_path": None,
+        "env.allow_external_database_access": False,
+        # ReportConfig defaults
+        "report.generate_index": True,
+        "report.show_boxplots": True,
+        "report.show_latency_cdf": False,
+        "report.show_heatmap": True,
+        "report.show_bar_chart": True,
+        # ExecutionConfig defaults
+        "execution.parallel": False,
+        "execution.max_workers": None,
+        # BenchmarkConfig defaults
+        "metrics": {},
+    }
+
+    def is_default(path: str, value: Any) -> bool:
+        """Check if a value matches its default."""
+        if path in DEFAULTS:
+            return bool(value == DEFAULTS[path])
+        return False
+
+    def format_value(value: Any, indent: int = 0) -> str:
+        """Format a value for YAML output."""
+        if value is None:
+            return "null"
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        if isinstance(value, str):
+            # Quote strings that might be ambiguous
+            if value == "" or value in ("true", "false", "null", "yes", "no"):
+                return f'"{value}"'
+            # Quote strings with special characters
+            if any(c in value for c in ":#{}[]&*!|>'\"%@`"):
+                return f'"{value}"'
+            return value
+        if isinstance(value, int | float):
+            return str(value)
+        if isinstance(value, dict):
+            # Format nested dicts as inline YAML
+            if not value:
+                return "{}"
+            items = [f"{k}: {format_value(v)}" for k, v in value.items()]
+            return "{" + ", ".join(items) + "}"
+        if isinstance(value, list):
+            # Format lists as inline YAML
+            if not value:
+                return "[]"
+            items = [format_value(v) for v in value]
+            return "[" + ", ".join(items) + "]"
+        return str(value)
+
+    def print_yaml_value(
+        key: str, value: Any, indent: int = 0, comment: str = ""
+    ) -> None:
+        """Print a YAML key-value pair with optional comment."""
+        prefix = "  " * indent
+        if isinstance(value, dict):
+            print(f"{prefix}{key}:")
+            for k, v in value.items():
+                print_yaml_value(k, v, indent + 1)
+        elif isinstance(value, list):
+            if not value:
+                suffix = f"  # {comment}" if comment else ""
+                print(f"{prefix}{key}: []{suffix}")
+            else:
+                print(f"{prefix}{key}:")
+                for item in value:
+                    if isinstance(item, dict):
+                        # First item of dict gets the dash
+                        items = list(item.items())
+                        if items:
+                            k, v = items[0]
+                            if isinstance(v, dict):
+                                print(f"{prefix}  - {k}:")
+                                for kk, vv in v.items():
+                                    print_yaml_value(kk, vv, indent + 3)
+                            else:
+                                print(f"{prefix}  - {k}: {format_value(v)}")
+                            for k, v in items[1:]:
+                                print_yaml_value(k, v, indent + 2)
+                    else:
+                        print(f"{prefix}  - {format_value(item)}")
+        else:
+            suffix = f"  # {comment}" if comment else ""
+            print(f"{prefix}{key}: {format_value(value)}{suffix}")
+
+    # Output header
+    print("# Benchkit Configuration (expanded with defaults)")
+    print(f"# Generated from: {config_path}")
+    print("#")
+    print("# This file shows all configuration options with their current values.")
+    print("# Options marked [DEFAULT] were not specified and use default values.")
+    print()
+
+    # === Project Section ===
+    print("# === Project ===")
+    project_id = cfg.get("project_id", "")
+    print(
+        f"project_id: {format_value(project_id)}  # Derived from filename if not specified"
+    )
+    print()
+    print(f"title: {format_value(cfg.get('title', ''))}")
+    print(f"author: {format_value(cfg.get('author', ''))}")
+    print()
+
+    # === Environment Section ===
+    print("# === Environment ===")
+    print("# mode: local | aws | gcp | azure")
+    env = cfg.get("env", {})
+    print("env:")
+
+    mode = env.get("mode", "local")
+    mode_comment = "[DEFAULT]" if is_default("env.mode", mode) else ""
+    print(
+        f"  mode: {format_value(mode)}  # Execution environment {mode_comment}".rstrip()
+    )
+
+    region = env.get("region")
+    if region:
+        print(f"  region: {format_value(region)}")
+    else:
+        print("  # region: null  # [DEFAULT] Only needed for cloud modes")
+
+    ssh_key = env.get("ssh_key_name")
+    if ssh_key:
+        print(f"  ssh_key_name: {format_value(ssh_key)}")
+
+    ssh_path = env.get("ssh_private_key_path")
+    if ssh_path:
+        print(f"  ssh_private_key_path: {format_value(ssh_path)}")
+
+    ext_access = env.get("allow_external_database_access", False)
+    if is_default("env.allow_external_database_access", ext_access):
+        print(
+            f"  allow_external_database_access: {format_value(ext_access)}  # [DEFAULT]"
+        )
+    else:
+        print(f"  allow_external_database_access: {format_value(ext_access)}")
+
+    instances = env.get("instances")
+    if instances:
+        print("  instances:")
+        for inst_name, inst_cfg in instances.items():
+            print(f"    {inst_name}:")
+            for k, v in inst_cfg.items():
+                print(f"      {k}: {format_value(v)}")
+    print()
+
+    # === Systems Section ===
+    print("# === Systems ===")
+    print("# Each system defines a database to benchmark")
+    print("systems:")
+    for system in cfg.get("systems", []):
+        print(f"  - name: {format_value(system.get('name', ''))}")
+        print(f"    kind: {format_value(system.get('kind', ''))}")
+        print(f"    version: {format_value(system.get('version', ''))}")
+        print("    setup:")
+        setup = system.get("setup", {})
+        for k, v in setup.items():
+            # Mask passwords in output
+            if "password" in k.lower():
+                print(f'      {k}: "********"')
+            else:
+                print(f"      {k}: {format_value(v)}")
+        print()
+
+    # === Workload Section ===
+    print("# === Workload ===")
+    print("# Configuration for benchmark execution")
+    workload = cfg.get("workload", {})
+    print("workload:")
+    print(f"  name: {format_value(workload.get('name', ''))}")
+    print(
+        f"  scale_factor: {workload.get('scale_factor', 1)}  # Data size in GB for TPC-H"
+    )
+
+    queries = workload.get("queries", {"include": []})
+    queries_comment = (
+        "[DEFAULT] All queries" if is_default("workload.queries", queries) else ""
+    )
+    print("  queries:")
+    include = queries.get("include", [])
+    exclude = queries.get("exclude", [])
+    if include:
+        print(f"    include: {include}")
+    else:
+        print(f"    include: []  # {queries_comment}".rstrip())
+    if exclude:
+        print(f"    exclude: {exclude}")
+
+    runs = workload.get("runs_per_query", 3)
+    runs_comment = "[DEFAULT]" if is_default("workload.runs_per_query", runs) else ""
+    print(
+        f"  runs_per_query: {runs}  # Number of timed runs per query {runs_comment}".rstrip()
+    )
+
+    warmup = workload.get("warmup_runs", 1)
+    warmup_comment = "[DEFAULT]" if is_default("workload.warmup_runs", warmup) else ""
+    print(
+        f"  warmup_runs: {warmup}  # Warmup queries before measurement {warmup_comment}".rstrip()
+    )
+
+    data_fmt = workload.get("data_format", "csv")
+    fmt_comment = "[DEFAULT]" if is_default("workload.data_format", data_fmt) else ""
+    print(
+        f"  data_format: {format_value(data_fmt)}  # csv | parquet {fmt_comment}".rstrip()
+    )
+
+    generator = workload.get("generator", "dbgen")
+    gen_comment = "[DEFAULT]" if is_default("workload.generator", generator) else ""
+    print(
+        f"  generator: {format_value(generator)}  # Data generator {gen_comment}".rstrip()
+    )
+
+    variant = workload.get("variant", "official")
+    var_comment = "[DEFAULT]" if is_default("workload.variant", variant) else ""
+    print(
+        f"  variant: {format_value(variant)}  # Query variant: official | tuned | custom {var_comment}".rstrip()
+    )
+
+    sys_variants = workload.get("system_variants")
+    if sys_variants:
+        print("  system_variants:")
+        for sys_name, var_name in sys_variants.items():
+            print(f"    {sys_name}: {format_value(var_name)}")
+    else:
+        print("  # system_variants: null  # [DEFAULT] Per-system variant overrides")
+
+    multiuser = workload.get("multiuser")
+    if multiuser:
+        print("  multiuser:")
+        for k, v in multiuser.items():
+            print(f"    {k}: {format_value(v)}")
+    else:
+        print("  # multiuser: null  # [DEFAULT] Multiuser/concurrent execution config")
+    print()
+
+    # === Execution Section ===
+    print("# === Execution ===")
+    print("# Parallel execution settings")
+    execution = cfg.get("execution", {})
+    print("execution:")
+
+    parallel = execution.get("parallel", False)
+    parallel_comment = "[DEFAULT]" if is_default("execution.parallel", parallel) else ""
+    print(
+        f"  parallel: {format_value(parallel)}  # Enable parallel system setup {parallel_comment}".rstrip()
+    )
+
+    max_workers = execution.get("max_workers")
+    if max_workers:
+        print(f"  max_workers: {max_workers}")
+    else:
+        print("  # max_workers: null  # [DEFAULT] Uses number of systems")
+    print()
+
+    # === Report Section ===
+    print("# === Report ===")
+    report = cfg.get("report", {})
+    print("report:")
+
+    output_path = report.get("output_path", "")
+    print(f"  output_path: {format_value(output_path)}  # Derived from project_id")
+
+    figures_dir = report.get("figures_dir", "")
+    print(f"  figures_dir: {format_value(figures_dir)}  # Derived from project_id")
+
+    index_dir = report.get("index_output_dir", "results")
+    print(f"  index_output_dir: {format_value(index_dir)}")
+
+    gen_index = report.get("generate_index", True)
+    if is_default("report.generate_index", gen_index):
+        print(f"  generate_index: {format_value(gen_index)}  # [DEFAULT]")
+    else:
+        print(f"  generate_index: {format_value(gen_index)}")
+
+    boxplots = report.get("show_boxplots", True)
+    if is_default("report.show_boxplots", boxplots):
+        print(f"  show_boxplots: {format_value(boxplots)}  # [DEFAULT]")
+    else:
+        print(f"  show_boxplots: {format_value(boxplots)}")
+
+    cdf = report.get("show_latency_cdf", False)
+    if is_default("report.show_latency_cdf", cdf):
+        print(f"  show_latency_cdf: {format_value(cdf)}  # [DEFAULT]")
+    else:
+        print(f"  show_latency_cdf: {format_value(cdf)}")
+
+    heatmap = report.get("show_heatmap", True)
+    if is_default("report.show_heatmap", heatmap):
+        print(f"  show_heatmap: {format_value(heatmap)}  # [DEFAULT]")
+    else:
+        print(f"  show_heatmap: {format_value(heatmap)}")
+
+    bar = report.get("show_bar_chart", True)
+    if is_default("report.show_bar_chart", bar):
+        print(f"  show_bar_chart: {format_value(bar)}  # [DEFAULT]")
+    else:
+        print(f"  show_bar_chart: {format_value(bar)}")
+
+    # === Metrics Section ===
+    metrics = cfg.get("metrics", {})
+    if metrics:
+        print()
+        print("# === Metrics ===")
+        print("# Custom metrics configuration")
+        print("metrics:")
+        for k, v in metrics.items():
+            print_yaml_value(k, v, indent=1)
+
+
 @app.command()
 def check(
     config: str = typer.Option(..., "--config", "-c", help="Path to config YAML file"),
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Show all configuration details"
     ),
+    dump: bool = typer.Option(
+        False,
+        "--dump",
+        "-d",
+        help="Dump full config with defaults as YAML (for redirection)",
+    ),
 ) -> None:
-    """Check and display configuration file contents."""
+    """Check and display configuration file contents.
+
+    With --dump, outputs the expanded configuration as commented YAML that can be
+    redirected to a file. This shows all default values that were auto-filled.
+    """
     from pathlib import Path
 
     from rich.panel import Panel
@@ -482,16 +827,21 @@ def check(
 
         raise typer.Exit(1)
 
-    # Config is valid - display it
+    if cfg is None:
+        raise typer.Exit(1)
+
+    # If dump requested, output YAML and exit (no rich formatting)
+    if dump:
+        _dump_config_yaml(cfg, config_path)
+        return
+
+    # Config is valid - display it with rich formatting
     status_text = Text()
     status_text.append("Configuration: ", style="bold")
     status_text.append(str(config_path), style="cyan")
     status_text.append("\nStatus: ", style="bold")
     status_text.append("✓ Valid", style="green bold")
     console.print(Panel(status_text, border_style="green"))
-
-    if cfg is None:
-        raise typer.Exit(1)
 
     # Display Project section
     project_table = Table(show_header=False, box=None, padding=(0, 2))

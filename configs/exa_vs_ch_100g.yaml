@@ -35,20 +35,19 @@ systems:
   # Baseline: Exasol with original queries (first system is baseline)
   - name: "exasol"
     kind: "exasol"
-    version: "2025.1.0"          # Latest Exasol version
+    version: "2025.1.8"          # Latest Exasol version
     setup:
       method: "installer"        # Native c4 installation
       use_additional_disk: true  # Auto-detect and use additional NVMe disk
-      c4_version: "4.28.2"       # Latest c4 version
+      c4_version: "4.28.5"       # Latest c4 version
       host_addrs: "$EXASOL_PRIVATE_IP"  # Will be resolved from infrastructure
       host_external_addrs: "$EXASOL_PUBLIC_IP"
       image_password: "exasol123"
       db_password: "exasol456"
       admin_password: "exasol789"
-      working_copy: "@exasol-2025.1.0"
       license_file: "configs/exasol.license"  # License file path
+      db_mem_size: 220000  # RAM in MB
       extra:
-        dbram: "220g"            # Database RAM allocation (increased for SF100 on 256GB instance)
         optimizer_mode: "analytical"
         # Exasol database parameters for analytical workload optimization
         db_params:

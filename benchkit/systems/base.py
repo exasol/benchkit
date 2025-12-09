@@ -803,6 +803,9 @@ class SystemUnderTest(ABC):
         }
         if setup_config.get("use_additional_disk", False):
             conn_info["use_additional_disk"] = True
+        # Include node_count for multinode support (critical for distributed table creation)
+        if setup_config.get("node_count", 1) > 1:
+            conn_info["node_count"] = setup_config["node_count"]
         cls._extend_connection_info(conn_info, setup_config)
         return conn_info
 
@@ -1269,7 +1272,7 @@ class SystemUnderTest(ABC):
         return True
 
     @exclude_from_package
-    def setup_storage(self, workload: Workload) -> bool:
+    def setup_storage(self, workload: "Workload") -> bool:
         """
         Setup storage based on configuration.
 
@@ -1304,7 +1307,7 @@ class SystemUnderTest(ABC):
         return result
 
     @exclude_from_package
-    def _setup_database_storage(self, workload: Workload) -> bool:
+    def _setup_database_storage(self, workload: "Workload") -> bool:
         """
         System-specific storage setup for databases using additional disks.
 
@@ -1446,7 +1449,7 @@ class SystemUnderTest(ABC):
         return True
 
     @exclude_from_package
-    def _setup_directory_storage(self, workload: Workload) -> bool:
+    def _setup_directory_storage(self, workload: "Workload") -> bool:
         """
         Setup directory-based storage (no additional disks).
 
@@ -1567,7 +1570,7 @@ class SystemUnderTest(ABC):
         return self._cloud_instance_manager is not None
 
     @exclude_from_package
-    def _setup_multinode_storage(self, workload: Workload) -> bool:
+    def _setup_multinode_storage(self, workload: "Workload") -> bool:
         """
         Setup storage on all nodes in a multinode cluster.
 
@@ -1621,7 +1624,7 @@ class SystemUnderTest(ABC):
         return all_success
 
     @exclude_from_package
-    def _setup_single_node_storage(self, workload: Workload) -> bool:
+    def _setup_single_node_storage(self, workload: "Workload") -> bool:
         """
         Setup storage on a single node.
 

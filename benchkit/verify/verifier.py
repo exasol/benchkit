@@ -15,6 +15,92 @@ from ..workloads import create_workload
 console = Console()
 
 
+def _resolve_infrastructure_ips(
+    config: dict[str, Any], output_dir: Path
+) -> dict[str, Any]:
+    """
+    Load IPs from Terraform state and inject into system configs.
+
+    For AWS/cloud deployments, the config often uses environment variable placeholders
+    like $EXASOL_PUBLIC_IP. These are set during `run` but not during `verify`.
+    This function reads the actual IPs from Terraform state and injects them directly.
+
+    Args:
+        config: The benchmark configuration dictionary
+        output_dir: Results directory containing terraform/ subdirectory
+
+    Returns:
+        Modified config with resolved IP addresses
+    """
+    import copy
+
+    from ..infra.manager import InfraManager
+
+    # Check if this is a cloud deployment
+    env_mode = config.get("env", {}).get("mode", "local")
+    if env_mode == "local":
+        return config  # No infrastructure to resolve for local mode
+
+    # Check if terraform directory exists in results
+    terraform_dir = output_dir / "terraform"
+    if not terraform_dir.exists():
+        debug_print(f"No terraform directory found at {terraform_dir}")
+        return config
+
+    try:
+        provider = env_mode
+        infra_manager = InfraManager(provider, config)
+
+        # Override working directory to use results terraform state
+        infra_manager.project_state_dir = terraform_dir
+
+        result = infra_manager._run_terraform_command("output", ["-json"])
+        if not result.success:
+            debug_print(f"Failed to get terraform outputs: {result.error}")
+            return config
+
+        outputs = result.outputs or {}
+        public_ips = outputs.get("system_public_ips", {})
+
+        if not public_ips:
+            debug_print("No system_public_ips found in terraform outputs")
+            return config
+
+        # Deep copy config to avoid modifying original
+        resolved_config = copy.deepcopy(config)
+
+        # Inject IPs into system configs
+        for system_config in resolved_config["systems"]:
+            system_name = system_config["name"]
+            if system_name in public_ips:
+                ips = public_ips[system_name]
+                # Use first IP for client connections (distributed routing is internal)
+                resolved_ip = ips[0] if isinstance(ips, list) else ips
+
+                setup = system_config.get("setup", {})
+
+                # Check if host contains an unresolved env var or is empty
+                current_host = setup.get("host", "")
+                if current_host.startswith("$") or not current_host:
+                    setup["host"] = resolved_ip
+                    debug_print(f"Resolved {system_name} host to {resolved_ip}")
+
+                # Same for host_external_addrs (used by Exasol)
+                current_external = setup.get("host_external_addrs", "")
+                if current_external.startswith("$") or not current_external:
+                    setup["host_external_addrs"] = resolved_ip
+                    debug_print(
+                        f"Resolved {system_name} host_external_addrs to {resolved_ip}"
+                    )
+
+        console.print(f"[dim]Resolved infrastructure IPs from {terraform_dir}[/dim]")
+        return resolved_config
+
+    except Exception as e:
+        debug_print(f"Failed to resolve infrastructure IPs: {e}")
+        return config  # Fall back to original config
+
+
 class QueryVerifier:
     """Verifies query results against expected data."""
 
@@ -379,14 +465,18 @@ def verify_results(
     Returns:
         True if all verifications passed, False otherwise
     """
-    verifier = QueryVerifier(config, output_dir)
+    # Resolve infrastructure IPs from Terraform state for cloud deployments
+    # This handles cases where config uses $VARIABLE placeholders that aren't set
+    resolved_config = _resolve_infrastructure_ips(config, output_dir)
+
+    verifier = QueryVerifier(resolved_config, output_dir)
 
     # Check if verify data is available for this scale factor
     if not verifier.verify_scale_factor_available():
         return False
 
     # Filter systems if specified
-    systems_to_verify = config["systems"]
+    systems_to_verify = resolved_config["systems"]
     if systems:
         systems_to_verify = [s for s in systems_to_verify if s["name"] in systems]
         if not systems_to_verify:

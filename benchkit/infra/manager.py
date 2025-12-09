@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..debug import debug_log_command, debug_log_result, is_debug_enabled
+from ..debug import is_debug_enabled
 from ..util import Timer, ensure_directory, safe_command
 
 
@@ -1040,15 +1040,38 @@ class CloudInstanceManager:
         debug: bool = False,
         stream_callback: Callable[[str, str], None] | None = None,
     ) -> dict[str, Any]:
-        """Run a command on the remote instance."""
+        """Run a command on the remote instance.
+
+        Args:
+            command: Command to execute on the remote instance
+            timeout: Timeout in seconds (default: 300)
+            debug: Enable debug logging
+            stream_callback: Callback for streaming output (line, stream_name).
+                Use this for real-time output handling and to add per-system
+                tagging during parallel execution.
+
+        Returns:
+            Dictionary with success, stdout, stderr, returncode, elapsed_s, command
+        """
         ssh_cmd = self._get_ssh_command_prefix()
         ssh_command = f"{ssh_cmd} ubuntu@{self.public_ip} {shlex.quote(command)}"
 
         # Use global debug state if no explicit debug parameter
         enable_debug = debug or is_debug_enabled()
 
+        # Helper to route debug output through stream_callback if available
+        # This avoids race conditions with redirect_stdout in parallel execution
+        def debug_output(message: str) -> None:
+            if stream_callback is not None:
+                stream_callback(message, "stdout")
+            else:
+                print(message)
+
         if enable_debug:
-            debug_log_command(ssh_command, timeout)
+            if timeout:
+                debug_output(f"[DEBUG] Command ({timeout}s): {ssh_command}")
+            else:
+                debug_output(f"[DEBUG] Command: {ssh_command}")
 
         if stream_callback is None:
             result = safe_command(ssh_command, timeout=timeout)
@@ -1058,11 +1081,13 @@ class CloudInstanceManager:
             )
 
         if enable_debug:
-            debug_log_result(
-                result.get("success", False),
-                result.get("stdout", ""),
-                result.get("stderr", ""),
-            )
+            debug_output(f"[DEBUG] Command success: {result.get('success', False)}")
+            stdout = result.get("stdout", "")
+            stderr = result.get("stderr", "")
+            if stdout:
+                debug_output(f"[DEBUG] Stdout: {stdout}")
+            if stderr:
+                debug_output(f"[DEBUG] Stderr: {stderr}")
 
         return result
 

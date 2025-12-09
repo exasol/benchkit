@@ -1,17 +1,19 @@
 """TPC-H benchmark workload implementation."""
 
+from __future__ import annotations
+
 from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from jinja2 import Environment, FileSystemLoader
 
+from ..util import safe_command
 from .base import Workload
 
 if TYPE_CHECKING:
     # avoid cyclic dependency problems
     from ..systems.base import SystemUnderTest
-    from ..util import safe_command
 
 
 class TPCH(Workload):
@@ -422,7 +424,7 @@ class TPCH(Workload):
 
     def run_workload(
         self,
-        system: "SystemUnderTest",
+        system: SystemUnderTest,
         query_names: list[str],
         runs_per_query: int = 3,
         warmup_runs: int = 1,

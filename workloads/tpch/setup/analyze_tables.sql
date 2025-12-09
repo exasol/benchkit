@@ -71,6 +71,17 @@ ALTER TABLE {{ schema }}.region MATERIALIZE STATISTICS r_regionkey, r_name;
 -- Optimize tables to merge data parts and improve compression
 -- OPTIMIZE TABLE FINAL merges all data parts into a single optimized part
 -- This improves query performance by reducing the number of parts to scan
+{% if node_count > 1 %}
+-- Multinode: OPTIMIZE only works on local MergeTree tables, not Distributed tables
+OPTIMIZE TABLE {{ schema }}.nation_local ON CLUSTER '{cluster}' FINAL;
+OPTIMIZE TABLE {{ schema }}.region_local ON CLUSTER '{cluster}' FINAL;
+OPTIMIZE TABLE {{ schema }}.part_local ON CLUSTER '{cluster}' FINAL;
+OPTIMIZE TABLE {{ schema }}.supplier_local ON CLUSTER '{cluster}' FINAL;
+OPTIMIZE TABLE {{ schema }}.partsupp_local ON CLUSTER '{cluster}' FINAL;
+OPTIMIZE TABLE {{ schema }}.customer_local ON CLUSTER '{cluster}' FINAL;
+OPTIMIZE TABLE {{ schema }}.orders_local ON CLUSTER '{cluster}' FINAL;
+OPTIMIZE TABLE {{ schema }}.lineitem_local ON CLUSTER '{cluster}' FINAL;
+{% else %}
 OPTIMIZE TABLE {{ schema }}.nation FINAL;
 OPTIMIZE TABLE {{ schema }}.region FINAL;
 OPTIMIZE TABLE {{ schema }}.part FINAL;
@@ -79,6 +90,7 @@ OPTIMIZE TABLE {{ schema }}.partsupp FINAL;
 OPTIMIZE TABLE {{ schema }}.customer FINAL;
 OPTIMIZE TABLE {{ schema }}.orders FINAL;
 OPTIMIZE TABLE {{ schema }}.lineitem FINAL;
+{% endif %}
 
 {% if system_extra.get('allow_statistics_optimize', 0) == 1 %}
 SELECT 'ClickHouse statistics collected and tables optimized';
