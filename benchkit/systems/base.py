@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from benchkit.common import exclude_from_package
+
 from ..util import safe_command
 
 if TYPE_CHECKING:

@@ -1,8 +1,8 @@
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-from benchkit.workloads import Workload
 from benchkit.systems import SystemUnderTest
+from benchkit.workloads import Workload
 
 
 class Estuary(Workload):

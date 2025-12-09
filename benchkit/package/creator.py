@@ -9,8 +9,9 @@ from typing import Any, Literal, cast
 
 from jinja2 import Environment, FileSystemLoader
 from rich.console import Console
-from ..util import ensure_directory
+
 from ..systems.base import SystemUnderTest
+from ..util import ensure_directory
 from .code_minimizer import CodeMinimizer
 from .formatter import PackageFormatter
 from .import_cleaner import ImportCleaner
