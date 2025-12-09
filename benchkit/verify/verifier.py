@@ -52,7 +52,7 @@ def _resolve_infrastructure_ips(
         infra_manager = InfraManager(provider, config)
 
         # Override working directory to use results terraform state
-        infra_manager.working_dir = terraform_dir
+        infra_manager.project_state_dir = terraform_dir
 
         result = infra_manager._run_terraform_command("output", ["-json"])
         if not result.success:

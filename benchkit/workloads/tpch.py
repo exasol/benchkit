@@ -1,5 +1,7 @@
 """TPC-H benchmark workload implementation."""
 
+from __future__ import annotations
+
 from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -422,7 +424,7 @@ class TPCH(Workload):
 
     def run_workload(
         self,
-        system: "SystemUnderTest",
+        system: SystemUnderTest,
         query_names: list[str],
         runs_per_query: int = 3,
         warmup_runs: int = 1,

@@ -1272,7 +1272,7 @@ class SystemUnderTest(ABC):
         return True
 
     @exclude_from_package
-    def setup_storage(self, workload: Workload) -> bool:
+    def setup_storage(self, workload: "Workload") -> bool:
         """
         Setup storage based on configuration.
 
@@ -1307,7 +1307,7 @@ class SystemUnderTest(ABC):
         return result
 
     @exclude_from_package
-    def _setup_database_storage(self, workload: Workload) -> bool:
+    def _setup_database_storage(self, workload: "Workload") -> bool:
         """
         System-specific storage setup for databases using additional disks.
 
@@ -1449,7 +1449,7 @@ class SystemUnderTest(ABC):
         return True
 
     @exclude_from_package
-    def _setup_directory_storage(self, workload: Workload) -> bool:
+    def _setup_directory_storage(self, workload: "Workload") -> bool:
         """
         Setup directory-based storage (no additional disks).
 
@@ -1570,7 +1570,7 @@ class SystemUnderTest(ABC):
         return self._cloud_instance_manager is not None
 
     @exclude_from_package
-    def _setup_multinode_storage(self, workload: Workload) -> bool:
+    def _setup_multinode_storage(self, workload: "Workload") -> bool:
         """
         Setup storage on all nodes in a multinode cluster.
 
@@ -1578,7 +1578,7 @@ class SystemUnderTest(ABC):
         Commands are recorded only for the first node to avoid duplicates in reports.
 
         Args:
-            workload: Workload with scale factor for sizing calculations
+            workload: "Workload" with scale factor for sizing calculations
 
         Returns:
             True if successful on all nodes, False otherwise
@@ -1624,7 +1624,7 @@ class SystemUnderTest(ABC):
         return all_success
 
     @exclude_from_package
-    def _setup_single_node_storage(self, workload: Workload) -> bool:
+    def _setup_single_node_storage(self, workload: "Workload") -> bool:
         """
         Setup storage on a single node.
 
@@ -1632,7 +1632,7 @@ class SystemUnderTest(ABC):
         Called by _setup_multinode_storage() for each node in a cluster.
 
         Args:
-            workload: Workload with scale factor for sizing calculations
+            workload: "Workload" with scale factor for sizing calculations
 
         Returns:
             True if successful, False otherwise

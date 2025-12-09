@@ -1,5 +1,7 @@
 """ClickHouse database system implementation."""
 
+from __future__ import annotations
+
 from collections.abc import Callable, Iterable
 from datetime import timedelta
 from pathlib import Path
@@ -274,7 +276,7 @@ class ClickHouseSystem(SystemUnderTest):
         start_time = time.time()
         while time.time() - start_time < max_wait:
             all_healthy = True
-            for idx, mgr in enumerate(self._cloud_instance_managers):
+            for _idx, mgr in enumerate(self._cloud_instance_managers):
                 # Check if clickhouse-server is active
                 result = mgr.run_remote_command(
                     "systemctl is-active clickhouse-server",

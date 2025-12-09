@@ -1,5 +1,7 @@
 """Exasol database system implementation."""
 
+from __future__ import annotations
+
 import ssl
 from collections.abc import Callable, Iterable
 from pathlib import Path
@@ -1272,7 +1274,7 @@ sudo -u exasol bash -c '
 
             # Step 4b: Collect all exasol public keys
             exasol_pub_keys = []
-            for idx, mgr in enumerate(self._cloud_instance_managers):
+            for _idx, mgr in enumerate(self._cloud_instance_managers):
                 result = mgr.run_remote_command(
                     "sudo cat ~exasol/.ssh/id_rsa.pub", timeout=30
                 )
@@ -1285,7 +1287,7 @@ sudo -u exasol bash -c '
             self._log(
                 f"Distributing {len(exasol_pub_keys)} exasol keys to all nodes..."
             )
-            for idx, mgr in enumerate(self._cloud_instance_managers):
+            for _idx, mgr in enumerate(self._cloud_instance_managers):
                 for pub_key in exasol_pub_keys:
                     add_key_cmd = f"echo '{pub_key}' | sudo tee -a ~exasol/.ssh/authorized_keys > /dev/null"
                     mgr.run_remote_command(add_key_cmd, timeout=30)
