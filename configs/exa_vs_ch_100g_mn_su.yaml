@@ -80,6 +80,9 @@ workload:
   warmup_runs: 1                # Warmup runs before measurement
   data_format: "csv"            # csv or parquet
   generator: "dbgen"
+  # Use tuned queries for ClickHouse multinode (avoids correlated subqueries)
+  system_variants:
+    clickhouse: "tuned"
 
 report:
   show_boxplots: true

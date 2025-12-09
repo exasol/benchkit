@@ -221,11 +221,77 @@ class ClickHouseSystem(SystemUnderTest):
         if is_multinode:
             if not self._configure_multinode_cluster():
                 return False
-            self.execute_command_on_all_nodes(
-                "sudo systemctl restart clickhouse-server",
-                "Restart ClickHouse on all nodes",
-            )
+            # IMPORTANT: Restart all nodes in parallel for Keeper quorum
+            # Sequential restart would cause Keeper to hang waiting for quorum
+            if not self._restart_all_nodes_parallel():
+                return False
+            # Wait for Keeper cluster to form quorum after restart
+            if not self._wait_for_keeper_ready(timeout=90):
+                self._log("Warning: Keeper not ready, but continuing...")
         return True
+
+    @exclude_from_package
+    def _restart_all_nodes_parallel(self) -> bool:
+        """
+        Restart ClickHouse on all nodes in parallel.
+
+        This is critical for Keeper clusters - sequential restart would cause
+        the first node to hang waiting for quorum from the not-yet-restarted nodes.
+        Uses systemctl --no-block to initiate restarts without waiting.
+        """
+        import time
+
+        if not self._cloud_instance_managers:
+            return True
+
+        self._log("Restarting ClickHouse on all nodes in parallel...")
+
+        # Phase 1: Initiate restart on all nodes without blocking
+        # Using 'systemctl restart --no-block' allows returning immediately
+        for idx, mgr in enumerate(self._cloud_instance_managers):
+            # Use --no-block so the command returns immediately
+            result = mgr.run_remote_command(
+                "sudo systemctl restart clickhouse-server --no-block",
+                timeout=30,
+            )
+            if result.get("success"):
+                self._log(f"  ✓ Restart initiated on node {idx}")
+            else:
+                self._log(f"  ⚠ Restart may have issues on node {idx}")
+
+        # Record the command for documentation
+        self.record_setup_command(
+            "sudo systemctl restart clickhouse-server",
+            "Restart ClickHouse on all nodes (parallel for Keeper quorum)",
+            "cluster_configuration",
+        )
+
+        # Phase 2: Wait for all nodes to be healthy
+        self._log("Waiting for all nodes to be ready...")
+        time.sleep(3)  # Give systemd time to initiate the restart
+
+        max_wait = 60
+        start_time = time.time()
+        while time.time() - start_time < max_wait:
+            all_healthy = True
+            for idx, mgr in enumerate(self._cloud_instance_managers):
+                # Check if clickhouse-server is active
+                result = mgr.run_remote_command(
+                    "systemctl is-active clickhouse-server",
+                    timeout=10,
+                )
+                if not result.get("success") or "active" not in result.get("stdout", ""):
+                    all_healthy = False
+                    break
+
+            if all_healthy:
+                self._log("✓ All nodes restarted successfully")
+                return True
+
+            time.sleep(2)
+
+        self._log("⚠ Some nodes may not have restarted properly")
+        return True  # Continue anyway, Keeper wait will catch issues
 
     def _install_native_on_node(self) -> bool:
         """Install ClickHouse on the current node (works for both single and multinode)."""
@@ -639,6 +705,13 @@ class ClickHouseSystem(SystemUnderTest):
             "            <max_insert_threads>8</max_insert_threads>"
         )
 
+        # Multinode cluster settings - allow distributed JOINs
+        # Without this, queries with JOINs on distributed tables fail with error 288
+        if self._cloud_instance_managers and len(self._cloud_instance_managers) > 1:
+            profile_settings.append(
+                "            <distributed_product_mode>global</distributed_product_mode>"
+            )
+
         # Statistics for query optimization (ClickHouse 24.6+)
         # Only enable if explicitly requested in extra config
         # Use 'or {}' to handle case where 'extra' exists but is None
@@ -698,10 +771,12 @@ class ClickHouseSystem(SystemUnderTest):
         Configure ClickHouse cluster for multinode deployment.
 
         Generates and distributes:
-        1. remote_servers.xml - cluster topology (same on all nodes)
+        1. remote_servers.xml - cluster topology with credentials (same on all nodes)
         2. macros.xml - node-specific shard/replica info (unique per node)
+        3. keeper.xml - ClickHouse Keeper server config (unique server_id per node)
+        4. use_keeper.xml - ZooKeeper client config (same on all nodes)
 
-        For benchmarking, we use sharding WITHOUT replication (no Keeper needed).
+        ClickHouse Keeper enables `ON CLUSTER` DDL commands for distributed operations.
         """
         if not self._cloud_instance_managers or len(self._cloud_instance_managers) < 2:
             self._log("Skipping cluster configuration: not multinode")
@@ -714,7 +789,7 @@ class ClickHouseSystem(SystemUnderTest):
         # Build list of node IPs
         node_ips = [mgr.private_ip for mgr in self._cloud_instance_managers]
 
-        # Generate remote_servers.xml content (same on all nodes)
+        # Generate remote_servers.xml content (same on all nodes, now with credentials)
         remote_servers_xml = self._generate_remote_servers_xml(node_ips)
 
         # Distribute remote_servers.xml to ALL nodes
@@ -760,8 +835,13 @@ class ClickHouseSystem(SystemUnderTest):
                 self._log(f"  ✗ Failed to create macros.xml on node {idx}")
                 return False
 
+        # Configure ClickHouse Keeper for distributed coordination
+        # This enables ON CLUSTER DDL commands
+        if not self._configure_keeper_cluster(node_ips):
+            return False
+
         self.record_setup_note(
-            f"ClickHouse cluster configured with {len(node_ips)} nodes (sharding without replication)"
+            f"ClickHouse cluster configured with {len(node_ips)} nodes (sharding with Keeper coordination)"
         )
         self.record_setup_note(f"Cluster name: {self.cluster_name}")
 
@@ -773,7 +853,7 @@ class ClickHouseSystem(SystemUnderTest):
         Generate remote_servers.xml content for cluster configuration.
 
         Creates a cluster with N shards (one per node), without replication.
-        Each shard has only 1 replica.
+        Each shard has only 1 replica. Includes credentials for inter-node auth.
         """
         shard_entries = []
         for _idx, ip in enumerate(node_ips):
@@ -781,6 +861,8 @@ class ClickHouseSystem(SystemUnderTest):
             <replica>
                 <host>{ip}</host>
                 <port>9000</port>
+                <user>{self.username}</user>
+                <password>{self.password}</password>
             </replica>
         </shard>"""
             shard_entries.append(shard_entry)
@@ -811,6 +893,194 @@ class ClickHouseSystem(SystemUnderTest):
         <replica>node{shard_num}</replica>
     </macros>
 </clickhouse>"""
+
+    @exclude_from_package
+    def _generate_keeper_config(self, server_id: int, node_ips: list[str]) -> str:
+        """
+        Generate ClickHouse Keeper server configuration for a specific node.
+
+        ClickHouse Keeper is the built-in coordination service (ZooKeeper alternative)
+        required for `ON CLUSTER` DDL commands and distributed operations.
+
+        Args:
+            server_id: Unique server ID (1-indexed, must be unique across cluster)
+            node_ips: List of all node private IPs in the cluster
+        """
+        # Build RAFT configuration with all nodes
+        raft_servers = []
+        for idx, ip in enumerate(node_ips):
+            server_entry = f"""            <server>
+                <id>{idx + 1}</id>
+                <hostname>{ip}</hostname>
+                <port>9234</port>
+            </server>"""
+            raft_servers.append(server_entry)
+
+        raft_config = "\n".join(raft_servers)
+
+        return f"""<clickhouse>
+    <keeper_server>
+        <tcp_port>9181</tcp_port>
+        <server_id>{server_id}</server_id>
+        <log_storage_path>/var/lib/clickhouse/coordination/log</log_storage_path>
+        <snapshot_storage_path>/var/lib/clickhouse/coordination/snapshots</snapshot_storage_path>
+        <coordination_settings>
+            <operation_timeout_ms>10000</operation_timeout_ms>
+            <session_timeout_ms>30000</session_timeout_ms>
+            <raft_logs_level>warning</raft_logs_level>
+        </coordination_settings>
+        <raft_configuration>
+{raft_config}
+        </raft_configuration>
+    </keeper_server>
+</clickhouse>"""
+
+    @exclude_from_package
+    def _generate_zookeeper_client_config(self, node_ips: list[str]) -> str:
+        """
+        Generate ZooKeeper client configuration pointing to all Keeper nodes.
+
+        This config tells ClickHouse where to find the Keeper cluster for
+        coordination operations like `ON CLUSTER` DDL.
+
+        Args:
+            node_ips: List of all node private IPs running Keeper
+        """
+        zk_nodes = []
+        for ip in node_ips:
+            node_entry = f"""        <node>
+            <host>{ip}</host>
+            <port>9181</port>
+        </node>"""
+            zk_nodes.append(node_entry)
+
+        zk_config = "\n".join(zk_nodes)
+
+        return f"""<clickhouse>
+    <zookeeper>
+{zk_config}
+    </zookeeper>
+    <distributed_ddl>
+        <path>/clickhouse/task_queue/ddl</path>
+    </distributed_ddl>
+</clickhouse>"""
+
+    @exclude_from_package
+    def _wait_for_keeper_ready(self, timeout: int = 60) -> bool:
+        """
+        Wait for ClickHouse Keeper cluster to be ready and have quorum.
+
+        Checks that:
+        1. Keeper is responding to health checks
+        2. RAFT cluster has formed quorum
+
+        Args:
+            timeout: Maximum time to wait in seconds
+
+        Returns:
+            True if Keeper is ready, False if timeout
+        """
+        import time
+
+        self._log("Waiting for Keeper cluster to form quorum...")
+        start_time = time.time()
+
+        while time.time() - start_time < timeout:
+            try:
+                # Check Keeper health using 'ruok' command (returns 'imok' if healthy)
+                # Using system.zookeeper is more reliable as it tests actual functionality
+                result = self.execute_command(
+                    f"clickhouse-client --user={self.username} --password={self.password} "
+                    f"--query=\"SELECT count() FROM system.zookeeper WHERE path = '/'\" 2>/dev/null",
+                    timeout=10.0,
+                    record=False,
+                )
+
+                if result.get("success") and result.get("stdout", "").strip():
+                    self._log("✓ Keeper cluster is ready with quorum")
+                    return True
+
+            except Exception:
+                pass
+
+            time.sleep(2)
+            elapsed = int(time.time() - start_time)
+            if elapsed % 10 == 0:
+                self._log(f"  Still waiting for Keeper... ({elapsed}s)")
+
+        self._log("⚠ Keeper cluster did not reach quorum within timeout")
+        return False
+
+    @exclude_from_package
+    def _configure_keeper_cluster(self, node_ips: list[str]) -> bool:
+        """
+        Configure ClickHouse Keeper on all nodes for distributed coordination.
+
+        This enables `ON CLUSTER` DDL commands by providing a coordination layer.
+        Keeper runs on all nodes with RAFT consensus.
+
+        Args:
+            node_ips: List of all node private IPs
+
+        Returns:
+            True if successful, False otherwise
+        """
+        self._log(f"Configuring ClickHouse Keeper on {len(node_ips)} nodes...")
+
+        keeper_path = "/etc/clickhouse-server/config.d/keeper.xml"
+        use_keeper_path = "/etc/clickhouse-server/config.d/use_keeper.xml"
+
+        # Generate zookeeper client config (same on all nodes)
+        zk_client_config = self._generate_zookeeper_client_config(node_ips)
+
+        # Distribute Keeper server config to each node (unique server_id)
+        self._log("Distributing keeper.xml to all nodes...")
+        for idx, mgr in enumerate(self._cloud_instance_managers):
+            server_id = idx + 1
+            keeper_config = self._generate_keeper_config(server_id, node_ips)
+
+            # Record for first node as example
+            if idx == 0:
+                self.record_setup_command(
+                    f"sudo tee {keeper_path} > /dev/null << 'EOF'\n{keeper_config}\nEOF",
+                    "Create ClickHouse Keeper server config (example for node 0)",
+                    "keeper_configuration",
+                )
+
+            create_keeper_cmd = (
+                f"sudo tee {keeper_path} > /dev/null << 'EOF'\n{keeper_config}\nEOF"
+            )
+            result = mgr.run_remote_command(create_keeper_cmd, timeout=60)
+            if result.get("success"):
+                self._log(f"  ✓ keeper.xml created on node {idx} (server_id={server_id})")
+            else:
+                self._log(f"  ✗ Failed to create keeper.xml on node {idx}")
+                return False
+
+        # Distribute zookeeper client config to all nodes (same on all)
+        self._log("Distributing use_keeper.xml to all nodes...")
+        self.record_setup_command(
+            f"sudo tee {use_keeper_path} > /dev/null << 'EOF'\n{zk_client_config}\nEOF",
+            "Create ZooKeeper client config pointing to Keeper cluster",
+            "keeper_configuration",
+        )
+
+        for idx, mgr in enumerate(self._cloud_instance_managers):
+            create_zk_cmd = (
+                f"sudo tee {use_keeper_path} > /dev/null << 'EOF'\n{zk_client_config}\nEOF"
+            )
+            result = mgr.run_remote_command(create_zk_cmd, timeout=60)
+            if result.get("success"):
+                self._log(f"  ✓ use_keeper.xml created on node {idx}")
+            else:
+                self._log(f"  ✗ Failed to create use_keeper.xml on node {idx}")
+                return False
+
+        self.record_setup_note(
+            f"ClickHouse Keeper configured on {len(node_ips)} nodes for distributed coordination"
+        )
+
+        return True
 
     def _calculate_max_concurrent_queries(self, cpu_cores: int) -> int:
         """
@@ -1101,11 +1371,27 @@ class ClickHouseSystem(SystemUnderTest):
             return False
 
     def create_schema(self, schema_name: str) -> bool:
-        """Create a database in ClickHouse."""
+        """Create a database in ClickHouse.
+
+        For multinode clusters, uses ON CLUSTER to create the database on all nodes.
+        """
         original_database = self.database
         self.database = "default"
         try:
-            sql = f"CREATE DATABASE IF NOT EXISTS {schema_name}"
+            # For multinode clusters, create database on all nodes
+            # Check node_count from setup_config (works in package context)
+            # or fall back to cloud_instance_managers (works in cloud setup context)
+            node_count = self.setup_config.get("node_count", 1) if self.setup_config else 1
+            is_multinode = node_count > 1 or (
+                self._cloud_instance_managers
+                and len(self._cloud_instance_managers) > 1
+            )
+            if is_multinode:
+                sql = f"CREATE DATABASE IF NOT EXISTS {schema_name} ON CLUSTER '{self.cluster_name}'"
+                self._log(f"Creating database '{schema_name}' on all cluster nodes...")
+            else:
+                sql = f"CREATE DATABASE IF NOT EXISTS {schema_name}"
+
             result = self.execute_query(
                 sql, query_name=f"create_database_{schema_name}"
             )
