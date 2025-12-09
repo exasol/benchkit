@@ -223,22 +223,28 @@ class BenchmarkRunner:
             marker_data = load_json(marker_path)
             marker_ip = marker_data.get("connection_info", {}).get("public_ip")
 
-            # Get current infrastructure IP if available
-            if self._cloud_instance_managers:
-                current_mgr = self._cloud_instance_managers.get(system_name)
-                if current_mgr:
-                    # Handle both single manager and list of managers (multinode)
-                    if isinstance(current_mgr, list):
-                        current_ip = current_mgr[0].public_ip if current_mgr else None
-                    else:
-                        current_ip = current_mgr.public_ip
+            # Early exit: no cloud managers to validate against
+            if not self._cloud_instance_managers:
+                return True
 
-                    if marker_ip and current_ip and marker_ip != current_ip:
-                        console.print(
-                            f"[yellow]⚠ {system_name} setup marker has stale IP "
-                            f"({marker_ip} != {current_ip}), will reinstall[/yellow]"
-                        )
-                        return False
+            current_mgr = self._cloud_instance_managers.get(system_name)
+
+            # Early exit: no manager for this specific system
+            if not current_mgr:
+                return True
+
+            # Handle both single manager and list of managers (multinode)
+            if isinstance(current_mgr, list):
+                current_ip = current_mgr[0].public_ip if current_mgr else None
+            else:
+                current_ip = current_mgr.public_ip
+
+            if marker_ip and current_ip and marker_ip != current_ip:
+                console.print(
+                    f"[yellow]⚠ {system_name} setup marker has stale IP "
+                    f"({marker_ip} != {current_ip}), will reinstall[/yellow]"
+                )
+                return False
         except Exception:
             pass  # If marker can't be read, treat as still valid to avoid blocking
 

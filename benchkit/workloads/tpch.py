@@ -8,12 +8,12 @@ from typing import TYPE_CHECKING, Any
 
 from jinja2 import Environment, FileSystemLoader
 
+from ..util import safe_command
 from .base import Workload
 
 if TYPE_CHECKING:
     # avoid cyclic dependency problems
     from ..systems.base import SystemUnderTest
-    from ..util import safe_command
 
 
 class TPCH(Workload):

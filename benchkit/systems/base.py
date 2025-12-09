@@ -1578,7 +1578,7 @@ class SystemUnderTest(ABC):
         Commands are recorded only for the first node to avoid duplicates in reports.
 
         Args:
-            workload: "Workload" with scale factor for sizing calculations
+            workload: Workload with scale factor for sizing calculations
 
         Returns:
             True if successful on all nodes, False otherwise
@@ -1632,7 +1632,7 @@ class SystemUnderTest(ABC):
         Called by _setup_multinode_storage() for each node in a cluster.
 
         Args:
-            workload: "Workload" with scale factor for sizing calculations
+            workload: Workload with scale factor for sizing calculations
 
         Returns:
             True if successful, False otherwise
