@@ -3,14 +3,18 @@
 import ssl
 from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import pyexasol  # type: ignore
 
 from benchkit.common.markers import exclude_from_package
 
-from ..util import Timer
 from .base import SystemUnderTest
+
+if TYPE_CHECKING:
+    # avoid cyclic dependency problems
+    from ..util import Timer
+    from ..workloads import Workload
 
 
 class ExasolSystem(SystemUnderTest):
@@ -18,6 +22,8 @@ class ExasolSystem(SystemUnderTest):
 
     # Exasol supports multinode clusters via c4 tool
     SUPPORTS_MULTINODE = True
+    # streaming import implemented using pyexasol
+    SUPPORTS_STREAMLOAD = True
 
     @classmethod
     def get_python_dependencies(cls) -> list[str]:
@@ -214,36 +220,6 @@ class ExasolSystem(SystemUnderTest):
             return False
 
     @exclude_from_package
-    def _estimate_tpch_data_size_gb(self, scale_factor: int) -> int:
-        """
-        Estimate TPC-H data generation size in GB.
-
-        TPC-H SF1 generates approximately 1GB of data.
-        We add 20% safety margin and enforce minimum 3GB.
-
-        Args:
-            scale_factor: TPC-H scale factor
-
-        Returns:
-            Estimated data size in GB
-        """
-
-        # SF1 ≈ 1GB, add 20% safety margin
-        # estimated_gb = max(int(scale_factor * 1.3), 3)
-        def scale_multiplier(sf: float) -> float:
-            # 2.0 at very small sf (≈1–10), ~1.6 at 30, →1.3 for sf ≥ 100
-            # f(sf) = 1.3 + 0.7 / (1 + (sf/K)^p), with K≈26.8537, p≈2.5966
-            if sf <= 10:
-                return 2.0
-            val = 1.3 + 0.7 / (1.0 + (sf / 26.853725639548) ** 2.5965770266157073)
-            return float(max(1.3, min(val, 2.0)))
-
-        def estimate_gb(sf: float) -> int:
-            return int(max(sf * scale_multiplier(sf), 3.0))
-
-        return estimate_gb(float(scale_factor))
-
-    @exclude_from_package
     def _detect_exasol_disk(self, allow_mounted: bool = False) -> str | None:
         """
         Detect additional disk for Exasol using base class helper.
@@ -291,17 +267,17 @@ class ExasolSystem(SystemUnderTest):
 
     @exclude_from_package
     def _setup_partitioned_disk(
-        self, scale_factor: int
+        self, workload: Workload
     ) -> tuple[str | None, str | None]:
         """
-        Partition additional disk for TPC-H data generation and Exasol storage.
+        Partition additional disk for workload data generation and Exasol storage.
 
         Creates two partitions:
-        1. ext4 partition for TPC-H data generation (sized based on scale factor)
+        1. ext4 partition for workload data generation
         2. Raw partition for Exasol database storage (remaining space)
 
         Args:
-            scale_factor: TPC-H scale factor for size estimation
+            workload: The Workload reference for size estimation
 
         Returns:
             Tuple of (data_generation_mount_point, exasol_raw_partition_path)
@@ -420,7 +396,7 @@ class ExasolSystem(SystemUnderTest):
         self._log(f"Detected disk size: {disk_size_gb} GB")
 
         # Step 4: Calculate partition sizes
-        data_partition_gb = self._estimate_tpch_data_size_gb(scale_factor)
+        data_partition_gb = workload.estimate_filesystem_usage_gb(self)
         exasol_partition_gb = disk_size_gb - data_partition_gb
 
         if exasol_partition_gb < 10:
@@ -432,7 +408,7 @@ class ExasolSystem(SystemUnderTest):
 
         self._log("Partition plan:")
         self._log(
-            f"  - Data generation partition: {data_partition_gb} GB (for TPC-H SF{scale_factor})"
+            f"  - Data generation partition: {data_partition_gb} GB (for {workload.display_name()})"
         )
         self._log(f"  - Exasol raw partition: {exasol_partition_gb} GB")
 
@@ -523,9 +499,9 @@ class ExasolSystem(SystemUnderTest):
         return data_mount_point, exasol_partition_dev
 
     @exclude_from_package
-    def _setup_database_storage(self, scale_factor: int) -> bool:
+    def _setup_database_storage(self, workload: Workload) -> bool:
         """
-        Override base class to setup partitioned disk for Exasol.
+        Override base class to set up partitioned disk for Exasol.
 
         This is called when use_additional_disk is True in the config.
         Exasol requires partitioned storage for data generation and raw disk.
@@ -540,18 +516,18 @@ class ExasolSystem(SystemUnderTest):
         Returns:
             True if successful, False otherwise
         """
-        # For multinode, we need to setup storage on ALL nodes
+        # For multinode, we need to set up storage on ALL nodes
         if self._cloud_instance_managers and len(self._cloud_instance_managers) > 1:
             self._log(
                 f"Setting up storage on all {len(self._cloud_instance_managers)} nodes..."
             )
-            return self._setup_multinode_storage(scale_factor)
+            return self._setup_multinode_storage(workload)
 
         # Single node setup - use the same logic
-        return self._setup_single_node_storage(scale_factor)
+        return self._setup_single_node_storage(workload)
 
     @exclude_from_package
-    def _setup_single_node_storage(self, scale_factor: int) -> bool:
+    def _setup_single_node_storage(self, workload: Workload) -> bool:
         """
         Setup storage on a single node. Used by both single-node and multinode setups.
         This contains the actual storage setup logic.
@@ -620,7 +596,7 @@ class ExasolSystem(SystemUnderTest):
         self._exasol_base_device = device_to_use
 
         # Partition the disk
-        data_mount_point, exasol_partition = self._setup_partitioned_disk(scale_factor)
+        data_mount_point, exasol_partition = self._setup_partitioned_disk(workload)
 
         # Store partition paths
         if data_mount_point:

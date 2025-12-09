@@ -3,12 +3,22 @@
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
+from datetime import timedelta
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from benchkit.common.markers import exclude_from_package
 
-from ..util import safe_command
+if TYPE_CHECKING:
+    # avoid cyclic dependency problems
+    from ..util import safe_command
+    from ..workloads import Workload
+
+TableOperation = Literal[
+    "DEFAULT",
+    "OPTIMIZE TABLE",
+    "MATERIALIZE STATISTICS",
+]
 
 
 class SystemUnderTest(ABC):
@@ -17,6 +27,8 @@ class SystemUnderTest(ABC):
     # Class attribute indicating if this system supports multinode clusters
     # Subclasses should override this to True if they support multinode
     SUPPORTS_MULTINODE: bool = False
+    # attribute indicating capability (or implementation) of streaming data import
+    SUPPORTS_STREAMLOAD: bool = False
 
     def __init__(
         self,
@@ -65,6 +77,7 @@ class SystemUnderTest(ABC):
 
         # Multinode configuration
         self.node_count: int = self.setup_config.get("node_count", 1)
+        assert self.node_count >= 1, "node_count must be positive"
 
         # Cloud instance management for remote execution
         self._cloud_instance_manager: Any = None
@@ -364,21 +377,16 @@ class SystemUnderTest(ABC):
         """Get directory for data generation. Uses /data/tpch_gen if use_additional_disk is set."""
         explicit_data_dir = self.setup_config.get("data_dir")
         if explicit_data_dir:
-            return (
-                Path(str(explicit_data_dir))
-                / "tpch_gen"
-                / str(workload.name)
-                / f"sf{workload.scale_factor}"
+            return Path(
+                str(explicit_data_dir), "generated", workload.safe_display_name()
             )
         if self.setup_config.get("use_additional_disk", False):
-            tpch_gen_dir = "/data/tpch_gen"
+            tpch_gen_dir = "/data/generated"
             self.execute_command(
                 f"sudo mkdir -p {tpch_gen_dir} && sudo chown -R $(whoami):$(whoami) {tpch_gen_dir}",
                 record=False,
             )
-            return (
-                Path(tpch_gen_dir) / str(workload.name) / f"sf{workload.scale_factor}"
-            )
+            return Path(tpch_gen_dir, workload.safe_display_name())
         return None
 
     @abstractmethod
@@ -1261,7 +1269,7 @@ class SystemUnderTest(ABC):
         return True
 
     @exclude_from_package
-    def setup_storage(self, scale_factor: int) -> bool:
+    def setup_storage(self, workload: Workload) -> bool:
         """
         Setup storage based on configuration.
 
@@ -1284,10 +1292,10 @@ class SystemUnderTest(ABC):
         result = False
         if use_additional_disk:
             self._log(f"Setting up additional disk storage for {self.name}...")
-            result = self._setup_database_storage(scale_factor)
+            result = self._setup_database_storage(workload)
         else:
             self._log(f"Setting up directory-based storage for {self.name}...")
-            result = self._setup_directory_storage(scale_factor)
+            result = self._setup_directory_storage(workload)
 
         # Mark storage setup as complete if successful
         if result:
@@ -1296,7 +1304,7 @@ class SystemUnderTest(ABC):
         return result
 
     @exclude_from_package
-    def _setup_database_storage(self, scale_factor: int) -> bool:
+    def _setup_database_storage(self, workload: Workload) -> bool:
         """
         System-specific storage setup for databases using additional disks.
 
@@ -1388,7 +1396,7 @@ class SystemUnderTest(ABC):
                 self._log(
                     f"Warning: No additional storage devices found for {self.name}, using directory storage"
                 )
-                return self._setup_directory_storage(scale_factor)
+                return self._setup_directory_storage(workload)
 
             # Prefer stable_path for multinode consistency
             device_to_use = all_devices[0].get("stable_path", all_devices[0]["path"])
@@ -1438,7 +1446,7 @@ class SystemUnderTest(ABC):
         return True
 
     @exclude_from_package
-    def _setup_directory_storage(self, scale_factor: int) -> bool:
+    def _setup_directory_storage(self, workload: Workload) -> bool:
         """
         Setup directory-based storage (no additional disks).
 
@@ -1559,7 +1567,7 @@ class SystemUnderTest(ABC):
         return self._cloud_instance_manager is not None
 
     @exclude_from_package
-    def _setup_multinode_storage(self, scale_factor: int) -> bool:
+    def _setup_multinode_storage(self, workload: Workload) -> bool:
         """
         Setup storage on all nodes in a multinode cluster.
 
@@ -1567,7 +1575,7 @@ class SystemUnderTest(ABC):
         Commands are recorded only for the first node to avoid duplicates in reports.
 
         Args:
-            scale_factor: Workload scale factor for sizing calculations
+            workload: Workload with scale factor for sizing calculations
 
         Returns:
             True if successful on all nodes, False otherwise
@@ -1590,7 +1598,7 @@ class SystemUnderTest(ABC):
 
             try:
                 # Run single-node storage setup on this node
-                success = self._setup_single_node_storage(scale_factor)
+                success = self._setup_single_node_storage(workload)
                 if not success:
                     self._log(f"  [Node {idx}] ✗ Storage setup failed")
                     all_success = False
@@ -1613,7 +1621,7 @@ class SystemUnderTest(ABC):
         return all_success
 
     @exclude_from_package
-    def _setup_single_node_storage(self, scale_factor: int) -> bool:
+    def _setup_single_node_storage(self, workload: Workload) -> bool:
         """
         Setup storage on a single node.
 
@@ -1621,14 +1629,14 @@ class SystemUnderTest(ABC):
         Called by _setup_multinode_storage() for each node in a cluster.
 
         Args:
-            scale_factor: Workload scale factor for sizing calculations
+            workload: Workload with scale factor for sizing calculations
 
         Returns:
             True if successful, False otherwise
         """
         # Default implementation uses the base class database storage setup
         # Subclasses should override this method for system-specific storage
-        return self._setup_database_storage(scale_factor)
+        return self._setup_database_storage(workload)
 
     def _detect_hardware_specs(self) -> dict[str, int]:
         """
@@ -1747,6 +1755,21 @@ class SystemUnderTest(ABC):
 
         # If it's already an IP address, return as-is
         return ip_config
+
+    def estimate_execution_time(
+        self, operation: TableOperation, data_size_gb: float
+    ) -> timedelta:
+        """
+        Calculate an estimated (pessimistic) execution time for the given operation,
+        based on system properties and table size.
+
+        The default implementation returns a fixed value of 5 minutes
+
+        Args:
+            operation: The operation to take place
+            data_size_gb: estimated size of data to operate on
+        """
+        return timedelta(minutes=5)
 
 
 def get_system_class(system_kind: str) -> type | None:
