@@ -1,5 +1,6 @@
 """TPC-H benchmark workload implementation."""
 
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
@@ -82,14 +83,28 @@ class TPCH(Workload):
 
     def calculate_statement_timeout(
         self, statement: str, system: SystemUnderTest
-    ) -> int:
-        # Default timeout for regular queries
-        base_timeout = 300  # 5 minutes
+    ) -> timedelta:
+        """
+        Calculate dynamic timeout for a SQL statement based on scale factor and node count.
+
+        For OPTIMIZE TABLE operations on large datasets, the default timeout is often
+        insufficient. This method calculates appropriate timeouts based on
+        - expected table/data size
+        - the operation
+        - the system executing the operation (kind and node count)
+
+        Args:
+            statement: SQL statement to execute
+            system: System under test, with its own characteristics
+
+        Returns:
+            Recommended statement timeout
+        """
 
         # Check if this is an OPTIMIZE operation (ClickHouse specific)
         statement_upper = statement.upper().strip()
 
-        if system.kind == "clickhouse" and "OPTIMIZE TABLE" in statement_upper:
+        if "OPTIMIZE TABLE" in statement_upper:
             # Base timeout for OPTIMIZE: 10 minutes per SF1
             # Scale factor 100 = ~1000 minutes base for lineitem
             # But we apply table-specific multipliers
@@ -113,29 +128,17 @@ class TPCH(Workload):
                     multiplier = table_mult
                     break
 
-            # Calculate timeout:
-            # - Base: 60 seconds per SF1 for lineitem
-            # - Adjusted by table multiplier
-            # - Divided by node_count (parallel processing)
-            # - Minimum 300 seconds (5 min), maximum 7200 seconds (2 hours)
-
-            sf_factor = max(1, self.scale_factor)
-            timeout = int(60 * sf_factor * multiplier / max(1, system.node_count))
-
-            # Apply bounds
-            timeout = max(300, min(7200, timeout))
-
-            return timeout
+            return system.estimate_execution_time(
+                "OPTIMIZE TABLE", self.scale_factor * multiplier
+            )
 
         # For MATERIALIZE STATISTICS, also needs longer timeout
-        if system.kind == "clickhouse" and "MATERIALIZE STATISTICS" in statement_upper:
-            # Similar to OPTIMIZE but typically faster
-            sf_factor = max(1, self.scale_factor)
-            timeout = int(30 * sf_factor / max(1, system.node_count))
-            timeout = max(300, min(3600, timeout))
-            return timeout
+        if "MATERIALIZE STATISTICS" in statement_upper:
+            return system.estimate_execution_time(
+                "MATERIALIZE STATISTICS", self.scale_factor
+            )
 
-        return base_timeout
+        return system.estimate_execution_time("DEFAULT", self.scale_factor)
 
     def prepare(self, system: SystemUnderTest) -> bool:
         """Complete TPC-H setup process: generate data, create tables, load data, create indexes, analyze tables."""
@@ -470,3 +473,24 @@ class TPCH(Workload):
             return str(self._current_system.database)
         else:
             return "benchmark"
+
+    def estimate_filesystem_usage_gb(self, system: SystemUnderTest) -> int:
+        """
+        Estimate required storage size for TPC-H data at specific scale factor
+
+        # SF1 ≈ 1GB, add 20% safety margin
+        # estimated_gb = max(int(scale_factor * 1.3), 3)
+        """
+
+        def scale_multiplier(sf: float) -> float:
+            # 2.0 at very small sf (≈1–10), ~1.6 at 30, →1.3 for sf ≥ 100
+            # f(sf) = 1.3 + 0.7 / (1 + (sf/K)^p), with K≈26.8537, p≈2.5966
+            if sf <= 10:
+                return 2.0
+            val = 1.3 + 0.7 / (1.0 + (sf / 26.853725639548) ** 2.5965770266157073)
+            return float(max(1.3, min(val, 2.0)))
+
+        def estimate_gb(sf: float) -> int:
+            return int(max(sf * scale_multiplier(sf), 3.0))
+
+        return estimate_gb(float(self.scale_factor))
