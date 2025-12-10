@@ -519,7 +519,7 @@ class BenchmarkRunner:
         context: ExecutionContext,
         force: bool,
         package_path: Path | None,
-        workload: "Workload",
+        workload: "Workload|None",
     ) -> dict[str, Callable[[], TaskResult]]:
         """
         Build task callables for each system in the benchmark.

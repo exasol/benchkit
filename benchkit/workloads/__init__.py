@@ -1,7 +1,6 @@
 """Benchmark workloads."""
 
 from .base import Workload
-from .clickbench import Clickbench
 from .estuary import Estuary
 from .tpch import TPCH
 
@@ -9,7 +8,6 @@ from .tpch import TPCH
 WORKLOAD_IMPLEMENTATIONS: dict[str, type[Workload]] = {
     "tpch": TPCH,
     "estuary": Estuary,
-    "clickbench": Clickbench,
 }
 
 
@@ -38,7 +36,6 @@ __all__ = [
     "Workload",
     "TPCH",
     "Estuary",
-    "Clickbench",
     "create_workload",
     "WORKLOAD_IMPLEMENTATIONS",
 ]
