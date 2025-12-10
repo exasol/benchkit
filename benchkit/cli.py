@@ -775,11 +775,20 @@ def check(
         "-d",
         help="Dump full config with defaults as YAML (for redirection)",
     ),
+    skip_aws_check: bool = typer.Option(
+        False,
+        "--skip-aws-check",
+        help="Skip AWS API validation (for offline validation)",
+    ),
 ) -> None:
     """Check and display configuration file contents.
 
     With --dump, outputs the expanded configuration as commented YAML that can be
     redirected to a file. This shows all default values that were auto-filled.
+
+    For cloud modes (aws/gcp/azure), validates SSH key configuration including:
+    - File existence and permissions
+    - AWS key pair existence and fingerprint match (unless --skip-aws-check)
     """
     from pathlib import Path
 
@@ -1013,6 +1022,63 @@ def check(
 
         console.print(Panel(report_table, title="Report Settings", border_style="blue"))
 
+    # Run pre-flight validation for cloud modes and display at the bottom
+    from .validation import PreflightChecker
+
+    mode = cfg.get("env", {}).get("mode", "local")
+    preflight_failed = False
+
+    if mode in ["aws", "gcp", "azure"]:
+        checker = PreflightChecker(cfg, skip_aws_checks=skip_aws_check, console=console)
+        validation_report = checker.run_check_command_validation()
+
+        # Build compact validation content for panel
+        validation_lines = []
+        for check in validation_report.checks:
+            symbol = check.symbol
+            # Compact format: symbol + name + message
+            validation_lines.append(f"{symbol} {check.name}: {check.message}")
+            if not check.passed and check.suggestion:
+                validation_lines.append(f"    [dim]\u2192 {check.suggestion}[/dim]")
+
+        # Add summary line
+        if validation_report.has_errors:
+            summary = f"[red bold]{validation_report.passed_count} passed, {validation_report.failed_count} failed[/red bold]"
+            preflight_failed = True
+        elif validation_report.has_warnings:
+            summary = f"[yellow]{validation_report.passed_count} passed, {validation_report.failed_count} warnings[/yellow]"
+        else:
+            summary = f"[green]{validation_report.passed_count} passed[/green]"
+
+        validation_lines.append(f"\nSummary: {summary}")
+        validation_content = "\n".join(validation_lines)
+
+        # Display in green panel (or red if failed)
+        border_color = "red" if preflight_failed else "green"
+        console.print(
+            Panel(
+                validation_content,
+                title="Pre-flight Validation",
+                border_style=border_color,
+            )
+        )
+
+        if preflight_failed:
+            if not skip_aws_check:
+                console.print(
+                    "[dim]Use --skip-aws-check to skip AWS API validation[/dim]"
+                )
+            raise typer.Exit(1)
+    else:
+        # Local mode - just show success
+        console.print(
+            Panel(
+                "[green]\u2713 Local mode: No cloud validation required[/green]",
+                title="Pre-flight Validation",
+                border_style="green",
+            )
+        )
+
     console.print("\n[green]Configuration is valid and ready to use.[/green]")
 
 
@@ -1031,8 +1097,19 @@ def infra(
     no_wait: bool = typer.Option(
         False, "--no-wait", help="Don't wait for instance initialization (apply only)"
     ),
+    skip_preflight: bool = typer.Option(
+        False,
+        "--skip-preflight",
+        help="Skip pre-flight checks (use with caution)",
+    ),
 ) -> None:
-    """Manage cloud infrastructure for benchmarks."""
+    """Manage cloud infrastructure for benchmarks.
+
+    Before apply/plan, validates:
+    - SSH key exists and has correct permissions (600 or 400)
+    - AWS credentials are configured
+    - AWS key pair exists and matches local key
+    """
     if action not in ["plan", "apply", "destroy"]:
         console.print(f"[red]Invalid action:[/] {action}. Use: plan, apply, destroy")
         raise typer.Exit(1)
@@ -1049,6 +1126,35 @@ def infra(
             )
         else:
             console.print("[yellow]Warning: No systems found in config to filter[/]")
+
+    # Run pre-flight validation for apply and plan
+    if action in ["apply", "plan"] and not skip_preflight:
+        from .validation import PreflightChecker
+
+        mode = cfg.get("env", {}).get("mode", "local")
+        if mode in ["aws", "gcp", "azure"]:
+            console.print("[bold blue]Running pre-flight checks...[/bold blue]\n")
+            checker = PreflightChecker(cfg, console=console)
+            report = checker.run_infra_deploy_validation()
+            checker.display_report(report)
+
+            if report.has_errors:
+                console.print(
+                    "\n[red bold]Pre-flight checks failed. "
+                    "Fix the issues above before deploying.[/red bold]"
+                )
+                console.print(
+                    "[dim]Use --skip-preflight to bypass (not recommended)[/dim]"
+                )
+                raise typer.Exit(1)
+
+            if report.has_warnings:
+                console.print(
+                    "\n[yellow]Warnings detected. Proceeding anyway...[/yellow]"
+                )
+            else:
+                console.print("\n[green]All pre-flight checks passed![/green]")
+            console.print()
 
     manager = InfraManager(provider, cfg)
 
