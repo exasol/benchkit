@@ -115,7 +115,7 @@ class Workload(ABC):
             print(f"✓ Schema '{schema}' created successfully")
 
         # Then create the tables using the templated script
-        print(f"Creating tables for {self.name}")  # TODO: display_name()
+        print(f"Creating tables for {self.display_name()}")
         return self.execute_setup_script(system, "create_tables.sql")
 
     @abstractmethod
