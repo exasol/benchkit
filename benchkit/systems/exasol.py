@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 import pyexasol  # type: ignore
 
-from benchkit.common.markers import exclude_from_package
+from benchkit.common import exclude_from_package
 
 from ..util import Timer
 from .base import SystemUnderTest
