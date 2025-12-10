@@ -31,6 +31,9 @@ class ImportCleaner:
         Returns:
             Cleaned source code
         """
+        # Check if original has future annotations - ast.unparse() strips this
+        has_future_annotations = "from __future__ import annotations" in source
+
         max_passes = 3  # Prevent infinite loops
         for _ in range(max_passes):
             try:
@@ -60,9 +63,17 @@ class ImportCleaner:
 
             # If no changes, we're done
             if new_source == source:
-                return source
+                break
 
             source = new_source
+
+        # Re-add future annotations if it was present in original
+        # This is critical for TYPE_CHECKING imports to work correctly
+        if (
+            has_future_annotations
+            and "from __future__ import annotations" not in source
+        ):
+            source = "from __future__ import annotations\n\n" + source
 
         return source
 

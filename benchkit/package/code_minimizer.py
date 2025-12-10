@@ -34,6 +34,9 @@ class CodeMinimizer:
         source = filepath.read_text()
         self.stats["lines_before"] += len(source.splitlines())
 
+        # Check if original has future annotations - ast.unparse() strips this
+        has_future_annotations = "from __future__ import annotations" in source
+
         try:
             tree = ast.parse(source)
         except SyntaxError as e:
@@ -53,6 +56,14 @@ class CodeMinimizer:
         except Exception as e:
             print(f"Warning: Could not unparse {filepath}: {e}")
             return source
+
+        # Re-add future annotations if it was present in original
+        # This is critical for TYPE_CHECKING imports to work correctly
+        if (
+            has_future_annotations
+            and "from __future__ import annotations" not in minimized
+        ):
+            minimized = "from __future__ import annotations\n\n" + minimized
 
         # Update stats
         self.stats["lines_after"] += len(minimized.splitlines())

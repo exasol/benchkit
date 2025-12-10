@@ -1082,12 +1082,15 @@ class CloudInstanceManager:
 
         if enable_debug:
             debug_output(f"[DEBUG] Command success: {result.get('success', False)}")
-            stdout = result.get("stdout", "")
-            stderr = result.get("stderr", "")
-            if stdout:
-                debug_output(f"[DEBUG] Stdout: {stdout}")
-            if stderr:
-                debug_output(f"[DEBUG] Stderr: {stderr}")
+            # Only dump stdout/stderr if not using streaming callback
+            # (streaming already printed output in real-time)
+            if stream_callback is None:
+                stdout = result.get("stdout", "")
+                stderr = result.get("stderr", "")
+                if stdout:
+                    debug_output(f"[DEBUG] Stdout: {stdout}")
+                if stderr:
+                    debug_output(f"[DEBUG] Stderr: {stderr}")
 
         return result
 

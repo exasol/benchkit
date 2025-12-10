@@ -157,6 +157,9 @@ class WorkloadPackage:
         # Copy minimal framework files (execution only)
         self._copy_minimal_framework_files()
 
+        # Copy only the required workload module
+        self._copy_workload_module()
+
         # Copy workload configuration
         self._copy_workload_config()
 
@@ -347,12 +350,12 @@ class WorkloadPackage:
                 shutil.copy2(src, dst)
 
         # Copy only workload execution modules (no setup, infra, package, report)
+        # Note: workloads module is copied separately by _copy_workload_module()
         workload_modules = {
             "run": [
                 "parsers.py"
             ],  # Only parsers, no __init__.py to avoid import issues
             "systems": None,  # Copy all - needed for database connections
-            "workloads": None,  # Copy all - needed for workload execution
             "common": None,
         }
 
@@ -421,6 +424,59 @@ class WorkloadPackage:
         dst = self.package_dir / "config.yaml"
         with open(dst, "w") as f:
             yaml.dump(workload_config, f, default_flow_style=False)
+
+    def _copy_workload_module(self) -> None:
+        """Copy only the required workload module files."""
+        workload_name = self.config["workload"]["name"]
+        src_dir = Path("benchkit/workloads")
+        dst_dir = self.package_dir / "benchkit" / "workloads"
+
+        ensure_directory(dst_dir)
+
+        # Always copy base.py (required by all workloads)
+        shutil.copy2(src_dir / "base.py", dst_dir / "base.py")
+
+        # Copy the specific workload file or directory
+        workload_file = src_dir / f"{workload_name}.py"
+        workload_subdir = src_dir / workload_name
+
+        if workload_file.exists():
+            shutil.copy2(workload_file, dst_dir / f"{workload_name}.py")
+        elif workload_subdir.exists() and workload_subdir.is_dir():
+            shutil.copytree(
+                workload_subdir, dst_dir / workload_name, dirs_exist_ok=True
+            )
+
+        # Generate minimal __init__.py with only the required workload
+        self._generate_workload_init(dst_dir, workload_name)
+
+    def _generate_workload_init(self, dst_dir: Path, workload_name: str) -> None:
+        """Generate minimal workloads __init__.py for the specific workload."""
+        # Map workload names to class names
+        class_name_map = {"tpch": "TPCH", "estuary": "Estuary"}
+        class_name = class_name_map.get(workload_name, workload_name.upper())
+
+        init_content = f'''"""Benchmark workloads."""
+
+from .base import Workload
+from .{workload_name} import {class_name}
+
+WORKLOAD_IMPLEMENTATIONS = {{
+    "{workload_name}": {class_name},
+}}
+
+
+def create_workload(config: dict) -> Workload:
+    name = config.get("name")
+    if name not in WORKLOAD_IMPLEMENTATIONS:
+        available = ", ".join(WORKLOAD_IMPLEMENTATIONS.keys())
+        raise ValueError(f"Unsupported workload: {{name}}. Available: {{available}}")
+    return WORKLOAD_IMPLEMENTATIONS[name](config)
+
+
+__all__ = ["Workload", "{class_name}", "create_workload", "WORKLOAD_IMPLEMENTATIONS"]
+'''
+        (dst_dir / "__init__.py").write_text(init_content)
 
     def _copy_workload_files(self) -> None:
         """Copy workload-specific files."""
