@@ -6,8 +6,6 @@ from benchkit.workloads import Workload
 
 
 class Estuary(Workload):
-    """Inherits all but very few methods from the TPC-H benchmark"""
-
     @classmethod
     def get_python_dependencies(cls) -> list[str]:
         """Return Python packages required for Estuary workload."""
@@ -16,10 +14,10 @@ class Estuary(Workload):
     def __init__(self, config: dict[str, Any]):
         super().__init__(config)
 
-        # arbitrary restriction introduced by the row calculation in load_data
+        # arbitrary restriction introduced by the row calculation in load_data and the broken Faker setup
         assert (
-            1 <= self.scale_factor <= 1000
-        ), "estuary benchmark only supports scale factors 1 to 1000"
+            1 <= self.scale_factor <= 100
+        ), "estuary benchmark currently only supports scale factors 1 to 100"
 
     def get_workload_description(self) -> dict[str, Any]:
         """Return Estuary workload description."""
