@@ -48,6 +48,8 @@ dev = [
     "types-Markdown>=3.0.0",
     "pandas-stubs>=2.0.0",
     "boto3-stubs[sts,ec2]>=1.26.0",
+    "types-requests",
+    "types-PyYAML",
     # Database drivers for testing framework (not needed in generated packages)
     "pyexasol>=0.25.0",
     "clickhouse-connect>=0.6.0",

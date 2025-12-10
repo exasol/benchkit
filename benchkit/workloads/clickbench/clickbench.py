@@ -14,6 +14,10 @@ class Clickbench(Workload):
         # override default from base
         self.data_format = config.get("data_format", "csv")
 
+    def display_name(self) -> str:
+        # no scale factor
+        return "ClickBench"
+
     def generate_data(self, output_dir: Path) -> bool:
         """TODO: download (and decompress?) data from web server"""
         if self.generator == "download":

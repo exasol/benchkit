@@ -414,7 +414,7 @@ class BenchmarkRunner:
         phase: PhaseConfig,
         context: ExecutionContext,
         force: bool = False,
-        workload: Any = None,
+        workload: "Workload | None" = None,
     ) -> bool | list[dict[str, Any]]:
         """
         Universal phase executor handling setup, load, and query phases.
@@ -519,7 +519,7 @@ class BenchmarkRunner:
         context: ExecutionContext,
         force: bool,
         package_path: Path | None,
-        workload: Any,
+        workload: "Workload",
     ) -> dict[str, Callable[[], TaskResult]]:
         """
         Build task callables for each system in the benchmark.
@@ -655,7 +655,7 @@ class BenchmarkRunner:
         self,
         system_config: dict[str, Any],
         context: ExecutionContext,
-    ) -> SystemUnderTest:
+    ) -> "SystemUnderTest":
         """
         Create system instance configured for the execution context.
 
@@ -741,11 +741,11 @@ class BenchmarkRunner:
     @exclude_from_package
     def _setup_operation(
         self,
-        system: SystemUnderTest,
+        system: "SystemUnderTest",
         system_config: dict[str, Any],
         instance_manager: Any,
         package_path: Path | None,  # unused for setup
-        workload: Any,  # unused for setup
+        workload: "Workload",  # unused for setup
     ) -> tuple[bool, dict[str, Any]]:
         """
         Execute setup operation for a single system.
@@ -854,11 +854,11 @@ class BenchmarkRunner:
 
     def _load_operation(
         self,
-        system: SystemUnderTest,
+        system: "SystemUnderTest",
         system_config: dict[str, Any],
         instance_manager: Any,
         package_path: Path | None,
-        workload: Any,
+        workload: "Workload",
     ) -> tuple[bool, dict[str, Any]]:
         """
         Execute load operation for a single system.
@@ -907,11 +907,11 @@ class BenchmarkRunner:
 
     def _query_operation(
         self,
-        system: SystemUnderTest,
+        system: "SystemUnderTest",
         system_config: dict[str, Any],
         instance_manager: Any,
         package_path: Path | None,
-        workload: Any,
+        workload: "Workload",
     ) -> tuple[bool, list[dict[str, Any]]]:
         """
         Execute query operation for a single system.
@@ -1049,7 +1049,7 @@ class BenchmarkRunner:
         system_config: dict[str, Any],
         instance_manager: Any,
         output_callback: Callable[[str], None] | None = None,
-    ) -> SystemUnderTest:
+    ) -> "SystemUnderTest":
         """Create system object configured for local-to-remote execution.
 
         IMPORTANT: Uses the PUBLIC IP from the cloud instance manager to enable
@@ -1488,7 +1488,7 @@ class BenchmarkRunner:
         return True
 
     def _execute_queries(
-        self, system: SystemUnderTest, workload: Workload
+        self, system: "SystemUnderTest", workload: "Workload"
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         """Execute benchmark queries with timing and monitoring."""
         runs_per_query = self.config["workload"]["runs_per_query"]
@@ -1570,7 +1570,7 @@ class BenchmarkRunner:
 
     def _load_setup_summary_to_system(
         self,
-        system: SystemUnderTest,
+        system: "SystemUnderTest",
         system_name: str,
         executor: "ParallelExecutor | None" = None,
     ) -> None:
