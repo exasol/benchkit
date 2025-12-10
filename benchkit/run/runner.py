@@ -212,8 +212,48 @@ class BenchmarkRunner:
         return self.output_dir / f"load_complete_{system_name}.json"
 
     def _is_setup_complete(self, system_name: str) -> bool:
-        """Check if setup phase is complete for a system."""
-        return self._get_setup_complete_path(system_name).exists()
+        """Check if setup phase is complete for a system.
+
+        This method validates not just that a marker file exists, but also that
+        the IP address in the marker matches the current infrastructure. This
+        prevents stale markers from causing installations to be skipped after
+        infrastructure is re-provisioned with new IP addresses.
+        """
+        marker_path = self._get_setup_complete_path(system_name)
+        if not marker_path.exists():
+            return False
+
+        # Validate that marker IP matches current infrastructure IP
+        try:
+            marker_data = load_json(marker_path)
+            marker_ip = marker_data.get("connection_info", {}).get("public_ip")
+
+            # Early exit: no cloud managers to validate against
+            if not self._cloud_instance_managers:
+                return True
+
+            current_mgr = self._cloud_instance_managers.get(system_name)
+
+            # Early exit: no manager for this specific system
+            if not current_mgr:
+                return True
+
+            # Handle both single manager and list of managers (multinode)
+            if isinstance(current_mgr, list):
+                current_ip = current_mgr[0].public_ip if current_mgr else None
+            else:
+                current_ip = current_mgr.public_ip
+
+            if marker_ip and current_ip and marker_ip != current_ip:
+                console.print(
+                    f"[yellow]⚠ {system_name} setup marker has stale IP "
+                    f"({marker_ip} != {current_ip}), will reinstall[/yellow]"
+                )
+                return False
+        except Exception:
+            pass  # If marker can't be read, treat as still valid to avoid blocking
+
+        return True
 
     def _is_load_complete(self, system_name: str) -> bool:
         """Check if load phase is complete for a system."""
@@ -768,7 +808,9 @@ class BenchmarkRunner:
         if state == "NEEDS_INSTALLATION":
             console.print(f"🚀 Installing {system_name}...")
             with Timer(f"Installation for {system_name}") as timer:
-                if not self._install_system_remotely(system, instance_manager):
+                if not self._install_system_remotely(
+                    system, instance_manager, system_name=system_name
+                ):
                     return False, {"error": "installation_failed"}
             timings["installation_s"] = timer.elapsed
             self._save_installation_timing(system_name, timer.elapsed)
@@ -784,7 +826,9 @@ class BenchmarkRunner:
             self._load_setup_summary_to_system(system, system_name)
 
             with Timer(f"Restart for {system_name}") as timer:
-                if not self._restart_system_remotely(system, instance_manager):
+                if not self._restart_system_remotely(
+                    system, instance_manager, system_name=system_name
+                ):
                     return False, {"error": "restart_failed"}
             timings["restart_s"] = timer.elapsed
             timings["installation_s"] = self._load_installation_timing(system_name)
@@ -1172,11 +1216,13 @@ class BenchmarkRunner:
                 system_name,
             )
 
-            # Create streaming callback for remote output (thread-safe)
+            # Create streaming callback for remote output with local tagging
             def stream_remote_output(line: str, stream_name: str) -> None:
-                prefix = "STDERR" if stream_name == "stderr" else "STDOUT"
-                message = prefix if not line else f"{prefix}: {line}"
-                self._log_output(message, executor, system_name)
+                # Add system tag prefix for parallel output identification
+                tagged_line = f"[{system_name}] {line}"
+                if stream_name == "stderr":
+                    tagged_line = f"[{system_name}] [stderr] {line}"
+                self._log_output(tagged_line, executor, system_name)
 
             load_result = primary_manager.run_remote_command(
                 f"cd /home/ubuntu/{project_id} && ./load_data.sh {system_name}",
@@ -2039,10 +2085,18 @@ class BenchmarkRunner:
                 # Show command being executed
                 self._log_output(f"[dim]$ {cmd}[/dim]", executor, system_name)
 
+                # Create streaming callback for local tagging
+                def tag_output(line: str, stream_name: str) -> None:
+                    tagged_line = f"[{system_name}] {line}"
+                    if stream_name == "stderr":
+                        tagged_line = f"[{system_name}] [stderr] {line}"
+                    self._log_output(tagged_line, executor, system_name)
+
                 result = primary_manager.run_remote_command(
                     cmd,
                     timeout=timeout,
                     debug=is_debug_enabled(),  # Use global debug state
+                    stream_callback=tag_output,  # Local tagging via callback
                 )
 
                 # Show command result status
@@ -2447,10 +2501,13 @@ class BenchmarkRunner:
                 system_name,
             )
 
+            # Create streaming callback for remote output with local tagging
             def stream_remote_output(line: str, stream_name: str) -> None:
-                prefix = "STDERR" if stream_name == "stderr" else "STDOUT"
-                message = prefix if not line else f"{prefix}: {line}"
-                self._log_output(message, executor, system_name)
+                # Add system tag prefix for parallel output identification
+                tagged_line = f"[{system_name}] {line}"
+                if stream_name == "stderr":
+                    tagged_line = f"[{system_name}] [stderr] {line}"
+                self._log_output(tagged_line, executor, system_name)
 
             workload_result = primary_manager.run_remote_command(
                 f"cd /home/ubuntu/{project_id} && ./run_queries.sh {system_name}",

@@ -1,5 +1,7 @@
 """Exasol database system implementation."""
 
+from __future__ import annotations
+
 import ssl
 from collections.abc import Callable, Iterable
 from pathlib import Path
@@ -879,6 +881,7 @@ echo "Symlink: %s -> $INSTANCE_STORE"
         admin_password = self.setup_config.get("admin_password", "exasol789")
         working_copy = self.setup_config.get("working_copy", f"@exasol-{self.version}")
         storage_disk_size = self.setup_config.get("storage_disk_size", "100GB")
+        db_mem_size = self.setup_config.get("db_mem_size")  # In MB, optional
 
         try:
             # Step 0: Handle license file if specified and copy to remote system
@@ -912,13 +915,13 @@ echo "Symlink: %s -> $INSTANCE_STORE"
             node_info = f"all_nodes_{node_count}" if node_count > 1 else None
 
             self.record_setup_command(
-                "sudo useradd -m exasol",
+                "sudo useradd -m -s /bin/bash exasol",
                 "Create Exasol system user",
                 "user_setup",
                 node_info=node_info,
             )
             if not self.execute_command_on_all_nodes(
-                "sudo useradd -m exasol || true",
+                "sudo useradd -m -s /bin/bash exasol || true",
                 description="Creating exasol user on all nodes",
             ):
                 self._log("Warning: Failed to create exasol user on some nodes")
@@ -1154,10 +1157,12 @@ echo "Symlink: %s -> $INSTANCE_STORE"
                 f"Download c4 cluster management tool v{c4_version}",
                 "tool_setup",
             )
-            result = self.execute_command(f"wget {c4_url} -O c4 && chmod +x c4")
+            # Use -q to suppress verbose progress output (~3700 lines)
+            result = self.execute_command(f"wget -q {c4_url} -O c4 && chmod +x c4")
             if not result["success"]:
                 self._log(f"Failed to download c4: {result['stderr']}")
                 return False
+            self._log(f"✓ Downloaded c4 v{c4_version}")
 
             # Step 4: Generate SSH key on primary node and distribute to ALL nodes
             self.record_setup_command(
@@ -1206,6 +1211,136 @@ echo "Symlink: %s -> $INSTANCE_STORE"
                     self._log(f"  ✗ Failed SSH connectivity to node {idx} ({host})")
                     return False
 
+            # Setup ubuntu→exasol@localhost passwordless SSH on each node
+            self._log("Setting up ubuntu→exasol@localhost SSH access on all nodes...")
+            for idx, mgr in enumerate(self._cloud_instance_managers):
+                # Configure SSH to skip host key checking for localhost
+                localhost_ssh_cmd = """
+# Add localhost to known_hosts to avoid prompts
+ssh-keyscan -H localhost >> ~/.ssh/known_hosts 2>/dev/null || true
+ssh-keyscan -H 127.0.0.1 >> ~/.ssh/known_hosts 2>/dev/null || true
+
+# Create SSH config for localhost if not exists
+mkdir -p ~/.ssh
+touch ~/.ssh/config
+grep -q "Host localhost" ~/.ssh/config 2>/dev/null || cat >> ~/.ssh/config << 'SSHEOF'
+
+Host localhost 127.0.0.1
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+    LogLevel ERROR
+SSHEOF
+chmod 600 ~/.ssh/config
+"""
+                result = mgr.run_remote_command(localhost_ssh_cmd, timeout=60)
+                if result.get("success"):
+                    self._log(f"  ✓ localhost SSH configured on node {idx}")
+                else:
+                    self._log(f"  ⚠ Failed to configure localhost SSH on node {idx}")
+
+                # Verify ubuntu can SSH to exasol@localhost
+                test_result = mgr.run_remote_command(
+                    "ssh -o BatchMode=yes exasol@localhost 'echo ok' 2>/dev/null",
+                    timeout=30,
+                )
+                if test_result.get("success") and "ok" in test_result.get("stdout", ""):
+                    self._log(f"  ✓ SSH ubuntu→exasol@localhost verified on node {idx}")
+                else:
+                    self._log(
+                        f"  ⚠ SSH ubuntu→exasol@localhost verification failed on node {idx}"
+                    )
+
+            # Setup exasol→exasol SSH access (for exasol user to SSH to itself and other nodes)
+            self._log("Setting up exasol→exasol SSH access on all nodes...")
+
+            # Step 4a: Generate SSH keys for exasol user on all nodes
+            for idx, mgr in enumerate(self._cloud_instance_managers):
+                keygen_cmd = """
+sudo -u exasol bash -c '
+    mkdir -p ~/.ssh
+    chmod 700 ~/.ssh
+    if [ ! -f ~/.ssh/id_rsa ]; then
+        ssh-keygen -t rsa -b 2048 -f ~/.ssh/id_rsa -N "" -q
+    fi
+'
+"""
+                result = mgr.run_remote_command(keygen_cmd, timeout=60)
+                if result.get("success"):
+                    self._log(f"  ✓ SSH key generated for exasol user on node {idx}")
+                else:
+                    self._log(
+                        f"  ⚠ Failed to generate SSH key for exasol on node {idx}"
+                    )
+
+            # Step 4b: Collect all exasol public keys
+            exasol_pub_keys = []
+            for _idx, mgr in enumerate(self._cloud_instance_managers):
+                result = mgr.run_remote_command(
+                    "sudo cat ~exasol/.ssh/id_rsa.pub", timeout=30
+                )
+                if result.get("success"):
+                    key = result.get("stdout", "").strip()
+                    if key:
+                        exasol_pub_keys.append(key)
+
+            # Step 4c: Distribute all exasol public keys to all nodes
+            self._log(
+                f"Distributing {len(exasol_pub_keys)} exasol keys to all nodes..."
+            )
+            for _idx, mgr in enumerate(self._cloud_instance_managers):
+                for pub_key in exasol_pub_keys:
+                    add_key_cmd = f"echo '{pub_key}' | sudo tee -a ~exasol/.ssh/authorized_keys > /dev/null"
+                    mgr.run_remote_command(add_key_cmd, timeout=30)
+                # Fix permissions after adding keys
+                mgr.run_remote_command(
+                    "sudo chown exasol:exasol ~exasol/.ssh/authorized_keys && sudo chmod 600 ~exasol/.ssh/authorized_keys",
+                    timeout=30,
+                )
+
+            # Step 4d: Build list of all hosts for SSH config
+            all_hosts = ["localhost", "127.0.0.1"]
+            all_hosts.extend(host_addrs.split())  # private IPs
+            all_hosts.extend(host_external_addrs.split())  # public IPs
+            hosts_pattern = " ".join(all_hosts)
+
+            # Step 4e: Configure exasol's SSH config for all hosts
+            for idx, mgr in enumerate(self._cloud_instance_managers):
+                exasol_ssh_config_cmd = f"""
+sudo -u exasol bash -c '
+mkdir -p ~/.ssh
+chmod 700 ~/.ssh
+touch ~/.ssh/config
+chmod 600 ~/.ssh/config
+
+# Add SSH config for all cluster hosts
+grep -q "Host localhost" ~/.ssh/config 2>/dev/null || cat >> ~/.ssh/config << SSHEOF
+
+Host {hosts_pattern}
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+    LogLevel ERROR
+SSHEOF
+'
+"""
+                result = mgr.run_remote_command(exasol_ssh_config_cmd, timeout=60)
+                if result.get("success"):
+                    self._log(f"  ✓ exasol SSH config set on node {idx}")
+                else:
+                    self._log(f"  ⚠ Failed to set exasol SSH config on node {idx}")
+
+            # Step 4f: Verify exasol can SSH to exasol@localhost
+            for idx, mgr in enumerate(self._cloud_instance_managers):
+                test_result = mgr.run_remote_command(
+                    "sudo -u exasol ssh -o BatchMode=yes exasol@localhost 'echo ok' 2>/dev/null",
+                    timeout=30,
+                )
+                if test_result.get("success") and "ok" in test_result.get("stdout", ""):
+                    self._log(f"  ✓ SSH exasol→exasol@localhost verified on node {idx}")
+                else:
+                    self._log(
+                        f"  ⚠ SSH exasol→exasol@localhost verification failed on node {idx}"
+                    )
+
             # Step 5: Create c4 configuration file on remote system
             # Note: For multinode, IP addresses are space-separated lists,
             # and storage paths are the same on all nodes
@@ -1224,6 +1359,10 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
             # Mount path is the same on all nodes (c4 applies it to each node)
             if not use_additional_disk:
                 config_content += f"\nCCC_PLAY_MOUNTS={data_dir}:{data_dir}"
+
+            # Add database memory size if specified (in MB)
+            if db_mem_size:
+                config_content += f"\nCCC_PLAY_DB_MEM_SIZE={db_mem_size}"
 
             config_content += "\nCCC_ADMINUI_START_SERVER=true"
 

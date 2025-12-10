@@ -5,16 +5,17 @@ import json
 import shutil
 import zipfile
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from jinja2 import Environment, FileSystemLoader
 from rich.console import Console
 
-from ..systems.base import SystemUnderTest
-from ..util import ensure_directory
-from .code_minimizer import CodeMinimizer
-from .formatter import PackageFormatter
-from .import_cleaner import ImportCleaner
+if TYPE_CHECKING:
+    from ..systems.base import SystemUnderTest
+    from ..util import ensure_directory
+    from .code_minimizer import CodeMinimizer
+    from .formatter import PackageFormatter
+    from .import_cleaner import ImportCleaner
 
 console = Console()
 
@@ -515,7 +516,7 @@ class WorkloadPackage:
         requirements_file = self.package_dir / "requirements.txt"
         requirements_file.write_text("\n".join(unique_requirements))
 
-    def _get_system_class(self, system_kind: str) -> type[SystemUnderTest] | None:
+    def _get_system_class(self, system_kind: str) -> "type[SystemUnderTest] | None":
         """Dynamically import and return the system class for the given system kind."""
         import importlib
         import inspect

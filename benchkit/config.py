@@ -272,7 +272,6 @@ class BenchmarkConfig(BaseModel):
             if kind == "exasol" and method == "installer":
                 required_fields = [
                     "c4_version",
-                    "working_copy",
                     "image_password",
                     "db_password",
                 ]
@@ -282,6 +281,23 @@ class BenchmarkConfig(BaseModel):
                         f"System '{system_config.name}': Exasol installer method requires: "
                         f"{', '.join(missing)}"
                     )
+
+                # Validate db_mem_size if provided (must be integer, at least 4GB per node)
+                db_mem_size = system_config.setup.get("db_mem_size")
+                if db_mem_size is not None:
+                    if not isinstance(db_mem_size, int):
+                        raise ValueError(
+                            f"System '{system_config.name}': db_mem_size must be an integer "
+                            f"(in MB), got {type(db_mem_size).__name__}"
+                        )
+                    min_mem_per_node = 4000  # 4GB in MB
+                    min_total_mem = node_count * min_mem_per_node
+                    if db_mem_size < min_total_mem:
+                        raise ValueError(
+                            f"System '{system_config.name}': db_mem_size must be at least "
+                            f"{min_mem_per_node}MB per node. With {node_count} node(s), "
+                            f"minimum is {min_total_mem}MB (got {db_mem_size}MB)"
+                        )
 
         return v
 
