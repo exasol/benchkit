@@ -5,8 +5,11 @@ import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
+
+from jinja2 import Environment, FileSystemLoader
 
 from ..systems.base import SystemUnderTest
 
@@ -19,6 +22,40 @@ class Workload(ABC):
         self.scale_factor = config.get("scale_factor", 1)
         self.config = config
         self.data_dir = Path(f"data/{self.name}/sf{self.scale_factor}")
+        self.workload_dir = (
+            Path(__file__).parent.parent.parent / "workloads" / self.name
+        )
+        self.template_env: Environment | None = None
+        # Store system for template resolution
+        self._current_system: SystemUnderTest | None = None
+
+        self.data_format = config.get("data_format", "tbl")  # TPC-H standard format
+        self.variant = config.get("variant", "official")  # Query variant to use
+        self.generator: str = config.get("generator", "")
+
+        self.system_variants = (
+            config.get("system_variants") or {}
+        )  # Per-system variant overrides
+
+        # Determine which queries to include based on include/exclude logic
+        queries_config = config.get("queries", {})
+        self.queries_include = queries_config.get("include", [])
+        self.queries_exclude = queries_config.get("exclude", [])
+
+    def get_template_env(self) -> Environment:
+        """Get the workload's jinja2 template environment"""
+        if not self.template_env:
+            self.template_env = Environment(
+                loader=FileSystemLoader(
+                    [
+                        self.workload_dir / "queries",
+                        self.workload_dir / "setup",
+                    ]
+                ),
+                trim_blocks=True,
+                lstrip_blocks=True,
+            )
+        return self.template_env
 
     def display_name(self) -> str:
         """Return user-friendly display name for workload"""
@@ -56,7 +93,6 @@ class Workload(ABC):
         """
         pass
 
-    @abstractmethod
     def create_schema(self, system: SystemUnderTest) -> bool:
         """
         Create database schema and tables for the workload.
@@ -67,7 +103,20 @@ class Workload(ABC):
         Returns:
             True if schema creation successful, False otherwise
         """
-        pass
+        # Use workload specific schema name like "tpch_sf100"
+        schema: str = self.get_schema_name()
+
+        # First, create the schema using the system's method
+        if hasattr(system, "create_schema"):
+            print(f"Creating schema '{schema}'...")
+            if not system.create_schema(schema):
+                print(f"Failed to create schema '{schema}'")
+                return False
+            print(f"✓ Schema '{schema}' created successfully")
+
+        # Then create the tables using the templated script
+        print(f"Creating tables for {self.display_name()}")
+        return self.execute_setup_script(system, "create_tables.sql")
 
     @abstractmethod
     def load_data(self, system: SystemUnderTest) -> bool:
@@ -82,7 +131,6 @@ class Workload(ABC):
         """
         pass
 
-    @abstractmethod
     def get_queries(self, system: SystemUnderTest | None = None) -> dict[str, str]:
         """
         Get the benchmark queries.
@@ -93,7 +141,26 @@ class Workload(ABC):
         Returns:
             Dictionary mapping query names to SQL text
         """
-        pass
+        # Use provided system or stored system
+        target_system = system or self._current_system
+        if target_system is None:
+            raise ValueError(
+                "System must be provided either as parameter or stored from previous call"
+            )
+
+        # Store system for future template resolution
+        self._current_system = target_system
+
+        # Get and log the variant being used for this system
+        variant = self._get_query_variant_for_system(target_system)
+        if variant != "official":
+            print(f"Loading '{variant}' variant queries for {target_system.kind}")
+
+        queries = {}
+        for query_name in self.get_included_queries():
+            queries[query_name] = self._get_query_sql(query_name, target_system)
+
+        return queries
 
     @abstractmethod
     def get_all_query_names(self) -> list[str]:
@@ -105,7 +172,19 @@ class Workload(ABC):
         """
         pass
 
-    @abstractmethod
+    def get_included_queries(self) -> list[str]:
+        all_queries = self.get_all_query_names()
+
+        if self.queries_include:
+            # If include is specified, use only those queries
+            return [q for q in all_queries if q in self.queries_include]
+        elif self.queries_exclude:
+            # If exclude is specified, use all queries except excluded ones
+            return [q for q in all_queries if q not in self.queries_exclude]
+        else:
+            # If neither is specified, use all queries
+            return all_queries
+
     def run_query(
         self, system: SystemUnderTest, query_name: str, query_sql: str
     ) -> dict[str, Any]:
@@ -120,7 +199,11 @@ class Workload(ABC):
         Returns:
             Query execution result dictionary
         """
-        pass
+        # Substitute schema name in query
+        schema_name = self.get_schema_name()
+        formatted_sql = query_sql.format(schema=schema_name)
+
+        return system.execute_query(formatted_sql, query_name=query_name)
 
     def prepare(self, system: SystemUnderTest) -> bool:
         """
@@ -244,7 +327,7 @@ class Workload(ABC):
         Returns:
             Dictionary with 'measured' and 'warmup' keys containing results
         """
-        all_queries = self.get_queries()
+        all_queries = self.get_queries(system)
         measured_results = []
         warmup_results = []
 
@@ -317,7 +400,7 @@ class Workload(ABC):
         Returns:
             Dictionary with 'measured' and 'warmup' keys containing results
         """
-        all_queries = self.get_queries()
+        all_queries = self.get_queries(system)
         warmup_results = []
 
         print(f"Running multiuser workload with {num_streams} concurrent streams")
@@ -602,6 +685,138 @@ class Workload(ABC):
             "setup_steps": self.get_setup_script_info(),
             "schema_name": self.get_schema_name(),
         }
+
+    def execute_setup_script(self, system: SystemUnderTest, script_name: str) -> bool:
+        """Execute a templated setup script by rendering the jinja2 template and splitting into individual statements."""
+        try:
+            # Get system extra config for conditional features
+            system_extra = {}
+            if hasattr(system, "setup_config"):
+                system_extra = system.setup_config.get("extra", {})
+
+            # Load and render the template
+            template = self.get_template_env().get_template(script_name)
+
+            # Get node_count and cluster for multinode support
+            node_count = getattr(system, "node_count", 1)
+            cluster = getattr(system, "cluster_name", "benchmark_cluster")
+
+            rendered_sql = template.render(
+                system_kind=system.kind,
+                scale_factor=self.scale_factor,
+                schema=self.get_schema_name(),
+                system_extra=system_extra,
+                node_count=node_count,
+                cluster=cluster,
+            )
+
+            # Split SQL into individual statements and execute them one by one
+            statements = system.split_sql_statements(rendered_sql)
+
+            for idx, statement in enumerate(statements):
+                # Skip empty statements
+                if not statement.strip():
+                    continue
+
+                # Calculate dynamic timeout for OPTIMIZE operations
+                # These can take a long time for large tables
+                timeout = self.calculate_statement_timeout(statement, system)
+
+                # Execute each statement individually with calculated timeout
+                result = system.execute_query(
+                    statement,
+                    query_name=f"setup_{script_name.replace('.sql', '')}_{idx+1}",
+                    timeout=int(timeout.total_seconds()),
+                )
+
+                if not result["success"]:
+                    print(
+                        f"Failed to execute statement {idx+1} in {script_name}: {result.get('error', 'Unknown error')}"
+                    )
+                    print(f"Statement was: {statement[:200]}...")
+                    return False
+
+            return True
+
+        except Exception as e:
+            print(f"Error executing setup script {script_name}: {e}")
+            return False
+
+    def _get_query_variant_for_system(self, system: SystemUnderTest) -> str:
+        """
+        Determine which query variant to use for a given system.
+
+        Args:
+            system: System under test
+
+        Returns:
+            Variant name to use for this system
+        """
+        # Check if system has a specific variant override
+        if self.system_variants and system.name in self.system_variants:
+            return str(self.system_variants[system.name])
+        # Otherwise use global variant
+        return str(self.variant)
+
+    def _get_query_sql(self, query_name: str, system: SystemUnderTest) -> str:
+        """
+        Get SQL text for a specific TPC-H query with variant and templates resolved.
+
+        Priority order for loading queries:
+        1. variants/{variant}/{system_kind}/{query_name}.sql (system-specific variant)
+        2. variants/{variant}/{query_name}.sql (generic variant)
+        3. {query_name}.sql (default/official with inline conditionals)
+        """
+        try:
+            variant = self._get_query_variant_for_system(system)
+
+            # Build priority-ordered list of query paths
+            query_paths = [
+                f"variants/{variant}/{system.kind}/{query_name}.sql",
+                f"variants/{variant}/{query_name}.sql",
+                f"{query_name}.sql",
+            ]
+
+            template = None
+
+            # Try each path in order until one succeeds
+            for path in query_paths:
+                try:
+                    template = self.get_template_env().get_template(path)
+                    break
+                except Exception:
+                    continue
+
+            if template is None:
+                raise FileNotFoundError(
+                    f"Query {query_name} not found in any variant path"
+                )
+
+            # Get system extra config for conditional features
+            system_extra = {}
+            if hasattr(system, "setup_config"):
+                system_extra = system.setup_config.get("extra", {})
+
+            # Render template with variant context
+            rendered_sql = template.render(
+                system_kind=system.kind,
+                scale_factor=self.scale_factor,
+                schema=self.get_schema_name(),
+                variant=variant,
+                system_extra=system_extra,
+            )
+
+            return rendered_sql
+
+        except Exception as e:
+            print(f"Error loading query {query_name}: {e}")
+            return f"-- Error loading query {query_name}: {e}"
+
+    def calculate_statement_timeout(
+        self, statement: str, system: SystemUnderTest
+    ) -> timedelta:
+        """Default implementation: 5 minutes for any statement"""
+        return timedelta(minutes=5)
 
 
 def get_workload_class(workload_name: str) -> type | None:

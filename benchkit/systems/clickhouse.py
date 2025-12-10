@@ -13,13 +13,13 @@ except ModuleNotFoundError:
     # optional for most part
     pass
 
-from benchkit.common.markers import exclude_from_package
+from benchkit.common import exclude_from_package
 
+from ..util import Timer
 from .base import SystemUnderTest, TableOperation
 
 if TYPE_CHECKING:
     # avoid cyclic dependency problems
-    from ..util import Timer
     from ..workloads import Workload
 
 
@@ -1489,6 +1489,79 @@ class ClickHouseSystem(SystemUnderTest):
         self, table_name: str, data_source: Iterable[Any], **kwargs: Any
     ) -> bool:
         raise NotImplementedError("clickhouse.load_data_from_iterable")
+
+    def load_data_from_url(
+        self,
+        schema_name: str,
+        table_name: str,
+        data_url: str | list[str],
+        /,
+        extension: str = ".csv",
+        **kwargs: Any,
+    ) -> bool:
+        if isinstance(data_url, list):
+            raise NotImplementedError("Loading multiple URLs into clickhouse")
+
+        try:
+            self._log(f"Loading {data_url} into {table_name}...")
+
+            import_query: str = (
+                f"INSERT INTO {schema_name}.{table_name} SELECT * FROM url('{data_url}', CSV)"
+            )
+
+            if clickhouse_connect:
+                # Use clickhouse-connect for verification
+                client = self._get_client()
+                if not client:
+                    self._log("Error: failed to connect to clickhouse system")
+                    return False
+
+                import_res = client.query(import_query)
+                self._log(f"{import_res}")
+                count_result = client.query(
+                    f"SELECT COUNT(*) FROM {schema_name}.{table_name}"
+                )
+                row_count = count_result.result_rows[0][0]
+
+            else:
+                import_cmd = (
+                    f"clickhouse-client "
+                    f"--user={self.username} "
+                    f"--password={self.password} "
+                    f"--query='{import_query}'"
+                )
+
+                # Execute the import
+                result = self.execute_command(import_cmd, timeout=3600.0, record=False)
+
+                if not result.get("success", False):
+                    self._log(
+                        f"Failed to load data: {result.get('stderr', 'Unknown error')}"
+                    )
+                    return False
+
+                # Verify data was loaded by counting rows
+                count_cmd = (
+                    f"clickhouse-client "
+                    f"--user={self.username} "
+                    f"--password={self.password} "
+                    f'--query="SELECT COUNT(*) FROM {schema_name}.{table_name} FORMAT TSV"'
+                )
+                count_result = self.execute_command(
+                    count_cmd, timeout=60.0, record=False
+                )
+                if count_result.get("success", False):
+                    row_count = int(count_result.get("stdout", "0").strip())
+                else:
+                    self._log("Warning: Could not verify row count")
+                    return True  # Assume success if import succeeded
+
+            self._log(f"Successfully loaded {row_count:,} rows into {table_name}")
+            return True
+
+        except Exception as e:
+            self._log(f"Failed to load data into {table_name}: {e}")
+            return False
 
     def execute_query(
         self,

@@ -9,13 +9,13 @@ from typing import TYPE_CHECKING, Any, cast
 
 import pyexasol  # type: ignore
 
-from benchkit.common.markers import exclude_from_package
+from benchkit.common import exclude_from_package
 
+from ..util import Timer
 from .base import SystemUnderTest
 
 if TYPE_CHECKING:
     # avoid cyclic dependency problems
-    from ..util import Timer
     from ..workloads import Workload
 
 
@@ -2109,3 +2109,53 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
             return removed > 0
         except Exception:
             return False
+
+    def load_data_from_url(
+        self,
+        schema_name: str,
+        table_name: str,
+        data_url: str | list[str],
+        /,
+        extension: str = ".csv",
+        **kwargs: Any,
+    ) -> bool:
+        conn = None
+
+        # split URL into bases and file names
+        data_sources: dict[Path, list[str]] = {}
+        for url in [data_url] if isinstance(data_url, str) else data_url:
+            p = Path(url)
+            prefix: Path = p.parent
+            if prefix not in data_sources:
+                data_sources[prefix] = [p.name]
+            else:
+                data_sources[prefix].append(p.name)
+
+        try:
+            conn = self._get_connection()
+            if not conn:
+                return False
+            if not self._schema_created:
+                if self._schema_exists(conn, schema_name):
+                    self._schema_created = True
+                    conn.execute(f"OPEN SCHEMA {schema_name}")
+
+            self._log(f"Loading {data_url} into {table_name}...")
+            base_sql = f"IMPORT INTO {schema_name}.{table_name} FROM CSV AT "
+            for host, files in data_sources.items():
+                base_sql += f"'{host}' " + " ".join([f"FILE '{f}'" for f in files])
+
+            conn.execute(base_sql)
+
+            # Verify data was loaded
+            result = conn.execute(f"SELECT COUNT(*) FROM {table_name}")
+            row_count = result.fetchone()[0]
+            self._log(f"Successfully loaded {row_count:,} rows into {table_name}")
+            return True
+
+        except Exception as e:
+            self._log(f"Failed to load data into {table_name}: {e}")
+            return False
+        finally:
+            if conn:
+                conn.close()

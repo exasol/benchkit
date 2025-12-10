@@ -266,13 +266,25 @@ class ReportRenderer:
         infrastructure_timings = self._load_infrastructure_timings(results_dir)
 
         # Get relative paths to figures for HTML
+        # Map filenames to template keys (template uses short keys like "boxplot")
+        filename_to_template_key = {
+            "query_runtime_boxplot": "boxplot",
+            "median_runtime_bar": "bar_chart",
+            "performance_heatmap": "heatmap",
+            "speedup_comparison": "speedup",
+            "query_runtime_cdf": "cdf",
+            "system_performance_overview": "system_overview",
+            "all_systems_comparison": "all_systems_comparison",
+        }
         figures_dir = Path(self.report_config["figures_dir"])
         relative_figures = {}
         if figures_dir.exists():
             for fig_file in figures_dir.glob("*.html"):
                 fig_name = fig_file.stem
+                # Map filename to template key, fallback to filename if not mapped
+                template_key = filename_to_template_key.get(fig_name, fig_name)
                 # Path relative to report directory
-                relative_figures[fig_name] = f"attachments/figures/{fig_file.name}"
+                relative_figures[template_key] = f"attachments/figures/{fig_file.name}"
 
         # Generate workload metadata
         workload_metadata = self._generate_workload_metadata()

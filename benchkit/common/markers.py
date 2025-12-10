@@ -27,5 +27,5 @@ def exclude_from_package(obj: T) -> T:
         ... def install(self) -> bool:
         ...     return self._install_database()
     """
-    obj._exclude_from_package = True  # type: ignore
+    obj._exclude_from_package = True  # type: ignore[attr-defined]
     return obj

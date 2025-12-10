@@ -33,7 +33,7 @@ This is a benchmark using the TPC-H schema and data, but different queries.
 | Microsoft Fabric | DW3000c             | ?                  | 0.99                                | $340              | 343 min             |
 | Microsoft Fabric | DW1500c             | ?                  | 0.48                                | $290              | 604 min             |
 | Microsoft Fabric | DW500c              | ?                  | x                                   | $236              | -                   |
-| BigQuery | serveless           | ?                  | 15.64                               | $241              | 15 min              |
+| BigQuery | serverless          | ?                  | 15.64                               | $241              | 15 min              |
 
 Notes:
 
