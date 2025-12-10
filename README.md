@@ -110,23 +110,28 @@ benchmark configurations using supported modules.**
 
 ## Support Matrix
 
-### setup / installation
-
-| system     | local | aws           | docker | gcp | azure |
-|------------|-------|---------------|--------|-----|-------|
-| Exasol     | ✗     | ✓<sup>1</sup> | ✗      | ✗   | ✗     | 
-| ClickHouse | ✗     | ✓<sup>1</sup> | ✗      | ✗   | ✗     |
-
-Notes:
-
-1. Only single-node deployments supported at this time.
-
-### "tpch" workload
+### Setup / Installation
 
 | system     | local | aws | docker | gcp | azure |
 |------------|-------|-----|--------|-----|-------|
-| Exasol     | ✗     | ✓   | ✗      | ✗   | ✗     |
+| Exasol     | ✗     | ✓   | ✗      | ✗   | ✗     | 
 | ClickHouse | ✗     | ✓   | ✗      | ✗   | ✗     |
+
+### Workloads
+
+<!-- link definitions for table headers -->
+[clickbench]: benchkit/workloads/clickbench/README.md "ClickHouse ClickBench"
+[estuary]: benchkit/workloads/estuary/README.md "Estuary Warehouse Report"
+
+| system     | tpch | [clickbench] | [estuary]       |
+|------------|------|--------------|-----------------|
+| Exasol     | ✓    | ✓            | ✓<sup>(1)</sup> |
+| ClickHouse | ✓    | ✓            | ✗<sup>(1)</sup> |
+
+Notes:
+
+1. Work in Progress
+
 
 ## Documentation
 
