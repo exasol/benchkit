@@ -456,9 +456,13 @@ class TPCH(Workload):
         if self._current_system is None:
             return "benchmark"
 
-        if hasattr(self._current_system, "schema"):
+        # Check schema first (Exasol), then database (ClickHouse)
+        # Must check if attribute exists AND is not None
+        if hasattr(self._current_system, "schema") and self._current_system.schema:
             return str(self._current_system.schema)
-        elif hasattr(self._current_system, "database"):
+        elif (
+            hasattr(self._current_system, "database") and self._current_system.database
+        ):
             return str(self._current_system.database)
         else:
             return "benchmark"

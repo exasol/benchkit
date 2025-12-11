@@ -297,6 +297,7 @@ class ClickHouseSystem(SystemUnderTest):
         self._log("⚠ Some nodes may not have restarted properly")
         return True  # Continue anyway, Keeper wait will catch issues
 
+    @exclude_from_package
     def _install_native_on_node(self) -> bool:
         """Install ClickHouse on the current node (works for both single and multinode)."""
         # Defensive: ensure setup_config is not None (can happen in parallel execution)
@@ -1611,13 +1612,17 @@ class ClickHouseSystem(SystemUnderTest):
                         query, query_name, timer, return_data
                     )
 
+                # Use active schema if set (from workload), else fall back to instance database
+                # _active_schema is set by workload.run_workload() for thread-safe multi-stream
+                database_to_use = getattr(self, "_active_schema", None) or self.database
+
                 # Use clickhouse-connect for query execution
                 client = clickhouse_connect.get_client(
                     host=self.host,
                     port=self.port,
                     username=self.username,
                     password=self.password,
-                    database=self.database,
+                    database=database_to_use,
                     interface="http",
                     secure=False,
                     send_receive_timeout=send_receive_timeout,

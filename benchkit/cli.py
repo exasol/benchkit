@@ -1468,7 +1468,7 @@ def _check_infra_available(
 
     try:
         result = subprocess.run(
-            cmd, shell=True, capture_output=True, text=True, timeout=10
+            cmd, shell=True, capture_output=True, text=True, timeout=10  # nosec B602
         )
         if result.returncode == 0 and "ok" in result.stdout:
             return ("up", "[green]✓ up[/]")

@@ -159,19 +159,19 @@
                             <td><strong>Average Runtime</strong></td>
                             <td>{{ stats.avg_runtime_ms | format_number }}ms</td>
                             <td>{{ winner_avg | format_number }}ms</td>
-                            <td class="metric-slow">{{ (stats.avg_runtime_ms / winner_avg) | format_number_ceil }}× slower</td>
+                            <td class="metric-slow">{{ stats.avg_runtime_ms | safe_divide(winner_avg, 0) | format_number_ceil }}× slower</td>
                         </tr>
                         <tr>
                             <td><strong>Fastest Query</strong></td>
                             <td>{{ stats.min_runtime_ms | format_number }}ms</td>
                             <td>{{ winner_min | format_number }}ms</td>
-                            <td class="metric-slow">{{ (stats.min_runtime_ms / winner_min) | format_number(1) }}× slower</td>
+                            <td class="metric-slow">{{ stats.min_runtime_ms | safe_divide(winner_min, 0) | format_number(1) }}× slower</td>
                         </tr>
                         <tr>
                             <td><strong>Slowest Query</strong></td>
                             <td>{{ stats.max_runtime_ms | format_number }}ms</td>
                             <td>{{ winner_max | format_number }}ms</td>
-                            <td class="metric-slow">{{ (stats.max_runtime_ms / winner_max) | format_number(1) }}× slower</td>
+                            <td class="metric-slow">{{ stats.max_runtime_ms | safe_divide(winner_max, 0) | format_number(1) }}× slower</td>
                         </tr>
                     </tbody>
                 </table>
