@@ -526,13 +526,13 @@ def _calculate_key_fingerprints(key_path: Path) -> dict[str, str] | None:
         else:
             openssh_key_data = openssh_bytes
 
-        # Calculate fingerprints
-        md5_hash = hashlib.md5(der_bytes).hexdigest()
+        # Calculate fingerprints (MD5/SHA1 used for certificate identification, not security)
+        md5_hash = hashlib.md5(der_bytes, usedforsecurity=False).hexdigest()
         md5_fingerprint = ":".join(
             md5_hash[i : i + 2] for i in range(0, len(md5_hash), 2)
         )
 
-        sha1_hash = hashlib.sha1(der_bytes).hexdigest()
+        sha1_hash = hashlib.sha1(der_bytes, usedforsecurity=False).hexdigest()
         sha1_fingerprint = ":".join(
             sha1_hash[i : i + 2] for i in range(0, len(sha1_hash), 2)
         )

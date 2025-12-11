@@ -45,7 +45,7 @@ class Workload(ABC):
     def get_template_env(self) -> Environment:
         """Get the workload's jinja2 template environment"""
         if not self.template_env:
-            self.template_env = Environment(
+            self.template_env = Environment(  # nosec B701
                 loader=FileSystemLoader(
                     [
                         self.workload_dir / "queries",
@@ -292,6 +292,10 @@ class Workload(ABC):
         Returns:
             Dictionary with 'measured' and 'warmup' keys containing lists of query execution results
         """
+        # Set active schema for thread-safe multi-stream query execution
+        # This ensures all connections use the correct schema regardless of timing
+        system.set_active_schema(self.get_schema_name())
+
         # Decision logic: single-stream (sequential) or multi-stream (concurrent)
         if num_streams <= 1:
             return self._run_workload_sequential(

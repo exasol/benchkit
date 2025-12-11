@@ -378,7 +378,7 @@ class SystemUnderTest(ABC):
         return f"{self.kind}://{host}:{port}"
 
     def get_data_generation_directory(self, workload: Any) -> Path | None:
-        """Get directory for data generation. Uses /data/tpch_gen if use_additional_disk is set."""
+        """Get directory for data generation. Uses /data/generated if use_additional_disk is set."""
         explicit_data_dir = self.setup_config.get("data_dir")
         if explicit_data_dir:
             return Path(
@@ -482,6 +482,18 @@ class SystemUnderTest(ABC):
         return self.load_data_from_url_with_download(
             schema_name, table_name, data_url, extension=extension, **kwargs
         )
+
+    def set_active_schema(self, schema_name: str) -> None:
+        """Set the active schema for all subsequent query executions.
+
+        This ensures thread-safe schema handling in multi-stream workloads.
+        When set, this schema takes precedence over the instance-level schema
+        configuration for all new connections.
+
+        Args:
+            schema_name: Name of the schema/database to use for queries
+        """
+        self._active_schema = schema_name
 
     @abstractmethod
     def execute_query(
@@ -1596,7 +1608,6 @@ class SystemUnderTest(ABC):
         """
         pass  # Subclasses override if needed
 
-    @exclude_from_package
     def _get_health_check_host(self) -> str:
         """
         Get the host to use for health checks, preferring external IP for remote systems.

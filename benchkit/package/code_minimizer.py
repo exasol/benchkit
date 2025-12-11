@@ -59,11 +59,32 @@ class CodeMinimizer:
 
         # Re-add future annotations if it was present in original
         # This is critical for TYPE_CHECKING imports to work correctly
+        # Must come after module docstring but before other imports
         if (
             has_future_annotations
             and "from __future__ import annotations" not in minimized
         ):
-            minimized = "from __future__ import annotations\n\n" + minimized
+            # Check if file starts with a docstring
+            lines = minimized.split("\n")
+            if lines and (lines[0].startswith('"""') or lines[0].startswith("'''")):
+                # Find end of docstring
+                quote_style = lines[0][:3]
+                insert_pos = 0
+                for i, line in enumerate(lines):
+                    if i == 0:
+                        # Check if single-line docstring
+                        if line.count(quote_style) >= 2:
+                            insert_pos = i + 1
+                            break
+                        continue
+                    if quote_style in line:
+                        insert_pos = i + 1
+                        break
+                # Insert after docstring
+                lines.insert(insert_pos, "from __future__ import annotations")
+                minimized = "\n".join(lines)
+            else:
+                minimized = "from __future__ import annotations\n\n" + minimized
 
         # Update stats
         self.stats["lines_after"] += len(minimized.splitlines())

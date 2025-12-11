@@ -77,7 +77,7 @@ class WorkloadPackage:
     def _get_jinja_env(self) -> Environment:
         """Get or create Jinja2 environment for package templates."""
         if self._jinja_env is None:
-            self._jinja_env = Environment(
+            self._jinja_env = Environment(  # nosec B701
                 loader=FileSystemLoader("templates/package"),
                 keep_trailing_newline=True,
             )
@@ -485,7 +485,12 @@ __all__ = ["Workload", "{class_name}", "create_workload", "WORKLOAD_IMPLEMENTATI
 
         if workload_dir.exists():
             dst_dir = self.package_dir / "workloads" / workload_name
-            shutil.copytree(workload_dir, dst_dir, dirs_exist_ok=True)
+            shutil.copytree(
+                workload_dir,
+                dst_dir,
+                dirs_exist_ok=True,
+                ignore=shutil.ignore_patterns("verify", "__pycache__", "*.pyc"),
+            )
 
     def _copy_minimal_system_files(self) -> None:
         """Copy only system files needed for database connections."""

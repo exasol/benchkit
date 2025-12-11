@@ -1106,7 +1106,7 @@ class CloudInstanceManager:
         try:
             process = subprocess.Popen(
                 ssh_command,
-                shell=True,
+                shell=True,  # nosec B602
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,

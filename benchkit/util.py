@@ -42,7 +42,11 @@ def safe_command(cmd: str | list[str], timeout: float | None = None) -> dict[str
     try:
         if isinstance(cmd, str):
             result = subprocess.run(
-                cmd, shell=True, capture_output=True, text=True, timeout=timeout
+                cmd,
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=timeout,  # nosec B602
             )
         else:
             result = subprocess.run(

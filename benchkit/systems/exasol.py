@@ -323,7 +323,7 @@ class ExasolSystem(SystemUnderTest):
                     exasol_partition_dev = f"{detected_disk}2"
 
                 # Check if data partition is mounted
-                data_mount_point = "/data/tpch_gen"
+                data_mount_point = "/data"
                 check_mount_result = self.execute_command(
                     f"mount | grep {data_partition_dev}", record=False
                 )
@@ -480,7 +480,7 @@ class ExasolSystem(SystemUnderTest):
             return None, None
 
         # Step 10: Mount data generation partition
-        data_mount_point = "/data/tpch_gen"
+        data_mount_point = "/data"
         if not self._mount_disk(data_partition_dev, data_mount_point):
             self._log("Failed to mount data generation partition")
             return None, None
@@ -625,6 +625,7 @@ class ExasolSystem(SystemUnderTest):
             summary["data_device"] = str(self.data_device)
         return summary
 
+    @exclude_from_package
     def _create_storage_symlink(self, target_device: str) -> str:
         """
         Create a consistent symlink for Exasol storage across all nodes.
@@ -761,7 +762,7 @@ echo "Symlink: %s -> $INSTANCE_STORE"
         if result and self._data_generation_mount_point is None:
             self._data_generation_mount_point = str(
                 result.parent.parent.parent
-            )  # Cache /data/tpch_gen
+            )  # Cache /data
         return result
 
     @exclude_from_package
@@ -823,9 +824,11 @@ echo "Symlink: %s -> $INSTANCE_STORE"
             "compression": True,
         }
 
-        # Only specify schema if it has been created
-        if hasattr(self, "_schema_created") and self._schema_created and self.schema:
-            connection_params["schema"] = self.schema
+        # Use active schema if set (from workload), else fall back to instance schema
+        # _active_schema is set by workload.run_workload() for thread-safe multi-stream
+        schema_to_use = getattr(self, "_active_schema", None) or self.schema
+        if schema_to_use:
+            connection_params["schema"] = schema_to_use
 
         return self._connect_with_fingerprint_retry(**connection_params)
 
@@ -1738,15 +1741,10 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
 
         try:
             conn = None
-            schema_to_use = self.schema
 
             try:
+                # Schema is set in connection params by _get_connection()
                 conn = self._get_connection()
-                if schema_to_use:
-                    if not self._schema_created:
-                        if self._schema_exists(conn, schema_to_use):
-                            self._schema_created = True
-                            conn.execute(f"OPEN SCHEMA {schema_to_use}")
 
                 debug_print(f"Executing query: {query_name}")
                 if len(query) > 200:
@@ -1812,13 +1810,6 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
 
             finally:
                 if conn:
-                    if schema_to_use:
-                        try:
-                            self._schema_created = self._schema_exists(
-                                conn, schema_to_use
-                            )
-                        except Exception:
-                            pass
                     conn.close()
 
         except Exception as e:
