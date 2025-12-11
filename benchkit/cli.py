@@ -41,7 +41,9 @@ console = Console()
 
 @app.command()
 def probe(
-    config: str = typer.Option(..., "--config", "-c", help="Path to config YAML file"),
+    config: str = typer.Option(
+        ..., "--config", "-c", help="Path to config YAML file", envvar="BENCHKIT_CONFIG"
+    ),
     systems: str | None = typer.Option(
         None, "--systems", help="Comma-separated list of systems to probe"
     ),
@@ -101,7 +103,9 @@ def probe(
 
 @app.command()
 def setup(
-    config: str = typer.Option(..., "--config", "-c", help="Path to config YAML file"),
+    config: str = typer.Option(
+        ..., "--config", "-c", help="Path to config YAML file", envvar="BENCHKIT_CONFIG"
+    ),
     systems: str | None = typer.Option(
         None, "--systems", help="Comma-separated list of systems to setup"
     ),
@@ -146,7 +150,9 @@ def setup(
 
 @app.command()
 def load(
-    config: str = typer.Option(..., "--config", "-c", help="Path to config YAML file"),
+    config: str = typer.Option(
+        ..., "--config", "-c", help="Path to config YAML file", envvar="BENCHKIT_CONFIG"
+    ),
     systems: str | None = typer.Option(
         None, "--systems", help="Comma-separated list of systems to load data into"
     ),
@@ -210,7 +216,9 @@ def load(
 
 @app.command()
 def run(
-    config: str = typer.Option(..., "--config", "-c", help="Path to config YAML file"),
+    config: str = typer.Option(
+        ..., "--config", "-c", help="Path to config YAML file", envvar="BENCHKIT_CONFIG"
+    ),
     systems: str | None = typer.Option(
         None, "--systems", help="Comma-separated list of systems to run"
     ),
@@ -298,7 +306,9 @@ def run(
 
 @app.command()
 def execute(
-    config: str = typer.Option(..., "--config", "-c", help="Path to config YAML file"),
+    config: str = typer.Option(
+        ..., "--config", "-c", help="Path to config YAML file", envvar="BENCHKIT_CONFIG"
+    ),
     system: str = typer.Option(
         ..., "--system", help="System to execute workload against"
     ),
@@ -330,7 +340,11 @@ def execute(
 @app.command()
 def report(
     config: str | None = typer.Option(
-        None, "--config", "-c", help="Path to config YAML file"
+        None,
+        "--config",
+        "-c",
+        help="Path to config YAML file",
+        envvar="BENCHKIT_CONFIG",
     ),
     index_dir: str = typer.Option(
         "results",
@@ -378,7 +392,11 @@ def report(
 @app.command()
 def status(
     config: list[str] = typer.Option(
-        None, "--config", "-c", help="Config file(s) to check status for"
+        None,
+        "--config",
+        "-c",
+        help="Config file(s) to check status for",
+        envvar="BENCHKIT_CONFIG",
     ),
     project: str | None = typer.Option(
         None, "--project", "-p", help="Project ID to check (auto-finds config)"
@@ -765,7 +783,9 @@ def _dump_config_yaml(cfg: dict[str, Any], config_path: Path | str) -> None:
 
 @app.command()
 def check(
-    config: str = typer.Option(..., "--config", "-c", help="Path to config YAML file"),
+    config: str = typer.Option(
+        ..., "--config", "-c", help="Path to config YAML file", envvar="BENCHKIT_CONFIG"
+    ),
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Show all configuration details"
     ),
@@ -1087,7 +1107,11 @@ def infra(
     action: str = typer.Argument(..., help="Action: plan, apply, destroy"),
     provider: str = typer.Option("aws", "--provider", "-p", help="Cloud provider"),
     config: str | None = typer.Option(
-        None, "--config", "-c", help="Config file for infrastructure settings"
+        None,
+        "--config",
+        "-c",
+        help="Config file for infrastructure settings",
+        envvar="BENCHKIT_CONFIG",
     ),
     systems: str | None = typer.Option(
         None,
@@ -1203,7 +1227,9 @@ def infra(
 
 @app.command()
 def package(
-    config: str = typer.Option(..., "--config", "-c", help="Path to config YAML file"),
+    config: str = typer.Option(
+        ..., "--config", "-c", help="Path to config YAML file", envvar="BENCHKIT_CONFIG"
+    ),
     output_dir: str | None = typer.Option(
         None, "--output", "-o", help="Output directory for package"
     ),
@@ -2322,7 +2348,9 @@ def _show_all_projects(results_dir: Path) -> None:
 
 @app.command()
 def verify(
-    config: str = typer.Option(..., "--config", "-c", help="Path to config YAML file"),
+    config: str = typer.Option(
+        ..., "--config", "-c", help="Path to config YAML file", envvar="BENCHKIT_CONFIG"
+    ),
     systems: str | None = typer.Option(
         None, "--systems", help="Comma-separated list of systems to verify"
     ),
@@ -2371,7 +2399,9 @@ def verify(
 
 @app.command()
 def cleanup(
-    config: str = typer.Option(..., "--config", "-c", help="Path to config YAML file"),
+    config: str = typer.Option(
+        ..., "--config", "-c", help="Path to config YAML file", envvar="BENCHKIT_CONFIG"
+    ),
 ) -> None:
     """Clean up running systems after manual benchmark execution."""
     cfg = load_config(config)
