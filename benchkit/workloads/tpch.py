@@ -4,15 +4,12 @@ from __future__ import annotations
 
 from datetime import timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-from ..systems.base import SystemUnderTest
-from ..util import safe_command
+from benchkit.systems import SystemUnderTest
+from benchkit.util import safe_command
+
 from .base import Workload
-
-if TYPE_CHECKING:
-    # avoid cyclic dependency problems
-    from ..systems.base import SystemUnderTest
 
 
 class TPCH(Workload):
@@ -25,13 +22,30 @@ class TPCH(Workload):
 
     def __init__(self, config: dict[str, Any]):
         super().__init__(config)
+        assert self.generator in ["dbgen", "dbgen-pipe"]
 
-    def generate_data(self, output_dir: Path) -> bool:
+    def generate_data(self, output_dir: Path, force: bool = False) -> bool:
         """Generate TPC-H data using tpchgen-cli (modern Python approach)."""
-        return self._generate_with_tpchgen_cli(output_dir)
+        if self.generator == "dbgen":
+            return self._generate_with_tpchgen_cli(output_dir, force)
+        # else: generate data on the fly later
+        return True
 
-    def _generate_with_tpchgen_cli(self, output_dir: Path) -> bool:
+    def _generate_with_tpchgen_cli(self, output_dir: Path, force: bool = False) -> bool:
         """Generate TPC-H data using tpchgen-cli (modern Python package)."""
+
+        # precheck: is data already there?
+        if not force:
+            missing: bool = False
+            for table in self.get_table_names():
+                tbl_file = output_dir / f"{table}.tbl"
+                if not tbl_file.exists():
+                    missing = True
+                    break
+            if not missing:
+                # all files already there
+                return True
+
         try:
             # Check if tpchgen-cli is available
 
@@ -174,6 +188,15 @@ class TPCH(Workload):
 
     def load_data(self, system: SystemUnderTest) -> bool:
         """Load TPC-H data into the database system."""
+        if self.generator == "dbgen-pipe" and system.SUPPORTS_STREAMLOAD:
+            return self._load_data_from_pipe(system)
+        else:
+            # note: generate_data should detect things have already happened.
+            return self.generate_data(self.data_dir) and self._load_data_from_files(
+                system
+            )
+
+    def _load_data_from_files(self, system: SystemUnderTest) -> bool:
         schema_name = self.get_schema_name()
 
         for table_name in self.get_table_names():
@@ -212,6 +235,22 @@ class TPCH(Workload):
         except Exception as e:
             print(f"Warning: Could not remove data directory: {e}")
 
+        return True
+
+    def _load_data_from_pipe(self, system: SystemUnderTest) -> bool:
+        from benchkit.common import DataFormat, DbGenPipe
+
+        schema_name = self.get_schema_name()
+
+        for table_name in self.get_table_names():
+            print(f"Loading {table_name}...")
+
+            with DbGenPipe(table_name, self.scale_factor) as dbgen:
+                if not system.load_data_from_iterable(
+                    table_name, dbgen.file_stream(), DataFormat.CSV, schema=schema_name
+                ):
+                    print(f"Failed to load {table_name}")
+                    return False
         return True
 
     def run_workload(
@@ -470,6 +509,8 @@ class TPCH(Workload):
         # SF1 ≈ 1GB, add 20% safety margin
         # estimated_gb = max(int(scale_factor * 1.3), 3)
         """
+        if system.SUPPORTS_STREAMLOAD and self.generator == "dbgen-pipe":
+            return 0
 
         def scale_multiplier(sf: float) -> float:
             # 2.0 at very small sf (≈1–10), ~1.6 at 30, →1.3 for sf ≥ 100

@@ -7,7 +7,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from benchkit.common import exclude_from_package
+from benchkit.common import DataFormat, exclude_from_package
 
 from ..util import safe_command
 
@@ -410,7 +410,11 @@ class SystemUnderTest(ABC):
 
     @abstractmethod
     def load_data_from_iterable(
-        self, table_name: str, data_source: Iterable[Any], **kwargs: Any
+        self,
+        table_name: str,
+        data_source: Iterable[Any],
+        data_format: DataFormat,
+        **kwargs: Any,
     ) -> bool:
         """
         Load data into a table.
@@ -418,6 +422,7 @@ class SystemUnderTest(ABC):
         Args:
             table_name: Name of the target table
             data_source: An iterable containing row data (could be list[list[Any]] or list[str] or ...)
+            data_format: Format of the data, from text-based CSV/TSV/... to structured list/dict/...
             **kwargs: Additional parameters for data loading
 
         Returns:
