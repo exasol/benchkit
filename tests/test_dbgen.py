@@ -52,6 +52,7 @@ def test_supplier_stream(scale_factor: int) -> None:
     last_line: str = last_buffer.split("\n")[-2]
     assert last_line.startswith(f"{scale_factor*10000},Supplier#")
     assert short_reads <= 1
+    assert total_bytes == expected_bytes
 
 
 def test_raises_on_bad_table() -> None:

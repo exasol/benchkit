@@ -50,7 +50,7 @@ class DbGenPipe:
             self.proc.terminate()
         # give the process 5 seconds to terminate
         return_code: int = self.proc.wait(timeout=5)
-        if return_code != 0:
+        if return_code!=0:
             raise ChildProcessError("tpchgen-cli exited with error")
 
     def file_stream(self) -> IO[Any]:
