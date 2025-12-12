@@ -77,6 +77,15 @@ benchkit report --config configs/my_benchmark.yaml
 # Other commands: execute, status, package, verify, cleanup
 ```
 
+> [!INFO]
+> Note that the config parameter can also be set through an **environment variable** for all commands:
+> 
+> ```shell
+> export BENCHKIT_CONFIG=configs/my_benchmark.yaml
+> 
+> benchkit check
+> ```
+
 **Status Command** provides comprehensive project insights:
 
 - Overview of all projects (probe, benchmark, report status)

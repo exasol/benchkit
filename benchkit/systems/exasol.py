@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 import pyexasol  # type: ignore
 
-from benchkit.common import exclude_from_package
+from benchkit.common import DataFormat, exclude_from_package
 
 from ..util import Timer
 from .base import SystemUnderTest
@@ -815,13 +815,13 @@ echo "Symlink: %s -> $INSTANCE_STORE"
 
         return False
 
-    def _get_connection(self) -> Any:
+    def _get_connection(self, compression: bool = True) -> Any:
         """Get a connection to Exasol database using pyexasol."""
         connection_params = {
             "dsn": self._build_dsn(self.host, self.port),
             "user": self.username,
             "password": self.password,
-            "compression": True,
+            "compression": compression,
         }
 
         # Use active schema if set (from workload), else fall back to instance schema
@@ -1653,7 +1653,7 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
         conn = None
 
         try:
-            conn = self._get_connection()
+            conn = self._get_connection(compression=False)
             if not conn:
                 return False
             if not self._schema_created:
@@ -1690,13 +1690,17 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
                 conn.close()
 
     def load_data_from_iterable(
-        self, table_name: str, data_source: Iterable[Any], **kwargs: Any
+        self,
+        table_name: str,
+        data_source: Iterable[Any],
+        data_format: DataFormat,
+        **kwargs: Any,
     ) -> bool:
         schema_name: str = kwargs.get("schema", "benchmark")
         conn: pyexasol.ExaConnection | None = None
 
         try:
-            conn = self._get_connection()
+            conn = self._get_connection(compression=False)
             if not conn:
                 return False
             if not self._schema_created:
@@ -1704,8 +1708,11 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
                     self._schema_created = True
                     conn.execute(f"OPEN SCHEMA {schema_name}")
 
-            self._log(f"Loading (iterable) into {schema_name}.{table_name}...")
-            conn.import_from_iterable(data_source, table=table_name)
+            self._log(f"Loading ({data_format}) into {schema_name}.{table_name}...")
+            if data_format == DataFormat.DATA_LIST:
+                conn.import_from_iterable(data_source, table=table_name)
+            else:
+                conn.import_from_file(data_source, table_name, import_params={})
 
             # Verify data was loaded
             result = conn.execute(f"SELECT COUNT(*) FROM {table_name}")
