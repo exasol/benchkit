@@ -28,24 +28,31 @@ def test_nation_lines(scale_factor: int) -> None:
 
 
 @pytest.mark.parametrize(
-    argnames=["scale_factor", "expected_bytes"],
-    argvalues=[[1, 1439251], [1000, 1468656940]],
+    argnames=["scale_factor"],
+    argvalues=[[1], [1000]],
 )
-def test_supplier_stream(scale_factor: int, expected_bytes: int) -> None:
+def test_supplier_stream(scale_factor: int) -> None:
     buf_len: int = 1024
     short_reads: int = 0
     total_bytes: int = 0
 
     with DbGenPipe("supplier", scale_factor) as p:
         stream = p.file_stream()
-        buffer: str
+        buffer: bytes
+        last_buffer: str = ""
         while buffer := stream.read(buf_len):
             read_bytes: int = len(buffer)
             if read_bytes < buf_len:
                 short_reads += 1
             total_bytes += read_bytes
+            last_buffer = buffer.decode("ascii")
+    assert last_buffer.endswith(
+        '"\n'
+    ), f"End of stream must be end of record: {last_buffer}"
+    last_line: str = last_buffer.split("\n")[-2]
+    assert last_line.startswith(f"{scale_factor*10000},Supplier#")
     assert short_reads <= 1
-    assert total_bytes == expected_bytes
+
 
 def test_raises_on_bad_table() -> None:
     with pytest.raises(ChildProcessError):
@@ -53,22 +60,25 @@ def test_raises_on_bad_table() -> None:
             for _ in p.readlines():
                 pass
 
+
 def test_raises_on_bad_scalefactor() -> None:
     with pytest.raises(ChildProcessError):
         with DbGenPipe("nation", -1) as p:
             for _ in p.readlines():
                 pass
 
+
 def test_raises_on_broken_pipe() -> None:
     with pytest.raises(ChildProcessError):
-        with DbGenPipe("partsupp", 1000) as p:
+        with DbGenPipe("partsupp", 1000):
             # exit here
             pass
+
 
 def test_raises_on_exception() -> None:
     with pytest.raises(ChildProcessError):
         try:
-            with DbGenPipe("partsupp", 1000) as p:
+            with DbGenPipe("partsupp", 1000):
                 # exit here
                 raise ValueError("exit the loop")
         except ValueError:
