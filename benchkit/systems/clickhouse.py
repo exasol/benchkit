@@ -13,7 +13,7 @@ except ModuleNotFoundError:
     # optional for most part
     pass
 
-from benchkit.common import exclude_from_package
+from benchkit.common import DataFormat, exclude_from_package
 
 from ..util import Timer
 from .base import SystemUnderTest, TableOperation
@@ -1487,7 +1487,11 @@ class ClickHouseSystem(SystemUnderTest):
             return False
 
     def load_data_from_iterable(
-        self, table_name: str, data_source: Iterable[Any], **kwargs: Any
+        self,
+        table_name: str,
+        data_source: Iterable[Any],
+        data_format: DataFormat,
+        **kwargs: Any,
     ) -> bool:
         raise NotImplementedError("clickhouse.load_data_from_iterable")
 

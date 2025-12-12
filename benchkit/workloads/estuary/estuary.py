@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Any
 
+from benchkit.common import DataFormat
 from benchkit.systems import SystemUnderTest
 from benchkit.workloads import Workload
 
@@ -79,6 +80,7 @@ class Estuary(Workload):
             success = system.load_data_from_iterable(
                 table_name,
                 generator.rows(),
+                DataFormat.DATA_LIST,
                 schema=schema_name,
             )
 

@@ -31,7 +31,7 @@ class Workload(ABC):
 
         self.data_format = config.get("data_format", "tbl")  # TPC-H standard format
         self.variant = config.get("variant", "official")  # Query variant to use
-        self.generator: str = config.get("generator", "")
+        self.generator: str = config.get("generator", "dbgen")
 
         self.system_variants = (
             config.get("system_variants") or {}
