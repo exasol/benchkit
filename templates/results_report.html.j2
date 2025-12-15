@@ -113,7 +113,9 @@
                 <h3>Key Findings</h3>
                 <ul>
                     <li><strong>{{ fastest_system[0] }}</strong> was the fastest overall with <strong>{{ fastest_system[1].median_runtime_ms | format_number }}ms</strong> median runtime</li>
+                    {% if fastest_system[1].median_runtime_ms > 0 %}
                     <li><strong>{{ slowest_system[0] }}</strong> was <strong>{{ (slowest_system[1].median_runtime_ms / fastest_system[1].median_runtime_ms) | format_number(1) }}×</strong> slower</li>
+                    {% endif %}
                     <li>Tested <strong>{{ data.summary.total_queries }}</strong> total query executions across {{ cfg.workload.queries.include | length if cfg.workload.queries and cfg.workload.queries.include else '22' }} different query types</li>
                     {% if data.summary.execution_mode == "multiuser" and data.summary.multiuser %}
                     <li><strong>Execution mode:</strong> Multiuser with <strong>{{ data.summary.multiuser.num_streams }} concurrent streams</strong> ({% if data.summary.multiuser.randomize %}randomized distribution{% else %}round-robin distribution{% endif %})</li>
@@ -237,9 +239,13 @@
                 <ul>
                     <li><strong>Best stream median:</strong> {{ fastest_stream.median_runtime_ms | format_number }}ms</li>
                     <li><strong>Worst stream median:</strong> {{ slowest_stream.median_runtime_ms | format_number }}ms</li>
+                    {% if fastest_stream.median_runtime_ms > 0 %}
                     <li><strong>Performance variance:</strong> {{ ((slowest_stream.median_runtime_ms / fastest_stream.median_runtime_ms - 1) * 100) | format_number(1) }}% difference between fastest and slowest streams</li>
+                    {% endif %}
                 </ul>
+                {% if fastest_stream.median_runtime_ms > 0 %}
                 <p>This demonstrates {{ system_name | title }}'s ability to handle concurrent query loads with {% if ((slowest_stream.median_runtime_ms / fastest_stream.median_runtime_ms - 1) * 100) < 20 %}<strong>consistent</strong>{% else %}<strong>varying</strong>{% endif %} performance across streams.</p>
+                {% endif %}
             </div>
             {% endfor %}
 

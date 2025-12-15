@@ -10,6 +10,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ..common.cli_helpers import (
+    get_all_environments,
+    get_cloud_ssh_key_path,
+    get_environment_for_system,
+)
+from ..common.enums import EnvironmentMode
 from ..debug import is_debug_enabled
 from ..util import Timer, ensure_directory, safe_command
 
@@ -416,11 +422,21 @@ class InfraManager:
 
     def _prepare_terraform_vars(self) -> dict[str, str]:
         """Prepare terraform variables from configuration."""
-        env_config = self.config.get("env", {})
+        env_config = self.config.get("env") or {}
+        environments = self.config.get("environments") or {}
+
+        # Determine region - check env first, then look at cloud environments
+        region = env_config.get("region", "us-east-1")
+        if not env_config and environments:
+            # Find first cloud environment to get region
+            for env_cfg in environments.values():
+                if env_cfg.get("mode") in ["aws", "gcp", "azure"]:
+                    region = env_cfg.get("region", "us-east-1")
+                    break
 
         # Common variables
         tf_vars = {
-            "region": env_config.get("region", "us-east-1"),
+            "region": region,
             "project_id": self.config.get("project_id", "benchmark"),
         }
 
@@ -428,10 +444,20 @@ class InfraManager:
         all_required_ports = self._collect_required_ports()
 
         # Build generic systems configuration for Terraform
-        instances_config = env_config.get("instances", {})
+        # Support both legacy 'env.instances' and new 'environments.*.instances' formats
+        instances_config = env_config.get("instances") or {}
+
+        # If no instances in env, collect from environments
+        if not instances_config and environments:
+            for _env_name, env_cfg in environments.items():
+                if env_cfg.get("mode") in ["aws", "gcp", "azure"]:
+                    env_instances = env_cfg.get("instances") or {}
+                    instances_config.update(env_instances)
+
         if not instances_config:
             raise ValueError(
-                "env.instances configuration is required for multi-system benchmarks"
+                "Instance configuration is required for cloud benchmarks. "
+                "Define instances in 'env.instances' or 'environments.<name>.instances'"
             )
 
         # Get the actual systems that should be created (respects --systems filter)
@@ -476,15 +502,28 @@ class InfraManager:
         tf_vars["systems"] = json.dumps(systems_tf)
         tf_vars["required_ports"] = json.dumps(all_required_ports)
 
-        # Add SSH key if provided
+        # Add SSH key if provided - check env first, then environments
         ssh_key_name = env_config.get("ssh_key_name", "")
+        if not ssh_key_name and environments:
+            for env_cfg in environments.values():
+                if env_cfg.get("mode") in ["aws", "gcp", "azure"]:
+                    ssh_key_name = env_cfg.get("ssh_key_name", "")
+                    if ssh_key_name:
+                        break
         if ssh_key_name:
             tf_vars["ssh_key_name"] = ssh_key_name
 
         # Add external access option (default false for security)
-        tf_vars["allow_external_database_access"] = str(
-            env_config.get("allow_external_database_access", False)
-        ).lower()
+        allow_external = env_config.get("allow_external_database_access", False)
+        if not allow_external and environments:
+            for env_cfg in environments.values():
+                if env_cfg.get("mode") in ["aws", "gcp", "azure"]:
+                    allow_external = env_cfg.get(
+                        "allow_external_database_access", False
+                    )
+                    if allow_external:
+                        break
+        tf_vars["allow_external_database_access"] = str(allow_external).lower()
 
         return tf_vars
 
@@ -532,15 +571,25 @@ class InfraManager:
 
     def _prepare_minimal_terraform_vars(self) -> dict[str, str]:
         """Prepare minimal terraform variables for destroy operations."""
+        # Get region and SSH key from any cloud environment
+        environments = get_all_environments(self.config)
+        region = "us-east-1"
+        ssh_key_name = ""
+        for env_cfg in environments.values():
+            mode = env_cfg.get("mode", EnvironmentMode.LOCAL.value)
+            if EnvironmentMode.is_cloud_provider(mode):
+                region = env_cfg.get("region", region)
+                ssh_key_name = env_cfg.get("ssh_key_name", ssh_key_name)
+                break  # Use first cloud environment found
+
         # Only provide required variables without validating full configuration
         tf_vars = {
             "project_id": self.config.get("project_id", "benchmark"),
-            "region": self.config.get("env", {}).get("region", "us-east-1"),
+            "region": region,
             "systems": "{}",  # Empty systems for destroy
         }
 
         # Add SSH key if provided
-        ssh_key_name = self.config.get("env", {}).get("ssh_key_name", "")
         if ssh_key_name:
             tf_vars["ssh_key_name"] = ssh_key_name
 
@@ -932,10 +981,18 @@ class InfraManager:
             True if instance is ready, False otherwise
         """
         try:
-            # Get SSH configuration
-            ssh_config = self.config.get("env", {})
-            ssh_key_path = ssh_config.get("ssh_private_key_path", "~/.ssh/id_rsa")
-            ssh_user = ssh_config.get("ssh_user", "ubuntu")
+            # Get environment config for this specific system
+            _, env_config = get_environment_for_system(self.config, system_name)
+
+            # Get SSH configuration from the system's environment
+            ssh_key_path = env_config.get("ssh_private_key_path")
+            if not ssh_key_path:
+                # Fallback to helper that checks all cloud environments
+                ssh_key_path = get_cloud_ssh_key_path(self.config)
+            if not ssh_key_path:
+                ssh_key_path = "~/.ssh/id_rsa"
+
+            ssh_user = env_config.get("ssh_user", "ubuntu")
 
             # Expand tilde in SSH key path
             import os

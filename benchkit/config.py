@@ -16,6 +16,7 @@ class SystemConfig(BaseModel):
     kind: str
     version: str
     setup: dict[str, Any]
+    environment: str | None = None  # Reference to named environment in 'environments'
 
     @field_validator("name")
     @classmethod
@@ -143,7 +144,7 @@ class EnvironmentConfig(BaseModel):
     @classmethod
     def validate_mode(cls, v: str) -> str:
         """Ensure environment mode is valid."""
-        valid_modes = {"local", "aws", "gcp", "azure"}
+        valid_modes = {"local", "aws", "gcp", "azure", "managed"}
         if v not in valid_modes:
             raise ValueError(
                 f"Unknown environment mode '{v}'. Supported: {', '.join(sorted(valid_modes))}"
@@ -179,12 +180,23 @@ class BenchmarkConfig(BaseModel):
     project_id: str | None = None
     title: str
     author: str
-    env: EnvironmentConfig
+    # Support both legacy 'env' (single) and 'environments' (multi) formats
+    env: EnvironmentConfig | None = None
+    environments: dict[str, EnvironmentConfig] | None = None
     systems: list[SystemConfig]
     workload: WorkloadConfig
     execution: ExecutionConfig = ExecutionConfig()  # Optional, defaults to sequential
     metrics: dict[str, Any] = {}
     report: ReportConfig | None = None
+
+    @model_validator(mode="after")
+    def validate_env_or_environments(self) -> "BenchmarkConfig":
+        """Ensure at least one of env or environments is provided."""
+        if self.env is None and self.environments is None:
+            raise ValueError(
+                "Either 'env' or 'environments' must be provided in configuration"
+            )
+        return self
 
     @field_validator("project_id")
     @classmethod
@@ -304,13 +316,25 @@ class BenchmarkConfig(BaseModel):
     @model_validator(mode="after")
     def validate_instance_config_matches_systems(self) -> "BenchmarkConfig":
         """Validate that instance configs reference valid system names."""
-        if self.env and self.env.instances and self.systems:
-            system_names = {s.name for s in self.systems}
+        system_names = {s.name for s in self.systems} if self.systems else set()
+
+        # Validate legacy 'env' format
+        if self.env and self.env.instances:
             for instance_name in self.env.instances:
                 if instance_name not in system_names:
                     raise ValueError(
                         f"Instance config '{instance_name}' does not match any system. "
                         f"Valid systems: {', '.join(sorted(system_names))}"
+                    )
+
+        # Validate 'environments' format - check that systems reference valid environments
+        if self.environments and self.systems:
+            env_names = set(self.environments.keys())
+            for system in self.systems:
+                if system.environment and system.environment not in env_names:
+                    raise ValueError(
+                        f"System '{system.name}' references unknown environment "
+                        f"'{system.environment}'. Valid environments: {', '.join(sorted(env_names))}"
                     )
 
         return self

@@ -1472,9 +1472,11 @@ class ReportRenderer:
     def _build_project_metadata(self, report_base_dir: Path) -> dict[str, Any]:
         """Assemble metadata used for the global report index."""
         results_dir = Path("results") / self.project_id
+        from ..common.cli_helpers import get_all_environments
+
         data = self._load_benchmark_data(results_dir)
         summary = data.get("summary", {}) or {}
-        env_config = self.config.get("env", {}) or {}
+        env_config = self.config.get("env") or {}
         workload_config = self.config.get("workload", {}) or {}
 
         run_date = summary.get("run_date")
@@ -1496,6 +1498,17 @@ class ReportRenderer:
             tags.append({"slug": slug, "label": label, "category": category})
             existing_slugs.add(slug)
 
+        # Add tags for all environment modes used by systems
+        all_envs = get_all_environments(self.config)
+        for _env_name, env_cfg in all_envs.items():
+            env_mode = env_cfg.get("mode")
+            if env_mode:
+                add_tag(env_mode, env_mode.upper(), "environment")
+            env_region = env_cfg.get("region")
+            if env_region:
+                add_tag(env_region, env_region, "environment")
+
+        # Also check legacy env config for mode/region
         env_mode = env_config.get("mode")
         if env_mode:
             add_tag(env_mode, env_mode.upper(), "environment")

@@ -181,6 +181,7 @@ class SystemUnderTest(ABC):
             "native": self._install_native,
             "installer": self._install_native,
             "preinstalled": self._verify_preinstalled,
+            "managed": self._install_managed,
         }
         handler = handlers.get(method)
         if not handler:
@@ -199,6 +200,90 @@ class SystemUnderTest(ABC):
     def _verify_preinstalled(self) -> bool:
         """Verify preinstalled system is accessible. Default: check health."""
         return self.is_healthy()
+
+    @exclude_from_package
+    def _install_managed(self) -> bool:
+        """Install using self-managed deployment (e.g., Exasol Personal Edition).
+
+        Self-managed deployments handle their own infrastructure provisioning
+        via external tools (like the 'exasol' CLI for Personal Edition).
+        This method orchestrates that deployment through the SelfManagedDeployment
+        abstraction.
+
+        Returns:
+            True if installation succeeded, False otherwise
+        """
+        from benchkit.infra.self_managed import get_self_managed_deployment
+
+        # Get deployment directory from config or use default
+        project_id = self.config.get("project_id", "default")
+        deployment_dir = self.setup_config.get(
+            "deployment_dir", f"results/{project_id}/managed/{self.name}"
+        )
+
+        self._log(f"Using self-managed deployment for {self.kind}")
+        self._log(f"Deployment directory: {deployment_dir}")
+
+        deployment = get_self_managed_deployment(
+            system_kind=self.kind,
+            deployment_dir=deployment_dir,
+            output_callback=self._log,
+        )
+
+        if deployment is None:
+            self._log(f"System '{self.kind}' does not support managed deployment")
+            return False
+
+        # Build options from config for init/deploy
+        options = {}
+        option_keys = [
+            "cluster_size",
+            "instance_type",
+            "data_volume_size",
+            "os_volume_size",
+            "volume_type",
+            "db_password",
+            "adminui_password",
+            "allowed_cidr",
+            "vpc_cidr",
+            "subnet_cidr",
+        ]
+        for key in option_keys:
+            value = self.setup_config.get(key)
+            if value is not None:
+                options[key] = value
+
+        self._log(f"Deployment options: {options}")
+
+        # Ensure deployment is running (will init + deploy if needed)
+        if not deployment.ensure_running(options):
+            self._log("Failed to ensure managed deployment is running")
+            return False
+
+        # Update connection info from the running deployment
+        conn_info = deployment.get_connection_info()
+        if conn_info:
+            self._log(
+                f"Got connection info: host={conn_info.host}, port={conn_info.port}"
+            )
+            # Update instance attributes for connection
+            if hasattr(self, "host"):
+                self.host = conn_info.host
+            if hasattr(self, "port"):
+                self.port = conn_info.port
+            if conn_info.password and hasattr(self, "password"):
+                self.password = conn_info.password
+            if conn_info.username and hasattr(self, "username"):
+                self.username = conn_info.username
+
+            # Store extra info (like certificate fingerprint) for later use
+            if conn_info.extra:
+                if not hasattr(self, "_managed_extra"):
+                    self._managed_extra: dict[str, Any] = {}
+                self._managed_extra.update(conn_info.extra)
+
+        self._log("Self-managed deployment is ready")
+        return True
 
     @exclude_from_package
     def _install_docker_common(

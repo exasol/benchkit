@@ -63,11 +63,11 @@ data/
 *.tbl
 *.dat
 
-# Infrastructure state
-infra/*/.terraform/
-infra/*/.terraform.lock.hcl
-infra/*/terraform.tfstate*
-infra/*/terraform.tfvars
+# Infrastructure state (per-project in results/<project_id>/terraform/)
+results/**/terraform/.terraform/
+results/**/terraform/.terraform.lock.hcl
+results/**/terraform/terraform.tfstate*
+results/**/terraform/terraform.tfvars
 
 # Secrets and credentials
 *.key

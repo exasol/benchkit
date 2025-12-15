@@ -26,6 +26,7 @@ from .config import load_config
 from .debug import set_debug
 from .gather.system_probe import probe_all
 from .infra.manager import InfraManager
+from .infra.self_managed import SelfManagedDeployment, get_self_managed_deployment
 from .package.creator import create_workload_zip
 from .report.render import render_global_report_index, render_report
 from .run.runner import run_benchmark
@@ -79,9 +80,9 @@ def probe(
     console.print(f"[blue]Probing system info for project:[/] {cfg['project_id']}")
 
     # Check if this is a cloud benchmark with multiple systems
-    env_mode = cfg.get("env", {}).get("mode", "local")
+    from .common.cli_helpers import is_any_system_cloud_mode
 
-    if env_mode in ["aws", "gcp", "azure"]:
+    if is_any_system_cloud_mode(cfg):
         console.print("[blue]Multi-system cloud benchmark detected[/]")
         console.print("[blue]Collecting system information from all instances...[/]")
 
@@ -578,7 +579,7 @@ def _dump_config_yaml(cfg: dict[str, Any], config_path: Path | str) -> None:
     # === Environment Section ===
     print("# === Environment ===")
     print("# mode: local | aws | gcp | azure")
-    env = cfg.get("env", {})
+    env = cfg.get("env") or {}
     print("env:")
 
     mode = env.get("mode", "local")
@@ -882,7 +883,7 @@ def check(
     console.print(Panel(project_table, title="Project", border_style="blue"))
 
     # Display Environment section
-    env = cfg.get("env", {})
+    env = cfg.get("env") or {}
     env_table = Table(show_header=False, box=None, padding=(0, 2))
     env_table.add_column("Key", style="bold")
     env_table.add_column("Value")
@@ -1043,12 +1044,12 @@ def check(
         console.print(Panel(report_table, title="Report Settings", border_style="blue"))
 
     # Run pre-flight validation for cloud modes and display at the bottom
+    from .common.cli_helpers import is_any_system_cloud_mode
     from .validation import PreflightChecker
 
-    mode = cfg.get("env", {}).get("mode", "local")
     preflight_failed = False
 
-    if mode in ["aws", "gcp", "azure"]:
+    if is_any_system_cloud_mode(cfg):
         checker = PreflightChecker(cfg, skip_aws_checks=skip_aws_check, console=console)
         validation_report = checker.run_check_command_validation()
 
@@ -1102,6 +1103,151 @@ def check(
     console.print("\n[green]Configuration is valid and ready to use.[/green]")
 
 
+def _destroy_all_environments(cfg: dict[str, Any]) -> tuple[bool, list[str]]:
+    """Destroy infrastructure for all environments in a multi-environment config.
+
+    Handles both terraform-managed (aws, gcp, azure) and self-managed (managed) environments.
+
+    Args:
+        cfg: Configuration dictionary with environments and systems
+
+    Returns:
+        Tuple of (all_success, list of error messages)
+    """
+    from .common.cli_helpers import get_all_environments
+    from .common.enums import EnvironmentMode
+
+    environments = get_all_environments(cfg)
+    project_id = cfg.get("project_id", "default")
+
+    # Track which environments are actually used by systems
+    used_env_names: set[str] = set()
+    for system in cfg.get("systems", []):
+        env_name = system.get("environment") or "default"
+        used_env_names.add(env_name)
+
+    all_success = True
+    errors: list[str] = []
+
+    # Group environments by mode for efficient handling
+    cloud_envs: list[tuple[str, dict[str, Any]]] = []  # (env_name, env_config)
+    managed_envs: list[tuple[str, dict[str, Any], dict[str, Any]]] = (
+        []
+    )  # (env_name, env_config, system_config)
+
+    for env_name in used_env_names:
+        env_config = environments.get(env_name, {})
+        mode = env_config.get("mode", EnvironmentMode.LOCAL.value)
+
+        if EnvironmentMode.is_cloud_provider(mode):
+            cloud_envs.append((env_name, env_config))
+        elif mode == EnvironmentMode.MANAGED.value:
+            # Find the system(s) using this managed environment
+            for system in cfg.get("systems", []):
+                if (system.get("environment") or "default") == env_name:
+                    managed_envs.append((env_name, env_config, system))
+
+    # Destroy cloud-provider environments (terraform-managed)
+    # Group by provider since terraform state is per-provider
+    providers_processed: set[str] = set()
+    for env_name, env_config in cloud_envs:
+        provider = env_config.get("mode", "aws")
+        if provider in providers_processed:
+            continue  # Already destroyed this provider's resources
+
+        console.print(
+            f"\n[blue]Destroying {provider} infrastructure (env: {env_name})...[/blue]"
+        )
+
+        try:
+            manager = InfraManager(provider, cfg)
+            console.print(
+                f"  State directory: [cyan]{manager.project_state_dir}[/cyan]"
+            )
+
+            result = manager.destroy()
+            if result.success:
+                console.print(f"  [green]✓ {provider} infrastructure destroyed[/green]")
+                providers_processed.add(provider)
+            else:
+                all_success = False
+                error_msg = f"{provider} destroy failed: {result.error}"
+                errors.append(error_msg)
+                console.print(f"  [red]✗ {error_msg}[/red]")
+        except Exception as e:
+            all_success = False
+            error_msg = f"{provider} destroy exception: {e}"
+            errors.append(error_msg)
+            console.print(f"  [red]✗ {error_msg}[/red]")
+
+    # Destroy managed environments (e.g., Exasol Personal Edition)
+    for env_name, _env_config, system_config in managed_envs:
+        system_name = system_config.get("name", "unknown")
+        setup = system_config.get("setup", {})
+
+        console.print(
+            f"\n[blue]Destroying managed infrastructure for {system_name} (env: {env_name})...[/blue]"
+        )
+
+        # Determine deployment directory
+        # Priority: 1) setup.deployment_dir, 2) results/<project_id>/exasol-pe/<system_name>
+        deployment_dir = setup.get("deployment_dir")
+        if not deployment_dir:
+            deployment_dir = str(
+                Path("results") / project_id / "exasol-pe" / system_name
+            )
+
+        console.print(f"  Deployment directory: [cyan]{deployment_dir}[/cyan]")
+
+        # Check if deployment directory exists
+        if not Path(deployment_dir).exists():
+            console.print(
+                "  [yellow]⚠ Deployment directory does not exist, skipping[/yellow]"
+            )
+            continue
+
+        try:
+            # Use factory function to get appropriate self-managed deployment handler
+            system_kind = system_config.get("kind", "")
+            deployment_manager = get_self_managed_deployment(
+                system_kind=system_kind,
+                deployment_dir=deployment_dir,
+                output_callback=lambda msg: console.print(f"  {msg}"),
+            )
+
+            if deployment_manager is None:
+                console.print(
+                    f"  [yellow]⚠ No self-managed handler for system kind '{system_kind}', skipping[/yellow]"
+                )
+                continue
+
+            # Check status first
+            status = deployment_manager.get_status()
+            if status.status == SelfManagedDeployment.STATUS_NOT_INITIALIZED:
+                console.print(
+                    f"  [yellow]⚠ No deployment found in {deployment_dir}, skipping[/yellow]"
+                )
+                continue
+
+            # Destroy the deployment
+            if deployment_manager.destroy():
+                console.print(
+                    f"  [green]✓ Managed infrastructure for {system_name} destroyed[/green]"
+                )
+            else:
+                all_success = False
+                error_msg = f"Managed destroy failed for {system_name}"
+                errors.append(error_msg)
+                console.print(f"  [red]✗ {error_msg}[/red]")
+        except Exception as e:
+            all_success = False
+            error_msg = f"Managed destroy exception for {system_name}: {e}"
+            errors.append(error_msg)
+            console.print(f"  [red]✗ {error_msg}[/red]")
+
+    return all_success, errors
+
+
 @app.command()
 def infra(
     action: str = typer.Argument(..., help="Action: plan, apply, destroy"),
@@ -1153,10 +1299,11 @@ def infra(
 
     # Run pre-flight validation for apply and plan
     if action in ["apply", "plan"] and not skip_preflight:
+        from .common.cli_helpers import is_any_system_cloud_mode
         from .validation import PreflightChecker
 
-        mode = cfg.get("env", {}).get("mode", "local")
-        if mode in ["aws", "gcp", "azure"]:
+        # Check if any system uses cloud mode (supports both env and environments)
+        if is_any_system_cloud_mode(cfg):
             console.print("[bold blue]Running pre-flight checks...[/bold blue]\n")
             checker = PreflightChecker(cfg, console=console)
             report = checker.run_infra_deploy_validation()
@@ -1180,18 +1327,38 @@ def infra(
                 console.print("\n[green]All pre-flight checks passed![/green]")
             console.print()
 
-    manager = InfraManager(provider, cfg)
-
     # Display project isolation info
     project_id = cfg.get("project_id", "default")
     console.print("[bold blue]Infrastructure Management[/bold blue]")
     console.print(f"  Project: [cyan]{project_id}[/cyan]")
-    console.print(f"  State:   [cyan]{manager.project_state_dir}[/cyan]")
     if project_id == "default":
         console.print(
             "[yellow]  Warning: Using default project_id. "
             "Specify project_id in config for isolation.[/yellow]"
         )
+    console.print()
+
+    # For destroy action, use multi-environment handler
+    if action == "destroy":
+        console.print("[blue]Destroying infrastructure for all environments...[/blue]")
+        all_success, errors = _destroy_all_environments(cfg)
+
+        if all_success:
+            console.print(
+                "\n[green]✓ All infrastructure destroyed successfully[/green]"
+            )
+        else:
+            console.print(
+                "\n[red]✗ Infrastructure destroy completed with errors:[/red]"
+            )
+            for error in errors:
+                console.print(f"  [red]• {error}[/red]")
+            raise typer.Exit(1)
+        return
+
+    # For plan and apply actions, use single-provider InfraManager
+    manager = InfraManager(provider, cfg)
+    console.print(f"  State:   [cyan]{manager.project_state_dir}[/cyan]")
     console.print()
 
     console.print(f"[blue]Running infrastructure {action} on {provider}[/]")
@@ -1460,10 +1627,10 @@ def _check_infra_available(
     """
     import subprocess
 
-    env_mode = cfg.get("env", {}).get("mode", "local")
+    from .common.cli_helpers import get_cloud_ssh_key_path, is_any_system_cloud_mode
 
     # Local mode - infrastructure N/A
-    if env_mode == "local":
+    if not is_any_system_cloud_mode(cfg):
         return ("na", "[dim]-[/]")
 
     # No infrastructure IPs available
@@ -1481,7 +1648,7 @@ def _check_infra_available(
         return ("unknown", "[yellow]?[/]")
 
     # Get SSH key
-    ssh_key = cfg.get("env", {}).get("ssh_private_key_path", "")
+    ssh_key = get_cloud_ssh_key_path(cfg) or ""
     if ssh_key:
         ssh_key = os.path.expanduser(ssh_key)
 
@@ -1581,7 +1748,7 @@ def _show_detailed_status(cfg: dict[str, Any], config_file: Path) -> None:
 
     info_table.add_row("Title", cfg.get("title", "-"))
     info_table.add_row("Author", cfg.get("author", "-"))
-    info_table.add_row("Environment", cfg.get("env", {}).get("mode", "local"))
+    info_table.add_row("Environment", (cfg.get("env") or {}).get("mode", "local"))
 
     systems = cfg.get("systems", [])
     system_names = [s["name"] for s in systems]
@@ -1612,11 +1779,14 @@ def _show_detailed_status(cfg: dict[str, Any], config_file: Path) -> None:
     query_stats = _get_query_stats_per_system(runs_df) if runs_df is not None else {}
 
     # Get infrastructure IPs for availability check (cloud mode only)
-    env_mode = cfg.get("env", {}).get("mode", "local")
+    from .common.cli_helpers import get_first_cloud_provider, is_any_system_cloud_mode
+
+    is_cloud = is_any_system_cloud_mode(cfg)
+    cloud_provider = get_first_cloud_provider(cfg)
     infra_ips: dict[str, Any] | None = None
-    if env_mode in ["aws", "gcp", "azure"]:
+    if is_cloud and cloud_provider:
         try:
-            infra_manager = InfraManager(env_mode, cfg)
+            infra_manager = InfraManager(cloud_provider, cfg)
             infra_ips = infra_manager.get_infrastructure_ips()
         except Exception:
             infra_ips = None
@@ -1629,7 +1799,7 @@ def _show_detailed_status(cfg: dict[str, Any], config_file: Path) -> None:
     phase_table.add_column("Setup", justify="center")
     phase_table.add_column("Load", justify="center")
     phase_table.add_column("Run", justify="center")
-    if env_mode in ["aws", "gcp", "azure"]:
+    if is_cloud:
         phase_table.add_column("Infra", justify="center")
 
     # Track overall health
@@ -1682,7 +1852,7 @@ def _show_detailed_status(cfg: dict[str, Any], config_file: Path) -> None:
             all_phases_complete = False
 
         # Infrastructure availability (cloud only)
-        if env_mode in ["aws", "gcp", "azure"]:
+        if is_cloud:
             _, infra_cell = _check_infra_available(cfg, system_name, infra_ips)
             phase_table.add_row(
                 system_name, setup_cell, load_cell, run_cell, infra_cell
@@ -1736,7 +1906,7 @@ def _show_detailed_status(cfg: dict[str, Any], config_file: Path) -> None:
         console.print(f"[dim]Report: {report_files[0]}[/dim]")
 
     # Show infrastructure details (IPs and connection strings) for cloud environments
-    if env_mode in ["aws", "gcp", "azure"]:
+    if is_cloud:
         console.print()
         _show_infrastructure_details(cfg, systems)
 
@@ -1745,11 +1915,15 @@ def _show_infrastructure_details(
     cfg: dict[str, Any], systems: list[dict[str, Any]]
 ) -> None:
     """Show infrastructure details including IPs and connection strings."""
+    from .common.cli_helpers import get_first_cloud_provider
     from .infra.manager import InfraManager
     from .systems import SYSTEM_IMPLEMENTATIONS, _lazy_import_system
 
     try:
-        provider = cfg.get("env", {}).get("mode", "aws")
+        provider = get_first_cloud_provider(cfg)
+        if not provider:
+            console.print("[yellow]No cloud provider found in configuration[/yellow]")
+            return
         infra_manager = InfraManager(provider, cfg)
 
         # Get infrastructure IPs using InfraManager
@@ -1900,11 +2074,20 @@ def _show_configs_summary(config_files: list[Path]) -> None:
 def _probe_remote_systems(config: dict[str, Any], outdir: Path) -> bool:
     """Probe system information on remote cloud instances."""
 
+    from .common.cli_helpers import (
+        get_all_environments,
+        get_cloud_ssh_key_path,
+        get_first_cloud_provider,
+    )
+    from .common.enums import EnvironmentMode
     from .infra.manager import InfraManager
 
     try:
         # Get cloud provider from config
-        provider = config.get("env", {}).get("mode", "aws")
+        provider = get_first_cloud_provider(config)
+        if not provider:
+            console.print("[yellow]No cloud provider found in configuration[/yellow]")
+            return False
 
         # Create infrastructure manager to get instance information
         infra_manager = InfraManager(provider, config)
@@ -1953,10 +2136,19 @@ def _probe_remote_systems(config: dict[str, Any], outdir: Path) -> bool:
             console.print("[yellow]No instances found in terraform outputs[/yellow]")
             return False
 
-        # SSH configuration
-        ssh_config = config.get("env", {})
-        ssh_key_path = ssh_config.get("ssh_private_key_path", "~/.ssh/id_rsa")
-        ssh_user = ssh_config.get("ssh_user", "ubuntu")
+        # SSH configuration - use helper to support multi-environment configs
+        ssh_key_path = get_cloud_ssh_key_path(config)
+        if not ssh_key_path:
+            ssh_key_path = "~/.ssh/id_rsa"
+
+        # Get ssh_user from first cloud environment
+        environments = get_all_environments(config)
+        ssh_user = "ubuntu"
+        for env_cfg in environments.values():
+            mode = env_cfg.get("mode", EnvironmentMode.LOCAL.value)
+            if EnvironmentMode.is_cloud_provider(mode):
+                ssh_user = env_cfg.get("ssh_user", "ubuntu")
+                break
 
         # Expand tilde in SSH key path
         import os
@@ -2419,8 +2611,9 @@ def cleanup(
         runner._setup_infrastructure()
 
         # For cloud environments, check if any systems were connected
-        env_mode = cfg.get("env", {}).get("mode", "local")
-        if env_mode in ["aws", "gcp", "azure"] and not runner._cloud_instance_managers:
+        from .common.cli_helpers import is_any_system_cloud_mode
+
+        if is_any_system_cloud_mode(cfg) and not runner._cloud_instance_managers:
             console.print(
                 "[yellow]No running systems found. Infrastructure may already be destroyed.[/yellow]"
             )
@@ -2457,8 +2650,7 @@ def cleanup(
                 )
 
         # Clean up infrastructure if using cloud
-        env_mode = cfg.get("env", {}).get("mode", "local")
-        if env_mode in ["aws", "gcp", "azure"]:
+        if is_any_system_cloud_mode(cfg):
             console.print(
                 "[yellow]Infrastructure cleanup available via: make infra-destroy[/yellow]"
             )

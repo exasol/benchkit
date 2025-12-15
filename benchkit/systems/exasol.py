@@ -815,22 +815,34 @@ echo "Symlink: %s -> $INSTANCE_STORE"
 
         return False
 
-    def _get_connection(self, compression: bool = True) -> Any:
-        """Get a connection to Exasol database using pyexasol."""
-        connection_params = {
-            "dsn": self._build_dsn(self.host, self.port),
-            "user": self.username,
-            "password": self.password,
-            "compression": compression,
-        }
+    def _get_connection(
+        self, compression: bool = True, skip_schema: bool = False
+    ) -> Any:
+        """Get a connection to Exasol database using pyexasol.
+
+        Args:
+            compression: Whether to enable compression (default True)
+            skip_schema: If True, don't include schema in connection params.
+                        Use this when creating schemas to avoid chicken-and-egg
+                        problem where we try to connect TO the schema we're creating.
+        """
+        # Build extra kwargs for the connection
+        extra_kwargs: dict[str, Any] = {"compression": compression}
 
         # Use active schema if set (from workload), else fall back to instance schema
         # _active_schema is set by workload.run_workload() for thread-safe multi-stream
-        schema_to_use = getattr(self, "_active_schema", None) or self.schema
-        if schema_to_use:
-            connection_params["schema"] = schema_to_use
+        # Skip schema when creating schemas to avoid "schema not found" errors
+        if not skip_schema:
+            schema_to_use = getattr(self, "_active_schema", None) or self.schema
+            if schema_to_use:
+                extra_kwargs["schema"] = schema_to_use
 
-        return self._connect_with_fingerprint_retry(**connection_params)
+        return self._connect_with_fingerprint_retry(
+            dsn=self._build_dsn(self.host, self.port),
+            user=self.username,
+            password=self.password,
+            **extra_kwargs,
+        )
 
     @exclude_from_package
     def _install_docker(self) -> bool:
@@ -1635,15 +1647,40 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
             return False
 
     def create_schema(self, schema_name: str) -> bool:
-        """Create a schema in Exasol."""
+        """Create a schema in Exasol.
+
+        Uses skip_schema=True to avoid chicken-and-egg problem where we try
+        to connect TO the schema we're creating.
+        """
         sql = f"CREATE SCHEMA IF NOT EXISTS {schema_name};"
-        result = self.execute_query(sql, query_name=f"create_schema_{schema_name}")
-        success = bool(result.get("success", False))
+        conn = None
 
-        if success and self.schema and schema_name.upper() == self.schema.upper():
-            self._schema_created = True
+        try:
+            # Connect WITHOUT schema to avoid "schema not found" error
+            # when creating the schema for the first time
+            conn = self._get_connection(skip_schema=True)
+            if not conn:
+                self._log(f"Failed to connect for schema creation: {schema_name}")
+                return False
 
-        return success
+            conn.execute(sql)
+
+            if self.schema and schema_name.upper() == self.schema.upper():
+                self._schema_created = True
+
+            self._log(f"✓ Schema '{schema_name}' created successfully")
+            return True
+
+        except Exception as e:
+            self._log(f"Failed to create schema '{schema_name}': {e}")
+            return False
+
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 
     def load_data(self, table_name: str, data_path: Path, **kwargs: Any) -> bool:
         """Load data into Exasol table using pyexasol import_from_file."""

@@ -8,9 +8,9 @@ Usage:
 """
 
 from collections.abc import Callable
-from typing import TypeVar
+from typing import Any, TypeVar, cast
 
-T = TypeVar("T", bound=Callable)
+T = TypeVar("T", bound=Callable[..., Any])
 
 
 def exclude_from_package(obj: T) -> T:
@@ -27,5 +27,5 @@ def exclude_from_package(obj: T) -> T:
         ... def install(self) -> bool:
         ...     return self._install_database()
     """
-    obj._exclude_from_package = True  # type: ignore[attr-defined]
+    cast(Any, obj)._exclude_from_package = True
     return obj
