@@ -1492,11 +1492,7 @@ def infra(
         return
 
     # Import managed systems helpers
-    from .common.cli_helpers import (
-        get_managed_deployment_dir,
-        get_managed_systems,
-        is_any_system_managed_mode,
-    )
+    from .common.cli_helpers import is_any_system_managed_mode
 
     has_cloud = is_any_system_cloud_mode(cfg)
     has_managed = is_any_system_managed_mode(cfg)
@@ -2084,7 +2080,7 @@ def _show_managed_system_status(
     cfg: dict[str, Any], systems: list[dict[str, Any]]
 ) -> None:
     """Show status of managed systems (like Exasol Personal Edition)."""
-    from .common.cli_helpers import get_all_environments, get_managed_deployment_dir
+    from .common.cli_helpers import get_all_environments
     from .common.enums import EnvironmentMode
     from .infra.managed_state import load_managed_state
 
@@ -2437,8 +2433,6 @@ def _probe_managed_systems(config: dict[str, Any], outdir: Path) -> bool:
     Managed systems are probed either via SSH (if ssh info is in connection_info.extra)
     or via API using the deployment's get_system_info() method.
     """
-    import os
-
     from .common.cli_helpers import get_managed_deployment_dir, get_managed_systems
     from .infra.managed_state import load_managed_state
 
