@@ -866,6 +866,11 @@ class BenchmarkRunner:
                 )
 
             connection_info = self._build_connection_info(instance_manager)
+
+            # Record setup summary for managed systems too
+            setup_summary = system.get_setup_summary()
+            self._save_setup_summary(system_name, setup_summary)
+
             return True, {"timings": timings, "connection_info": connection_info}
 
         # Cloud/remote mode - use state machine
