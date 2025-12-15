@@ -1051,35 +1051,41 @@ class CloudInstanceManager:
     """Manages individual cloud instances for benchmarks."""
 
     def __init__(
-        self, instance_info: dict[str, Any], ssh_private_key_path: str | None = None
+        self,
+        instance_info: dict[str, Any],
+        ssh_private_key_path: str | None = None,
+        ssh_user: str = "ubuntu",
+        ssh_port: int = 22,
     ):
         self.instance_info = instance_info
         self.public_ip = instance_info.get("public_ip")
         self.private_ip = instance_info.get("private_ip")
         self.ssh_private_key_path = ssh_private_key_path
+        self.ssh_user = ssh_user
+        self.ssh_port = ssh_port
 
     def _get_ssh_command_prefix(self) -> str:
-        """Get SSH command prefix with key if configured."""
+        """Get SSH command prefix with key and port if configured."""
+        import os
+
         ssh_opts = "-o StrictHostKeyChecking=no -o ConnectTimeout=5"
 
         if self.ssh_private_key_path:
-            # Expand ~ to home directory
-            import os
-
             key_path = os.path.expanduser(self.ssh_private_key_path)
             ssh_opts += f" -i {key_path}"
+
+        if self.ssh_port != 22:
+            ssh_opts += f" -p {self.ssh_port}"
 
         return f"ssh {ssh_opts}"
 
     def wait_for_ssh(self, timeout: int = 300) -> bool:
         """Wait for SSH to be available on the instance."""
-        import time
-
         start_time = time.time()
         while time.time() - start_time < timeout:
             ssh_cmd = self._get_ssh_command_prefix()
             result = safe_command(
-                f"{ssh_cmd} ubuntu@{self.public_ip} {shlex.quote('echo ready')}",
+                f"{ssh_cmd} {self.ssh_user}@{self.public_ip} {shlex.quote('echo ready')}",
                 timeout=10,
             )
 
@@ -1111,7 +1117,9 @@ class CloudInstanceManager:
             Dictionary with success, stdout, stderr, returncode, elapsed_s, command
         """
         ssh_cmd = self._get_ssh_command_prefix()
-        ssh_command = f"{ssh_cmd} ubuntu@{self.public_ip} {shlex.quote(command)}"
+        ssh_command = (
+            f"{ssh_cmd} {self.ssh_user}@{self.public_ip} {shlex.quote(command)}"
+        )
 
         # Use global debug state if no explicit debug parameter
         enable_debug = debug or is_debug_enabled()
@@ -1241,34 +1249,36 @@ class CloudInstanceManager:
 
     def copy_file_to_instance(self, local_path: Path, remote_path: str) -> bool:
         """Copy a file to the remote instance."""
+        import os
+
         scp_opts = "-o StrictHostKeyChecking=no"
 
         if self.ssh_private_key_path:
-            import os
-
             key_path = os.path.expanduser(self.ssh_private_key_path)
             scp_opts += f" -i {key_path}"
 
-        scp_command = (
-            f"scp {scp_opts} {local_path} ubuntu@{self.public_ip}:{remote_path}"
-        )
+        if self.ssh_port != 22:
+            scp_opts += f" -P {self.ssh_port}"
+
+        scp_command = f"scp {scp_opts} {local_path} {self.ssh_user}@{self.public_ip}:{remote_path}"
 
         result = safe_command(scp_command, timeout=300)
         return bool(result.get("success", False))
 
     def copy_file_from_instance(self, remote_path: str, local_path: Path) -> bool:
         """Copy a file from the remote instance."""
+        import os
+
         scp_opts = "-o StrictHostKeyChecking=no"
 
         if self.ssh_private_key_path:
-            import os
-
             key_path = os.path.expanduser(self.ssh_private_key_path)
             scp_opts += f" -i {key_path}"
 
-        scp_command = (
-            f"scp {scp_opts} ubuntu@{self.public_ip}:{remote_path} {local_path}"
-        )
+        if self.ssh_port != 22:
+            scp_opts += f" -P {self.ssh_port}"
+
+        scp_command = f"scp {scp_opts} {self.ssh_user}@{self.public_ip}:{remote_path} {local_path}"
 
         result = safe_command(scp_command, timeout=300)
         return bool(result.get("success", False))

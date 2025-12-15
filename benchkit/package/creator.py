@@ -389,6 +389,9 @@ class WorkloadPackage:
         """Copy configuration modified for workload execution only."""
         import yaml
 
+        from ..common.cli_helpers import get_managed_deployment_dir, is_managed_system
+        from ..infra.self_managed import get_self_managed_deployment
+
         # Create workload-only configuration
         workload_config = {
             "project_id": self.config["project_id"],
@@ -399,6 +402,7 @@ class WorkloadPackage:
         # Add minimal system configs (connection info only)
         for system_config in self.config.get("systems", []):
             system_kind = system_config["kind"]
+            system_name = system_config["name"]
             setup_config = system_config.get("setup", {})
 
             # Use system-specific extraction method to get connection info
@@ -410,6 +414,25 @@ class WorkloadPackage:
             else:
                 # This should not happen, but fallback to empty dict if system not found
                 connection_info = {}
+
+            # For managed systems, get actual credentials from deployment
+            if is_managed_system(self.config, system_name):
+                deployment_dir = get_managed_deployment_dir(self.config, system_config)
+                deployment = get_self_managed_deployment(
+                    system_kind, deployment_dir, output_callback=None
+                )
+                if deployment:
+                    managed_conn = deployment.get_connection_info()
+                    if managed_conn:
+                        # Override with actual managed system credentials
+                        if managed_conn.username:
+                            connection_info["username"] = managed_conn.username
+                        if managed_conn.password:
+                            connection_info["password"] = managed_conn.password
+                        # For managed systems running on same host, keep localhost
+                        # but allow override if explicitly set in managed conn
+                        if managed_conn.port:
+                            connection_info["port"] = managed_conn.port
 
             minimal_system = {
                 "name": system_config["name"],

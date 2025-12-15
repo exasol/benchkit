@@ -37,10 +37,13 @@ console = Console()
 class ExecutionContext:
     """Encapsulates execution environment details for benchmark phases."""
 
-    mode: Literal["local", "cloud", "local_to_remote"]
+    mode: Literal["local", "cloud", "local_to_remote", "managed_remote"]
     use_parallel: bool
     max_workers: int
     cloud_managers: dict[str, Any] | None = None
+    managed_managers: dict[str, Any] | None = (
+        None  # For managed systems with remote exec
+    )
     executor: ParallelExecutor | None = (
         None  # Reference to executor for output callbacks
     )
@@ -48,17 +51,25 @@ class ExecutionContext:
     @property
     def is_remote(self) -> bool:
         """Check if this context involves remote execution."""
-        return self.mode in ("cloud", "local_to_remote")
+        return self.mode in ("cloud", "local_to_remote", "managed_remote")
 
     @property
     def needs_package(self) -> bool:
         """Check if this context requires deploying a package to remote."""
-        return self.mode == "cloud"
+        return self.mode in ("cloud", "managed_remote")
 
     @property
     def effective_max_workers(self) -> int:
         """Return 1 for sequential execution, otherwise configured max_workers."""
         return self.max_workers if self.use_parallel else 1
+
+    def get_instance_manager(self, system_name: str) -> Any | None:
+        """Get instance manager for a system (cloud or managed)."""
+        if self.cloud_managers and system_name in self.cloud_managers:
+            return self.cloud_managers[system_name]
+        if self.managed_managers and system_name in self.managed_managers:
+            return self.managed_managers[system_name]
+        return None
 
 
 @dataclass
@@ -334,17 +345,45 @@ class BenchmarkRunner:
         Create execution context based on config and overrides.
 
         Args:
-            local_override: If True, use local-to-remote mode for cloud configs
+            local_override: If True, use local-to-remote mode for cloud/managed configs
 
         Returns:
             ExecutionContext with appropriate mode and settings
         """
-        from ..common.cli_helpers import is_any_system_cloud_mode
+        from ..common.cli_helpers import (
+            get_managed_deployment_dir,
+            is_any_system_cloud_mode,
+            is_any_system_managed_mode,
+            is_managed_system,
+        )
+        from ..infra.self_managed import get_self_managed_deployment
 
-        if is_any_system_cloud_mode(self.config):
-            mode: Literal["local", "cloud", "local_to_remote"] = (
-                "local_to_remote" if local_override else "cloud"
-            )
+        has_cloud = is_any_system_cloud_mode(self.config)
+        has_managed = is_any_system_managed_mode(self.config)
+
+        # Build managed instance managers for systems that support remote execution
+        managed_managers: dict[str, Any] = {}
+        if has_managed:
+            for system_config in self.config.get("systems", []):
+                system_name = system_config["name"]
+                if is_managed_system(self.config, system_name):
+                    deployment_dir = get_managed_deployment_dir(
+                        self.config, system_config
+                    )
+                    deployment = get_self_managed_deployment(
+                        system_config["kind"], deployment_dir
+                    )
+                    if deployment and deployment.SUPPORTS_REMOTE_EXECUTION:
+                        mgr = deployment.get_instance_manager()
+                        if mgr:
+                            managed_managers[system_name] = mgr
+
+        # Determine mode
+        mode: Literal["local", "cloud", "local_to_remote", "managed_remote"]
+        if has_cloud:
+            mode = "local_to_remote" if local_override else "cloud"
+        elif managed_managers:  # Has managed systems with remote execution
+            mode = "local_to_remote" if local_override else "managed_remote"
         else:
             mode = "local"
 
@@ -353,6 +392,7 @@ class BenchmarkRunner:
             use_parallel=self.use_parallel,
             max_workers=self.max_workers,
             cloud_managers=self._cloud_instance_managers or None,
+            managed_managers=managed_managers or None,
         )
 
     @exclude_from_package
@@ -435,13 +475,19 @@ class BenchmarkRunner:
             "local": "Local",
             "cloud": "Cloud",
             "local_to_remote": "Local-to-Remote",
+            "managed_remote": "Managed-Remote",
         }[context.mode]
         console.print(
             f"[bold blue]{phase.header_emoji}  {phase.header_text} ({mode_label})[/bold blue]"
         )
 
         # 2. Establish cloud connections if needed
-        if context.is_remote and not self._cloud_instance_managers:
+        # Skip for managed_remote mode - instance managers are already set in context
+        if (
+            context.is_remote
+            and context.mode != "managed_remote"
+            and not self._cloud_instance_managers
+        ):
             if not self._setup_cloud_infrastructure():
                 return False if not phase.collects_results else []
             context.cloud_managers = self._cloud_instance_managers
@@ -553,11 +599,7 @@ class BenchmarkRunner:
 
                         # Get system for this execution context
                         system = self._get_system_for_context(cfg, context)
-                        instance_mgr = (
-                            context.cloud_managers.get(name)
-                            if context.cloud_managers
-                            else None
-                        )
+                        instance_mgr = context.get_instance_manager(name)
 
                         # Execute phase operation
                         success, data = phase.operation(
@@ -696,19 +738,15 @@ class BenchmarkRunner:
 
         elif context.mode == "local_to_remote":
             # Local-to-remote mode - need public IP for connection
-            instance_manager = (
-                context.cloud_managers.get(system_name)
-                if context.cloud_managers
-                else None
-            )
+            instance_manager = context.get_instance_manager(system_name)
             if not instance_manager:
                 raise ValueError(f"No instance manager for {system_name}")
             return self._create_system_for_local_execution(
                 system_config, instance_manager, output_callback=output_callback
             )
 
-        else:  # cloud
-            # Cloud mode - system runs on remote, use prepared system if available
+        else:  # cloud or managed_remote
+            # Remote mode - system runs on remote, use prepared system if available
             if (
                 hasattr(self, "_prepared_systems")
                 and system_name in self._prepared_systems
@@ -726,12 +764,8 @@ class BenchmarkRunner:
                     workload_config=self.config.get("workload", {}),
                 )
 
-            # Set cloud instance manager
-            instance_manager = (
-                context.cloud_managers.get(system_name)
-                if context.cloud_managers
-                else None
-            )
+            # Set instance manager (works for both cloud and managed systems)
+            instance_manager = context.get_instance_manager(system_name)
             if instance_manager and hasattr(system, "set_cloud_instance_manager"):
                 system.set_cloud_instance_manager(instance_manager)
 
@@ -803,6 +837,36 @@ class BenchmarkRunner:
                     "port": system_config.get("setup", {}).get("port"),
                 },
             }
+
+        # Check if this is a managed system - skip cloud state machine
+        from ..common.cli_helpers import is_managed_system
+
+        if is_managed_system(self.config, system_name):
+            # Managed systems are already set up via 'infra apply'
+            # Just mark as ready and prepare remote environment
+            console.print(
+                f"[green]✅ {system_name} managed infrastructure ready[/green]"
+            )
+            timings["installation_s"] = 0
+
+            # Prepare remote environment for package execution
+            from ..common.cli_helpers import get_managed_deployment_dir
+            from ..infra.self_managed import get_self_managed_deployment
+
+            deployment_dir = get_managed_deployment_dir(self.config, system_config)
+            deployment = get_self_managed_deployment(
+                system_config["kind"], deployment_dir
+            )
+            if deployment and deployment.SUPPORTS_REMOTE_EXECUTION:
+                console.print(f"🔧 Preparing remote environment for {system_name}...")
+                if not deployment.prepare_remote_environment(instance_manager):
+                    return False, {"error": "remote_environment_preparation_failed"}
+                console.print(
+                    f"[green]✓ Remote environment ready for {system_name}[/green]"
+                )
+
+            connection_info = self._build_connection_info(instance_manager)
+            return True, {"timings": timings, "connection_info": connection_info}
 
         # Cloud/remote mode - use state machine
         state = self._check_system_state(system, instance_manager)
@@ -998,8 +1062,9 @@ class BenchmarkRunner:
 
         context = self._create_execution_context()
 
-        # Cloud mode requires storage preparation before setup
-        if context.is_remote:
+        # Cloud mode requires infrastructure provisioning and storage preparation
+        # Skip for managed_remote - infrastructure is already set up via 'infra apply'
+        if context.is_remote and context.mode != "managed_remote":
             # Setup cloud infrastructure first
             if not self._setup_cloud_infrastructure():
                 return False
@@ -1232,7 +1297,7 @@ class BenchmarkRunner:
             load_result = primary_manager.run_remote_command(
                 f"cd /home/ubuntu/{project_id} && ./load_data.sh {system_name}",
                 timeout=execution_timeout,
-                debug=True,
+                debug=False,
                 stream_callback=stream_remote_output,
             )
 

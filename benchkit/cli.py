@@ -9,6 +9,7 @@ import typer
 
 if TYPE_CHECKING:
     import pandas as pd
+
 from rich.console import Console
 from rich.table import Table
 
@@ -1777,18 +1778,29 @@ def _check_infra_available(
     """
     Check if infrastructure for system is still running.
 
+    Handles both cloud (Terraform) and managed (self-managed) systems.
+
     Returns (status, display):
     - ('up', '[green]✓ up[/]') - SSH connectivity confirmed
     - ('down', '[red]✗ down[/]') - Cannot reach instance
     - ('na', '[dim]-[/]') - Local mode, N/A
     - ('unknown', '[yellow]?[/]') - No IP info available
     """
+    import re
     import subprocess
 
-    from .common.cli_helpers import get_cloud_ssh_key_path, is_any_system_cloud_mode
+    from .common.cli_helpers import (
+        get_cloud_ssh_key_path,
+        is_any_system_cloud_mode,
+        is_managed_system,
+    )
+
+    # Check if system has infrastructure (cloud or managed)
+    has_cloud = is_any_system_cloud_mode(cfg)
+    has_managed = is_managed_system(cfg, system_name)
 
     # Local mode - infrastructure N/A
-    if not is_any_system_cloud_mode(cfg):
+    if not has_cloud and not has_managed:
         return ("na", "[dim]-[/]")
 
     # No infrastructure IPs available
@@ -1805,17 +1817,51 @@ def _check_infra_available(
     else:
         return ("unknown", "[yellow]?[/]")
 
-    # Get SSH key
-    ssh_key = get_cloud_ssh_key_path(cfg) or ""
-    if ssh_key:
-        ssh_key = os.path.expanduser(ssh_key)
+    # For managed systems, check if we have SSH command in infra_ips
+    ssh_command = system_ips.get("ssh_command")
+    if ssh_command and has_managed:
+        # Parse the SSH command to extract key path
+        key_match = re.search(r"-i\s+([^\s]+)", ssh_command)
+        key_path = key_match.group(1) if key_match else None
 
-    # Quick SSH connectivity check (5 second timeout)
-    ssh_opts = "-o ConnectTimeout=5 -o StrictHostKeyChecking=no -o BatchMode=yes"
-    if ssh_key and os.path.exists(ssh_key):
-        ssh_opts += f" -i {ssh_key}"
+        # Extract user from command
+        user_match = re.search(r"(\w+)@", ssh_command)
+        ssh_user = user_match.group(1) if user_match else "ubuntu"
 
-    cmd = f'ssh {ssh_opts} ubuntu@{ip} "echo ok" 2>/dev/null'
+        # Resolve key path (may be relative to deployment dir)
+        if key_path:
+            key_path = os.path.expanduser(key_path)
+            # If relative, try to resolve from managed system deployment dir
+            if not os.path.isabs(key_path) and not os.path.exists(key_path):
+                from .common.cli_helpers import (
+                    get_managed_deployment_dir,
+                    get_managed_systems,
+                )
+
+                for system in get_managed_systems(cfg):
+                    if system["name"] == system_name:
+                        deployment_dir = get_managed_deployment_dir(cfg, system)
+                        resolved_path = os.path.join(deployment_dir, key_path)
+                        if os.path.exists(resolved_path):
+                            key_path = resolved_path
+                        break
+
+        ssh_opts = "-o ConnectTimeout=5 -o StrictHostKeyChecking=no -o BatchMode=yes"
+        if key_path and os.path.exists(key_path):
+            ssh_opts += f" -i {key_path}"
+
+        cmd = f'ssh {ssh_opts} {ssh_user}@{ip} "echo ok" 2>/dev/null'
+    else:
+        # Cloud system - use cloud SSH key
+        ssh_key = get_cloud_ssh_key_path(cfg) or ""
+        if ssh_key:
+            ssh_key = os.path.expanduser(ssh_key)
+
+        ssh_opts = "-o ConnectTimeout=5 -o StrictHostKeyChecking=no -o BatchMode=yes"
+        if ssh_key and os.path.exists(ssh_key):
+            ssh_opts += f" -i {ssh_key}"
+
+        cmd = f'ssh {ssh_opts} ubuntu@{ip} "echo ok" 2>/dev/null'
 
     try:
         result = subprocess.run(
@@ -1936,16 +1982,22 @@ def _show_detailed_status(cfg: dict[str, Any], config_file: Path) -> None:
     runs_df = _load_runs_data(results_dir)
     query_stats = _get_query_stats_per_system(runs_df) if runs_df is not None else {}
 
-    # Get infrastructure IPs for availability check (cloud mode only)
-    from .common.cli_helpers import get_first_cloud_provider, is_any_system_cloud_mode
+    # Get infrastructure IPs for availability check (cloud + managed)
+    from .common.cli_helpers import (
+        get_all_infrastructure_ips,
+        is_any_system_cloud_mode,
+        is_any_system_managed_mode,
+    )
 
     is_cloud = is_any_system_cloud_mode(cfg)
-    cloud_provider = get_first_cloud_provider(cfg)
+    is_managed = is_any_system_managed_mode(cfg)
+    has_infra = is_cloud or is_managed
+
+    # Get combined infrastructure IPs from both cloud and managed systems
     infra_ips: dict[str, Any] | None = None
-    if is_cloud and cloud_provider:
+    if has_infra:
         try:
-            infra_manager = InfraManager(cloud_provider, cfg)
-            infra_ips = infra_manager.get_infrastructure_ips()
+            infra_ips = get_all_infrastructure_ips(cfg)
         except Exception:
             infra_ips = None
 
@@ -1957,7 +2009,7 @@ def _show_detailed_status(cfg: dict[str, Any], config_file: Path) -> None:
     phase_table.add_column("Setup", justify="center")
     phase_table.add_column("Load", justify="center")
     phase_table.add_column("Run", justify="center")
-    if is_cloud:
+    if has_infra:
         phase_table.add_column("Infra", justify="center")
 
     # Track overall health
@@ -2009,8 +2061,8 @@ def _show_detailed_status(cfg: dict[str, Any], config_file: Path) -> None:
             run_cell = "[dim]-[/]"
             all_phases_complete = False
 
-        # Infrastructure availability (cloud only)
-        if is_cloud:
+        # Infrastructure availability (cloud or managed)
+        if has_infra:
             _, infra_cell = _check_infra_available(cfg, system_name, infra_ips)
             phase_table.add_row(
                 system_name, setup_cell, load_cell, run_cell, infra_cell
@@ -2063,108 +2115,28 @@ def _show_detailed_status(cfg: dict[str, Any], config_file: Path) -> None:
     if report_files:
         console.print(f"[dim]Report: {report_files[0]}[/dim]")
 
-    # Show infrastructure details (IPs and connection strings) for cloud environments
-    if is_cloud:
+    # Show infrastructure details (IPs and connection strings) for cloud and managed
+    if has_infra:
         console.print()
         _show_infrastructure_details(cfg, systems)
-
-    # Show managed system status
-    from .common.cli_helpers import is_any_system_managed_mode
-
-    if is_any_system_managed_mode(cfg):
-        console.print()
-        _show_managed_system_status(cfg, systems)
-
-
-def _show_managed_system_status(
-    cfg: dict[str, Any], systems: list[dict[str, Any]]
-) -> None:
-    """Show status of managed systems (like Exasol Personal Edition)."""
-    from .common.cli_helpers import get_all_environments
-    from .common.enums import EnvironmentMode
-    from .infra.managed_state import load_managed_state
-
-    project_id = cfg.get("project_id", "default")
-    environments = get_all_environments(cfg)
-
-    # Find managed systems
-    managed_systems = []
-    for system in systems:
-        env_name = system.get("environment") or "default"
-        env_cfg = environments.get(env_name, {})
-        mode = env_cfg.get("mode", EnvironmentMode.LOCAL.value)
-        if mode == EnvironmentMode.MANAGED.value:
-            managed_systems.append(system)
-
-    if not managed_systems:
-        return
-
-    managed_table = Table(
-        show_header=True,
-        header_style="bold magenta",
-        title="Managed Systems Status",
-    )
-    managed_table.add_column("System", style="bold")
-    managed_table.add_column("Status", justify="center")
-    managed_table.add_column("Host", style="cyan")
-    managed_table.add_column("Port", justify="center")
-    managed_table.add_column("Deployed At", style="dim")
-
-    for system in managed_systems:
-        system_name = system["name"]
-        state = load_managed_state(project_id, system_name)
-
-        if state:
-            status = state.get("status", "unknown")
-            conn_info = state.get("connection_info", {})
-            host = conn_info.get("host", "-")
-            port = str(conn_info.get("port", "-"))
-            deployed_at = state.get("deployed_at", "-")
-
-            # Truncate timestamp for display
-            if deployed_at and deployed_at != "-":
-                deployed_at = deployed_at[:19].replace("T", " ")
-
-            # Color-code status
-            if status in ["running", "database_ready", "deployed"]:
-                status_cell = f"[green]✓ {status}[/]"
-            elif status == "not_initialized":
-                status_cell = f"[dim]{status}[/]"
-            else:
-                status_cell = f"[yellow]{status}[/]"
-
-            managed_table.add_row(system_name, status_cell, host, port, deployed_at)
-        else:
-            managed_table.add_row(
-                system_name,
-                "[red]No state[/]",
-                "-",
-                "-",
-                "[dim]Run 'infra apply' first[/]",
-            )
-
-    console.print(managed_table)
 
 
 def _show_infrastructure_details(
     cfg: dict[str, Any], systems: list[dict[str, Any]]
 ) -> None:
-    """Show infrastructure details including IPs and connection strings."""
-    from .common.cli_helpers import get_first_cloud_provider
-    from .infra.manager import InfraManager
+    """Show infrastructure details including IPs and connection strings.
+
+    This function displays a unified table for both cloud (Terraform) and
+    managed (self-managed) systems.
+    """
+    from .common.cli_helpers import get_all_infrastructure_ips
     from .systems import SYSTEM_IMPLEMENTATIONS, _lazy_import_system
 
     try:
-        provider = get_first_cloud_provider(cfg)
-        if not provider:
-            console.print("[yellow]No cloud provider found in configuration[/yellow]")
-            return
-        infra_manager = InfraManager(provider, cfg)
-
-        # Get infrastructure IPs using InfraManager
-        infra_ips = infra_manager.get_infrastructure_ips()
+        # Get combined infrastructure IPs from cloud and managed systems
+        infra_ips = get_all_infrastructure_ips(cfg)
         if not infra_ips:
-            console.print("[yellow]Infrastructure details not available[/yellow]")
+            console.print("\n[dim]Infrastructure details not available[/dim]")
             return
 
         # Create infrastructure table
@@ -2432,6 +2404,9 @@ def _probe_managed_systems(config: dict[str, Any], outdir: Path) -> bool:
 
     Managed systems are probed either via SSH (if ssh info is in connection_info.extra)
     or via API using the deployment's get_system_info() method.
+
+    Note: We fetch fresh connection info from the deployment rather than relying
+    on potentially stale state data.
     """
     from .common.cli_helpers import get_managed_deployment_dir, get_managed_systems
     from .infra.managed_state import load_managed_state
@@ -2452,7 +2427,7 @@ def _probe_managed_systems(config: dict[str, Any], outdir: Path) -> bool:
 
             console.print(f"[blue]Probing managed system: {system_name}...[/blue]")
 
-            # Load state for this system
+            # Check state exists (system must be deployed via infra apply)
             state = load_managed_state(project_id, system_name)
             if not state:
                 console.print(
@@ -2461,15 +2436,38 @@ def _probe_managed_systems(config: dict[str, Any], outdir: Path) -> bool:
                 )
                 continue
 
-            connection_info = state.get("connection_info", {})
-            extra = connection_info.get("extra", {})
+            # Get deployment_dir (where CLI and state files live)
+            deployment_dir = get_managed_deployment_dir(config, system)
+
+            # Get fresh connection info from the deployment instead of stale state
+            deployment = get_self_managed_deployment(
+                system_kind, deployment_dir, console.print
+            )
+
+            if not deployment:
+                console.print(
+                    f"[red]Could not create deployment handler for {system_name}[/red]"
+                )
+                continue
+
+            # Fetch fresh connection info
+            connection_info = deployment.get_connection_info()
+            if not connection_info:
+                console.print(
+                    f"[red]Could not get connection info for {system_name}[/red]"
+                )
+                continue
+
+            extra = connection_info.extra or {}
 
             # Try SSH probing first if SSH info is available
             ssh_command = extra.get("ssh_command")
             if ssh_command:
                 # Parse SSH command to extract host, user, and key
-                # Format: "ssh -i ~/.ssh/key.pem user@host"
-                success = _probe_managed_via_ssh(system_name, ssh_command, outdir)
+                # Pass deployment_dir as state_dir for resolving relative key paths
+                success = _probe_managed_via_ssh(
+                    system_name, ssh_command, outdir, state_dir=deployment_dir
+                )
                 if success:
                     console.print(
                         f"[green]✓ {system_name} probe completed (via SSH)[/green]"
@@ -2483,23 +2481,17 @@ def _probe_managed_systems(config: dict[str, Any], outdir: Path) -> bool:
                     )
 
             # Fall back to API probing via get_system_info()
-            deployment_dir = get_managed_deployment_dir(config, system)
-            deployment = get_self_managed_deployment(
-                system_kind, deployment_dir, console.print
-            )
-
-            if deployment:
-                system_info = deployment.get_system_info()
-                if system_info:
-                    # Save the system info to a file
-                    system_file = outdir / f"system_{system_name}.json"
-                    with open(system_file, "w") as f:
-                        json.dump(system_info, f, indent=2)
-                    console.print(
-                        f"[green]✓ {system_name} probe completed (via API)[/green]"
-                    )
-                    success_count += 1
-                    continue
+            system_info = deployment.get_system_info()
+            if system_info:
+                # Save the system info to a file
+                system_file = outdir / f"system_{system_name}.json"
+                with open(system_file, "w") as f:
+                    json.dump(system_info, f, indent=2)
+                console.print(
+                    f"[green]✓ {system_name} probe completed (via API)[/green]"
+                )
+                success_count += 1
+                continue
 
             console.print(f"[red]✗ {system_name} probe failed[/red]")
 
@@ -2513,34 +2505,47 @@ def _probe_managed_systems(config: dict[str, Any], outdir: Path) -> bool:
         return False
 
 
-def _probe_managed_via_ssh(system_name: str, ssh_command: str, outdir: Path) -> bool:
+def _probe_managed_via_ssh(
+    system_name: str, ssh_command: str, outdir: Path, state_dir: str | None = None
+) -> bool:
     """Probe a managed system via SSH using its ssh_command from connection info.
 
     Args:
         system_name: Name of the system
-        ssh_command: Full SSH command (e.g., "ssh -i ~/.ssh/key.pem user@host")
+        ssh_command: Full SSH command (e.g., "ssh -i key.pem user@host -p 22")
         outdir: Output directory for probe results
+        state_dir: Directory where the SSH key file might be located (for relative paths)
     """
     import os
     import re
 
     # Parse the SSH command to extract components
-    # Format: "ssh -i /path/to/key user@host" or "ssh -i /path/to/key -p port user@host"
-    match = re.match(
-        r"ssh\s+(?:-i\s+([^\s]+)\s+)?(?:-p\s+(\d+)\s+)?(\w+)@([\w\.\-]+)",
-        ssh_command.strip(),
-    )
-    if not match:
+    # Format can be: "ssh -i key.pem user@host -p 22" or "ssh -i /path/to/key user@host"
+    # The -p port can come before or after user@host
+    # Extract key path (if present)
+    key_match = re.search(r"-i\s+([^\s]+)", ssh_command)
+    key_path = key_match.group(1) if key_match else "~/.ssh/id_rsa"
+
+    # Extract user@host
+    user_host_match = re.search(r"(\w+)@([\w\.\-]+)", ssh_command)
+    if not user_host_match:
         console.print(f"[yellow]Could not parse SSH command: {ssh_command}[/yellow]")
         return False
 
-    key_path = match.group(1) or "~/.ssh/id_rsa"
-    # port = match.group(2) or "22"  # Not used directly, embedded in ssh_command
-    ssh_user = match.group(3)
-    host = match.group(4)
+    ssh_user = user_host_match.group(1)
+    host = user_host_match.group(2)
 
     # Expand tilde in key path
     key_path = os.path.expanduser(key_path)
+
+    # If key path is relative and we have a state_dir, resolve it
+    if not os.path.isabs(key_path) and state_dir:
+        key_path = os.path.join(state_dir, key_path)
+
+    # Check if key file exists
+    if not os.path.exists(key_path):
+        console.print(f"[yellow]SSH key not found: {key_path}[/yellow]")
+        return False
 
     return _probe_single_remote_system(system_name, host, key_path, ssh_user, outdir)
 

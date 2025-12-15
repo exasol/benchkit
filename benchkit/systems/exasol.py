@@ -136,14 +136,19 @@ class ExasolSystem(SystemUnderTest):
 
     def _resolve_ip_address(self, var_name: str) -> str | None:
         """Resolve IP address from configuration or infrastructure state."""
-        from benchkit.infra.manager import InfraManager
+        try:
+            from benchkit.infra.manager import InfraManager
 
-        # Use infrastructure manager to resolve IP addresses
-        project_id = self.config.get("project_id", "")
-        result = InfraManager.resolve_ip_from_infrastructure(
-            var_name, self.name, project_id
-        )
-        return cast(str | None, result)
+            # Use infrastructure manager to resolve IP addresses
+            project_id = self.config.get("project_id", "")
+            result = InfraManager.resolve_ip_from_infrastructure(
+                var_name, self.name, project_id
+            )
+            return cast(str | None, result)
+        except ImportError:
+            # In minimal packages, InfraManager isn't available
+            # Return None to use fallback value
+            return None
 
     def _connect_with_fingerprint_retry(
         self, dsn: str, user: str, password: str, **kwargs: Any
@@ -2209,6 +2214,7 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
 # =============================================================================
 
 
+@exclude_from_package
 class ExasolPersonalEdition(SelfManagedDeployment):
     """Exasol Personal Edition - self-managed deployment via 'exasol' CLI.
 
@@ -2239,6 +2245,9 @@ class ExasolPersonalEdition(SelfManagedDeployment):
     CLI_REPO = "exasol/personal-edition"
     CLI_DEFAULT_VERSION = "0.5.1"
 
+    # Enable remote execution support for load/run phases
+    SUPPORTS_REMOTE_EXECUTION = True
+
     def __init__(
         self,
         deployment_dir: str,
@@ -2264,6 +2273,36 @@ class ExasolPersonalEdition(SelfManagedDeployment):
         # CLI path: in parent of deployment_dir (deployment_dir is typically state subdir)
         cli_dir = self.deployment_dir.parent
         self.cli_path = str(cli_dir / "exasol")
+
+    def prepare_remote_environment(self, instance_manager: Any) -> bool:
+        """Prepare remote environment for package execution.
+
+        Installs required packages (python3, pip, venv, unzip) on the Exasol PE
+        instance to support package deployment during load/run phases.
+
+        Args:
+            instance_manager: CloudInstanceManager for remote execution
+
+        Returns:
+            True if preparation succeeded
+        """
+        self._log("Preparing remote environment for package execution...")
+
+        # Install required packages: python3, pip, venv, unzip
+        packages = ["python3", "python3-pip", "python3-venv", "unzip"]
+        install_cmd = (
+            "sudo apt-get update && " f"sudo apt-get install -y {' '.join(packages)}"
+        )
+
+        result = instance_manager.run_remote_command(install_cmd, debug=False)
+        if not result.get("success"):
+            self._log(
+                f"Failed to install packages: {result.get('stderr', 'unknown error')}"
+            )
+            return False
+
+        self._log("Remote environment ready for package execution")
+        return True
 
     def _log(self, message: str) -> None:
         """Log a message via callback or print."""
@@ -2524,7 +2563,7 @@ class ExasolPersonalEdition(SelfManagedDeployment):
             True if destroy succeeded
         """
         self._log("Destroying Exasol Personal Edition...")
-        result = self._run_command(["destroy", "--force"], timeout=600)  # 10 minutes
+        result = self._run_command(["destroy"], timeout=600)  # 10 minutes
 
         if result.returncode != 0:
             self._log(f"Destroy failed: {result.stderr}")
@@ -2553,13 +2592,66 @@ class ExasolPersonalEdition(SelfManagedDeployment):
             return None
 
         # Extract connection details from the JSON output
-        # The structure depends on the CLI version, handle both formats
-        host = info_data.get("hostname") or info_data.get("publicIp", "")
-        port_str = info_data.get("dbPort") or info_data.get("port", "8563")
-        try:
-            port = int(port_str)
-        except (ValueError, TypeError):
-            port = 8563
+        # New CLI format has nodes nested: nodes.n11.publicIp, nodes.n11.database.dbPort
+        # Old format had: hostname, publicIp, dbPort at top level
+        host = ""
+        port = 8563
+        ssh_command = None
+        ssh_port = None
+        ui_port = None
+        cert_fingerprint = None
+
+        # Try new format first (nodes dict)
+        nodes = info_data.get("nodes", {})
+        if nodes:
+            # Get the first node (usually n11 for single-node clusters)
+            first_node: dict[str, Any] = next(iter(nodes.values()), {})
+            host = first_node.get("publicIp") or first_node.get("dnsName", "")
+
+            # Get database port from nested structure
+            database_info = first_node.get("database", {})
+            port_str = database_info.get("dbPort", "8563")
+            try:
+                port = int(port_str)
+            except (ValueError, TypeError):
+                port = 8563
+
+            ui_port_str = database_info.get("uiPort")
+            if ui_port_str:
+                try:
+                    ui_port = int(ui_port_str)
+                except (ValueError, TypeError):
+                    pass
+
+            # Get SSH info from nested structure
+            ssh_info = first_node.get("ssh", {})
+            ssh_command = ssh_info.get("command")
+            ssh_port_str = ssh_info.get("port")
+            if ssh_port_str:
+                try:
+                    ssh_port = int(ssh_port_str)
+                except (ValueError, TypeError):
+                    pass
+
+            # Get certificate from node
+            tls_cert = first_node.get("tlsCert")
+            if tls_cert:
+                cert_fingerprint = tls_cert[:50] + "..."  # Truncate for storage
+
+        # Fall back to old format if no nodes found
+        if not host:
+            host = info_data.get("hostname") or info_data.get("publicIp", "")
+            port_str = info_data.get("dbPort") or info_data.get("port", "8563")
+            try:
+                port = int(port_str)
+            except (ValueError, TypeError):
+                port = 8563
+            ssh_command = info_data.get("sshCommand")
+            ssh_port = info_data.get("sshPort")
+            ui_port = info_data.get("uiPort")
+            cert_fingerprint = info_data.get(
+                "certFingerprint", info_data.get("certificateFingerprint")
+            )
 
         # Get password from secrets file
         password = self._get_password()
@@ -2570,12 +2662,10 @@ class ExasolPersonalEdition(SelfManagedDeployment):
             username=info_data.get("username", "sys"),
             password=password,
             extra={
-                "certificate_fingerprint": info_data.get(
-                    "certFingerprint", info_data.get("certificateFingerprint")
-                ),
-                "ssh_command": info_data.get("sshCommand"),
-                "ssh_port": info_data.get("sshPort"),
-                "ui_port": info_data.get("uiPort"),
+                "certificate_fingerprint": cert_fingerprint,
+                "ssh_command": ssh_command,
+                "ssh_port": ssh_port,
+                "ui_port": ui_port,
                 "cluster_size": info_data.get("clusterSize"),
                 "cluster_state": info_data.get("clusterState"),
                 "deployment_id": info_data.get("deploymentId"),

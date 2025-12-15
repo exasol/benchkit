@@ -148,9 +148,16 @@ class ExclusionTransformer(ast.NodeTransformer):
     def __init__(self) -> None:
         self.methods_removed = 0
         self.functions_removed = 0
+        self.classes_removed = 0
 
-    def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef:
-        """Filter class methods based on decorators."""
+    def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef | None:
+        """Filter classes and their methods based on decorators."""
+        # Check if entire class is excluded
+        if self._is_class_excluded(node):
+            self.classes_removed += 1
+            return None  # Remove entire class from AST
+
+        # Filter class methods
         filtered_body: list[ast.stmt] = []
 
         for item in node.body:
@@ -216,6 +223,19 @@ class ExclusionTransformer(ast.NodeTransformer):
                 if decorator.func.id == "exclude_from_package":
                     return True
 
+        return False
+
+    def _is_class_excluded(self, node: ast.ClassDef) -> bool:
+        """Check if class has @exclude_from_package decorator."""
+        for decorator in node.decorator_list:
+            if isinstance(decorator, ast.Name):
+                if decorator.id == "exclude_from_package":
+                    return True
+            elif isinstance(decorator, ast.Call) and isinstance(
+                decorator.func, ast.Name
+            ):
+                if decorator.func.id == "exclude_from_package":
+                    return True
         return False
 
     def _remove_marker_decorators(

@@ -368,3 +368,93 @@ def get_managed_deployment_dir(cfg: dict[str, Any], system: dict[str, Any]) -> s
     default_dir = f"results/{project_id}/managed/{system_name}/state"
     deployment_dir = system.get("setup", {}).get("deployment_dir", default_dir)
     return str(deployment_dir) if deployment_dir else default_dir
+
+
+def get_all_infrastructure_ips(
+    cfg: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    """Get infrastructure IPs for all systems (cloud + managed).
+
+    Combines IPs from both Terraform-managed (cloud) and self-managed deployments
+    into a consistent format for status display.
+
+    Args:
+        cfg: Configuration dictionary
+
+    Returns:
+        Dictionary mapping system names to their infrastructure info:
+        {
+            "system_name": {
+                "public_ip": "54.123.45.67",
+                "private_ip": "172.30.1.11",
+                "ssh_command": "ssh -i key.pem user@host",  # optional
+            }
+        }
+        or
+        {
+            "system_name": {
+                "public_ips": ["54.1.2.3", "54.1.2.4"],  # multinode
+                "private_ips": ["10.0.1.10", "10.0.1.11"],
+            }
+        }
+    """
+    from ..infra.manager import InfraManager
+    from ..infra.self_managed import get_self_managed_deployment
+
+    all_ips: dict[str, dict[str, Any]] = {}
+
+    # Get cloud IPs from Terraform (if available)
+    provider = get_first_cloud_provider(cfg)
+    if provider:
+        try:
+            infra_manager = InfraManager(provider, cfg)
+            cloud_ips = infra_manager.get_infrastructure_ips()
+            if cloud_ips:
+                all_ips.update(cloud_ips)
+        except Exception:
+            pass  # Cloud infrastructure not available
+
+    # Get managed system IPs
+    managed_systems = get_managed_systems(cfg)
+    for system in managed_systems:
+        system_name = system["name"]
+        system_kind = system["kind"]
+        deployment_dir = get_managed_deployment_dir(cfg, system)
+
+        # Silent mode - no console output during status check
+        deployment = get_self_managed_deployment(
+            system_kind, deployment_dir, output_callback=None
+        )
+
+        if deployment:
+            infra_info = deployment.get_infrastructure_info()
+            if infra_info and infra_info.public_ip:
+                all_ips[system_name] = {
+                    "public_ip": infra_info.public_ip,
+                    "private_ip": infra_info.private_ip,
+                    "ssh_command": infra_info.ssh_command,
+                }
+
+    return all_ips
+
+
+def is_managed_system(cfg: dict[str, Any], system_name: str) -> bool:
+    """Check if a specific system uses managed mode.
+
+    Args:
+        cfg: Configuration dictionary
+        system_name: Name of the system to check
+
+    Returns:
+        True if the system uses managed mode
+    """
+    environments = get_all_environments(cfg)
+
+    for system in cfg.get("systems", []):
+        if system["name"] == system_name:
+            env_name = system.get("environment") or "default"
+            env_cfg = environments.get(env_name, {})
+            mode = str(env_cfg.get("mode", EnvironmentMode.LOCAL.value))
+            return mode == EnvironmentMode.MANAGED.value
+
+    return False
