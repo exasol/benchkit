@@ -686,6 +686,8 @@ class BenchmarkRunner:
                 if output_callback is not None:
                     system._output_callback = output_callback
                 return system
+            # Inject project_id so system can access it
+            system_config["project_id"] = self.project_id
             return create_system(
                 system_config,
                 output_callback=output_callback,
@@ -716,6 +718,8 @@ class BenchmarkRunner:
                 if output_callback is not None:
                     system._output_callback = output_callback
             else:
+                # Inject project_id so system can access it
+                system_config["project_id"] = self.project_id
                 system = create_system(
                     system_config,
                     output_callback=output_callback,
@@ -1107,6 +1111,8 @@ class BenchmarkRunner:
         # Create modified config for system instantiation
         modified_config = copy.deepcopy(system_config)
         modified_config["setup"] = modified_setup
+        # Inject project_id so system can access it
+        modified_config["project_id"] = self.project_id
 
         return create_system(
             modified_config,
@@ -1446,6 +1452,8 @@ class BenchmarkRunner:
             console.print(f"\n🔧 Preparing storage for: [bold]{system_name}[/bold]")
 
             try:
+                # Inject project_id so system can access it
+                system_config["project_id"] = self.project_id
                 system = create_system(
                     system_config, workload_config=self.config.get("workload", {})
                 )
@@ -1992,6 +2000,8 @@ class BenchmarkRunner:
                     system_config = None
             if not system_config:
                 raise SystemError(f"System {system_name} not found")
+            # Inject project_id so system can access it
+            system_config["project_id"] = self.project_id
             system = create_system(system_config)
 
             if system.is_healthy():

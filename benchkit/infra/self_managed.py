@@ -90,6 +90,19 @@ class SelfManagedDeployment(ABC):
     def get_connection_info(self) -> SelfManagedConnectionInfo | None:
         """Get connection details."""
 
+    def get_system_info(self) -> dict[str, Any] | None:
+        """Get system information for probing (optional, for systems without SSH).
+
+        This method allows self-managed systems to provide system information
+        via their native API (e.g., database queries) when SSH access is not
+        available.
+
+        Returns:
+            Dictionary with system info (similar to system_probe.py output),
+            or None if not available.
+        """
+        return None  # Default: not implemented, subclasses can override
+
     def install(self, options: dict[str, Any] | None = None) -> bool:
         """Convenience method: init + deploy in one step.
 
@@ -176,22 +189,35 @@ class ExasolPersonalEdition(SelfManagedDeployment):
     STATUS_INTERRUPTED = "interrupted"
     STATUS_DEPLOYMENT_FAILED = "deployment_failed"
 
+    # GitHub repository for CLI releases
+    CLI_REPO = "exasol/personal-edition"
+    CLI_DEFAULT_VERSION = "0.5.1"
+
     def __init__(
         self,
         deployment_dir: str,
-        cli_path: str = "exasol",
         output_callback: Any | None = None,
+        setup_config: dict[str, Any] | None = None,
     ):
         """Initialize ExasolPersonalEdition manager.
 
         Args:
             deployment_dir: Directory where personal edition stores state
-            cli_path: Path to the 'exasol' CLI executable
             output_callback: Optional callback for logging output
+            setup_config: Setup configuration with exasol_pe_version and other options
         """
         self.deployment_dir = Path(deployment_dir).expanduser().resolve()
-        self.cli_path = cli_path
         self._output_callback = output_callback
+        self._setup_config = setup_config or {}
+
+        # Extract CLI version from setup_config
+        self._cli_version = self._setup_config.get(
+            "exasol_pe_version", self.CLI_DEFAULT_VERSION
+        )
+
+        # CLI path: in parent of deployment_dir (deployment_dir is typically state subdir)
+        cli_dir = self.deployment_dir.parent
+        self.cli_path = str(cli_dir / "exasol")
 
     def _log(self, message: str) -> None:
         """Log a message via callback or print."""
@@ -199,6 +225,76 @@ class ExasolPersonalEdition(SelfManagedDeployment):
             self._output_callback(message)
         else:
             print(message)
+
+    def ensure_cli_available(self) -> bool:
+        """Ensure the CLI binary is available, downloading if necessary.
+
+        Downloads the Exasol Personal Edition CLI from GitHub releases if
+        it's not already present at cli_path.
+
+        Returns:
+            True if CLI is available (was found or successfully downloaded),
+            False if download failed.
+        """
+        import os
+        import platform
+
+        from benchkit.common.file_management import download_github_release
+
+        cli_path = Path(self.cli_path)
+
+        # Check if CLI already exists
+        if cli_path.exists() and cli_path.is_file():
+            self._log(f"CLI already available at {cli_path}")
+            return True
+
+        # Determine the correct asset for the platform
+        system = platform.system()
+        machine = platform.machine()
+
+        if system == "Linux":
+            if machine == "x86_64":
+                asset_pattern = "exasol-personal-edition_Linux_x86_64.tar.gz"
+            elif machine == "aarch64":
+                asset_pattern = "exasol-personal-edition_Linux_arm64.tar.gz"
+            else:
+                self._log(f"Unsupported Linux architecture: {machine}")
+                return False
+        elif system == "Darwin":
+            if machine == "x86_64":
+                asset_pattern = "exasol-personal-edition_macOS_x86_64.tar.gz"
+            elif machine == "arm64":
+                asset_pattern = "exasol-personal-edition_macOS_arm64.tar.gz"
+            else:
+                self._log(f"Unsupported macOS architecture: {machine}")
+                return False
+        else:
+            self._log(f"Unsupported platform: {system}")
+            return False
+
+        self._log(f"Downloading Exasol PE CLI v{self._cli_version}...")
+
+        # Get GH_TOKEN for private repo access
+        gh_token = os.environ.get("GH_TOKEN")
+
+        # Ensure target directory exists
+        cli_dir = cli_path.parent
+        cli_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            downloaded_path = download_github_release(
+                repo=self.CLI_REPO,
+                version=self._cli_version,
+                asset_pattern=asset_pattern,
+                target_dir=cli_dir,
+                gh_token=gh_token,
+                binary_name="exasol",
+            )
+            self._log(f"CLI downloaded to {downloaded_path}")
+            return True
+        except RuntimeError as e:
+            self._log(f"Failed to download CLI: {e}")
+            return False
 
     def _run_command(
         self, args: list[str], timeout: int = 1800
@@ -465,6 +561,82 @@ class ExasolPersonalEdition(SelfManagedDeployment):
             self._log(f"Failed to read secrets file: {e}")
             return None
 
+    def get_system_info(self) -> dict[str, Any] | None:
+        """Query Exasol system info via database connection.
+
+        This provides system information when SSH probing is not available
+        or as supplementary info. Queries Exasol's system tables.
+
+        Returns:
+            Dictionary with system info, or None if unavailable.
+        """
+        conn_info = self.get_connection_info()
+        if not conn_info or not conn_info.host:
+            return None
+
+        try:
+            import pyexasol
+        except ImportError:
+            self._log("pyexasol not available for system info query")
+            return None
+
+        try:
+            conn = pyexasol.connect(
+                dsn=f"{conn_info.host}:{conn_info.port}",
+                user=conn_info.username or "sys",
+                password=conn_info.password or "",
+                encryption=True,
+                compression=True,
+            )
+
+            system_info: dict[str, Any] = {
+                "probe_timestamp": None,
+                "hostname": conn_info.host,
+                "source": "exasol_api",
+            }
+
+            # Query system info from EXA_SYSTEM_PROPERTIES
+            try:
+                props = conn.execute(
+                    "SELECT PROPERTY_NAME, PROPERTY_VALUE FROM EXA_SYSTEM_PROPERTIES"
+                ).fetchall()
+                system_info["exasol_properties"] = {row[0]: row[1] for row in props}
+            except Exception as e:
+                self._log(f"Failed to query system properties: {e}")
+
+            # Query cluster info
+            try:
+                nodes = conn.execute(
+                    "SELECT NODE_NAME, NODE_STATE, ACTIVE_SESSIONS "
+                    "FROM EXA_STATISTICS.EXA_MONITOR_LAST_DAY "
+                    "WHERE MEASURE_TIME = (SELECT MAX(MEASURE_TIME) FROM EXA_STATISTICS.EXA_MONITOR_LAST_DAY)"
+                ).fetchall()
+                system_info["cluster_nodes"] = [
+                    {"name": row[0], "state": row[1], "sessions": row[2]}
+                    for row in nodes
+                ]
+            except Exception:
+                # Table might not exist or be accessible
+                pass
+
+            # Get database version
+            try:
+                version = conn.execute(
+                    "SELECT PARAM_VALUE FROM SYS.EXA_METADATA "
+                    "WHERE PARAM_NAME = 'databaseProductVersion'"
+                ).fetchone()
+                if version:
+                    system_info["database_version"] = version[0]
+            except Exception:
+                pass
+
+            conn.close()
+            return system_info
+
+        except Exception as e:
+            self._log(f"Failed to query system info: {e}")
+            return None
+
     def install(self, options: dict[str, Any] | None = None) -> bool:
         """Convenience method: init + deploy in one step.
 
@@ -536,6 +708,7 @@ def get_self_managed_deployment(
     system_kind: str,
     deployment_dir: str,
     output_callback: Any | None = None,
+    setup_config: dict[str, Any] | None = None,
 ) -> SelfManagedDeployment | None:
     """Factory function to create a self-managed deployment handler.
 
@@ -546,6 +719,7 @@ def get_self_managed_deployment(
         system_kind: The kind of system (e.g., "exasol", "clickhouse")
         deployment_dir: Directory where the deployment stores its state
         output_callback: Optional callback for logging output
+        setup_config: System setup configuration (passed to deployment class)
 
     Returns:
         SelfManagedDeployment instance if the system kind supports self-managed
@@ -563,4 +737,5 @@ def get_self_managed_deployment(
     return deployment_class(
         deployment_dir=deployment_dir,
         output_callback=output_callback,
+        setup_config=setup_config,
     )

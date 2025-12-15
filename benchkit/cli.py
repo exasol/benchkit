@@ -79,20 +79,35 @@ def probe(
 
     console.print(f"[blue]Probing system info for project:[/] {cfg['project_id']}")
 
-    # Check if this is a cloud benchmark with multiple systems
-    from .common.cli_helpers import is_any_system_cloud_mode
+    # Check if this is a cloud or managed benchmark
+    from .common.cli_helpers import is_any_system_cloud_mode, is_any_system_managed_mode
 
-    if is_any_system_cloud_mode(cfg):
-        console.print("[blue]Multi-system cloud benchmark detected[/]")
-        console.print("[blue]Collecting system information from all instances...[/]")
+    has_cloud = is_any_system_cloud_mode(cfg)
+    has_managed = is_any_system_managed_mode(cfg)
 
-        # Probe each remote instance
+    any_success = True
+
+    if has_cloud:
+        console.print("[blue]Cloud benchmark detected - probing remote instances...[/]")
         success = _probe_remote_systems(cfg, outdir)
         if success:
-            console.print("[green]✓ Remote system probes completed[/]")
+            console.print("[green]✓ Cloud system probes completed[/]")
         else:
-            console.print("[red]✗ Some remote system probes failed[/]")
-    else:
+            console.print("[red]✗ Some cloud system probes failed[/]")
+            any_success = False
+
+    if has_managed:
+        console.print(
+            "[blue]Managed systems detected - probing managed deployments...[/]"
+        )
+        success = _probe_managed_systems(cfg, outdir)
+        if success:
+            console.print("[green]✓ Managed system probes completed[/]")
+        else:
+            console.print("[red]✗ Some managed system probes failed[/]")
+            any_success = False
+
+    if not has_cloud and not has_managed:
         # Local benchmark - probe current system
         meta = probe_all(outdir)
         console.print(f"[green]✓ System probe saved to:[/] {outdir / 'system.json'}")
@@ -100,6 +115,9 @@ def probe(
             f"[dim]Found {meta['cpu_count_logical']} logical CPUs, "
             f"{meta['memory_total_gb']}GB RAM[/]"
         )
+
+    if (has_cloud or has_managed) and not any_success:
+        raise typer.Exit(1)
 
 
 @app.command()
@@ -1103,6 +1121,117 @@ def check(
     console.print("\n[green]Configuration is valid and ready to use.[/green]")
 
 
+def _apply_managed_systems(cfg: dict[str, Any]) -> bool:
+    """Deploy all self-managed systems in the config.
+
+    This is called during 'infra apply' to deploy systems like Exasol Personal Edition
+    that manage their own infrastructure.
+
+    Args:
+        cfg: Configuration dictionary
+
+    Returns:
+        True if all managed systems deployed successfully
+    """
+    from .common.cli_helpers import get_managed_deployment_dir, get_managed_systems
+    from .infra.managed_state import save_managed_state
+    from .infra.self_managed import get_self_managed_deployment
+
+    managed_systems = get_managed_systems(cfg)
+    project_id = cfg.get("project_id", "default")
+
+    if not managed_systems:
+        return True
+
+    all_success = True
+
+    for system in managed_systems:
+        system_name = system["name"]
+        system_kind = system["kind"]
+        setup_config = system.get("setup", {})
+
+        console.print(f"\n  Deploying [bold]{system_name}[/bold] ({system_kind})...")
+
+        # Get deployment directory
+        deployment_dir = get_managed_deployment_dir(cfg, system)
+
+        # Create deployment handler
+        deployment = get_self_managed_deployment(
+            system_kind=system_kind,
+            deployment_dir=deployment_dir,
+            output_callback=lambda msg: console.print(f"    {msg}"),
+            setup_config=setup_config,
+        )
+
+        if deployment is None:
+            console.print(
+                f"  [red]✗ System kind '{system_kind}' does not support managed deployment[/red]"
+            )
+            all_success = False
+            continue
+
+        # Ensure CLI is available (download if needed)
+        if hasattr(deployment, "ensure_cli_available"):
+            console.print("    Ensuring CLI is available...")
+            if not deployment.ensure_cli_available():
+                console.print("  [red]✗ Failed to ensure CLI is available[/red]")
+                all_success = False
+                continue
+
+        # Build options from setup config
+        options = {}
+        option_keys = [
+            "cluster_size",
+            "instance_type",
+            "data_volume_size",
+            "os_volume_size",
+            "volume_type",
+            "db_password",
+            "adminui_password",
+            "allowed_cidr",
+            "vpc_cidr",
+            "subnet_cidr",
+        ]
+        for key in option_keys:
+            value = setup_config.get(key)
+            if value is not None:
+                options[key] = value
+
+        # Deploy the system
+        if not deployment.ensure_running(options):
+            console.print(f"  [red]✗ Failed to deploy {system_name}[/red]")
+            all_success = False
+            continue
+
+        # Get connection info and save state
+        conn_info = deployment.get_connection_info()
+        if conn_info:
+            console.print(f"    Connection: {conn_info.host}:{conn_info.port}")
+            save_managed_state(
+                project_id=project_id,
+                system_name=system_name,
+                system_kind=system_kind,
+                status="deployed",
+                connection_info=conn_info,
+                deployment_dir=deployment_dir,
+            )
+            console.print(f"  [green]✓ {system_name} deployed successfully[/green]")
+        else:
+            console.print(
+                f"  [yellow]⚠ {system_name} deployed but no connection info available[/yellow]"
+            )
+            save_managed_state(
+                project_id=project_id,
+                system_name=system_name,
+                system_kind=system_kind,
+                status="deployed",
+                connection_info=None,
+                deployment_dir=deployment_dir,
+            )
+
+    return all_success
+
+
 def _destroy_all_environments(cfg: dict[str, Any]) -> tuple[bool, list[str]]:
     """Destroy infrastructure for all environments in a multi-environment config.
 
@@ -1181,21 +1310,18 @@ def _destroy_all_environments(cfg: dict[str, Any]) -> tuple[bool, list[str]]:
             console.print(f"  [red]✗ {error_msg}[/red]")
 
     # Destroy managed environments (e.g., Exasol Personal Edition)
+    from .common.cli_helpers import get_managed_deployment_dir
+    from .infra.managed_state import clear_managed_state
+
     for env_name, _env_config, system_config in managed_envs:
         system_name = system_config.get("name", "unknown")
-        setup = system_config.get("setup", {})
 
         console.print(
             f"\n[blue]Destroying managed infrastructure for {system_name} (env: {env_name})...[/blue]"
         )
 
-        # Determine deployment directory
-        # Priority: 1) setup.deployment_dir, 2) results/<project_id>/exasol-pe/<system_name>
-        deployment_dir = setup.get("deployment_dir")
-        if not deployment_dir:
-            deployment_dir = str(
-                Path("results") / project_id / "exasol-pe" / system_name
-            )
+        # Get deployment directory using the standard path
+        deployment_dir = get_managed_deployment_dir(cfg, system_config)
 
         console.print(f"  Deployment directory: [cyan]{deployment_dir}[/cyan]")
 
@@ -1204,6 +1330,8 @@ def _destroy_all_environments(cfg: dict[str, Any]) -> tuple[bool, list[str]]:
             console.print(
                 "  [yellow]⚠ Deployment directory does not exist, skipping[/yellow]"
             )
+            # Still clear state file if it exists
+            clear_managed_state(project_id, system_name)
             continue
 
         try:
@@ -1227,6 +1355,8 @@ def _destroy_all_environments(cfg: dict[str, Any]) -> tuple[bool, list[str]]:
                 console.print(
                     f"  [yellow]⚠ No deployment found in {deployment_dir}, skipping[/yellow]"
                 )
+                # Still clear state file if it exists
+                clear_managed_state(project_id, system_name)
                 continue
 
             # Destroy the deployment
@@ -1234,6 +1364,11 @@ def _destroy_all_environments(cfg: dict[str, Any]) -> tuple[bool, list[str]]:
                 console.print(
                     f"  [green]✓ Managed infrastructure for {system_name} destroyed[/green]"
                 )
+                # Clear state file after successful destroy
+                if clear_managed_state(project_id, system_name):
+                    console.print(
+                        f"  [green]✓ State file cleared for {system_name}[/green]"
+                    )
             else:
                 all_success = False
                 error_msg = f"Managed destroy failed for {system_name}"
@@ -1356,40 +1491,67 @@ def infra(
             raise typer.Exit(1)
         return
 
-    # For plan and apply actions, use single-provider InfraManager
-    manager = InfraManager(provider, cfg)
-    console.print(f"  State:   [cyan]{manager.project_state_dir}[/cyan]")
-    console.print()
+    # Import managed systems helpers
+    from .common.cli_helpers import (
+        get_managed_deployment_dir,
+        get_managed_systems,
+        is_any_system_managed_mode,
+    )
 
-    console.print(f"[blue]Running infrastructure {action} on {provider}[/]")
-    if action == "apply":
-        result = manager.apply(wait_for_init=not no_wait)
-    else:
-        result = getattr(manager, action)()
+    has_cloud = is_any_system_cloud_mode(cfg)
+    has_managed = is_any_system_managed_mode(cfg)
 
-    if result.success:
-        console.print(f"[green]✓ Infrastructure {action} completed[/]")
+    # For plan and apply actions on cloud systems, use InfraManager
+    if has_cloud:
+        manager = InfraManager(provider, cfg)
+        console.print(f"  State:   [cyan]{manager.project_state_dir}[/cyan]")
+        console.print()
 
-        # For plan command, show detailed output
-        if action == "plan" and result.plan_output:
-            console.print("\n[bold]Terraform Plan Details:[/bold]")
-            # Display the plan output with some formatting
-            for line in result.plan_output.split("\n"):
-                if line.strip():
-                    # Color-code key terraform plan lines
-                    if line.strip().startswith("+ "):
-                        console.print(f"[green]{line}[/green]")
-                    elif line.strip().startswith("- "):
-                        console.print(f"[red]{line}[/red]")
-                    elif line.strip().startswith("~ "):
-                        console.print(f"[yellow]{line}[/yellow]")
-                    elif "Plan:" in line:
-                        console.print(f"[bold blue]{line}[/bold blue]")
-                    else:
-                        console.print(line)
-    else:
-        console.print(f"[red]✗ Infrastructure {action} failed:[/] {result.error}")
-        raise typer.Exit(1)
+        console.print(f"[blue]Running infrastructure {action} on {provider}[/]")
+        if action == "apply":
+            result = manager.apply(wait_for_init=not no_wait)
+        else:
+            result = getattr(manager, action)()
+
+        if result.success:
+            console.print(f"[green]✓ Cloud infrastructure {action} completed[/]")
+
+            # For plan command, show detailed output
+            if action == "plan" and result.plan_output:
+                console.print("\n[bold]Terraform Plan Details:[/bold]")
+                # Display the plan output with some formatting
+                for line in result.plan_output.split("\n"):
+                    if line.strip():
+                        # Color-code key terraform plan lines
+                        if line.strip().startswith("+ "):
+                            console.print(f"[green]{line}[/green]")
+                        elif line.strip().startswith("- "):
+                            console.print(f"[red]{line}[/red]")
+                        elif line.strip().startswith("~ "):
+                            console.print(f"[yellow]{line}[/yellow]")
+                        elif "Plan:" in line:
+                            console.print(f"[bold blue]{line}[/bold blue]")
+                        else:
+                            console.print(line)
+        else:
+            console.print(f"[red]✗ Infrastructure {action} failed:[/] {result.error}")
+            raise typer.Exit(1)
+
+    # For apply action, also deploy managed systems
+    if action == "apply" and has_managed:
+        console.print()
+        console.print("[blue]Deploying self-managed systems...[/blue]")
+        managed_success = _apply_managed_systems(cfg)
+        if not managed_success:
+            console.print("[red]✗ Managed systems deployment failed[/red]")
+            raise typer.Exit(1)
+        console.print("[green]✓ Managed systems deployed successfully[/green]")
+
+    # If no cloud systems but has managed, we still succeed
+    if not has_cloud and not has_managed:
+        console.print(
+            "[yellow]No cloud or managed systems found in config. Nothing to do.[/yellow]"
+        )
 
 
 @app.command()
@@ -1910,6 +2072,83 @@ def _show_detailed_status(cfg: dict[str, Any], config_file: Path) -> None:
         console.print()
         _show_infrastructure_details(cfg, systems)
 
+    # Show managed system status
+    from .common.cli_helpers import is_any_system_managed_mode
+
+    if is_any_system_managed_mode(cfg):
+        console.print()
+        _show_managed_system_status(cfg, systems)
+
+
+def _show_managed_system_status(
+    cfg: dict[str, Any], systems: list[dict[str, Any]]
+) -> None:
+    """Show status of managed systems (like Exasol Personal Edition)."""
+    from .common.cli_helpers import get_all_environments, get_managed_deployment_dir
+    from .common.enums import EnvironmentMode
+    from .infra.managed_state import load_managed_state
+
+    project_id = cfg.get("project_id", "default")
+    environments = get_all_environments(cfg)
+
+    # Find managed systems
+    managed_systems = []
+    for system in systems:
+        env_name = system.get("environment") or "default"
+        env_cfg = environments.get(env_name, {})
+        mode = env_cfg.get("mode", EnvironmentMode.LOCAL.value)
+        if mode == EnvironmentMode.MANAGED.value:
+            managed_systems.append(system)
+
+    if not managed_systems:
+        return
+
+    managed_table = Table(
+        show_header=True,
+        header_style="bold magenta",
+        title="Managed Systems Status",
+    )
+    managed_table.add_column("System", style="bold")
+    managed_table.add_column("Status", justify="center")
+    managed_table.add_column("Host", style="cyan")
+    managed_table.add_column("Port", justify="center")
+    managed_table.add_column("Deployed At", style="dim")
+
+    for system in managed_systems:
+        system_name = system["name"]
+        state = load_managed_state(project_id, system_name)
+
+        if state:
+            status = state.get("status", "unknown")
+            conn_info = state.get("connection_info", {})
+            host = conn_info.get("host", "-")
+            port = str(conn_info.get("port", "-"))
+            deployed_at = state.get("deployed_at", "-")
+
+            # Truncate timestamp for display
+            if deployed_at and deployed_at != "-":
+                deployed_at = deployed_at[:19].replace("T", " ")
+
+            # Color-code status
+            if status in ["running", "database_ready", "deployed"]:
+                status_cell = f"[green]✓ {status}[/]"
+            elif status == "not_initialized":
+                status_cell = f"[dim]{status}[/]"
+            else:
+                status_cell = f"[yellow]{status}[/]"
+
+            managed_table.add_row(system_name, status_cell, host, port, deployed_at)
+        else:
+            managed_table.add_row(
+                system_name,
+                "[red]No state[/]",
+                "-",
+                "-",
+                "[dim]Run 'infra apply' first[/]",
+            )
+
+    console.print(managed_table)
+
 
 def _show_infrastructure_details(
     cfg: dict[str, Any], systems: list[dict[str, Any]]
@@ -2190,6 +2429,126 @@ def _probe_remote_systems(config: dict[str, Any], outdir: Path) -> bool:
     except Exception as e:
         console.print(f"[red]Error during remote system probing: {e}[/red]")
         return False
+
+
+def _probe_managed_systems(config: dict[str, Any], outdir: Path) -> bool:
+    """Probe system information on managed deployments (like Exasol PE).
+
+    Managed systems are probed either via SSH (if ssh info is in connection_info.extra)
+    or via API using the deployment's get_system_info() method.
+    """
+    import os
+
+    from .common.cli_helpers import get_managed_deployment_dir, get_managed_systems
+    from .infra.managed_state import load_managed_state
+
+    try:
+        managed_systems = get_managed_systems(config)
+        if not managed_systems:
+            console.print("[yellow]No managed systems found in config[/yellow]")
+            return True
+
+        project_id = config.get("project_id", "default")
+        success_count = 0
+        total_systems = len(managed_systems)
+
+        for system in managed_systems:
+            system_name = system["name"]
+            system_kind = system["kind"]
+
+            console.print(f"[blue]Probing managed system: {system_name}...[/blue]")
+
+            # Load state for this system
+            state = load_managed_state(project_id, system_name)
+            if not state:
+                console.print(
+                    f"[red]No state found for {system_name}. "
+                    f"Run 'infra apply' first to deploy managed systems.[/red]"
+                )
+                continue
+
+            connection_info = state.get("connection_info", {})
+            extra = connection_info.get("extra", {})
+
+            # Try SSH probing first if SSH info is available
+            ssh_command = extra.get("ssh_command")
+            if ssh_command:
+                # Parse SSH command to extract host, user, and key
+                # Format: "ssh -i ~/.ssh/key.pem user@host"
+                success = _probe_managed_via_ssh(system_name, ssh_command, outdir)
+                if success:
+                    console.print(
+                        f"[green]✓ {system_name} probe completed (via SSH)[/green]"
+                    )
+                    success_count += 1
+                    continue
+                else:
+                    console.print(
+                        f"[yellow]SSH probe failed for {system_name}, "
+                        f"trying API probe...[/yellow]"
+                    )
+
+            # Fall back to API probing via get_system_info()
+            deployment_dir = get_managed_deployment_dir(config, system)
+            deployment = get_self_managed_deployment(
+                system_kind, deployment_dir, console.print
+            )
+
+            if deployment:
+                system_info = deployment.get_system_info()
+                if system_info:
+                    # Save the system info to a file
+                    system_file = outdir / f"system_{system_name}.json"
+                    with open(system_file, "w") as f:
+                        json.dump(system_info, f, indent=2)
+                    console.print(
+                        f"[green]✓ {system_name} probe completed (via API)[/green]"
+                    )
+                    success_count += 1
+                    continue
+
+            console.print(f"[red]✗ {system_name} probe failed[/red]")
+
+        console.print(
+            f"[blue]Completed {success_count}/{total_systems} managed system probes[/blue]"
+        )
+        return success_count == total_systems
+
+    except Exception as e:
+        console.print(f"[red]Error during managed system probing: {e}[/red]")
+        return False
+
+
+def _probe_managed_via_ssh(system_name: str, ssh_command: str, outdir: Path) -> bool:
+    """Probe a managed system via SSH using its ssh_command from connection info.
+
+    Args:
+        system_name: Name of the system
+        ssh_command: Full SSH command (e.g., "ssh -i ~/.ssh/key.pem user@host")
+        outdir: Output directory for probe results
+    """
+    import os
+    import re
+
+    # Parse the SSH command to extract components
+    # Format: "ssh -i /path/to/key user@host" or "ssh -i /path/to/key -p port user@host"
+    match = re.match(
+        r"ssh\s+(?:-i\s+([^\s]+)\s+)?(?:-p\s+(\d+)\s+)?(\w+)@([\w\.\-]+)",
+        ssh_command.strip(),
+    )
+    if not match:
+        console.print(f"[yellow]Could not parse SSH command: {ssh_command}[/yellow]")
+        return False
+
+    key_path = match.group(1) or "~/.ssh/id_rsa"
+    # port = match.group(2) or "22"  # Not used directly, embedded in ssh_command
+    ssh_user = match.group(3)
+    host = match.group(4)
+
+    # Expand tilde in key path
+    key_path = os.path.expanduser(key_path)
+
+    return _probe_single_remote_system(system_name, host, key_path, ssh_user, outdir)
 
 
 def _probe_single_remote_system(

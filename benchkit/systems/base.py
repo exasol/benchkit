@@ -203,86 +203,75 @@ class SystemUnderTest(ABC):
 
     @exclude_from_package
     def _install_managed(self) -> bool:
-        """Install using self-managed deployment (e.g., Exasol Personal Edition).
+        """Configure connection for self-managed deployment (e.g., Exasol PE).
 
-        Self-managed deployments handle their own infrastructure provisioning
-        via external tools (like the 'exasol' CLI for Personal Edition).
-        This method orchestrates that deployment through the SelfManagedDeployment
-        abstraction.
+        Self-managed systems are deployed during 'infra apply', NOT during setup.
+        This method loads connection info from the state file saved during deployment.
+
+        If the system was not deployed via 'infra apply', this will FAIL.
+        There is no backward compatibility - 'infra apply' must be run first.
 
         Returns:
-            True if installation succeeded, False otherwise
+            True if configuration succeeded, False otherwise
         """
-        from benchkit.infra.self_managed import get_self_managed_deployment
+        from benchkit.infra.managed_state import load_managed_state
 
-        # Get deployment directory from config or use default
         project_id = self.config.get("project_id", "default")
-        deployment_dir = self.setup_config.get(
-            "deployment_dir", f"results/{project_id}/managed/{self.name}"
-        )
 
-        self._log(f"Using self-managed deployment for {self.kind}")
-        self._log(f"Deployment directory: {deployment_dir}")
+        self._log(f"Loading state for managed system: {self.name}")
 
-        deployment = get_self_managed_deployment(
-            system_kind=self.kind,
-            deployment_dir=deployment_dir,
-            output_callback=self._log,
-        )
+        # Load state from managed_state.py (saved during infra apply)
+        state = load_managed_state(project_id, self.name)
 
-        if deployment is None:
-            self._log(f"System '{self.kind}' does not support managed deployment")
-            return False
-
-        # Build options from config for init/deploy
-        options = {}
-        option_keys = [
-            "cluster_size",
-            "instance_type",
-            "data_volume_size",
-            "os_volume_size",
-            "volume_type",
-            "db_password",
-            "adminui_password",
-            "allowed_cidr",
-            "vpc_cidr",
-            "subnet_cidr",
-        ]
-        for key in option_keys:
-            value = self.setup_config.get(key)
-            if value is not None:
-                options[key] = value
-
-        self._log(f"Deployment options: {options}")
-
-        # Ensure deployment is running (will init + deploy if needed)
-        if not deployment.ensure_running(options):
-            self._log("Failed to ensure managed deployment is running")
-            return False
-
-        # Update connection info from the running deployment
-        conn_info = deployment.get_connection_info()
-        if conn_info:
+        if not state:
             self._log(
-                f"Got connection info: host={conn_info.host}, port={conn_info.port}"
+                f"ERROR: No state found for managed system '{self.name}'. "
+                f"You must run 'infra apply' before 'setup' to deploy managed systems."
             )
-            # Update instance attributes for connection
-            if hasattr(self, "host"):
-                self.host = conn_info.host
-            if hasattr(self, "port"):
-                self.port = conn_info.port
-            if conn_info.password and hasattr(self, "password"):
-                self.password = conn_info.password
-            if conn_info.username and hasattr(self, "username"):
-                self.username = conn_info.username
+            return False
 
-            # Store extra info (like certificate fingerprint) for later use
-            if conn_info.extra:
-                if not hasattr(self, "_managed_extra"):
-                    self._managed_extra: dict[str, Any] = {}
-                self._managed_extra.update(conn_info.extra)
+        status = state.get("status", "unknown")
+        if status not in ["running", "database_ready", "deployed"]:
+            self._log(
+                f"ERROR: Managed system '{self.name}' is not in a ready state. "
+                f"Current status: {status}. Run 'infra apply' to deploy."
+            )
+            return False
 
-        self._log("Self-managed deployment is ready")
+        # Get connection info from state
+        connection_info = state.get("connection_info", {})
+        if not connection_info:
+            self._log(
+                f"ERROR: No connection info found in state for '{self.name}'. "
+                f"The deployment may have failed. Run 'infra apply' again."
+            )
+            return False
+
+        # Apply connection info to system attributes
+        host = connection_info.get("host")
+        port = connection_info.get("port")
+        username = connection_info.get("username")
+        # Note: password is not stored in state for security reasons
+        # It should be loaded from config or environment
+
+        self._log(f"Got connection info from state: host={host}, port={port}")
+
+        if host and hasattr(self, "host"):
+            self.host = host
+        if port and hasattr(self, "port"):
+            self.port = port
+        if username and hasattr(self, "username"):
+            self.username = username
+
+        # Store extra info (like certificate fingerprint, SSH info) for later use
+        extra = connection_info.get("extra", {})
+        if extra:
+            if not hasattr(self, "_managed_extra"):
+                self._managed_extra: dict[str, Any] = {}
+            self._managed_extra.update(extra)
+            self._log(f"Loaded extra info: {list(extra.keys())}")
+
+        self._log(f"Managed system '{self.name}' configured from state")
         return True
 
     @exclude_from_package

@@ -296,3 +296,75 @@ def print_workload_info(cfg: dict[str, Any]) -> None:
             f"[dim]Workload: {workload.get('name', 'unknown')} "
             f"(SF={workload.get('scale_factor', '?')})[/]"
         )
+
+
+def is_any_system_managed_mode(cfg: dict[str, Any]) -> bool:
+    """Check if any system in the config uses a managed environment.
+
+    Managed environments are self-managed deployments like Exasol Personal Edition
+    that handle their own infrastructure provisioning.
+
+    Args:
+        cfg: Configuration dictionary
+
+    Returns:
+        True if any system uses managed mode
+    """
+    environments = get_all_environments(cfg)
+
+    # Get all environment names used by systems
+    used_env_names = {
+        system.get("environment") or "default" for system in cfg.get("systems", [])
+    }
+
+    # Check if any used environment is managed mode
+    for env_name in used_env_names:
+        env_cfg = environments.get(env_name, {})
+        mode = env_cfg.get("mode", EnvironmentMode.LOCAL.value)
+        if mode == EnvironmentMode.MANAGED.value:
+            return True
+
+    return False
+
+
+def get_managed_systems(cfg: dict[str, Any]) -> list[dict[str, Any]]:
+    """Get list of systems that use managed environments.
+
+    Args:
+        cfg: Configuration dictionary
+
+    Returns:
+        List of system configuration dictionaries for managed systems
+    """
+    environments = get_all_environments(cfg)
+    managed_systems: list[dict[str, Any]] = []
+
+    for system in cfg.get("systems", []):
+        env_name = system.get("environment") or "default"
+        env_cfg = environments.get(env_name, {})
+        mode = env_cfg.get("mode", EnvironmentMode.LOCAL.value)
+
+        if mode == EnvironmentMode.MANAGED.value:
+            managed_systems.append(system)
+
+    return managed_systems
+
+
+def get_managed_deployment_dir(cfg: dict[str, Any], system: dict[str, Any]) -> str:
+    """Get the deployment directory for a managed system.
+
+    The directory structure is:
+        results/{project_id}/managed/{system_name}/state/
+
+    Args:
+        cfg: Full configuration dictionary
+        system: System configuration dictionary
+
+    Returns:
+        Path to the deployment state directory
+    """
+    project_id = cfg.get("project_id", "default")
+    system_name = system["name"]
+    default_dir = f"results/{project_id}/managed/{system_name}/state"
+    deployment_dir = system.get("setup", {}).get("deployment_dir", default_dir)
+    return str(deployment_dir) if deployment_dir else default_dir
