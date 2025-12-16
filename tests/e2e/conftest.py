@@ -13,6 +13,7 @@ Available options:
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -133,6 +134,56 @@ def results_dir(project_id: str) -> Path:
 def expected_systems(loaded_config: dict[str, Any]) -> list[str]:
     """Return list of expected system names from config."""
     return [s["name"] for s in loaded_config.get("systems", [])]
+
+
+# =============================================================================
+# Artifact Cleanup
+# =============================================================================
+
+
+def _cleanup_e2e_artifacts(project_id: str) -> None:
+    """Remove E2E test artifacts (results dir, packages).
+
+    Artifacts cleaned:
+    - results/{project_id}/ - results directory
+    - packages/{project_id}_workload/ - package directory
+    - packages/{project_id}_workload.zip - package zip file
+    """
+    # Results directory
+    results_dir = Path("results") / project_id
+    if results_dir.exists():
+        shutil.rmtree(results_dir)
+
+    # Package directory and zip
+    packages_dir = Path("packages")
+    package_name = f"{project_id}_workload"
+
+    package_dir = packages_dir / package_name
+    if package_dir.exists():
+        shutil.rmtree(package_dir)
+
+    package_zip = packages_dir / f"{package_name}.zip"
+    if package_zip.exists():
+        package_zip.unlink()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def cleanup_e2e_artifacts(request: pytest.FixtureRequest, project_id: str) -> None:
+    """Clean up E2E test artifacts on start and end (unless skip_cleanup).
+
+    - On start: Always cleans up previous test artifacts
+    - On end: Cleans up only if --e2e-skip-cleanup is NOT set
+    """
+    # Always clean up on start to ensure fresh test environment
+    _cleanup_e2e_artifacts(project_id)
+
+    # Register finalizer to clean up on end (unless skip_cleanup)
+    def finalizer() -> None:
+        skip_cleanup = request.config.getoption("--e2e-skip-cleanup", default=False)
+        if not skip_cleanup:
+            _cleanup_e2e_artifacts(project_id)
+
+    request.addfinalizer(finalizer)
 
 
 # =============================================================================

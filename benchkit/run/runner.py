@@ -859,7 +859,9 @@ class BenchmarkRunner:
             )
             if deployment and deployment.SUPPORTS_REMOTE_EXECUTION:
                 console.print(f"🔧 Preparing remote environment for {system_name}...")
-                if not deployment.prepare_remote_environment(instance_manager):
+                if not deployment.prepare_remote_environment(
+                    instance_manager, system=system
+                ):
                     return False, {"error": "remote_environment_preparation_failed"}
                 console.print(
                     f"[green]✓ Remote environment ready for {system_name}[/green]"

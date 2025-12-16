@@ -146,7 +146,9 @@ class SelfManagedDeployment(ABC):
             extra=extra,
         )
 
-    def prepare_remote_environment(self, instance_manager: Any) -> bool:
+    def prepare_remote_environment(
+        self, instance_manager: Any, system: Any | None = None
+    ) -> bool:
         """Prepare remote environment for package execution.
 
         Called during setup phase to install required packages (unzip, etc.)
@@ -156,6 +158,7 @@ class SelfManagedDeployment(ABC):
 
         Args:
             instance_manager: CloudInstanceManager for remote execution
+            system: Optional SystemUnderTest instance for recording setup commands
 
         Returns:
             True if preparation succeeded

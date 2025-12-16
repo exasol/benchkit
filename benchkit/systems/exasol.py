@@ -2278,7 +2278,9 @@ class ExasolPersonalEdition(SelfManagedDeployment):
         cli_dir = self.deployment_dir.parent
         self.cli_path = str(cli_dir / "exasol")
 
-    def prepare_remote_environment(self, instance_manager: Any) -> bool:
+    def prepare_remote_environment(
+        self, instance_manager: Any, system: Any | None = None
+    ) -> bool:
         """Prepare remote environment for package execution.
 
         Installs required packages (python3, pip, venv, unzip) on the Exasol PE
@@ -2286,6 +2288,7 @@ class ExasolPersonalEdition(SelfManagedDeployment):
 
         Args:
             instance_manager: CloudInstanceManager for remote execution
+            system: Optional SystemUnderTest instance for recording setup commands
 
         Returns:
             True if preparation succeeded
@@ -2297,6 +2300,14 @@ class ExasolPersonalEdition(SelfManagedDeployment):
         install_cmd = (
             "sudo apt-get update && " f"sudo apt-get install -y {' '.join(packages)}"
         )
+
+        # Record the command for reproducibility if system is provided
+        if system and hasattr(system, "record_setup_command"):
+            system.record_setup_command(
+                install_cmd,
+                "Install Python and utilities for package execution",
+                "prerequisites",
+            )
 
         result = instance_manager.run_remote_command(install_cmd, debug=False)
         if not result.get("success"):
