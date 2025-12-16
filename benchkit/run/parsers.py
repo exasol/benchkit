@@ -4,7 +4,10 @@ from typing import Any
 
 import pandas as pd
 
+from ..common.markers import exclude_from_package
 
+
+@exclude_from_package
 def normalize_runs(results: list[dict[str, Any]]) -> pd.DataFrame:
     """
     Normalize benchmark results into a standard DataFrame format.

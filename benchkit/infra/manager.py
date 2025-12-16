@@ -10,6 +10,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ..common.cli_helpers import (
+    get_all_environments,
+    get_cloud_ssh_key_path,
+    get_environment_for_system,
+)
+from ..common.enums import EnvironmentMode
 from ..debug import is_debug_enabled
 from ..util import Timer, ensure_directory, safe_command
 
@@ -416,11 +422,21 @@ class InfraManager:
 
     def _prepare_terraform_vars(self) -> dict[str, str]:
         """Prepare terraform variables from configuration."""
-        env_config = self.config.get("env", {})
+        env_config = self.config.get("env") or {}
+        environments = self.config.get("environments") or {}
+
+        # Determine region - check env first, then look at cloud environments
+        region = env_config.get("region", "us-east-1")
+        if not env_config and environments:
+            # Find first cloud environment to get region
+            for env_cfg in environments.values():
+                if env_cfg.get("mode") in ["aws", "gcp", "azure"]:
+                    region = env_cfg.get("region", "us-east-1")
+                    break
 
         # Common variables
         tf_vars = {
-            "region": env_config.get("region", "us-east-1"),
+            "region": region,
             "project_id": self.config.get("project_id", "benchmark"),
         }
 
@@ -428,10 +444,20 @@ class InfraManager:
         all_required_ports = self._collect_required_ports()
 
         # Build generic systems configuration for Terraform
-        instances_config = env_config.get("instances", {})
+        # Support both legacy 'env.instances' and new 'environments.*.instances' formats
+        instances_config = env_config.get("instances") or {}
+
+        # If no instances in env, collect from environments
+        if not instances_config and environments:
+            for _env_name, env_cfg in environments.items():
+                if env_cfg.get("mode") in ["aws", "gcp", "azure"]:
+                    env_instances = env_cfg.get("instances") or {}
+                    instances_config.update(env_instances)
+
         if not instances_config:
             raise ValueError(
-                "env.instances configuration is required for multi-system benchmarks"
+                "Instance configuration is required for cloud benchmarks. "
+                "Define instances in 'env.instances' or 'environments.<name>.instances'"
             )
 
         # Get the actual systems that should be created (respects --systems filter)
@@ -476,15 +502,28 @@ class InfraManager:
         tf_vars["systems"] = json.dumps(systems_tf)
         tf_vars["required_ports"] = json.dumps(all_required_ports)
 
-        # Add SSH key if provided
+        # Add SSH key if provided - check env first, then environments
         ssh_key_name = env_config.get("ssh_key_name", "")
+        if not ssh_key_name and environments:
+            for env_cfg in environments.values():
+                if env_cfg.get("mode") in ["aws", "gcp", "azure"]:
+                    ssh_key_name = env_cfg.get("ssh_key_name", "")
+                    if ssh_key_name:
+                        break
         if ssh_key_name:
             tf_vars["ssh_key_name"] = ssh_key_name
 
         # Add external access option (default false for security)
-        tf_vars["allow_external_database_access"] = str(
-            env_config.get("allow_external_database_access", False)
-        ).lower()
+        allow_external = env_config.get("allow_external_database_access", False)
+        if not allow_external and environments:
+            for env_cfg in environments.values():
+                if env_cfg.get("mode") in ["aws", "gcp", "azure"]:
+                    allow_external = env_cfg.get(
+                        "allow_external_database_access", False
+                    )
+                    if allow_external:
+                        break
+        tf_vars["allow_external_database_access"] = str(allow_external).lower()
 
         return tf_vars
 
@@ -532,15 +571,25 @@ class InfraManager:
 
     def _prepare_minimal_terraform_vars(self) -> dict[str, str]:
         """Prepare minimal terraform variables for destroy operations."""
+        # Get region and SSH key from any cloud environment
+        environments = get_all_environments(self.config)
+        region = "us-east-1"
+        ssh_key_name = ""
+        for env_cfg in environments.values():
+            mode = env_cfg.get("mode", EnvironmentMode.LOCAL.value)
+            if EnvironmentMode.is_cloud_provider(mode):
+                region = env_cfg.get("region", region)
+                ssh_key_name = env_cfg.get("ssh_key_name", ssh_key_name)
+                break  # Use first cloud environment found
+
         # Only provide required variables without validating full configuration
         tf_vars = {
             "project_id": self.config.get("project_id", "benchmark"),
-            "region": self.config.get("env", {}).get("region", "us-east-1"),
+            "region": region,
             "systems": "{}",  # Empty systems for destroy
         }
 
         # Add SSH key if provided
-        ssh_key_name = self.config.get("env", {}).get("ssh_key_name", "")
         if ssh_key_name:
             tf_vars["ssh_key_name"] = ssh_key_name
 
@@ -932,10 +981,18 @@ class InfraManager:
             True if instance is ready, False otherwise
         """
         try:
-            # Get SSH configuration
-            ssh_config = self.config.get("env", {})
-            ssh_key_path = ssh_config.get("ssh_private_key_path", "~/.ssh/id_rsa")
-            ssh_user = ssh_config.get("ssh_user", "ubuntu")
+            # Get environment config for this specific system
+            _, env_config = get_environment_for_system(self.config, system_name)
+
+            # Get SSH configuration from the system's environment
+            ssh_key_path = env_config.get("ssh_private_key_path")
+            if not ssh_key_path:
+                # Fallback to helper that checks all cloud environments
+                ssh_key_path = get_cloud_ssh_key_path(self.config)
+            if not ssh_key_path:
+                ssh_key_path = "~/.ssh/id_rsa"
+
+            ssh_user = env_config.get("ssh_user", "ubuntu")
 
             # Expand tilde in SSH key path
             import os
@@ -994,35 +1051,41 @@ class CloudInstanceManager:
     """Manages individual cloud instances for benchmarks."""
 
     def __init__(
-        self, instance_info: dict[str, Any], ssh_private_key_path: str | None = None
+        self,
+        instance_info: dict[str, Any],
+        ssh_private_key_path: str | None = None,
+        ssh_user: str = "ubuntu",
+        ssh_port: int = 22,
     ):
         self.instance_info = instance_info
         self.public_ip = instance_info.get("public_ip")
         self.private_ip = instance_info.get("private_ip")
         self.ssh_private_key_path = ssh_private_key_path
+        self.ssh_user = ssh_user
+        self.ssh_port = ssh_port
 
     def _get_ssh_command_prefix(self) -> str:
-        """Get SSH command prefix with key if configured."""
+        """Get SSH command prefix with key and port if configured."""
+        import os
+
         ssh_opts = "-o StrictHostKeyChecking=no -o ConnectTimeout=5"
 
         if self.ssh_private_key_path:
-            # Expand ~ to home directory
-            import os
-
             key_path = os.path.expanduser(self.ssh_private_key_path)
             ssh_opts += f" -i {key_path}"
+
+        if self.ssh_port != 22:
+            ssh_opts += f" -p {self.ssh_port}"
 
         return f"ssh {ssh_opts}"
 
     def wait_for_ssh(self, timeout: int = 300) -> bool:
         """Wait for SSH to be available on the instance."""
-        import time
-
         start_time = time.time()
         while time.time() - start_time < timeout:
             ssh_cmd = self._get_ssh_command_prefix()
             result = safe_command(
-                f"{ssh_cmd} ubuntu@{self.public_ip} {shlex.quote('echo ready')}",
+                f"{ssh_cmd} {self.ssh_user}@{self.public_ip} {shlex.quote('echo ready')}",
                 timeout=10,
             )
 
@@ -1054,7 +1117,9 @@ class CloudInstanceManager:
             Dictionary with success, stdout, stderr, returncode, elapsed_s, command
         """
         ssh_cmd = self._get_ssh_command_prefix()
-        ssh_command = f"{ssh_cmd} ubuntu@{self.public_ip} {shlex.quote(command)}"
+        ssh_command = (
+            f"{ssh_cmd} {self.ssh_user}@{self.public_ip} {shlex.quote(command)}"
+        )
 
         # Use global debug state if no explicit debug parameter
         enable_debug = debug or is_debug_enabled()
@@ -1184,34 +1249,36 @@ class CloudInstanceManager:
 
     def copy_file_to_instance(self, local_path: Path, remote_path: str) -> bool:
         """Copy a file to the remote instance."""
+        import os
+
         scp_opts = "-o StrictHostKeyChecking=no"
 
         if self.ssh_private_key_path:
-            import os
-
             key_path = os.path.expanduser(self.ssh_private_key_path)
             scp_opts += f" -i {key_path}"
 
-        scp_command = (
-            f"scp {scp_opts} {local_path} ubuntu@{self.public_ip}:{remote_path}"
-        )
+        if self.ssh_port != 22:
+            scp_opts += f" -P {self.ssh_port}"
+
+        scp_command = f"scp {scp_opts} {local_path} {self.ssh_user}@{self.public_ip}:{remote_path}"
 
         result = safe_command(scp_command, timeout=300)
         return bool(result.get("success", False))
 
     def copy_file_from_instance(self, remote_path: str, local_path: Path) -> bool:
         """Copy a file from the remote instance."""
+        import os
+
         scp_opts = "-o StrictHostKeyChecking=no"
 
         if self.ssh_private_key_path:
-            import os
-
             key_path = os.path.expanduser(self.ssh_private_key_path)
             scp_opts += f" -i {key_path}"
 
-        scp_command = (
-            f"scp {scp_opts} ubuntu@{self.public_ip}:{remote_path} {local_path}"
-        )
+        if self.ssh_port != 22:
+            scp_opts += f" -P {self.ssh_port}"
+
+        scp_command = f"scp {scp_opts} {self.ssh_user}@{self.public_ip}:{remote_path} {local_path}"
 
         result = safe_command(scp_command, timeout=300)
         return bool(result.get("success", False))

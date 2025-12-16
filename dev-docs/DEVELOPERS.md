@@ -41,9 +41,11 @@ benchkit/
 │   └── verify/                # Result verification
 ├── templates/                 # Jinja2 templates for reports
 ├── configs/                   # Benchmark configurations
-├── infra/aws/                 # AWS Terraform modules
+├── infra/aws/                 # AWS Terraform templates (source)
 ├── workloads/tpch/            # TPC-H queries and schemas
 └── results/                   # Generated results (auto-created)
+    └── <project_id>/          # Per-project results
+        └── terraform/         # Terraform state (per-project isolation)
 ```
 
 ## Adding New Workloads

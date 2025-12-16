@@ -34,11 +34,11 @@ def _resolve_infrastructure_ips(
     """
     import copy
 
+    from ..common.cli_helpers import get_first_cloud_provider, is_any_system_cloud_mode
     from ..infra.manager import InfraManager
 
     # Check if this is a cloud deployment
-    env_mode = config.get("env", {}).get("mode", "local")
-    if env_mode == "local":
+    if not is_any_system_cloud_mode(config):
         return config  # No infrastructure to resolve for local mode
 
     # Check if terraform directory exists in results
@@ -48,7 +48,10 @@ def _resolve_infrastructure_ips(
         return config
 
     try:
-        provider = env_mode
+        provider = get_first_cloud_provider(config)
+        if not provider:
+            debug_print("Cloud mode detected but no provider found")
+            return config
         infra_manager = InfraManager(provider, config)
 
         # Override working directory to use results terraform state

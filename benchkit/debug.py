@@ -3,6 +3,8 @@
 import os
 from typing import Any
 
+from .common.markers import exclude_from_package
+
 # Global debug state
 _debug_enabled = False
 
@@ -65,6 +67,7 @@ def debug_print(message: str, **kwargs: Any) -> None:
         print(f"{prefix}[DEBUG] {message}", **kwargs)
 
 
+@exclude_from_package
 def debug_log_command(command: str, timeout: int | None = None, **kwargs: Any) -> None:
     """Log command execution details if debug mode is enabled."""
     if is_debug_enabled():
@@ -75,6 +78,7 @@ def debug_log_command(command: str, timeout: int | None = None, **kwargs: Any) -
             print(f"{prefix}[DEBUG] Command: {command}")
 
 
+@exclude_from_package
 def debug_log_result(
     success: bool, stdout: str | None = None, stderr: str | None = None, **kwargs: Any
 ) -> None:

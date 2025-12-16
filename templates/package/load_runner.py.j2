@@ -1,5 +1,6 @@
 """Data loading runner for minimal packages (Phase 2)."""
 
+import sys
 from pathlib import Path
 from typing import Any
 import json
@@ -18,7 +19,9 @@ def execute_load(config: dict[str, Any], output_dir: Path, force: bool = False) 
 
     if not workload_class:
         console.print(f"[red]Error: Unknown workload '{workload_name}'[/]")
-        return
+        sys.exit(1)
+
+    failed_systems: list[str] = []
 
     for system_config in config["systems"]:
         system_name = system_config["name"]
@@ -36,6 +39,7 @@ def execute_load(config: dict[str, Any], output_dir: Path, force: bool = False) 
         system_class = get_system_class(system_kind)
         if not system_class:
             console.print(f"[red]Error: Unknown system kind '{system_kind}'[/]")
+            failed_systems.append(system_name)
             continue
 
         system = system_class(system_config)
@@ -48,6 +52,7 @@ def execute_load(config: dict[str, Any], output_dir: Path, force: bool = False) 
         try:
             if not workload.prepare(system):
                 console.print(f"[red]✗ Failed to prepare workload for {system_name}[/]")
+                failed_systems.append(system_name)
                 continue
             console.print(f"[green]✓ Workload preparation completed[/]")
         except Exception as e:
@@ -55,6 +60,7 @@ def execute_load(config: dict[str, Any], output_dir: Path, force: bool = False) 
             if is_debug_enabled():
                 import traceback
                 console.print(f"[dim]{traceback.format_exc()}[/]")
+            failed_systems.append(system_name)
             continue
 
         # Save load completion marker
@@ -79,3 +85,8 @@ def execute_load(config: dict[str, Any], output_dir: Path, force: bool = False) 
             json.dump(load_complete_data, f, indent=2)
 
         console.print(f"[green]✓ Load completion marker saved for {system_name}[/]")
+
+    # Exit with error if any systems failed
+    if failed_systems:
+        console.print(f"[red]Load failed for systems: {', '.join(failed_systems)}[/]")
+        sys.exit(1)

@@ -1,0 +1,51 @@
+# E2E Dry-Run Test Configuration (Local Mode)
+#
+# This configuration is used for CLI validation tests that don't require
+# actual infrastructure. It uses local mode with preinstalled systems.
+#
+# Usage:
+#   pytest tests/e2e/test_cli_validation.py -v
+
+title: "E2E Dry-Run Test: Local Mode"
+author: "Benchkit E2E Tests"
+
+execution:
+  parallel: false
+
+env:
+  mode: "local"
+
+systems:
+  - name: "exasol_local"
+    kind: "exasol"
+    version: "8.35.0"
+    setup:
+      method: "preinstalled"
+      host: "localhost"
+      port: 8563
+      username: "sys"
+      password: "exasol"
+      schema: "BENCHMARK"
+
+  - name: "clickhouse_local"
+    kind: "clickhouse"
+    version: "25.10.2.65"
+    setup:
+      method: "preinstalled"
+      host: "localhost"
+      port: 8123
+      username: "default"
+      password: ""
+      data_dir: "/data/clickhouse"
+
+workload:
+  name: "tpch"
+  scale_factor: 1
+  runs_per_query: 2
+  warmup_runs: 1
+  data_format: "csv"
+  generator: "dbgen"
+
+report:
+  show_boxplots: true
+  show_bar_chart: true

@@ -789,14 +789,42 @@ class PreflightChecker:
         self.console = console
 
     def _get_env_config(self) -> dict[str, Any]:
-        """Get environment configuration."""
-        env = self.config.get("env", {})
-        return env if isinstance(env, dict) else {}
+        """Get environment configuration.
+
+        Handles both legacy 'env' and multi-environment 'environments' configs.
+        Returns the first cloud environment config found, or the default env.
+        """
+        from .common.cli_helpers import get_all_environments
+        from .common.enums import EnvironmentMode
+
+        # First check legacy env config
+        env = self.config.get("env")
+        if env and isinstance(env, dict):
+            return dict(env)
+
+        # Check environments config - find first cloud environment
+        environments = get_all_environments(self.config)
+        for _env_name, env_cfg in environments.items():
+            mode = env_cfg.get("mode", EnvironmentMode.LOCAL.value)
+            if EnvironmentMode.is_cloud_provider(str(mode)):
+                return dict(env_cfg)
+
+        # Return first environment if no cloud providers found
+        if environments:
+            return dict(next(iter(environments.values())))
+
+        return {}
 
     def _get_mode(self) -> str:
-        """Get deployment mode."""
-        mode = self._get_env_config().get("mode", "local")
-        return str(mode) if mode else "local"
+        """Get deployment mode.
+
+        Returns first cloud provider mode if any system uses cloud,
+        otherwise returns 'local'.
+        """
+        from .common.cli_helpers import get_first_cloud_provider
+
+        provider = get_first_cloud_provider(self.config)
+        return provider if provider else "local"
 
     def validate_ssh_keys(self) -> ValidationReport:
         """

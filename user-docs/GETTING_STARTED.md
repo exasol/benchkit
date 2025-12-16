@@ -803,8 +803,10 @@ aws ec2 describe-regions --region eu-west-1
 #### Terraform Errors
 
 ```bash
-# Initialize Terraform
-cd infra/aws
+# Terraform state is stored per-project in results/<project_id>/terraform/
+cd results/<project_id>/terraform
+
+# Initialize Terraform (if needed)
 terraform init
 
 # Check state

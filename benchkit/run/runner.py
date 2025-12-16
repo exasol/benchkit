@@ -37,10 +37,13 @@ console = Console()
 class ExecutionContext:
     """Encapsulates execution environment details for benchmark phases."""
 
-    mode: Literal["local", "cloud", "local_to_remote"]
+    mode: Literal["local", "cloud", "local_to_remote", "managed_remote"]
     use_parallel: bool
     max_workers: int
     cloud_managers: dict[str, Any] | None = None
+    managed_managers: dict[str, Any] | None = (
+        None  # For managed systems with remote exec
+    )
     executor: ParallelExecutor | None = (
         None  # Reference to executor for output callbacks
     )
@@ -48,17 +51,25 @@ class ExecutionContext:
     @property
     def is_remote(self) -> bool:
         """Check if this context involves remote execution."""
-        return self.mode in ("cloud", "local_to_remote")
+        return self.mode in ("cloud", "local_to_remote", "managed_remote")
 
     @property
     def needs_package(self) -> bool:
         """Check if this context requires deploying a package to remote."""
-        return self.mode == "cloud"
+        return self.mode in ("cloud", "managed_remote")
 
     @property
     def effective_max_workers(self) -> int:
         """Return 1 for sequential execution, otherwise configured max_workers."""
         return self.max_workers if self.use_parallel else 1
+
+    def get_instance_manager(self, system_name: str) -> Any | None:
+        """Get instance manager for a system (cloud or managed)."""
+        if self.cloud_managers and system_name in self.cloud_managers:
+            return self.cloud_managers[system_name]
+        if self.managed_managers and system_name in self.managed_managers:
+            return self.managed_managers[system_name]
+        return None
 
 
 @dataclass
@@ -334,18 +345,45 @@ class BenchmarkRunner:
         Create execution context based on config and overrides.
 
         Args:
-            local_override: If True, use local-to-remote mode for cloud configs
+            local_override: If True, use local-to-remote mode for cloud/managed configs
 
         Returns:
             ExecutionContext with appropriate mode and settings
         """
-        env_config = self.config.get("env", {})
-        env_mode = env_config.get("mode", "local")
+        from ..common.cli_helpers import (
+            get_managed_deployment_dir,
+            is_any_system_cloud_mode,
+            is_any_system_managed_mode,
+            is_managed_system,
+        )
+        from ..infra.self_managed import get_self_managed_deployment
 
-        if env_mode in ["aws", "gcp", "azure"]:
-            mode: Literal["local", "cloud", "local_to_remote"] = (
-                "local_to_remote" if local_override else "cloud"
-            )
+        has_cloud = is_any_system_cloud_mode(self.config)
+        has_managed = is_any_system_managed_mode(self.config)
+
+        # Build managed instance managers for systems that support remote execution
+        managed_managers: dict[str, Any] = {}
+        if has_managed:
+            for system_config in self.config.get("systems", []):
+                system_name = system_config["name"]
+                if is_managed_system(self.config, system_name):
+                    deployment_dir = get_managed_deployment_dir(
+                        self.config, system_config
+                    )
+                    deployment = get_self_managed_deployment(
+                        system_config["kind"], deployment_dir
+                    )
+                    if deployment and deployment.SUPPORTS_REMOTE_EXECUTION:
+                        mgr = deployment.get_instance_manager()
+                        if mgr:
+                            managed_managers[system_name] = mgr
+
+        # Determine mode
+        mode: Literal["local", "cloud", "local_to_remote", "managed_remote"]
+        if has_cloud:
+            mode = "local_to_remote" if local_override else "cloud"
+        elif managed_managers:  # Has managed systems with remote execution
+            mode = "local_to_remote" if local_override else "managed_remote"
         else:
             mode = "local"
 
@@ -354,6 +392,7 @@ class BenchmarkRunner:
             use_parallel=self.use_parallel,
             max_workers=self.max_workers,
             cloud_managers=self._cloud_instance_managers or None,
+            managed_managers=managed_managers or None,
         )
 
     @exclude_from_package
@@ -436,13 +475,19 @@ class BenchmarkRunner:
             "local": "Local",
             "cloud": "Cloud",
             "local_to_remote": "Local-to-Remote",
+            "managed_remote": "Managed-Remote",
         }[context.mode]
         console.print(
             f"[bold blue]{phase.header_emoji}  {phase.header_text} ({mode_label})[/bold blue]"
         )
 
         # 2. Establish cloud connections if needed
-        if context.is_remote and not self._cloud_instance_managers:
+        # Skip for managed_remote mode - instance managers are already set in context
+        if (
+            context.is_remote
+            and context.mode != "managed_remote"
+            and not self._cloud_instance_managers
+        ):
             if not self._setup_cloud_infrastructure():
                 return False if not phase.collects_results else []
             context.cloud_managers = self._cloud_instance_managers
@@ -554,11 +599,7 @@ class BenchmarkRunner:
 
                         # Get system for this execution context
                         system = self._get_system_for_context(cfg, context)
-                        instance_mgr = (
-                            context.cloud_managers.get(name)
-                            if context.cloud_managers
-                            else None
-                        )
+                        instance_mgr = context.get_instance_manager(name)
 
                         # Execute phase operation
                         success, data = phase.operation(
@@ -687,6 +728,8 @@ class BenchmarkRunner:
                 if output_callback is not None:
                     system._output_callback = output_callback
                 return system
+            # Inject project_id so system can access it
+            system_config["project_id"] = self.project_id
             return create_system(
                 system_config,
                 output_callback=output_callback,
@@ -695,19 +738,15 @@ class BenchmarkRunner:
 
         elif context.mode == "local_to_remote":
             # Local-to-remote mode - need public IP for connection
-            instance_manager = (
-                context.cloud_managers.get(system_name)
-                if context.cloud_managers
-                else None
-            )
+            instance_manager = context.get_instance_manager(system_name)
             if not instance_manager:
                 raise ValueError(f"No instance manager for {system_name}")
             return self._create_system_for_local_execution(
                 system_config, instance_manager, output_callback=output_callback
             )
 
-        else:  # cloud
-            # Cloud mode - system runs on remote, use prepared system if available
+        else:  # cloud or managed_remote
+            # Remote mode - system runs on remote, use prepared system if available
             if (
                 hasattr(self, "_prepared_systems")
                 and system_name in self._prepared_systems
@@ -717,18 +756,16 @@ class BenchmarkRunner:
                 if output_callback is not None:
                     system._output_callback = output_callback
             else:
+                # Inject project_id so system can access it
+                system_config["project_id"] = self.project_id
                 system = create_system(
                     system_config,
                     output_callback=output_callback,
                     workload_config=self.config.get("workload", {}),
                 )
 
-            # Set cloud instance manager
-            instance_manager = (
-                context.cloud_managers.get(system_name)
-                if context.cloud_managers
-                else None
-            )
+            # Set instance manager (works for both cloud and managed systems)
+            instance_manager = context.get_instance_manager(system_name)
             if instance_manager and hasattr(system, "set_cloud_instance_manager"):
                 system.set_cloud_instance_manager(instance_manager)
 
@@ -800,6 +837,43 @@ class BenchmarkRunner:
                     "port": system_config.get("setup", {}).get("port"),
                 },
             }
+
+        # Check if this is a managed system - skip cloud state machine
+        from ..common.cli_helpers import is_managed_system
+
+        if is_managed_system(self.config, system_name):
+            # Managed systems are already set up via 'infra apply'
+            # Just mark as ready and prepare remote environment
+            console.print(
+                f"[green]✅ {system_name} managed infrastructure ready[/green]"
+            )
+            timings["installation_s"] = 0
+
+            # Prepare remote environment for package execution
+            from ..common.cli_helpers import get_managed_deployment_dir
+            from ..infra.self_managed import get_self_managed_deployment
+
+            deployment_dir = get_managed_deployment_dir(self.config, system_config)
+            deployment = get_self_managed_deployment(
+                system_config["kind"], deployment_dir
+            )
+            if deployment and deployment.SUPPORTS_REMOTE_EXECUTION:
+                console.print(f"🔧 Preparing remote environment for {system_name}...")
+                if not deployment.prepare_remote_environment(
+                    instance_manager, system=system
+                ):
+                    return False, {"error": "remote_environment_preparation_failed"}
+                console.print(
+                    f"[green]✓ Remote environment ready for {system_name}[/green]"
+                )
+
+            connection_info = self._build_connection_info(instance_manager)
+
+            # Record setup summary for managed systems too
+            setup_summary = system.get_setup_summary()
+            self._save_setup_summary(system_name, setup_summary)
+
+            return True, {"timings": timings, "connection_info": connection_info}
 
         # Cloud/remote mode - use state machine
         state = self._check_system_state(system, instance_manager)
@@ -995,8 +1069,9 @@ class BenchmarkRunner:
 
         context = self._create_execution_context()
 
-        # Cloud mode requires storage preparation before setup
-        if context.is_remote:
+        # Cloud mode requires infrastructure provisioning and storage preparation
+        # Skip for managed_remote - infrastructure is already set up via 'infra apply'
+        if context.is_remote and context.mode != "managed_remote":
             # Setup cloud infrastructure first
             if not self._setup_cloud_infrastructure():
                 return False
@@ -1108,6 +1183,8 @@ class BenchmarkRunner:
         # Create modified config for system instantiation
         modified_config = copy.deepcopy(system_config)
         modified_config["setup"] = modified_setup
+        # Inject project_id so system can access it
+        modified_config["project_id"] = self.project_id
 
         return create_system(
             modified_config,
@@ -1227,7 +1304,7 @@ class BenchmarkRunner:
             load_result = primary_manager.run_remote_command(
                 f"cd /home/ubuntu/{project_id} && ./load_data.sh {system_name}",
                 timeout=execution_timeout,
-                debug=True,
+                debug=False,
                 stream_callback=stream_remote_output,
             )
 
@@ -1294,18 +1371,26 @@ class BenchmarkRunner:
 
     def _setup_cloud_infrastructure(self) -> bool:
         """Setup cloud infrastructure connection and managers."""
+        from ..common.cli_helpers import (
+            get_cloud_ssh_key_path,
+            get_first_cloud_provider,
+        )
         from ..util import Timer
 
         try:
             from ..infra.manager import CloudInstanceManager, InfraManager
 
-            env_config = self.config.get("env", {})
-            env_mode = env_config.get("mode", "local")
+            cloud_provider = get_first_cloud_provider(self.config)
+            if not cloud_provider:
+                console.print("[red]❌ No cloud provider found in config[/red]")
+                return False
 
-            console.print(f"🔗 Connecting to {env_mode.upper()} infrastructure...")
+            console.print(
+                f"🔗 Connecting to {cloud_provider.upper()} infrastructure..."
+            )
 
             # Initialize infrastructure manager
-            infra_manager = InfraManager(env_mode, self.config)
+            infra_manager = InfraManager(cloud_provider, self.config)
 
             # Check if instances exist, provision if needed
             with Timer("Infrastructure provisioning") as provision_timer:
@@ -1347,7 +1432,7 @@ class BenchmarkRunner:
                 return False
 
             # Create cloud instance managers for each system
-            ssh_private_key_path = env_config.get("ssh_private_key_path")
+            ssh_private_key_path = get_cloud_ssh_key_path(self.config)
             for system_name, system_info in instance_info.items():
                 if system_name != "error" and system_info:
                     # Check if this is a multinode system
@@ -1439,6 +1524,8 @@ class BenchmarkRunner:
             console.print(f"\n🔧 Preparing storage for: [bold]{system_name}[/bold]")
 
             try:
+                # Inject project_id so system can access it
+                system_config["project_id"] = self.project_id
                 system = create_system(
                     system_config, workload_config=self.config.get("workload", {})
                 )
@@ -1743,172 +1830,176 @@ class BenchmarkRunner:
 
     def _setup_infrastructure(self) -> None:
         """Set up cloud infrastructure if environment mode requires it."""
-        env_config = self.config.get("env", {})
-        env_mode = env_config.get("mode", "local")
+        from ..common.cli_helpers import (
+            get_cloud_ssh_key_path,
+            get_first_cloud_provider,
+            is_any_system_cloud_mode,
+        )
 
-        if env_mode in ["aws", "gcp", "azure"]:
-            try:
-                from ..infra.manager import CloudInstanceManager, InfraManager
+        if not is_any_system_cloud_mode(self.config):
+            return
 
-                console.print(
-                    f"[blue]Setting up {env_mode.upper()} infrastructure...[/blue]"
-                )
+        cloud_provider = get_first_cloud_provider(self.config)
+        if not cloud_provider:
+            console.print(
+                "[yellow]Warning: Cloud mode detected but no provider found[/yellow]"
+            )
+            return
 
-                # Initialize infrastructure manager
-                infra_manager = InfraManager(env_mode, self.config)
+        try:
+            from ..infra.manager import CloudInstanceManager, InfraManager
 
-                # Get instance information (assumes infrastructure is already deployed)
-                instance_info = infra_manager.get_instance_info()
+            console.print(
+                f"[blue]Setting up {cloud_provider.upper()} infrastructure...[/blue]"
+            )
 
-                if "error" not in instance_info:
-                    # Create separate cloud instance managers for each system
-                    ssh_private_key_path = env_config.get("ssh_private_key_path")
-                    for system_name, system_info in instance_info.items():
-                        if system_name != "error" and system_info:
-                            # Check if this is a multinode system
-                            is_multinode = system_info.get("multinode", False)
+            # Initialize infrastructure manager
+            infra_manager = InfraManager(cloud_provider, self.config)
 
-                            if is_multinode:
-                                # Multinode: validate nodes have IPs and create managers
-                                nodes = system_info.get("nodes", [])
-                                if not nodes:
-                                    console.print(
-                                        f"[yellow]Warning: {system_name} has no node info (infrastructure may be destroyed)[/yellow]"
-                                    )
-                                    continue
+            # Get instance information (assumes infrastructure is already deployed)
+            instance_info = infra_manager.get_instance_info()
 
-                                # Check first node has valid IP
-                                if not nodes[0].get("public_ip"):
-                                    console.print(
-                                        f"[yellow]Warning: {system_name} nodes have no public IPs (infrastructure may be destroyed)[/yellow]"
-                                    )
-                                    continue
+            if "error" not in instance_info:
+                # Create separate cloud instance managers for each system
+                ssh_private_key_path = get_cloud_ssh_key_path(self.config)
+                for system_name, system_info in instance_info.items():
+                    if system_name != "error" and system_info:
+                        # Check if this is a multinode system
+                        is_multinode = system_info.get("multinode", False)
 
-                                # Create list of managers for each node
-                                node_managers = []
-                                for node_info in nodes:
-                                    if node_info.get("public_ip"):
-                                        node_managers.append(
-                                            CloudInstanceManager(
-                                                node_info, ssh_private_key_path
-                                            )
+                        if is_multinode:
+                            # Multinode: validate nodes have IPs and create managers
+                            nodes = system_info.get("nodes", [])
+                            if not nodes:
+                                console.print(
+                                    f"[yellow]Warning: {system_name} has no node info (infrastructure may be destroyed)[/yellow]"
+                                )
+                                continue
+
+                            # Check first node has valid IP
+                            if not nodes[0].get("public_ip"):
+                                console.print(
+                                    f"[yellow]Warning: {system_name} nodes have no public IPs (infrastructure may be destroyed)[/yellow]"
+                                )
+                                continue
+
+                            # Create list of managers for each node
+                            node_managers = []
+                            for node_info in nodes:
+                                if node_info.get("public_ip"):
+                                    node_managers.append(
+                                        CloudInstanceManager(
+                                            node_info, ssh_private_key_path
                                         )
-
-                                if not node_managers:
-                                    console.print(
-                                        f"[yellow]Warning: {system_name} has no reachable nodes[/yellow]"
                                     )
-                                    continue
 
-                                self._cloud_instance_managers[system_name] = (
-                                    node_managers
-                                )
-                                primary_ip = node_managers[0].public_ip
+                            if not node_managers:
                                 console.print(
-                                    f"[green]✓ Connected to {system_name}: {len(node_managers)} nodes (primary: {primary_ip})[/green]"
+                                    f"[yellow]Warning: {system_name} has no reachable nodes[/yellow]"
                                 )
+                                continue
 
-                                # Set environment variables (comma-separated for multinode)
-                                import os
+                            self._cloud_instance_managers[system_name] = node_managers
+                            primary_ip = node_managers[0].public_ip
+                            console.print(
+                                f"[green]✓ Connected to {system_name}: {len(node_managers)} nodes (primary: {primary_ip})[/green]"
+                            )
 
-                                private_ips = ",".join(
-                                    str(mgr.private_ip)
-                                    for mgr in node_managers
-                                    if mgr.private_ip
-                                )
-                                public_ips = ",".join(
-                                    str(mgr.public_ip)
-                                    for mgr in node_managers
-                                    if mgr.public_ip
-                                )
-                                private_ip_var = f"{system_name.upper()}_PRIVATE_IP"
-                                public_ip_var = f"{system_name.upper()}_PUBLIC_IP"
-                                os.environ[private_ip_var] = private_ips
-                                os.environ[public_ip_var] = public_ips
+                            # Set environment variables (comma-separated for multinode)
+                            import os
 
+                            private_ips = ",".join(
+                                str(mgr.private_ip)
+                                for mgr in node_managers
+                                if mgr.private_ip
+                            )
+                            public_ips = ",".join(
+                                str(mgr.public_ip)
+                                for mgr in node_managers
+                                if mgr.public_ip
+                            )
+                            private_ip_var = f"{system_name.upper()}_PRIVATE_IP"
+                            public_ip_var = f"{system_name.upper()}_PUBLIC_IP"
+                            os.environ[private_ip_var] = private_ips
+                            os.environ[public_ip_var] = public_ips
+
+                            console.print(
+                                f"[blue]Set {private_ip_var}={private_ips}[/blue]"
+                            )
+                            console.print(
+                                f"[blue]Set {public_ip_var}={public_ips}[/blue]"
+                            )
+
+                            # Wait for SSH on primary node
+                            console.print(
+                                f"Waiting for {system_name} SSH access (primary node)..."
+                            )
+                            if node_managers[0].wait_for_ssh():
                                 console.print(
-                                    f"[blue]Set {private_ip_var}={private_ips}[/blue]"
+                                    f"[green]✓ {system_name} SSH access ready[/green]"
                                 )
-                                console.print(
-                                    f"[blue]Set {public_ip_var}={public_ips}[/blue]"
-                                )
-
-                                # Wait for SSH on primary node
-                                console.print(
-                                    f"Waiting for {system_name} SSH access (primary node)..."
-                                )
-                                if node_managers[0].wait_for_ssh():
-                                    console.print(
-                                        f"[green]✓ {system_name} SSH access ready[/green]"
-                                    )
-                                else:
-                                    console.print(
-                                        f"[yellow]Warning: {system_name} SSH access not confirmed[/yellow]"
-                                    )
                             else:
-                                # Single-node: validate public_ip exists
-                                public_ip = system_info.get("public_ip", "")
-                                if not public_ip:
-                                    console.print(
-                                        f"[yellow]Warning: {system_name} has no public IP (infrastructure may be destroyed)[/yellow]"
-                                    )
-                                    continue
-
-                                instance_manager = CloudInstanceManager(
-                                    system_info, ssh_private_key_path
-                                )
-                                self._cloud_instance_managers[system_name] = (
-                                    instance_manager
-                                )
                                 console.print(
-                                    f"[green]✓ Connected to {system_name} instance: {public_ip}[/green]"
+                                    f"[yellow]Warning: {system_name} SSH access not confirmed[/yellow]"
                                 )
-
-                                # Set environment variables for IP resolution
-                                import os
-
-                                private_ip_var = f"{system_name.upper()}_PRIVATE_IP"
-                                public_ip_var = f"{system_name.upper()}_PUBLIC_IP"
-
-                                os.environ[private_ip_var] = system_info.get(
-                                    "private_ip", ""
-                                )
-                                os.environ[public_ip_var] = public_ip
-
+                        else:
+                            # Single-node: validate public_ip exists
+                            public_ip = system_info.get("public_ip", "")
+                            if not public_ip:
                                 console.print(
-                                    f"[blue]Set {private_ip_var}={os.environ[private_ip_var]}[/blue]"
+                                    f"[yellow]Warning: {system_name} has no public IP (infrastructure may be destroyed)[/yellow]"
                                 )
-                                console.print(
-                                    f"[blue]Set {public_ip_var}={os.environ[public_ip_var]}[/blue]"
-                                )
+                                continue
 
-                                # Wait for SSH to be ready
-                                console.print(
-                                    f"Waiting for {system_name} SSH access..."
-                                )
-                                if instance_manager.wait_for_ssh():
-                                    console.print(
-                                        f"[green]✓ {system_name} SSH access ready[/green]"
-                                    )
-                                else:
-                                    console.print(
-                                        f"[yellow]Warning: {system_name} SSH access not confirmed[/yellow]"
-                                    )
-                else:
-                    console.print(
-                        f"[yellow]Warning: Could not get instance info: {instance_info['error']}[/yellow]"
-                    )
+                            instance_manager = CloudInstanceManager(
+                                system_info, ssh_private_key_path
+                            )
+                            self._cloud_instance_managers[system_name] = (
+                                instance_manager
+                            )
+                            console.print(
+                                f"[green]✓ Connected to {system_name} instance: {public_ip}[/green]"
+                            )
 
-            except ImportError as e:
+                            # Set environment variables for IP resolution
+                            import os
+
+                            private_ip_var = f"{system_name.upper()}_PRIVATE_IP"
+                            public_ip_var = f"{system_name.upper()}_PUBLIC_IP"
+
+                            os.environ[private_ip_var] = system_info.get(
+                                "private_ip", ""
+                            )
+                            os.environ[public_ip_var] = public_ip
+
+                            console.print(
+                                f"[blue]Set {private_ip_var}={os.environ[private_ip_var]}[/blue]"
+                            )
+                            console.print(
+                                f"[blue]Set {public_ip_var}={os.environ[public_ip_var]}[/blue]"
+                            )
+
+                            # Wait for SSH to be ready
+                            console.print(f"Waiting for {system_name} SSH access...")
+                            if instance_manager.wait_for_ssh():
+                                console.print(
+                                    f"[green]✓ {system_name} SSH access ready[/green]"
+                                )
+                            else:
+                                console.print(
+                                    f"[yellow]Warning: {system_name} SSH access not confirmed[/yellow]"
+                                )
+            else:
                 console.print(
-                    f"[yellow]Warning: Infrastructure management not available: {e}[/yellow]"
+                    f"[yellow]Warning: Could not get instance info: {instance_info['error']}[/yellow]"
                 )
-            except Exception as e:
-                console.print(
-                    f"[yellow]Warning: Infrastructure setup failed: {e}[/yellow]"
-                )
-        else:
-            console.print("[blue]Using local environment[/blue]")
+
+        except ImportError as e:
+            console.print(
+                f"[yellow]Warning: Infrastructure management not available: {e}[/yellow]"
+            )
+        except Exception as e:
+            console.print(f"[yellow]Warning: Infrastructure setup failed: {e}[/yellow]")
 
     def _check_system_state(self, system: Any, instance_manager: Any) -> str:
         """
@@ -1981,6 +2072,8 @@ class BenchmarkRunner:
                     system_config = None
             if not system_config:
                 raise SystemError(f"System {system_name} not found")
+            # Inject project_id so system can access it
+            system_config["project_id"] = self.project_id
             system = create_system(system_config)
 
             if system.is_healthy():

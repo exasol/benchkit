@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import glob
+import json
 import ssl
+import subprocess
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -10,6 +13,11 @@ from typing import TYPE_CHECKING, Any, cast
 import pyexasol  # type: ignore
 
 from benchkit.common import DataFormat, exclude_from_package
+from benchkit.infra.self_managed import (
+    SelfManagedConnectionInfo,
+    SelfManagedDeployment,
+    SelfManagedStatus,
+)
 
 from ..util import Timer
 from .base import SystemUnderTest
@@ -58,6 +66,7 @@ class ExasolSystem(SystemUnderTest):
             "Exasol SSH": 20002,
         }
 
+    @exclude_from_package
     def get_connection_string(self, public_ip: str, private_ip: str) -> str:
         """Get Exasol connection string with full CLI command."""
         port = self.setup_config.get("port", 8563)
@@ -128,14 +137,19 @@ class ExasolSystem(SystemUnderTest):
 
     def _resolve_ip_address(self, var_name: str) -> str | None:
         """Resolve IP address from configuration or infrastructure state."""
-        from benchkit.infra.manager import InfraManager
+        try:
+            from benchkit.infra.manager import InfraManager
 
-        # Use infrastructure manager to resolve IP addresses
-        project_id = self.config.get("project_id", "")
-        result = InfraManager.resolve_ip_from_infrastructure(
-            var_name, self.name, project_id
-        )
-        return cast(str | None, result)
+            # Use infrastructure manager to resolve IP addresses
+            project_id = self.config.get("project_id", "")
+            result = InfraManager.resolve_ip_from_infrastructure(
+                var_name, self.name, project_id
+            )
+            return cast(str | None, result)
+        except ImportError:
+            # In minimal packages, InfraManager isn't available
+            # Return None to use fallback value
+            return None
 
     def _connect_with_fingerprint_retry(
         self, dsn: str, user: str, password: str, **kwargs: Any
@@ -815,22 +829,34 @@ echo "Symlink: %s -> $INSTANCE_STORE"
 
         return False
 
-    def _get_connection(self, compression: bool = True) -> Any:
-        """Get a connection to Exasol database using pyexasol."""
-        connection_params = {
-            "dsn": self._build_dsn(self.host, self.port),
-            "user": self.username,
-            "password": self.password,
-            "compression": compression,
-        }
+    def _get_connection(
+        self, compression: bool = True, skip_schema: bool = False
+    ) -> Any:
+        """Get a connection to Exasol database using pyexasol.
+
+        Args:
+            compression: Whether to enable compression (default True)
+            skip_schema: If True, don't include schema in connection params.
+                        Use this when creating schemas to avoid chicken-and-egg
+                        problem where we try to connect TO the schema we're creating.
+        """
+        # Build extra kwargs for the connection
+        extra_kwargs: dict[str, Any] = {"compression": compression}
 
         # Use active schema if set (from workload), else fall back to instance schema
         # _active_schema is set by workload.run_workload() for thread-safe multi-stream
-        schema_to_use = getattr(self, "_active_schema", None) or self.schema
-        if schema_to_use:
-            connection_params["schema"] = schema_to_use
+        # Skip schema when creating schemas to avoid "schema not found" errors
+        if not skip_schema:
+            schema_to_use = getattr(self, "_active_schema", None) or self.schema
+            if schema_to_use:
+                extra_kwargs["schema"] = schema_to_use
 
-        return self._connect_with_fingerprint_retry(**connection_params)
+        return self._connect_with_fingerprint_retry(
+            dsn=self._build_dsn(self.host, self.port),
+            user=self.username,
+            password=self.password,
+            **extra_kwargs,
+        )
 
     @exclude_from_package
     def _install_docker(self) -> bool:
@@ -1505,10 +1531,12 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
             self._log(f"Native Exasol installation failed: {e}")
             return False
 
+    @exclude_from_package
     def _verify_preinstalled(self) -> bool:
         """Verify that Exasol is already installed and accessible."""
         return self.is_healthy()
 
+    @exclude_from_package
     def start(self) -> bool:
         """Start the Exasol system."""
         self._log(f"Starting {self.name} system using {self.setup_method} method...")
@@ -1635,15 +1663,40 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
             return False
 
     def create_schema(self, schema_name: str) -> bool:
-        """Create a schema in Exasol."""
+        """Create a schema in Exasol.
+
+        Uses skip_schema=True to avoid chicken-and-egg problem where we try
+        to connect TO the schema we're creating.
+        """
         sql = f"CREATE SCHEMA IF NOT EXISTS {schema_name};"
-        result = self.execute_query(sql, query_name=f"create_schema_{schema_name}")
-        success = bool(result.get("success", False))
+        conn = None
 
-        if success and self.schema and schema_name.upper() == self.schema.upper():
-            self._schema_created = True
+        try:
+            # Connect WITHOUT schema to avoid "schema not found" error
+            # when creating the schema for the first time
+            conn = self._get_connection(skip_schema=True)
+            if not conn:
+                self._log(f"Failed to connect for schema creation: {schema_name}")
+                return False
 
-        return success
+            conn.execute(sql)
+
+            if self.schema and schema_name.upper() == self.schema.upper():
+                self._schema_created = True
+
+            self._log(f"✓ Schema '{schema_name}' created successfully")
+            return True
+
+        except Exception as e:
+            self._log(f"Failed to create schema '{schema_name}': {e}")
+            return False
+
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 
     def load_data(self, table_name: str, data_path: Path, **kwargs: Any) -> bool:
         """Load data into Exasol table using pyexasol import_from_file."""
@@ -2108,6 +2161,7 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
         except Exception:
             return False
 
+    @exclude_from_package
     def load_data_from_url(
         self,
         schema_name: str,
@@ -2157,3 +2211,633 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
         finally:
             if conn:
                 conn.close()
+
+
+# =============================================================================
+# Exasol Personal Edition - Self-Managed Deployment
+# =============================================================================
+
+
+@exclude_from_package
+class ExasolPersonalEdition(SelfManagedDeployment):
+    """Exasol Personal Edition - self-managed deployment via 'exasol' CLI.
+
+    This class wraps the Exasol Personal Edition launcher CLI to provide
+    infrastructure management for benchkit. The personal edition handles
+    its own AWS infrastructure via OpenTofu/Terraform internally.
+
+    Status values from CLI:
+    - not_initialized: No deployment exists
+    - initialized: Ready for deploy
+    - running: Database started but not verified
+    - database_ready: Database running and accepting connections
+    - stopped: EC2 instances stopped, data preserved
+    - interrupted: Operation was interrupted
+    - deployment_failed: Deployment failed
+    """
+
+    # Status constants matching the CLI
+    STATUS_NOT_INITIALIZED = "not_initialized"
+    STATUS_INITIALIZED = "initialized"
+    STATUS_RUNNING = "running"
+    STATUS_DATABASE_READY = "database_ready"
+    STATUS_STOPPED = "stopped"
+    STATUS_INTERRUPTED = "interrupted"
+    STATUS_DEPLOYMENT_FAILED = "deployment_failed"
+
+    # GitHub repository for CLI releases
+    CLI_REPO = "exasol/personal-edition"
+    CLI_DEFAULT_VERSION = "0.5.1"
+
+    # Enable remote execution support for load/run phases
+    SUPPORTS_REMOTE_EXECUTION = True
+
+    def __init__(
+        self,
+        deployment_dir: str,
+        output_callback: Any | None = None,
+        setup_config: dict[str, Any] | None = None,
+    ):
+        """Initialize ExasolPersonalEdition manager.
+
+        Args:
+            deployment_dir: Directory where personal edition stores state
+            output_callback: Optional callback for logging output
+            setup_config: Setup configuration with exasol_pe_version and other options
+        """
+        self.deployment_dir = Path(deployment_dir).expanduser().resolve()
+        self._output_callback = output_callback
+        self._setup_config = setup_config or {}
+
+        # Extract CLI version from setup_config
+        self._cli_version = self._setup_config.get(
+            "exasol_pe_version", self.CLI_DEFAULT_VERSION
+        )
+
+        # CLI path: in parent of deployment_dir (deployment_dir is typically state subdir)
+        cli_dir = self.deployment_dir.parent
+        self.cli_path = str(cli_dir / "exasol")
+
+    def prepare_remote_environment(
+        self, instance_manager: Any, system: Any | None = None
+    ) -> bool:
+        """Prepare remote environment for package execution.
+
+        Installs required packages (python3, pip, venv, unzip) on the Exasol PE
+        instance to support package deployment during load/run phases.
+
+        Args:
+            instance_manager: CloudInstanceManager for remote execution
+            system: Optional SystemUnderTest instance for recording setup commands
+
+        Returns:
+            True if preparation succeeded
+        """
+        self._log("Preparing remote environment for package execution...")
+
+        # Install required packages: python3, pip, venv, unzip
+        packages = ["python3", "python3-pip", "python3-venv", "unzip"]
+        install_cmd = (
+            "sudo apt-get update && " f"sudo apt-get install -y {' '.join(packages)}"
+        )
+
+        # Record the command for reproducibility if system is provided
+        if system and hasattr(system, "record_setup_command"):
+            system.record_setup_command(
+                install_cmd,
+                "Install Python and utilities for package execution",
+                "prerequisites",
+            )
+
+        result = instance_manager.run_remote_command(install_cmd, debug=False)
+        if not result.get("success"):
+            self._log(
+                f"Failed to install packages: {result.get('stderr', 'unknown error')}"
+            )
+            return False
+
+        self._log("Remote environment ready for package execution")
+        return True
+
+    def _log(self, message: str) -> None:
+        """Log a message via callback or print."""
+        if self._output_callback:
+            self._output_callback(message)
+        else:
+            print(message)
+
+    def ensure_cli_available(self) -> bool:
+        """Ensure the CLI binary is available, downloading if necessary.
+
+        Downloads the Exasol Personal Edition CLI from GitHub releases if
+        it's not already present at cli_path.
+
+        Returns:
+            True if CLI is available (was found or successfully downloaded),
+            False if download failed.
+        """
+        import os
+        import platform
+
+        from benchkit.common.file_management import download_github_release
+
+        cli_path = Path(self.cli_path)
+
+        # Check if CLI already exists
+        if cli_path.exists() and cli_path.is_file():
+            self._log(f"CLI already available at {cli_path}")
+            return True
+
+        # Determine the correct asset for the platform
+        system = platform.system()
+        machine = platform.machine()
+
+        if system == "Linux":
+            if machine == "x86_64":
+                asset_pattern = "exasol-personal-edition_Linux_x86_64.tar.gz"
+            elif machine == "aarch64":
+                asset_pattern = "exasol-personal-edition_Linux_arm64.tar.gz"
+            else:
+                self._log(f"Unsupported Linux architecture: {machine}")
+                return False
+        elif system == "Darwin":
+            if machine == "x86_64":
+                asset_pattern = "exasol-personal-edition_macOS_x86_64.tar.gz"
+            elif machine == "arm64":
+                asset_pattern = "exasol-personal-edition_macOS_arm64.tar.gz"
+            else:
+                self._log(f"Unsupported macOS architecture: {machine}")
+                return False
+        else:
+            self._log(f"Unsupported platform: {system}")
+            return False
+
+        self._log(f"Downloading Exasol PE CLI v{self._cli_version}...")
+
+        # Get GH_TOKEN for private repo access
+        gh_token = os.environ.get("GH_TOKEN")
+
+        # Ensure target directory exists
+        cli_dir = cli_path.parent
+        cli_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            downloaded_path = download_github_release(
+                repo=self.CLI_REPO,
+                version=self._cli_version,
+                asset_pattern=asset_pattern,
+                target_dir=cli_dir,
+                gh_token=gh_token,
+                binary_name="exasol",
+            )
+            self._log(f"CLI downloaded to {downloaded_path}")
+            return True
+        except RuntimeError as e:
+            self._log(f"Failed to download CLI: {e}")
+            return False
+
+    def _run_command(
+        self, args: list[str], timeout: int = 1800
+    ) -> subprocess.CompletedProcess[str]:
+        """Run personal edition CLI command.
+
+        Args:
+            args: Command arguments (without the base 'exasol' command)
+            timeout: Timeout in seconds (default: 30 minutes for deploy operations)
+
+        Returns:
+            CompletedProcess with stdout, stderr, returncode
+        """
+        # Ensure deployment directory exists for commands that need it
+        if args[0] not in ["help", "version"]:
+            self.deployment_dir.mkdir(parents=True, exist_ok=True)
+
+        cmd = [self.cli_path] + args
+        self._log(f"Running: {' '.join(cmd)}")
+
+        try:
+            result = subprocess.run(
+                cmd,
+                cwd=str(self.deployment_dir),
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+            return result
+        except subprocess.TimeoutExpired as e:
+            self._log(f"Command timed out after {timeout}s")
+            stdout_val = e.stdout if isinstance(e.stdout, str) else ""
+            return subprocess.CompletedProcess(
+                args=cmd,
+                returncode=-1,
+                stdout=stdout_val,
+                stderr=f"Command timed out after {timeout}s",
+            )
+        except FileNotFoundError:
+            self._log(f"CLI not found: {self.cli_path}")
+            return subprocess.CompletedProcess(
+                args=cmd,
+                returncode=-1,
+                stdout="",
+                stderr=f"CLI executable not found: {self.cli_path}",
+            )
+
+    def get_status(self) -> SelfManagedStatus:
+        """Get deployment status via 'exasol status'."""
+        result = self._run_command(["status"], timeout=60)
+
+        if result.returncode != 0:
+            # Check if it's just not initialized
+            if "no workflow state" in result.stderr.lower():
+                return SelfManagedStatus(
+                    status=self.STATUS_NOT_INITIALIZED,
+                    message="No deployment exists in this directory",
+                )
+            return SelfManagedStatus(
+                status="error",
+                message="Failed to get status",
+                error=result.stderr,
+            )
+
+        # Parse JSON output from status command
+        try:
+            status_data = json.loads(result.stdout)
+            return SelfManagedStatus(
+                status=status_data.get("status", "unknown"),
+                message=status_data.get("message"),
+                error=status_data.get("error"),
+            )
+        except json.JSONDecodeError:
+            # Status might not be JSON in some cases
+            return SelfManagedStatus(
+                status="unknown",
+                message=result.stdout,
+                error=result.stderr if result.stderr else None,
+            )
+
+    def init(self, options: dict[str, Any]) -> bool:
+        """Initialize deployment via 'exasol init aws [options]'.
+
+        Args:
+            options: Dictionary of options to pass to init command:
+                - cluster_size: Number of nodes
+                - instance_type: EC2 instance type
+                - data_volume_size: Size of data volume in GB
+                - db_password: Database password
+                - etc.
+
+        Returns:
+            True if initialization succeeded
+        """
+        args = ["init", "aws"]
+
+        # Map options to CLI flags (convert snake_case to kebab-case)
+        option_mapping = {
+            "cluster_size": "--cluster-size",
+            "instance_type": "--instance-type",
+            "data_volume_size": "--data-volume-size",
+            "os_volume_size": "--os-volume-size",
+            "volume_type": "--volume-type",
+            "db_password": "--db-password",
+            "adminui_password": "--adminui-password",
+            "allowed_cidr": "--allowed-cidr",
+            "vpc_cidr": "--vpc-cidr",
+            "subnet_cidr": "--subnet-cidr",
+        }
+
+        for key, flag in option_mapping.items():
+            value = options.get(key)
+            if value is not None:
+                args.extend([flag, str(value)])
+
+        result = self._run_command(args, timeout=120)
+        if result.returncode != 0:
+            self._log(f"Init failed: {result.stderr}")
+            return False
+
+        self._log("Personal edition initialized successfully")
+        return True
+
+    def deploy(self) -> bool:
+        """Deploy via 'exasol deploy'.
+
+        This provisions AWS infrastructure and installs Exasol.
+        Can take 10-20 minutes.
+
+        Returns:
+            True if deployment succeeded
+        """
+        self._log("Deploying Exasol Personal Edition (this may take 10-20 minutes)...")
+        result = self._run_command(["deploy"], timeout=2400)  # 40 minutes timeout
+
+        if result.returncode != 0:
+            self._log(f"Deploy failed: {result.stderr}")
+            return False
+
+        self._log("Personal edition deployed successfully")
+        return True
+
+    @exclude_from_package
+    def start(self) -> bool:
+        """Start stopped deployment via 'exasol start'.
+
+        Returns:
+            True if start succeeded
+        """
+        self._log("Starting Exasol Personal Edition...")
+        result = self._run_command(["start"], timeout=600)  # 10 minutes
+
+        if result.returncode != 0:
+            self._log(f"Start failed: {result.stderr}")
+            return False
+
+        self._log("Personal edition started successfully")
+        return True
+
+    def stop(self) -> bool:
+        """Stop running deployment via 'exasol stop'.
+
+        Returns:
+            True if stop succeeded
+        """
+        self._log("Stopping Exasol Personal Edition...")
+        result = self._run_command(["stop"], timeout=300)  # 5 minutes
+
+        if result.returncode != 0:
+            self._log(f"Stop failed: {result.stderr}")
+            return False
+
+        self._log("Personal edition stopped successfully")
+        return True
+
+    def destroy(self) -> bool:
+        """Destroy deployment via 'exasol destroy'.
+
+        This removes all AWS resources created by the deployment.
+
+        Returns:
+            True if destroy succeeded
+        """
+        self._log("Destroying Exasol Personal Edition...")
+        result = self._run_command(["destroy"], timeout=600)  # 10 minutes
+
+        if result.returncode != 0:
+            self._log(f"Destroy failed: {result.stderr}")
+            return False
+
+        self._log("Personal edition destroyed successfully")
+        return True
+
+    def get_connection_info(self) -> SelfManagedConnectionInfo | None:
+        """Get connection details via 'exasol info --json'.
+
+        Returns:
+            SelfManagedConnectionInfo with host, port, username, password,
+            and extra info (certificate fingerprint, ssh command, etc.)
+        """
+        result = self._run_command(["info", "--json"], timeout=60)
+
+        if result.returncode != 0:
+            self._log(f"Failed to get connection info: {result.stderr}")
+            return None
+
+        try:
+            info_data = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            self._log(f"Failed to parse connection info JSON: {result.stdout}")
+            return None
+
+        # Extract connection details from the JSON output
+        # New CLI format has nodes nested: nodes.n11.publicIp, nodes.n11.database.dbPort
+        # Old format had: hostname, publicIp, dbPort at top level
+        host = ""
+        port = 8563
+        ssh_command = None
+        ssh_port = None
+        ui_port = None
+        cert_fingerprint = None
+
+        # Try new format first (nodes dict)
+        nodes = info_data.get("nodes", {})
+        if nodes:
+            # Get the first node (usually n11 for single-node clusters)
+            first_node: dict[str, Any] = next(iter(nodes.values()), {})
+            host = first_node.get("publicIp") or first_node.get("dnsName", "")
+
+            # Get database port from nested structure
+            database_info = first_node.get("database", {})
+            port_str = database_info.get("dbPort", "8563")
+            try:
+                port = int(port_str)
+            except (ValueError, TypeError):
+                port = 8563
+
+            ui_port_str = database_info.get("uiPort")
+            if ui_port_str:
+                try:
+                    ui_port = int(ui_port_str)
+                except (ValueError, TypeError):
+                    pass
+
+            # Get SSH info from nested structure
+            ssh_info = first_node.get("ssh", {})
+            ssh_command = ssh_info.get("command")
+            ssh_port_str = ssh_info.get("port")
+            if ssh_port_str:
+                try:
+                    ssh_port = int(ssh_port_str)
+                except (ValueError, TypeError):
+                    pass
+
+            # Get certificate from node
+            tls_cert = first_node.get("tlsCert")
+            if tls_cert:
+                cert_fingerprint = tls_cert[:50] + "..."  # Truncate for storage
+
+        # Fall back to old format if no nodes found
+        if not host:
+            host = info_data.get("hostname") or info_data.get("publicIp", "")
+            port_str = info_data.get("dbPort") or info_data.get("port", "8563")
+            try:
+                port = int(port_str)
+            except (ValueError, TypeError):
+                port = 8563
+            ssh_command = info_data.get("sshCommand")
+            ssh_port = info_data.get("sshPort")
+            ui_port = info_data.get("uiPort")
+            cert_fingerprint = info_data.get(
+                "certFingerprint", info_data.get("certificateFingerprint")
+            )
+
+        # Get password from secrets file
+        password = self._get_password()
+
+        return SelfManagedConnectionInfo(
+            host=host,
+            port=port,
+            username=info_data.get("username", "sys"),
+            password=password,
+            extra={
+                "certificate_fingerprint": cert_fingerprint,
+                "ssh_command": ssh_command,
+                "ssh_port": ssh_port,
+                "ui_port": ui_port,
+                "cluster_size": info_data.get("clusterSize"),
+                "cluster_state": info_data.get("clusterState"),
+                "deployment_id": info_data.get("deploymentId"),
+                "deployment_state": info_data.get("deploymentState"),
+            },
+        )
+
+    def _get_password(self) -> str | None:
+        """Read database password from secrets file in deployment directory.
+
+        The secrets file is named 'secrets-exasol-*.json' and contains:
+        {"dbPassword": "...", "adminUiPassword": "..."}
+        """
+        # Find secrets file using glob pattern
+        secrets_pattern = str(self.deployment_dir / "secrets-exasol-*.json")
+        secrets_files = glob.glob(secrets_pattern)
+
+        if not secrets_files:
+            self._log("No secrets file found in deployment directory")
+            return None
+
+        secrets_file = Path(secrets_files[0])
+        try:
+            with open(secrets_file) as f:
+                secrets = json.load(f)
+            db_password = secrets.get("dbPassword")
+            return str(db_password) if db_password is not None else None
+        except (OSError, json.JSONDecodeError) as e:
+            self._log(f"Failed to read secrets file: {e}")
+            return None
+
+    def get_system_info(self) -> dict[str, Any] | None:
+        """Query Exasol system info via database connection.
+
+        This provides system information when SSH probing is not available
+        or as supplementary info. Queries Exasol's system tables.
+
+        Returns:
+            Dictionary with system info, or None if unavailable.
+        """
+        conn_info = self.get_connection_info()
+        if not conn_info or not conn_info.host:
+            return None
+
+        try:
+            conn = pyexasol.connect(
+                dsn=f"{conn_info.host}:{conn_info.port}",
+                user=conn_info.username or "sys",
+                password=conn_info.password or "",
+                encryption=True,
+                compression=True,
+            )
+
+            system_info: dict[str, Any] = {
+                "probe_timestamp": None,
+                "hostname": conn_info.host,
+                "source": "exasol_api",
+            }
+
+            # Query system info from EXA_SYSTEM_PROPERTIES
+            try:
+                props = conn.execute(
+                    "SELECT PROPERTY_NAME, PROPERTY_VALUE FROM EXA_SYSTEM_PROPERTIES"
+                ).fetchall()
+                system_info["exasol_properties"] = {row[0]: row[1] for row in props}
+            except Exception as e:
+                self._log(f"Failed to query system properties: {e}")
+
+            # Query cluster info
+            try:
+                nodes = conn.execute(
+                    "SELECT NODE_NAME, NODE_STATE, ACTIVE_SESSIONS "
+                    "FROM EXA_STATISTICS.EXA_MONITOR_LAST_DAY "
+                    "WHERE MEASURE_TIME = (SELECT MAX(MEASURE_TIME) FROM EXA_STATISTICS.EXA_MONITOR_LAST_DAY)"
+                ).fetchall()
+                system_info["cluster_nodes"] = [
+                    {"name": row[0], "state": row[1], "sessions": row[2]}
+                    for row in nodes
+                ]
+            except Exception:
+                # Table might not exist or be accessible
+                pass
+
+            # Get database version
+            try:
+                version = conn.execute(
+                    "SELECT PARAM_VALUE FROM SYS.EXA_METADATA "
+                    "WHERE PARAM_NAME = 'databaseProductVersion'"
+                ).fetchone()
+                if version:
+                    system_info["database_version"] = version[0]
+            except Exception:
+                pass
+
+            conn.close()
+            return system_info
+
+        except Exception as e:
+            self._log(f"Failed to query system info: {e}")
+            return None
+
+    def install(self, options: dict[str, Any] | None = None) -> bool:
+        """Convenience method: init + deploy in one step.
+
+        Equivalent to 'exasol install' command.
+
+        Args:
+            options: Options to pass to init (cluster_size, instance_type, etc.)
+
+        Returns:
+            True if install succeeded
+        """
+        options = options or {}
+
+        # Check current status
+        status = self.get_status()
+
+        if status.status == self.STATUS_NOT_INITIALIZED:
+            # Need to initialize first
+            if not self.init(options):
+                return False
+
+        status = self.get_status()
+        if status.status == self.STATUS_INITIALIZED:
+            # Ready to deploy
+            return self.deploy()
+        elif status.status in [self.STATUS_RUNNING, self.STATUS_DATABASE_READY]:
+            # Already running
+            self._log("Personal edition is already running")
+            return True
+        elif status.status == self.STATUS_STOPPED:
+            # Just need to start
+            return self.start()
+        else:
+            self._log(f"Cannot install: deployment is in state '{status.status}'")
+            return False
+
+    def ensure_running(self, options: dict[str, Any] | None = None) -> bool:
+        """Ensure the deployment is running, installing/starting if needed.
+
+        Args:
+            options: Options for init if deployment doesn't exist
+
+        Returns:
+            True if deployment is now running
+        """
+        status = self.get_status()
+
+        if status.status in [self.STATUS_RUNNING, self.STATUS_DATABASE_READY]:
+            return True
+        elif status.status == self.STATUS_STOPPED:
+            return self.start()
+        elif status.status in [self.STATUS_NOT_INITIALIZED, self.STATUS_INITIALIZED]:
+            return self.install(options)
+        else:
+            self._log(
+                f"Deployment in unexpected state '{status.status}': {status.message}"
+            )
+            return False

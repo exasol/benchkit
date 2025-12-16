@@ -181,6 +181,7 @@ class SystemUnderTest(ABC):
             "native": self._install_native,
             "installer": self._install_native,
             "preinstalled": self._verify_preinstalled,
+            "managed": self._install_managed,
         }
         handler = handlers.get(method)
         if not handler:
@@ -199,6 +200,79 @@ class SystemUnderTest(ABC):
     def _verify_preinstalled(self) -> bool:
         """Verify preinstalled system is accessible. Default: check health."""
         return self.is_healthy()
+
+    @exclude_from_package
+    def _install_managed(self) -> bool:
+        """Configure connection for self-managed deployment (e.g., Exasol PE).
+
+        Self-managed systems are deployed during 'infra apply', NOT during setup.
+        This method loads connection info from the state file saved during deployment.
+
+        If the system was not deployed via 'infra apply', this will FAIL.
+        There is no backward compatibility - 'infra apply' must be run first.
+
+        Returns:
+            True if configuration succeeded, False otherwise
+        """
+        from benchkit.infra.managed_state import load_managed_state
+
+        project_id = self.config.get("project_id", "default")
+
+        self._log(f"Loading state for managed system: {self.name}")
+
+        # Load state from managed_state.py (saved during infra apply)
+        state = load_managed_state(project_id, self.name)
+
+        if not state:
+            self._log(
+                f"ERROR: No state found for managed system '{self.name}'. "
+                f"You must run 'infra apply' before 'setup' to deploy managed systems."
+            )
+            return False
+
+        status = state.get("status", "unknown")
+        if status not in ["running", "database_ready", "deployed"]:
+            self._log(
+                f"ERROR: Managed system '{self.name}' is not in a ready state. "
+                f"Current status: {status}. Run 'infra apply' to deploy."
+            )
+            return False
+
+        # Get connection info from state
+        connection_info = state.get("connection_info", {})
+        if not connection_info:
+            self._log(
+                f"ERROR: No connection info found in state for '{self.name}'. "
+                f"The deployment may have failed. Run 'infra apply' again."
+            )
+            return False
+
+        # Apply connection info to system attributes
+        host = connection_info.get("host")
+        port = connection_info.get("port")
+        username = connection_info.get("username")
+        # Note: password is not stored in state for security reasons
+        # It should be loaded from config or environment
+
+        self._log(f"Got connection info from state: host={host}, port={port}")
+
+        if host and hasattr(self, "host"):
+            self.host = host
+        if port and hasattr(self, "port"):
+            self.port = port
+        if username and hasattr(self, "username"):
+            self.username = username
+
+        # Store extra info (like certificate fingerprint, SSH info) for later use
+        extra = connection_info.get("extra", {})
+        if extra:
+            if not hasattr(self, "_managed_extra"):
+                self._managed_extra: dict[str, Any] = {}
+            self._managed_extra.update(extra)
+            self._log(f"Loaded extra info: {list(extra.keys())}")
+
+        self._log(f"Managed system '{self.name}' configured from state")
+        return True
 
     @exclude_from_package
     def _install_docker_common(
@@ -361,6 +435,7 @@ class SystemUnderTest(ABC):
         """
         pass
 
+    @exclude_from_package
     def get_connection_string(self, public_ip: str, private_ip: str) -> str:
         """
         Get connection string for this database system.
@@ -430,6 +505,7 @@ class SystemUnderTest(ABC):
         """
         pass
 
+    @exclude_from_package
     def load_data_from_url_with_download(
         self,
         schema_name: str,
@@ -471,6 +547,7 @@ class SystemUnderTest(ABC):
                 return False
         return True
 
+    @exclude_from_package
     def load_data_from_url(
         self,
         schema_name: str,
@@ -552,6 +629,7 @@ class SystemUnderTest(ABC):
         """
         pass
 
+    @exclude_from_package
     def prepare_data_directory(self) -> bool:
         """Prepare data directory for the database."""
         if self.data_dir is None:
@@ -1719,6 +1797,7 @@ class SystemUnderTest(ABC):
         # Subclasses should override this method for system-specific storage
         return self._setup_database_storage(workload)
 
+    @exclude_from_package
     def _detect_hardware_specs(self) -> dict[str, int]:
         """
         Detect actual CPU cores and memory from the system.

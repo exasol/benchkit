@@ -90,7 +90,9 @@
                 <h3>Key Findings</h3>
                 <ul>
                     <li><strong>{{ fastest_system[0] }}</strong> was the fastest overall with <strong>{{ fastest_system[1].median_runtime_ms | format_number }}ms</strong> median runtime</li>
+                    {% if fastest_system[1].median_runtime_ms > 0 %}
                     <li><strong>{{ slowest_system[0] }}</strong> was <strong>{{ (slowest_system[1].median_runtime_ms / fastest_system[1].median_runtime_ms) | format_number(1) }}x</strong> slower</li>
+                    {% endif %}
                     <li>Tested <strong>{{ data.summary.total_queries }}</strong> total query executions</li>
                 </ul>
             </div>

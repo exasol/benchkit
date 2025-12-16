@@ -1,5 +1,6 @@
 """Workload execution runner for minimal packages (Phase 3 - queries only)."""
 
+import sys
 from pathlib import Path
 from typing import Any
 from rich.console import Console
@@ -24,10 +25,11 @@ def execute_queries(config: dict[str, Any], output_dir: Path, force: bool = Fals
 
     if not workload_class:
         console.print(f"[red]Error: Unknown workload '{workload_name}'[/]")
-        return
+        sys.exit(1)
 
     all_results = []
     all_warmup_results = []
+    failed_systems: list[str] = []
 
     for system_config in config["systems"]:
         system_name = system_config["name"]
@@ -39,6 +41,7 @@ def execute_queries(config: dict[str, Any], output_dir: Path, force: bool = Fals
         system_class = get_system_class(system_kind)
         if not system_class:
             console.print(f"[red]Error: Unknown system kind '{system_kind}'[/]")
+            failed_systems.append(system_name)
             continue
 
         system = system_class(system_config)
@@ -81,7 +84,13 @@ def execute_queries(config: dict[str, Any], output_dir: Path, force: bool = Fals
             if is_debug_enabled():
                 import traceback
                 console.print(f"[dim]{traceback.format_exc()}[/dim]")
+            failed_systems.append(system_name)
             continue
+
+    # Exit with error if any systems failed
+    if failed_systems:
+        console.print(f"[red]Queries failed for systems: {', '.join(failed_systems)}[/]")
+        sys.exit(1)
 
     # Save results
     if all_results:

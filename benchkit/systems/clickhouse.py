@@ -61,6 +61,7 @@ class ClickHouseSystem(SystemUnderTest):
             "ClickHouse PostgreSQL": 9005,
         }
 
+    @exclude_from_package
     def get_connection_string(self, public_ip: str, private_ip: str) -> str:
         """Get ClickHouse connection string with full CLI command."""
         port = self.setup_config.get("port", 8123)
@@ -1087,6 +1088,7 @@ class ClickHouseSystem(SystemUnderTest):
 
         return True
 
+    @exclude_from_package
     def _calculate_max_concurrent_queries(self, cpu_cores: int) -> int:
         """
         Calculate max_concurrent_queries based on workload configuration.
@@ -1310,10 +1312,12 @@ class ClickHouseSystem(SystemUnderTest):
             self._cloud_instance_manager is not None and self.setup_method == "native"
         )
 
+    @exclude_from_package
     def _verify_preinstalled(self) -> bool:
         """Verify that ClickHouse is already installed and accessible."""
         return self.is_healthy()
 
+    @exclude_from_package
     def start(self) -> bool:
         """Start the ClickHouse system."""
         if self.setup_method == "docker":
@@ -1495,6 +1499,7 @@ class ClickHouseSystem(SystemUnderTest):
     ) -> bool:
         raise NotImplementedError("clickhouse.load_data_from_iterable")
 
+    @exclude_from_package
     def load_data_from_url(
         self,
         schema_name: str,
