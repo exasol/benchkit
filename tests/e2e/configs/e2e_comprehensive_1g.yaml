@@ -15,6 +15,7 @@
 #   E2E_SSH_KEY_PATH - Path to SSH private key file
 
 title: "E2E Comprehensive Test: All Systems and Configurations"
+project_id: "e2e_comprehensive_1g"
 author: "Benchkit E2E Tests"
 
 execution:
