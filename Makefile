@@ -1,4 +1,4 @@
-.PHONY: help probe run run-debug report all clean setup load lint test ruff bandit check infra-plan infra-apply infra-destroy web
+.PHONY: help probe run run-debug report all clean setup load lint test test-e2e test-e2e-dryrun ruff bandit check infra-plan infra-apply infra-destroy web
 
 CFG?=configs/exa_vs_ch_1g.yaml
 PORT?=8000
@@ -14,7 +14,7 @@ help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '^(all|run-full):' | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
 	@echo
 	@echo "Development:"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '^(dev-setup|lint|ruff|bandit|check|test|clean):' | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '^(dev-setup|lint|ruff|bandit|check|test|test-e2e|test-e2e-dryrun|clean):' | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-16s %s\n", $$1, $$2}'
 	@echo
 	@echo "Infrastructure:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '^(infra-|check-aws)' | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
@@ -94,6 +94,15 @@ check: lint ruff bandit ## Run all code quality and security checks
 
 test: ## Run pytest test suite
 	pytest tests/ -v
+
+test-e2e: ## Run E2E tests with real infrastructure (requires --e2e flag)
+	pytest tests/e2e/ --e2e -v
+
+test-e2e-dryrun: ## Run E2E dry-run tests only (no infrastructure)
+	pytest tests/e2e/test_cli_validation.py -v
+
+test-e2e-debug: ## Run E2E tests without cleanup (for debugging)
+	pytest tests/e2e/ --e2e --e2e-skip-cleanup -v
 
 clean: ## Clean up generated files and cache
 	rm -rf results/*/

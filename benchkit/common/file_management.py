@@ -7,10 +7,13 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .markers import exclude_from_package
+
 if TYPE_CHECKING:
     import requests
 
 
+@exclude_from_package
 def download_file_to_storage(url: str, target: Path) -> None:
     """Download data from a given URL to given target path"""
     import requests
@@ -23,6 +26,7 @@ def download_file_to_storage(url: str, target: Path) -> None:
         file.write(handle.content)
 
 
+@exclude_from_package
 def download_github_release(
     repo: str,
     version: str,
@@ -92,6 +96,7 @@ def download_github_release(
     return binary_path
 
 
+@exclude_from_package
 def _download_to_temp(response: requests.Response) -> str:
     """Download response content to a temporary file."""
     fd, temp_path = tempfile.mkstemp(suffix=".tar.gz")
@@ -106,6 +111,7 @@ def _download_to_temp(response: requests.Response) -> str:
         raise
 
 
+@exclude_from_package
 def _download_via_github_api(
     repo: str, version: str, asset_pattern: str, gh_token: str
 ) -> str | None:
@@ -154,8 +160,13 @@ def _download_via_github_api(
         return None
 
 
+@exclude_from_package
 def _extract_tarball(tarball_path: str, target_dir: Path, binary_name: str) -> Path:
-    """Extract binary from tarball."""
+    """Extract binary from tarball.
+
+    Note: This function is excluded from packages and runs only on the local
+    development machine, so we can safely require Python 3.12+ features.
+    """
     binary_path = target_dir / binary_name
 
     with tarfile.open(tarball_path, "r:gz") as tar:
@@ -164,12 +175,13 @@ def _extract_tarball(tarball_path: str, target_dir: Path, binary_name: str) -> P
             if member.name.endswith(binary_name) or member.name == binary_name:
                 # Extract to target directory
                 member.name = binary_name  # Rename to just binary name
-                tar.extract(member, target_dir)
+                tar.extract(member, target_dir, filter="data")  # nosec B202
                 binary_path.chmod(0o755)  # Make executable
                 return binary_path
 
-        # If exact name not found, try extracting all and finding it
-        tar.extractall(target_dir)
+        # If exact name not found, try extracting all safely
+        # Uses Python 3.12+ filter='data' for path traversal protection
+        tar.extractall(target_dir, filter="data")  # nosec B202
 
     # Look for the binary in extracted contents
     for item in target_dir.iterdir():

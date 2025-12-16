@@ -6,6 +6,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from .common.markers import exclude_from_package
+
 
 class Timer:
     """Context manager for timing operations."""
@@ -93,6 +95,7 @@ def ensure_directory(path: str | Path) -> Path:
     return dir_path
 
 
+@exclude_from_package
 def save_json(data: Any, path: str | Path, indent: int = 2) -> None:
     """Save data as JSON file."""
     filepath = Path(path)
@@ -102,6 +105,7 @@ def save_json(data: Any, path: str | Path, indent: int = 2) -> None:
         json.dump(data, f, indent=indent, default=str)
 
 
+@exclude_from_package
 def load_json(path: str | Path) -> Any:
     """Load data from JSON file."""
     with open(path, encoding="utf-8") as f:

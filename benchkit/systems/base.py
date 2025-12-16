@@ -435,6 +435,7 @@ class SystemUnderTest(ABC):
         """
         pass
 
+    @exclude_from_package
     def get_connection_string(self, public_ip: str, private_ip: str) -> str:
         """
         Get connection string for this database system.
@@ -504,6 +505,7 @@ class SystemUnderTest(ABC):
         """
         pass
 
+    @exclude_from_package
     def load_data_from_url_with_download(
         self,
         schema_name: str,
@@ -545,6 +547,7 @@ class SystemUnderTest(ABC):
                 return False
         return True
 
+    @exclude_from_package
     def load_data_from_url(
         self,
         schema_name: str,
@@ -626,6 +629,7 @@ class SystemUnderTest(ABC):
         """
         pass
 
+    @exclude_from_package
     def prepare_data_directory(self) -> bool:
         """Prepare data directory for the database."""
         if self.data_dir is None:
@@ -1793,6 +1797,7 @@ class SystemUnderTest(ABC):
         # Subclasses should override this method for system-specific storage
         return self._setup_database_storage(workload)
 
+    @exclude_from_package
     def _detect_hardware_specs(self) -> dict[str, int]:
         """
         Detect actual CPU cores and memory from the system.

@@ -8,6 +8,8 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, field_validator, model_validator
 
+from .common.markers import exclude_from_package
+
 
 class SystemConfig(BaseModel):
     """Configuration for a system under test."""
@@ -340,6 +342,7 @@ class BenchmarkConfig(BaseModel):
         return self
 
 
+@exclude_from_package
 def load_config(path: str | Path) -> dict[str, Any]:
     """Load and validate benchmark configuration from YAML file."""
     config_path = Path(path)

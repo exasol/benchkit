@@ -66,6 +66,7 @@ class ExasolSystem(SystemUnderTest):
             "Exasol SSH": 20002,
         }
 
+    @exclude_from_package
     def get_connection_string(self, public_ip: str, private_ip: str) -> str:
         """Get Exasol connection string with full CLI command."""
         port = self.setup_config.get("port", 8563)
@@ -1530,10 +1531,12 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
             self._log(f"Native Exasol installation failed: {e}")
             return False
 
+    @exclude_from_package
     def _verify_preinstalled(self) -> bool:
         """Verify that Exasol is already installed and accessible."""
         return self.is_healthy()
 
+    @exclude_from_package
     def start(self) -> bool:
         """Start the Exasol system."""
         self._log(f"Starting {self.name} system using {self.setup_method} method...")
@@ -2158,6 +2161,7 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
         except Exception:
             return False
 
+    @exclude_from_package
     def load_data_from_url(
         self,
         schema_name: str,
@@ -2522,6 +2526,7 @@ class ExasolPersonalEdition(SelfManagedDeployment):
         self._log("Personal edition deployed successfully")
         return True
 
+    @exclude_from_package
     def start(self) -> bool:
         """Start stopped deployment via 'exasol start'.
 

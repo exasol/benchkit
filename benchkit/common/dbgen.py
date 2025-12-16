@@ -4,6 +4,8 @@ from collections.abc import Iterable
 from subprocess import PIPE, Popen
 from typing import IO, Any
 
+from .markers import exclude_from_package
+
 
 class DbGenPipe:
     """
@@ -62,6 +64,7 @@ class DbGenPipe:
         assert header
         return self.proc.stdout
 
+    @exclude_from_package
     def readlines(self) -> Iterable[str]:
         """Returns the generated data one line at a time, excluding the column names header"""
         assert self.proc

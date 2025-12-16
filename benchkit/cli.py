@@ -1559,15 +1559,34 @@ def package(
     output_dir: str | None = typer.Option(
         None, "--output", "-o", help="Output directory for package"
     ),
+    systems: str | None = typer.Option(
+        None, "--systems", help="Comma-separated list of systems to include in package"
+    ),
     force: bool = typer.Option(
         False, "--force", "-f", help="Force creation even if already exists"
     ),
 ) -> None:
-    """Create a portable benchmark package."""
+    """Create a portable benchmark package.
+
+    By default, includes all systems from the config. Use --systems to create
+    a minimal package with only specific systems and their dependencies.
+    """
     cfg = load_config(config)
     output_path = Path(output_dir) if output_dir else None
 
+    # Filter to specific systems if requested
+    if systems:
+        system_names = [s.strip() for s in systems.split(",")]
+        cfg["systems"] = [s for s in cfg["systems"] if s["name"] in system_names]
+        if not cfg["systems"]:
+            console.print(
+                f"[red]Error: No matching systems found for: {system_names}[/]"
+            )
+            raise typer.Exit(1)
+
     console.print(f"[blue]Creating benchmark package for:[/] {cfg['project_id']}")
+    if systems:
+        console.print(f"[dim]Systems: {[s['name'] for s in cfg['systems']]}[/]")
 
     package_path = create_workload_zip(cfg, output_path, force)
     console.print(f"[green]✓ ZIP package created:[/] {package_path}")

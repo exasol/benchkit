@@ -109,3 +109,17 @@ ignore = [
 [tool.bandit]
 exclude_dirs = ["tests"]
 skips = ["B101", "B601"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+markers = [
+    "e2e: End-to-end tests requiring real infrastructure (use --e2e to run)",
+    "e2e_dryrun: Dry-run tests for CLI validation (no infrastructure required)",
+    "e2e_slow: Slow E2E tests that provision infrastructure",
+]
+# Don't run e2e tests by default (handled by conftest.py hook)
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]

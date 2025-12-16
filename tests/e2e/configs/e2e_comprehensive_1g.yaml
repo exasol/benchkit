@@ -1,0 +1,194 @@
+# E2E Comprehensive Test Configuration
+#
+# This configuration tests ALL supported combinations in a single benchmark run:
+# - Multiple environments: managed (Exasol PE) + AWS terraform
+# - Single-node and multinode configurations
+# - Exasol Native, Exasol Personal Edition, ClickHouse Native
+# - Original and tuned query variants
+#
+# Usage:
+#   pytest tests/e2e/ --e2e
+#   python -m benchkit check -c tests/e2e/configs/e2e_comprehensive_1g.yaml
+#
+# Required environment variables:
+#   E2E_SSH_KEY_NAME - AWS SSH key pair name
+#   E2E_SSH_KEY_PATH - Path to SSH private key file
+
+title: "E2E Comprehensive Test: All Systems and Configurations"
+author: "Benchkit E2E Tests"
+
+execution:
+  parallel: true
+  max_workers: 5  # Run all 5 systems in parallel
+
+# Multiple environments configuration
+environments:
+  # Exasol Personal Edition - manages its own AWS infrastructure
+  exasol_pe_env:
+    mode: "managed"
+
+  # AWS terraform-managed environment for native installations
+  aws_terraform:
+    mode: "aws"
+    region: "eu-west-1"
+    allow_external_database_access: true
+    instances:
+      # Single-node Exasol Native
+      exasol_sn:
+        instance_type: "r5d.xlarge"  # 4 vCPUs, 32GB RAM, 1x150GB NVMe
+        disk:
+          type: "local"
+        label: "e2e-exa-sn"
+      # Multinode Exasol Native (2 nodes)
+      exasol_mn:
+        instance_type: "r5d.xlarge"
+        disk:
+          type: "local"
+        label: "e2e-exa-mn"
+      # Single-node ClickHouse Native
+      clickhouse_sn:
+        instance_type: "r5d.xlarge"
+        disk:
+          type: "local"
+        label: "e2e-ch-sn"
+      # Multinode ClickHouse Native (2 nodes)
+      clickhouse_mn:
+        instance_type: "r5d.xlarge"
+        disk:
+          type: "local"
+        label: "e2e-ch-mn"
+    os_image: "ubuntu-22.04"
+    ssh_key_name: "${E2E_SSH_KEY_NAME}"
+    ssh_private_key_path: "${E2E_SSH_KEY_PATH}"
+
+systems:
+  # ==========================================================================
+  # 1. Exasol Personal Edition (managed environment)
+  #    Tests: managed deployment method, single-node PE
+  # ==========================================================================
+  - name: "exasol_pe"
+    kind: "exasol"
+    environment: "exasol_pe_env"
+    version: "8.35.0"
+    setup:
+      method: "managed"
+      exasol_pe_version: "0.5.1"
+      cluster_size: 1
+      instance_type: "r5d.xlarge"
+      data_volume_size: 50
+      schema: "BENCHMARK"
+      extra:
+        optimizer_mode: "analytical"
+
+  # ==========================================================================
+  # 2. Exasol Native Single-Node (AWS terraform)
+  #    Tests: native c4 installer, single-node, AWS terraform
+  # ==========================================================================
+  - name: "exasol_sn"
+    kind: "exasol"
+    environment: "aws_terraform"
+    version: "2025.1.8"
+    setup:
+      method: "installer"
+      use_additional_disk: true
+      c4_version: "4.28.5"
+      host_addrs: "$EXASOL_SN_PRIVATE_IP"
+      host_external_addrs: "$EXASOL_SN_PUBLIC_IP"
+      image_password: "exasol123"
+      db_password: "exasol456"
+      admin_password: "exasol789"
+      license_file: "configs/exasol.license"
+      db_mem_size: 16000  # 16GB RAM for 1GB scale factor
+      extra:
+        optimizer_mode: "analytical"
+        db_params:
+          - "-writeTouchInit=1"
+          - "-cacheMonitorLimit=0"
+          - "-useQueryCache=0"
+
+  # ==========================================================================
+  # 3. Exasol Native Multinode (AWS terraform)
+  #    Tests: native c4 installer, 2-node cluster, AWS terraform
+  # ==========================================================================
+  - name: "exasol_mn"
+    kind: "exasol"
+    environment: "aws_terraform"
+    version: "2025.1.8"
+    setup:
+      method: "installer"
+      node_count: 2
+      use_additional_disk: true
+      c4_version: "4.28.5"
+      host_addrs: "$EXASOL_MN_PRIVATE_IP"
+      host_external_addrs: "$EXASOL_MN_PUBLIC_IP"
+      image_password: "exasol123"
+      db_password: "exasol456"
+      admin_password: "exasol789"
+      license_file: "configs/exasol.license"
+      db_mem_size: 16000
+      extra:
+        optimizer_mode: "analytical"
+        db_params:
+          - "-writeTouchInit=1"
+          - "-cacheMonitorLimit=0"
+          - "-useQueryCache=0"
+
+  # ==========================================================================
+  # 4. ClickHouse Native Single-Node (AWS terraform)
+  #    Tests: native APT installation, single-node, original queries
+  # ==========================================================================
+  - name: "clickhouse_sn"
+    kind: "clickhouse"
+    environment: "aws_terraform"
+    version: "25.10.2.65"
+    setup:
+      method: "native"
+      use_additional_disk: true
+      data_dir: "/data/clickhouse"
+      host: "$CLICKHOUSE_SN_PUBLIC_IP"
+      port: 8123
+      username: "default"
+      password: "clickhouse123"
+      extra:
+        memory_limit: "16g"
+        max_threads: "4"
+        max_memory_usage: "15000000000"  # ~15GB
+
+  # ==========================================================================
+  # 5. ClickHouse Native Multinode (AWS terraform)
+  #    Tests: native APT installation, 2-node cluster, tuned queries
+  # ==========================================================================
+  - name: "clickhouse_mn"
+    kind: "clickhouse"
+    environment: "aws_terraform"
+    version: "25.10.2.65"
+    setup:
+      method: "native"
+      node_count: 2
+      use_additional_disk: true
+      data_dir: "/data/clickhouse"
+      host: "$CLICKHOUSE_MN_PUBLIC_IP"
+      port: 8123
+      username: "default"
+      password: "clickhouse123"
+      extra:
+        memory_limit: "16g"
+        max_threads: "4"
+        max_memory_usage: "15000000000"
+
+workload:
+  name: "tpch"
+  scale_factor: 1           # 1GB - minimal for E2E testing
+  runs_per_query: 2         # 2 runs - enough to verify execution
+  warmup_runs: 1            # 1 warmup run
+  data_format: "csv"
+  generator: "dbgen"
+  # Test query variants: tuned queries for ClickHouse multinode
+  system_variants:
+    clickhouse_mn: "tuned"
+
+report:
+  show_boxplots: true
+  show_latency_cdf: true
+  show_bar_chart: true
+  show_heatmap: true

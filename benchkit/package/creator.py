@@ -183,8 +183,9 @@ class WorkloadPackage:
         minimizer = CodeMinimizer(self.package_dir)
         stats = minimizer.minimize_all()
         console.print(
-            f"[green]✂️  Removed {stats['methods_removed']} methods and "
-            f"{stats['functions_removed']} functions[/]"
+            f"[green]✂️  Removed {stats['methods_removed']} methods, "
+            f"{stats['functions_removed']} functions, and "
+            f"{stats['classes_removed']} classes[/]"
         )
         console.print(
             f"[green]📉 Reduced from {stats['lines_before']} → "
@@ -351,39 +352,166 @@ class WorkloadPackage:
 
         # Copy only workload execution modules (no setup, infra, package, report)
         # Note: workloads module is copied separately by _copy_workload_module()
-        workload_modules = {
-            "run": [
-                "parsers.py"
-            ],  # Only parsers, no __init__.py to avoid import issues
-            "systems": None,  # Copy all - needed for database connections
-            "common": None,
+
+        # Copy run module (only parsers.py)
+        self._copy_run_module()
+
+        # Copy only essential common modules (not cli_helpers, enums, multinode, markers)
+        self._copy_essential_common_modules()
+
+        # Copy only configured systems (not all systems)
+        self._copy_configured_systems()
+
+    def _copy_run_module(self) -> None:
+        """Copy minimal run module with only parsers.py."""
+        src_dir = Path("benchkit/run")
+        dst_dir = self.package_dir / "benchkit" / "run"
+
+        if not src_dir.exists():
+            return
+
+        ensure_directory(dst_dir)
+
+        # Copy only parsers.py
+        src_file = src_dir / "parsers.py"
+        if src_file.exists():
+            shutil.copy2(src_file, dst_dir / "parsers.py")
+
+        # Create minimal __init__.py
+        init_file = dst_dir / "__init__.py"
+        init_file.write_text('"""Minimal run module for workload execution."""\n')
+
+    def _copy_essential_common_modules(self) -> None:
+        """Copy only essential common modules needed for workload execution.
+
+        Excludes modules not needed at runtime:
+        - cli_helpers.py (only used by main CLI)
+        - enums.py (only used by cli_helpers)
+        - multinode.py (not imported by package runtime)
+        - markers.py (only used during package creation)
+        """
+        src_dir = Path("benchkit/common")
+        dst_dir = self.package_dir / "benchkit" / "common"
+
+        if not src_dir.exists():
+            return
+
+        ensure_directory(dst_dir)
+
+        # Determine essential modules based on workload
+        essential_modules = self._get_essential_common_modules()
+
+        # Copy essential module files
+        for filename in essential_modules:
+            src_file = src_dir / filename
+            if src_file.exists():
+                shutil.copy2(src_file, dst_dir / filename)
+
+        # Generate minimal __init__.py with only needed exports
+        self._generate_common_init(dst_dir, essential_modules)
+
+    def _get_essential_common_modules(self) -> list[str]:
+        """Return list of essential common modules based on workload configuration.
+
+        Returns:
+            List of filenames to include (e.g., ['file_management.py', 'dbgen.py'])
+        """
+        # file_management.py is always needed (DataFormat, download_file_to_storage)
+        essential = ["file_management.py"]
+
+        # Add workload-specific modules
+        workload_name = self.config["workload"]["name"]
+        if workload_name == "tpch":
+            essential.append("dbgen.py")  # TPC-H data generation
+
+        return essential
+
+    def _generate_common_init(self, dst_dir: Path, included_files: list[str]) -> None:
+        """Generate minimal common/__init__.py based on included files.
+
+        Note: download_file_to_storage is NOT exported because it's marked
+        @exclude_from_package and will be removed by the CodeMinimizer.
+        """
+        imports = []
+
+        if "dbgen.py" in included_files:
+            imports.append("from .dbgen import DbGenPipe as DbGenPipe")
+        if "file_management.py" in included_files:
+            imports.append("from .file_management import DataFormat as DataFormat")
+
+        init_content = "\n".join(imports) + "\n"
+        (dst_dir / "__init__.py").write_text(init_content)
+
+    def _copy_configured_systems(self) -> None:
+        """Copy only system files for systems configured in the benchmark.
+
+        Instead of copying all system implementations, only copies:
+        - base.py (always required)
+        - System files for configured systems (e.g., exasol.py, clickhouse.py)
+        """
+        src_dir = Path("benchkit/systems")
+        dst_dir = self.package_dir / "benchkit" / "systems"
+
+        if not src_dir.exists():
+            return
+
+        ensure_directory(dst_dir)
+
+        # Always copy base.py (required by all systems)
+        base_file = src_dir / "base.py"
+        if base_file.exists():
+            shutil.copy2(base_file, dst_dir / "base.py")
+
+        # Get configured system kinds
+        configured_kinds = {s["kind"] for s in self.config.get("systems", [])}
+
+        # Copy only configured system files
+        for kind in configured_kinds:
+            src_file = src_dir / f"{kind}.py"
+            if src_file.exists():
+                shutil.copy2(src_file, dst_dir / f"{kind}.py")
+
+        # Generate minimal __init__.py with only configured systems
+        self._generate_systems_init(dst_dir, configured_kinds)
+
+    def _generate_systems_init(self, dst_dir: Path, configured_kinds: set[str]) -> None:
+        """Generate minimal systems/__init__.py for configured systems only."""
+        # Map system kinds to class names
+        kind_to_class = {
+            "exasol": "ExasolSystem",
+            "clickhouse": "ClickHouseSystem",
+            "postgresql": "PostgreSQLSystem",
         }
 
-        for module, files in workload_modules.items():
-            src_dir = Path("benchkit") / module
-            dst_dir = self.package_dir / "benchkit" / module
+        imports = ["from .base import SystemUnderTest"]
+        implementations = []
 
-            if not src_dir.exists():
-                continue
+        for kind in sorted(configured_kinds):
+            class_name = kind_to_class.get(kind, f"{kind.capitalize()}System")
+            imports.append(f"from .{kind} import {class_name}")
+            implementations.append(f'    "{kind}": {class_name},')
 
-            ensure_directory(dst_dir)
+        impl_dict = "SYSTEM_IMPLEMENTATIONS = {\n" + "\n".join(implementations) + "\n}"
 
-            if files is None:
-                # Copy entire module
-                shutil.copytree(src_dir, dst_dir, dirs_exist_ok=True)
-            else:
-                # Copy only specific files
-                for filename in files:
-                    src_file = src_dir / filename
-                    if src_file.exists():
-                        shutil.copy2(src_file, dst_dir / filename)
+        init_content = f'''"""Database system implementations."""
 
-                # Create minimal __init__.py for run module
-                if module == "run":
-                    init_file = dst_dir / "__init__.py"
-                    init_file.write_text(
-                        '"""Minimal run module for workload execution."""\n'
-                    )
+{chr(10).join(imports)}
+
+{impl_dict}
+
+
+def create_system(config: dict) -> SystemUnderTest:
+    """Create a system instance from configuration."""
+    kind = config.get("kind")
+    if kind not in SYSTEM_IMPLEMENTATIONS:
+        available = ", ".join(SYSTEM_IMPLEMENTATIONS.keys())
+        raise ValueError(f"Unsupported system: {{kind}}. Available: {{available}}")
+    return SYSTEM_IMPLEMENTATIONS[kind](config)
+
+
+__all__ = ["SystemUnderTest", "create_system", "SYSTEM_IMPLEMENTATIONS"]
+'''
+        (dst_dir / "__init__.py").write_text(init_content)
 
     def _copy_workload_config(self) -> None:
         """Copy configuration modified for workload execution only."""
@@ -502,18 +630,76 @@ __all__ = ["Workload", "{class_name}", "create_workload", "WORKLOAD_IMPLEMENTATI
         (dst_dir / "__init__.py").write_text(init_content)
 
     def _copy_workload_files(self) -> None:
-        """Copy workload-specific files."""
+        """Copy workload-specific files, filtering to only configured variants.
+
+        Instead of copying all variant directories, only copies:
+        - Base queries (queries/*.sql)
+        - Setup scripts (setup/*.sql)
+        - Only variant directories matching the configured variant
+        - Within variants, only system-specific subdirs for configured systems
+        """
         workload_name = self.config["workload"]["name"]
         workload_dir = Path("workloads") / workload_name
 
-        if workload_dir.exists():
-            dst_dir = self.package_dir / "workloads" / workload_name
-            shutil.copytree(
-                workload_dir,
-                dst_dir,
-                dirs_exist_ok=True,
-                ignore=shutil.ignore_patterns("verify", "__pycache__", "*.pyc"),
-            )
+        if not workload_dir.exists():
+            return
+
+        dst_dir = self.package_dir / "workloads" / workload_name
+
+        # Get configured variants and systems for filtering
+        needed_variants = self._get_needed_variants()
+        configured_systems = {s["kind"] for s in self.config.get("systems", [])}
+
+        def variant_filter(directory: str, files: list[str]) -> set[str]:
+            """Filter function for shutil.copytree - exclude unneeded variants."""
+            dir_path = Path(directory)
+            ignore: set[str] = set()
+
+            # Always exclude these
+            ignore.update({"verify", "__pycache__"})
+            ignore.update(f for f in files if f.endswith(".pyc"))
+
+            # If we're in the variants directory, filter by variant name
+            if dir_path.name == "variants":
+                for f in files:
+                    if (dir_path / f).is_dir() and f not in needed_variants:
+                        ignore.add(f)
+
+            # If we're inside a variant directory (e.g., variants/tuned/),
+            # filter by system kind
+            if dir_path.parent.name == "variants":
+                for f in files:
+                    sub_path = dir_path / f
+                    if sub_path.is_dir() and f not in configured_systems:
+                        ignore.add(f)
+
+            return ignore
+
+        shutil.copytree(
+            workload_dir,
+            dst_dir,
+            dirs_exist_ok=True,
+            ignore=variant_filter,
+        )
+
+    def _get_needed_variants(self) -> set[str]:
+        """Return set of variant names that are configured.
+
+        Returns:
+            Set of variant directory names to include (e.g., {'official', 'tuned'})
+        """
+        workload_config = self.config.get("workload", {})
+
+        # Start with the global variant (default: 'official')
+        variant = workload_config.get("variant", "official")
+        needed = {variant}
+
+        # Add any system-specific variants
+        system_variants = workload_config.get("system_variants", {})
+        if system_variants:
+            needed.update(system_variants.values())
+
+        return needed
 
     def _copy_minimal_system_files(self) -> None:
         """Copy only system files needed for database connections."""

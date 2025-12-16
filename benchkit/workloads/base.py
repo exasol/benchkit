@@ -11,6 +11,7 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
 
+from ..common.markers import exclude_from_package
 from ..systems.base import SystemUnderTest
 
 
@@ -80,6 +81,7 @@ class Workload(ABC):
         """
         pass
 
+    @exclude_from_package
     @abstractmethod
     def generate_data(self, output_dir: Path) -> bool:
         """
@@ -205,6 +207,7 @@ class Workload(ABC):
 
         return system.execute_query(formatted_sql, query_name=query_name)
 
+    @exclude_from_package
     def prepare(self, system: SystemUnderTest) -> bool:
         """
         Prepare the workload for execution (generate data, create schema, load data).
@@ -647,6 +650,7 @@ class Workload(ABC):
             "table_analysis": "Analyze tables and update statistics",
         }
 
+    @exclude_from_package
     def get_rendered_setup_scripts(self, system: SystemUnderTest) -> dict[str, str]:
         """
         Return rendered setup scripts for a specific system.
@@ -660,6 +664,7 @@ class Workload(ABC):
         # Default implementation - subclasses should override if they use setup scripts
         return {}
 
+    @exclude_from_package
     def get_workload_info(self) -> dict[str, Any]:
         """Get comprehensive information about this workload."""
         # Get query names - try to get from get_all_query_names() if available,

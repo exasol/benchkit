@@ -6,6 +6,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
+from benchkit.common.markers import exclude_from_package
 from benchkit.systems import SystemUnderTest
 from benchkit.util import safe_command
 
@@ -455,6 +456,7 @@ class TPCH(Workload):
             "table_analysis": "Update database statistics for query optimizer",
         }
 
+    @exclude_from_package
     def get_rendered_setup_scripts(self, system: SystemUnderTest) -> dict[str, str]:
         """Render setup scripts for specific system."""
         scripts = {}

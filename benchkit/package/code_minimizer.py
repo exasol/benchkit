@@ -17,6 +17,7 @@ class CodeMinimizer:
         self.stats = {
             "methods_removed": 0,
             "functions_removed": 0,
+            "classes_removed": 0,
             "lines_before": 0,
             "lines_after": 0,
             "files_processed": 0,
@@ -90,6 +91,7 @@ class CodeMinimizer:
         self.stats["lines_after"] += len(minimized.splitlines())
         self.stats["methods_removed"] += transformer.methods_removed
         self.stats["functions_removed"] += transformer.functions_removed
+        self.stats["classes_removed"] += transformer.classes_removed
         self.stats["files_processed"] += 1
 
         return minimized
