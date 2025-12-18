@@ -15,7 +15,7 @@ from typing import Any
 from benchkit.infra.self_managed import SelfManagedConnectionInfo
 
 # State file version for future schema migrations
-STATE_VERSION = 1
+STATE_VERSION = 2
 
 # State file name (stored in system's managed directory)
 STATE_FILENAME = "benchkit_state.json"
@@ -41,6 +41,7 @@ def save_managed_state(
     status: str,
     connection_info: SelfManagedConnectionInfo | None,
     deployment_dir: str | None = None,
+    infrastructure_commands: list[dict[str, Any]] | None = None,
 ) -> bool:
     """Save state for a managed system deployment.
 
@@ -51,6 +52,8 @@ def save_managed_state(
         status: Deployment status (e.g., "database_ready", "running")
         connection_info: Connection information from the deployment
         deployment_dir: Path to the deployment directory
+        infrastructure_commands: List of infrastructure deployment commands
+            recorded during infra apply phase for report reproduction
 
     Returns:
         True if state was saved successfully
@@ -68,6 +71,7 @@ def save_managed_state(
         "deployment_dir": deployment_dir,
         "deployed_at": datetime.now(timezone.utc).isoformat(),
         "connection_info": None,
+        "infrastructure_commands": infrastructure_commands or [],
     }
 
     if connection_info:

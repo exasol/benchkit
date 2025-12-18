@@ -79,6 +79,8 @@ class SelfManagedDeployment(ABC):
         # Store common parameters - subclasses can override or extend
         self._deployment_dir = deployment_dir
         self._output_callback = output_callback
+        # Infrastructure commands recorded during deployment for report reproduction
+        self.recorded_commands: list[dict[str, Any]] = []
 
     @abstractmethod
     def get_status(self) -> SelfManagedStatus:
@@ -295,6 +297,69 @@ class SelfManagedDeployment(ABC):
                 f"Deployment in unexpected state '{status.status}': {status.message}"
             )
         return False
+
+    def record_infrastructure_command(
+        self,
+        command: str,
+        description: str,
+        category: str = "infrastructure_deployment",
+    ) -> None:
+        """Record an infrastructure command for report reproduction.
+
+        Infrastructure commands (like 'exasol init aws' or 'exasol deploy')
+        are recorded during the infra apply phase and later injected into
+        the system's setup summary for inclusion in blog post reports.
+
+        Args:
+            command: The command that was executed
+            description: Human-readable description of what the command does
+            category: Category for grouping in reports (default: infrastructure_deployment)
+        """
+        sanitized_cmd = self._sanitize_infrastructure_command(command)
+        self.recorded_commands.append(
+            {
+                "command": sanitized_cmd,
+                "description": description,
+                "category": category,
+                "success": True,
+            }
+        )
+
+    def _sanitize_infrastructure_command(self, command: str) -> str:
+        """Remove sensitive data (passwords) from infrastructure commands.
+
+        Args:
+            command: The raw command string
+
+        Returns:
+            Sanitized command with passwords replaced by placeholders
+        """
+        import re
+
+        sanitized = command
+        # Replace --db-password value
+        sanitized = re.sub(
+            r"--db-password\s+\S+", "--db-password <DB_PASSWORD>", sanitized
+        )
+        # Replace --adminui-password value
+        sanitized = re.sub(
+            r"--adminui-password\s+\S+",
+            "--adminui-password <ADMIN_PASSWORD>",
+            sanitized,
+        )
+        # Replace any password= patterns (case-insensitive)
+        sanitized = re.sub(
+            r"password[=:]\S+", "password=<PASSWORD>", sanitized, flags=re.IGNORECASE
+        )
+        return sanitized
+
+    def get_recorded_commands(self) -> list[dict[str, Any]]:
+        """Return all recorded infrastructure commands.
+
+        Returns:
+            Copy of the recorded commands list
+        """
+        return self.recorded_commands.copy()
 
 
 def _get_deployment_class(system_kind: str) -> type[SelfManagedDeployment] | None:

@@ -2490,6 +2490,8 @@ class ExasolPersonalEdition(SelfManagedDeployment):
             True if initialization succeeded
         """
         args = ["init", "aws"]
+        # Build command string for recording (will be sanitized automatically)
+        cmd_parts = ["exasol", "init", "aws"]
 
         # Map options to CLI flags (convert snake_case to kebab-case)
         option_mapping = {
@@ -2509,6 +2511,13 @@ class ExasolPersonalEdition(SelfManagedDeployment):
             value = options.get(key)
             if value is not None:
                 args.extend([flag, str(value)])
+                cmd_parts.extend([flag, str(value)])
+
+        # Record the command before execution for report reproduction
+        self.record_infrastructure_command(
+            " ".join(cmd_parts),
+            "Initialize Exasol Personal Edition deployment on AWS",
+        )
 
         result = self._run_command(args, timeout=120)
         if result.returncode != 0:
@@ -2527,6 +2536,12 @@ class ExasolPersonalEdition(SelfManagedDeployment):
         Returns:
             True if deployment succeeded
         """
+        # Record the command before execution for report reproduction
+        self.record_infrastructure_command(
+            "exasol deploy",
+            "Deploy Exasol infrastructure and database (10-20 minutes)",
+        )
+
         self._log("Deploying Exasol Personal Edition (this may take 10-20 minutes)...")
         result = self._run_command(["deploy"], timeout=2400)  # 40 minutes timeout
 

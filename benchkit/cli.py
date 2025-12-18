@@ -1204,6 +1204,11 @@ def _apply_managed_systems(cfg: dict[str, Any]) -> bool:
             all_success = False
             continue
 
+        # Get recorded infrastructure commands for report reproduction
+        infra_commands = []
+        if hasattr(deployment, "get_recorded_commands"):
+            infra_commands = deployment.get_recorded_commands()
+
         # Get connection info and save state
         conn_info = deployment.get_connection_info()
         if conn_info:
@@ -1215,6 +1220,7 @@ def _apply_managed_systems(cfg: dict[str, Any]) -> bool:
                 status="deployed",
                 connection_info=conn_info,
                 deployment_dir=deployment_dir,
+                infrastructure_commands=infra_commands,
             )
             console.print(f"  [green]✓ {system_name} deployed successfully[/green]")
         else:
@@ -1228,6 +1234,7 @@ def _apply_managed_systems(cfg: dict[str, Any]) -> bool:
                 status="deployed",
                 connection_info=None,
                 deployment_dir=deployment_dir,
+                infrastructure_commands=infra_commands,
             )
 
     return all_success

@@ -55,6 +55,7 @@ class ReportRenderer:
 
         # Shared setup rendering configuration
         self.setup_category_order = [
+            "infrastructure_deployment",  # First: managed deployment commands (PE CLI)
             "storage_setup",
             "prerequisites",
             "repository_setup",
@@ -70,6 +71,7 @@ class ReportRenderer:
             "service_management",
         ]
         self.setup_category_labels = {
+            "infrastructure_deployment": "Infrastructure Deployment",
             "storage_setup": "Storage Configuration",
             "prerequisites": "Prerequisites",
             "repository_setup": "Repository Setup",

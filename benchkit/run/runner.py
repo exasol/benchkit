@@ -869,6 +869,16 @@ class BenchmarkRunner:
 
             connection_info = self._build_connection_info(instance_manager)
 
+            # Load infrastructure commands from managed state and inject into system
+            from ..infra.managed_state import load_managed_state
+
+            managed_state = load_managed_state(self.project_id, system_name)
+            if managed_state:
+                infra_commands = managed_state.get("infrastructure_commands", [])
+                # Prepend infrastructure commands (they happened first during infra apply)
+                for cmd in reversed(infra_commands):
+                    system.setup_commands.insert(0, cmd)
+
             # Record setup summary for managed systems too
             setup_summary = system.get_setup_summary()
             self._save_setup_summary(system_name, setup_summary)
