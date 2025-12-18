@@ -200,6 +200,178 @@ def _extract_tarball(tarball_path: str, target_dir: Path, binary_name: str) -> P
     raise RuntimeError(f"Binary '{binary_name}' not found in tarball")
 
 
+@exclude_from_package
+def discover_exasol_manifest_url(downloads_page_url: str) -> str:
+    """
+    Discover the packages.json manifest URL from Exasol downloads page.
+
+    Parses the HTML to find the preload link containing 'packages.json'.
+
+    Args:
+        downloads_page_url: URL of the Exasol downloads page
+
+    Returns:
+        URL of the packages.json manifest
+
+    Raises:
+        RuntimeError: If manifest URL cannot be discovered
+    """
+    import re
+
+    import requests
+
+    try:
+        response = requests.get(downloads_page_url, timeout=30)
+        response.raise_for_status()
+
+        # Look for href containing packages.json in the HTML
+        # Pattern: href="https://...packages.json"
+        match = re.search(r'href="([^"]*packages\.json[^"]*)"', response.text)
+        if match:
+            return match.group(1)
+
+        raise RuntimeError(f"Could not find packages.json URL in {downloads_page_url}")
+
+    except requests.RequestException as e:
+        raise RuntimeError(f"Failed to fetch Exasol downloads page: {e}") from e
+
+
+@exclude_from_package
+def download_exasol_personal_cli(
+    downloads_page_url: str,
+    version: str,
+    target_dir: Path,
+    binary_name: str = "exasol",
+) -> Path:
+    """
+    Download Exasol Personal Edition CLI from official downloads site.
+
+    Auto-discovers the manifest URL, finds the appropriate binary for the
+    current platform, downloads it, and verifies the SHA256 checksum.
+
+    Args:
+        downloads_page_url: URL of the Exasol downloads page
+        version: CLI version (e.g., "1.0.0") or "latest"
+        target_dir: Directory to save binary to
+        binary_name: Name for the downloaded binary (default: "exasol")
+
+    Returns:
+        Path to the downloaded binary
+
+    Raises:
+        RuntimeError: If download fails
+    """
+    import hashlib
+    import platform
+
+    import requests
+
+    target_dir = Path(target_dir)
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    # Discover manifest URL from downloads page
+    manifest_url = discover_exasol_manifest_url(downloads_page_url)
+
+    # Fetch manifest
+    try:
+        response = requests.get(manifest_url, timeout=30)
+        response.raise_for_status()
+        manifest = response.json()
+    except requests.RequestException as e:
+        raise RuntimeError(f"Failed to fetch manifest: {e}") from e
+
+    # Determine platform
+    system = platform.system()
+    machine = platform.machine()
+
+    # Map Python platform to Exasol manifest conventions
+    os_map = {"Linux": "Linux", "Darwin": "MacOS"}
+    arch_map = {"x86_64": "x86_64", "aarch64": "arm64", "arm64": "arm64"}
+
+    if system not in os_map:
+        raise RuntimeError(f"Unsupported platform: {system}")
+    if machine not in arch_map:
+        raise RuntimeError(f"Unsupported architecture: {machine}")
+
+    target_os = os_map[system]
+    target_arch = arch_map[machine]
+
+    # Find Exasol Personal in manifest
+    personal_edition = None
+    for artefact in manifest.get("artefacts", []):
+        if artefact.get("name") == "Exasol Personal":
+            personal_edition = artefact
+            break
+
+    if not personal_edition:
+        raise RuntimeError("Exasol Personal not found in manifest")
+
+    # Find matching OS and architecture
+    download_url = None
+    expected_sha256 = None
+
+    for os_entry in personal_edition.get("operatingSystems", []):
+        if os_entry.get("operatingSystem") != target_os:
+            continue
+
+        for arch_entry in os_entry.get("architectures", []):
+            if arch_entry.get("architecture") != target_arch:
+                continue
+
+            # Find the requested version
+            for ver_entry in arch_entry.get("versions", []):
+                if version == "latest":
+                    if ver_entry.get("isLatest"):
+                        download_url = ver_entry["packageFile"]["url"]
+                        expected_sha256 = ver_entry["packageFile"]["sha256"]
+                        break
+                elif ver_entry.get("version") == version:
+                    download_url = ver_entry["packageFile"]["url"]
+                    expected_sha256 = ver_entry["packageFile"]["sha256"]
+                    break
+
+            if download_url:
+                break
+        if download_url:
+            break
+
+    if not download_url:
+        raise RuntimeError(
+            f"No download URL found for Exasol Personal "
+            f"version={version} os={target_os} arch={target_arch}"
+        )
+
+    # Download the binary
+    try:
+        response = requests.get(download_url, allow_redirects=True, stream=True)
+        response.raise_for_status()
+    except requests.RequestException as e:
+        raise RuntimeError(f"Failed to download CLI binary: {e}") from e
+
+    binary_path = target_dir / binary_name
+
+    # Download and compute checksum
+    sha256_hash = hashlib.sha256()
+    with open(binary_path, "wb") as f:
+        for chunk in response.iter_content(chunk_size=8192):
+            f.write(chunk)
+            sha256_hash.update(chunk)
+
+    # Verify checksum
+    actual_sha256 = sha256_hash.hexdigest()
+    if expected_sha256 and actual_sha256 != expected_sha256:
+        binary_path.unlink()  # Remove corrupted file
+        raise RuntimeError(
+            f"SHA256 checksum mismatch: expected {expected_sha256}, "
+            f"got {actual_sha256}"
+        )
+
+    # Make executable
+    binary_path.chmod(0o755)
+
+    return binary_path
+
+
 class DataFormat(Enum):
     CSV = 1
     TBL = 2

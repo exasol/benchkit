@@ -2245,9 +2245,12 @@ class ExasolPersonalEdition(SelfManagedDeployment):
     STATUS_INTERRUPTED = "interrupted"
     STATUS_DEPLOYMENT_FAILED = "deployment_failed"
 
-    # GitHub repository for CLI releases
+    # Exasol downloads site (primary source)
+    CLI_DOWNLOADS_PAGE = "https://downloads.exasol.com/"
+    CLI_DEFAULT_VERSION = "1.0.0"
+
+    # GitHub repository for CLI releases (fallback)
     CLI_REPO = "exasol/personal-edition"
-    CLI_DEFAULT_VERSION = "0.5.1"
 
     # Enable remote execution support for load/run phases
     SUPPORTS_REMOTE_EXECUTION = True
@@ -2265,13 +2268,15 @@ class ExasolPersonalEdition(SelfManagedDeployment):
             output_callback: Optional callback for logging output
             setup_config: Setup configuration with exasol_pe_version and other options
         """
+        # Initialize base class (sets _deployment_dir, _output_callback,
+        # recorded_commands, _deployment_timing_s)
+        super().__init__(
+            deployment_dir=deployment_dir,
+            output_callback=output_callback,
+        )
+        # Also store as resolved Path for convenience (base class uses _deployment_dir as str)
         self.deployment_dir = Path(deployment_dir).expanduser().resolve()
-        self._output_callback = output_callback
         self._setup_config = setup_config or {}
-
-        # Initialize recorded_commands list from base class
-        # (not using super().__init__ due to different attribute naming)
-        self.recorded_commands: list[dict[str, Any]] = []
 
         # Extract CLI version from setup_config
         self._cli_version = self._setup_config.get(
@@ -2333,8 +2338,9 @@ class ExasolPersonalEdition(SelfManagedDeployment):
     def ensure_cli_available(self) -> bool:
         """Ensure the CLI binary is available, downloading if necessary.
 
-        Downloads the Exasol Personal Edition CLI from GitHub releases if
-        it's not already present at cli_path.
+        Downloads the Exasol Personal Edition CLI from the official Exasol
+        downloads site (downloads.exasol.com). Falls back to GitHub releases
+        if the Exasol site is unavailable.
 
         Returns:
             True if CLI is available (was found or successfully downloaded),
@@ -2343,7 +2349,10 @@ class ExasolPersonalEdition(SelfManagedDeployment):
         import os
         import platform
 
-        from benchkit.common.file_management import download_github_release
+        from benchkit.common.file_management import (
+            download_exasol_personal_cli,
+            download_github_release,
+        )
 
         cli_path = Path(self.cli_path)
 
@@ -2352,7 +2361,26 @@ class ExasolPersonalEdition(SelfManagedDeployment):
             self._log(f"CLI already available at {cli_path}")
             return True
 
-        # Determine the correct asset for the platform
+        # Ensure target directory exists
+        cli_dir = cli_path.parent
+        cli_dir.mkdir(parents=True, exist_ok=True)
+
+        # Try Exasol downloads site first (primary source)
+        self._log(f"Downloading Exasol PE CLI v{self._cli_version} from Exasol...")
+        try:
+            downloaded_path = download_exasol_personal_cli(
+                downloads_page_url=self.CLI_DOWNLOADS_PAGE,
+                version=self._cli_version,
+                target_dir=cli_dir,
+                binary_name="exasol",
+            )
+            self._log(f"CLI downloaded to {downloaded_path}")
+            return True
+        except RuntimeError as e:
+            self._log(f"Exasol download failed: {e}")
+            self._log("Falling back to GitHub...")
+
+        # Fallback to GitHub releases
         system = platform.system()
         machine = platform.machine()
 
@@ -2376,14 +2404,7 @@ class ExasolPersonalEdition(SelfManagedDeployment):
             self._log(f"Unsupported platform: {system}")
             return False
 
-        self._log(f"Downloading Exasol PE CLI v{self._cli_version}...")
-
-        # Get GH_TOKEN for private repo access
         gh_token = os.environ.get("GH_TOKEN")
-
-        # Ensure target directory exists
-        cli_dir = cli_path.parent
-        cli_dir.mkdir(parents=True, exist_ok=True)
 
         try:
             downloaded_path = download_github_release(
@@ -2397,7 +2418,7 @@ class ExasolPersonalEdition(SelfManagedDeployment):
             self._log(f"CLI downloaded to {downloaded_path}")
             return True
         except RuntimeError as e:
-            self._log(f"Failed to download CLI: {e}")
+            self._log(f"GitHub download failed: {e}")
             return False
 
     def _run_command(
