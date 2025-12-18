@@ -2269,6 +2269,10 @@ class ExasolPersonalEdition(SelfManagedDeployment):
         self._output_callback = output_callback
         self._setup_config = setup_config or {}
 
+        # Initialize recorded_commands list from base class
+        # (not using super().__init__ due to different attribute naming)
+        self.recorded_commands: list[dict[str, Any]] = []
+
         # Extract CLI version from setup_config
         self._cli_version = self._setup_config.get(
             "exasol_pe_version", self.CLI_DEFAULT_VERSION

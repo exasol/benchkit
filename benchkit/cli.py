@@ -1712,14 +1712,17 @@ def _load_phase_data(
     """
     Load phase completion data for all systems.
 
-    Returns dict: {system_name: {'setup': {...}, 'load': {...}}}
+    Returns dict: {system_name: {'setup': {...}, 'load': {...}, 'infra': {...}}}
     """
     from .util import load_json
 
     phase_data: dict[str, dict[str, Any]] = {}
 
+    # Load global infrastructure provisioning timing
+    infra_timing = _load_infrastructure_timing(results_dir)
+
     for system_name in system_names:
-        phase_data[system_name] = {"setup": None, "load": None}
+        phase_data[system_name] = {"setup": None, "load": None, "infra": infra_timing}
 
         # Load setup completion data
         setup_path = results_dir / f"setup_complete_{system_name}.json"
@@ -1738,6 +1741,20 @@ def _load_phase_data(
                 phase_data[system_name]["load"] = {"exists": True}
 
     return phase_data
+
+
+def _load_infrastructure_timing(results_dir: Path) -> dict[str, Any] | None:
+    """Load infrastructure provisioning timing from results directory."""
+    from .util import load_json
+
+    infra_path = results_dir / "infrastructure_provisioning.json"
+    if infra_path.exists():
+        try:
+            data = load_json(infra_path)
+            return dict(data) if isinstance(data, dict) else None
+        except Exception:
+            return None
+    return None
 
 
 def _load_runs_data(results_dir: Path) -> "pd.DataFrame | None":
@@ -2090,6 +2107,12 @@ def _show_detailed_status(cfg: dict[str, Any], config_file: Path) -> None:
         # Infrastructure availability (cloud or managed)
         if has_infra:
             _, infra_cell = _check_infra_available(cfg, system_name, infra_ips)
+            # Add infrastructure provisioning timing if available
+            infra_data = system_phase.get("infra")
+            if infra_data:
+                infra_timing = infra_data.get("infrastructure_provisioning_s", 0)
+                if infra_timing > 0:
+                    infra_cell = infra_cell + f" {_format_timing(infra_timing)}"
             phase_table.add_row(
                 system_name, setup_cell, load_cell, run_cell, infra_cell
             )
@@ -2150,7 +2173,7 @@ def _show_detailed_status(cfg: dict[str, Any], config_file: Path) -> None:
 def _show_infrastructure_details(
     cfg: dict[str, Any], systems: list[dict[str, Any]]
 ) -> None:
-    """Show infrastructure details including IPs and connection strings.
+    """Show infrastructure details including IPs, connection strings, and SSH commands.
 
     This function displays a unified table for both cloud (Terraform) and
     managed (self-managed) systems.
@@ -2171,10 +2194,13 @@ def _show_infrastructure_details(
             header_style="bold magenta",
             title="Infrastructure Details",
         )
-        infra_table.add_column("System", style="bold")
-        infra_table.add_column("Public IP")
-        infra_table.add_column("Private IP")
-        infra_table.add_column("Connection String")
+        infra_table.add_column("System", style="bold", no_wrap=True)
+        infra_table.add_column("Public IP", no_wrap=True)
+        infra_table.add_column("Private IP", no_wrap=True)
+        infra_table.add_column("Connection String", overflow="fold")
+
+        # Collect SSH commands for display after table
+        ssh_commands: list[tuple[str, str]] = []
 
         for system in systems:
             system_name = system["name"]
@@ -2223,14 +2249,97 @@ def _show_infrastructure_details(
                 except Exception:
                     connection_str = f"{system_kind}://{first_public_ip}"
 
+            # Build SSH command
+            ssh_command = _build_ssh_command(cfg, system, ips, first_public_ip)
+            if ssh_command and ssh_command != "-":
+                ssh_commands.append((system_name, ssh_command))
+
             infra_table.add_row(system_name, public_ip, private_ip, connection_str)
 
         console.print(infra_table)
+
+        # Print SSH commands separately for easy copy-paste
+        if ssh_commands:
+            console.print("\n[bold magenta]SSH Commands[/bold magenta]")
+            for system_name, ssh_cmd in ssh_commands:
+                console.print(f"  [bold]{system_name}:[/bold]")
+                console.print(f"    [dim]{ssh_cmd}[/dim]")
 
     except Exception as e:
         console.print(
             f"[yellow]Could not retrieve infrastructure details: {e}[/yellow]"
         )
+
+
+def _build_ssh_command(
+    cfg: dict[str, Any],
+    system: dict[str, Any],
+    ips: dict[str, Any],
+    public_ip: str,
+) -> str:
+    """Build SSH command for a system.
+
+    For managed systems, uses the SSH command stored in their deployment state.
+    For cloud systems, constructs the SSH command from the environment config.
+
+    Args:
+        cfg: Full configuration dict
+        system: System configuration dict
+        ips: IP information dict for the system (may include ssh_command for managed)
+        public_ip: The public IP to connect to
+
+    Returns:
+        SSH command string or "-" if not available
+    """
+    import re
+
+    from .common.cli_helpers import (
+        get_environment_for_system,
+        get_managed_deployment_dir,
+        get_managed_systems,
+        is_managed_system,
+    )
+
+    system_name = system["name"]
+
+    # For managed systems, use the stored SSH command
+    if is_managed_system(cfg, system_name):
+        ssh_command = str(ips.get("ssh_command", ""))
+        if ssh_command:
+            # For managed systems, the key path may be relative to deployment dir
+            # Make it copy-pasteable by making paths absolute if needed
+            if " -i " in ssh_command:
+                key_match = re.search(r"-i\s+([^\s]+)", ssh_command)
+                if key_match:
+                    key_path = key_match.group(1)
+                    # Check if key is relative path
+                    if not os.path.isabs(key_path) and not key_path.startswith("~"):
+                        # Try to resolve from managed deployment dir
+                        for managed_sys in get_managed_systems(cfg):
+                            if managed_sys["name"] == system_name:
+                                deployment_dir = get_managed_deployment_dir(
+                                    cfg, managed_sys
+                                )
+                                resolved_path = os.path.join(deployment_dir, key_path)
+                                if os.path.exists(resolved_path):
+                                    ssh_command = ssh_command.replace(
+                                        f"-i {key_path}", f"-i {resolved_path}"
+                                    )
+                                break
+            return ssh_command
+        return "-"
+
+    # For cloud systems, construct SSH command from environment config
+    _, env_config = get_environment_for_system(cfg, system_name)
+    ssh_key_path = str(env_config.get("ssh_private_key_path", ""))
+
+    if ssh_key_path:
+        # Expand ~ to full path for copy-paste convenience
+        expanded_path = os.path.expanduser(ssh_key_path)
+        return f"ssh -i {expanded_path} ubuntu@{public_ip}"
+
+    # No SSH key configured
+    return f"ssh ubuntu@{public_ip}"
 
 
 def _show_configs_summary(config_files: list[Path]) -> None:
