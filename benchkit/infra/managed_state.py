@@ -42,6 +42,7 @@ def save_managed_state(
     connection_info: SelfManagedConnectionInfo | None,
     deployment_dir: str | None = None,
     infrastructure_commands: list[dict[str, Any]] | None = None,
+    deployment_timing_s: float | None = None,
 ) -> bool:
     """Save state for a managed system deployment.
 
@@ -54,6 +55,7 @@ def save_managed_state(
         deployment_dir: Path to the deployment directory
         infrastructure_commands: List of infrastructure deployment commands
             recorded during infra apply phase for report reproduction
+        deployment_timing_s: Deployment duration in seconds (from SelfManagedDeployment)
 
     Returns:
         True if state was saved successfully
@@ -70,6 +72,7 @@ def save_managed_state(
         "system_name": system_name,
         "deployment_dir": deployment_dir,
         "deployed_at": datetime.now(timezone.utc).isoformat(),
+        "deployment_timing_s": deployment_timing_s,
         "connection_info": None,
         "infrastructure_commands": infrastructure_commands or [],
     }

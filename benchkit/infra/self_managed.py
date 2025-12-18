@@ -81,6 +81,20 @@ class SelfManagedDeployment(ABC):
         self._output_callback = output_callback
         # Infrastructure commands recorded during deployment for report reproduction
         self.recorded_commands: list[dict[str, Any]] = []
+        # Deployment timing (captured during ensure_running/install)
+        self._deployment_timing_s: float | None = None
+
+    @property
+    def deployment_timing_s(self) -> float | None:
+        """Get the deployment timing in seconds (if recorded).
+
+        This timing is captured when ensure_running() triggers an actual
+        deployment (init + deploy), not when the system is already running.
+
+        Returns:
+            Deployment duration in seconds, or None if not recorded.
+        """
+        return self._deployment_timing_s
 
     @abstractmethod
     def get_status(self) -> SelfManagedStatus:
@@ -266,7 +280,9 @@ class SelfManagedDeployment(ABC):
     def ensure_running(self, options: dict[str, Any] | None = None) -> bool:
         """Ensure the deployment is running, installing/starting if needed.
 
-        Subclasses may override this with custom logic.
+        Tracks deployment timing when an actual deployment (init + deploy) occurs.
+        Subclasses may override this with custom logic but should call super()
+        or implement their own timing capture.
 
         Args:
             options: Options for init if deployment doesn't exist
@@ -274,22 +290,32 @@ class SelfManagedDeployment(ABC):
         Returns:
             True if deployment is now running
         """
+        from benchkit.util import Timer
+
         status = self.get_status()
 
-        # If running, we're good
+        # If running, we're good (no timing to capture)
         if "running" in status.status.lower() or "ready" in status.status.lower():
             return True
 
-        # If stopped, try to start
+        # If stopped, try to start (quick operation, track timing)
         if "stopped" in status.status.lower():
-            return self.start()
+            with Timer("Start deployment") as timer:
+                success = self.start()
+            if success:
+                self._deployment_timing_s = timer.elapsed
+            return success
 
-        # If not initialized or initialized, try to install
+        # If not initialized or initialized, try to install (full deployment, track timing)
         if (
             status.status == self.STATUS_NOT_INITIALIZED
             or "initialized" in status.status.lower()
         ):
-            return self.install(options)
+            with Timer("Full deployment") as timer:
+                success = self.install(options)
+            if success:
+                self._deployment_timing_s = timer.elapsed
+            return success
 
         # Unknown state
         if self._output_callback:

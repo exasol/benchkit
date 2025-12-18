@@ -1221,6 +1221,7 @@ def _apply_managed_systems(cfg: dict[str, Any]) -> bool:
                 connection_info=conn_info,
                 deployment_dir=deployment_dir,
                 infrastructure_commands=infra_commands,
+                deployment_timing_s=deployment.deployment_timing_s,
             )
             console.print(f"  [green]✓ {system_name} deployed successfully[/green]")
         else:
@@ -1235,6 +1236,7 @@ def _apply_managed_systems(cfg: dict[str, Any]) -> bool:
                 connection_info=None,
                 deployment_dir=deployment_dir,
                 infrastructure_commands=infra_commands,
+                deployment_timing_s=deployment.deployment_timing_s,
             )
 
     return all_success
@@ -1709,20 +1711,23 @@ def _extract_error_summary(error_msg: str | None) -> str:
 def _load_phase_data(
     results_dir: Path, system_names: list[str]
 ) -> dict[str, dict[str, Any]]:
-    """
-    Load phase completion data for all systems.
+    """Load phase completion data for all systems.
 
-    Returns dict: {system_name: {'setup': {...}, 'load': {...}, 'infra': {...}}}
+    Returns dict: {system_name: {'setup': {...}, 'load': {...}, 'infra_timing_s': float|None}}
     """
     from .util import load_json
 
     phase_data: dict[str, dict[str, Any]] = {}
 
-    # Load global infrastructure provisioning timing
-    infra_timing = _load_infrastructure_timing(results_dir)
-
     for system_name in system_names:
-        phase_data[system_name] = {"setup": None, "load": None, "infra": infra_timing}
+        # Get deployment timing (unified: checks managed state first, then cloud infra)
+        infra_timing_s = _get_deployment_timing(results_dir, system_name)
+
+        phase_data[system_name] = {
+            "setup": None,
+            "load": None,
+            "infra_timing_s": infra_timing_s,
+        }
 
         # Load setup completion data
         setup_path = results_dir / f"setup_complete_{system_name}.json"
@@ -1743,17 +1748,46 @@ def _load_phase_data(
     return phase_data
 
 
-def _load_infrastructure_timing(results_dir: Path) -> dict[str, Any] | None:
-    """Load infrastructure provisioning timing from results directory."""
+def _get_deployment_timing(results_dir: Path, system_name: str) -> float | None:
+    """Get deployment timing in seconds for any system type.
+
+    Unified timing retrieval that checks sources in priority order:
+    1. Managed state (per-system) → for self-managed deployments (Exasol PE)
+    2. Global cloud infra → for Terraform-managed systems (ClickHouse)
+
+    Args:
+        results_dir: Results directory path
+        system_name: Name of the system
+
+    Returns:
+        Deployment timing in seconds, or None if not available.
+    """
     from .util import load_json
 
+    # Check managed state first (per-system timing for self-managed deployments)
+    state_file = results_dir / "managed" / system_name / "benchkit_state.json"
+    if state_file.exists():
+        try:
+            data = load_json(state_file)
+            if isinstance(data, dict):
+                timing = data.get("deployment_timing_s")
+                if timing and timing > 0:
+                    return float(timing)
+        except Exception:
+            pass
+
+    # Fall back to global cloud infra timing (Terraform)
     infra_path = results_dir / "infrastructure_provisioning.json"
     if infra_path.exists():
         try:
             data = load_json(infra_path)
-            return dict(data) if isinstance(data, dict) else None
+            if isinstance(data, dict):
+                timing = data.get("infrastructure_provisioning_s")
+                if timing and timing > 0:
+                    return float(timing)
         except Exception:
-            return None
+            pass
+
     return None
 
 
@@ -2108,11 +2142,9 @@ def _show_detailed_status(cfg: dict[str, Any], config_file: Path) -> None:
         if has_infra:
             _, infra_cell = _check_infra_available(cfg, system_name, infra_ips)
             # Add infrastructure provisioning timing if available
-            infra_data = system_phase.get("infra")
-            if infra_data:
-                infra_timing = infra_data.get("infrastructure_provisioning_s", 0)
-                if infra_timing > 0:
-                    infra_cell = infra_cell + f" {_format_timing(infra_timing)}"
+            infra_timing = system_phase.get("infra_timing_s")
+            if infra_timing and infra_timing > 0:
+                infra_cell = infra_cell + f" {_format_timing(infra_timing)}"
             phase_table.add_row(
                 system_name, setup_cell, load_cell, run_cell, infra_cell
             )
@@ -2263,7 +2295,7 @@ def _show_infrastructure_details(
             console.print("\n[bold magenta]SSH Commands[/bold magenta]")
             for system_name, ssh_cmd in ssh_commands:
                 console.print(f"  [bold]{system_name}:[/bold]")
-                console.print(f"    [dim]{ssh_cmd}[/dim]")
+                console.print(f"    {ssh_cmd}", soft_wrap=True)
 
     except Exception as e:
         console.print(
