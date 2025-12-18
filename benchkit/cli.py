@@ -1751,9 +1751,9 @@ def _load_phase_data(
 def _get_deployment_timing(results_dir: Path, system_name: str) -> float | None:
     """Get deployment timing in seconds for any system type.
 
-    Unified timing retrieval that checks sources in priority order:
-    1. Managed state (per-system) → for self-managed deployments (Exasol PE)
-    2. Global cloud infra → for Terraform-managed systems (ClickHouse)
+    Timing retrieval that checks the appropriate source based on system type:
+    - Managed systems: Only use managed state file (no fallback to terraform)
+    - Cloud systems: Use global terraform timing
 
     Args:
         results_dir: Results directory path
@@ -1767,6 +1767,7 @@ def _get_deployment_timing(results_dir: Path, system_name: str) -> float | None:
     # Check managed state first (per-system timing for self-managed deployments)
     state_file = results_dir / "managed" / system_name / "benchkit_state.json"
     if state_file.exists():
+        # This is a managed system - only use its own timing, don't fall back to terraform
         try:
             data = load_json(state_file)
             if isinstance(data, dict):
@@ -1775,8 +1776,10 @@ def _get_deployment_timing(results_dir: Path, system_name: str) -> float | None:
                     return float(timing)
         except Exception:
             pass
+        # Managed system with no timing recorded - return None (don't use terraform timing)
+        return None
 
-    # Fall back to global cloud infra timing (Terraform)
+    # Only use terraform timing for cloud systems (no managed state file exists)
     infra_path = results_dir / "infrastructure_provisioning.json"
     if infra_path.exists():
         try:

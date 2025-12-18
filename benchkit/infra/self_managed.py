@@ -10,6 +10,7 @@ and keep domain logic together.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 
@@ -95,6 +96,23 @@ class SelfManagedDeployment(ABC):
             Deployment duration in seconds, or None if not recorded.
         """
         return self._deployment_timing_s
+
+    def _persist_timing_to_state(self, timing_s: float) -> None:
+        """Persist deployment timing to the managed state file.
+
+        This is called immediately after a deployment completes to ensure
+        timing information is not lost if the process terminates before
+        the full state save happens.
+
+        Args:
+            timing_s: Deployment timing in seconds
+        """
+        from .managed_state import update_managed_state_timing
+
+        # The state file is in the parent of deployment_dir
+        # (deployment_dir contains the system's own state files like .workflowState.json)
+        state_parent = Path(self._deployment_dir).parent
+        update_managed_state_timing(state_parent, timing_s)
 
     @abstractmethod
     def get_status(self) -> SelfManagedStatus:
@@ -304,6 +322,7 @@ class SelfManagedDeployment(ABC):
                 success = self.start()
             if success:
                 self._deployment_timing_s = timer.elapsed
+                self._persist_timing_to_state(timer.elapsed)
             return success
 
         # If not initialized or initialized, try to install (full deployment, track timing)
@@ -315,6 +334,7 @@ class SelfManagedDeployment(ABC):
                 success = self.install(options)
             if success:
                 self._deployment_timing_s = timer.elapsed
+                self._persist_timing_to_state(timer.elapsed)
             return success
 
         # Unknown state

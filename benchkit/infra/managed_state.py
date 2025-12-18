@@ -198,3 +198,41 @@ def update_managed_state_status(project_id: str, system_name: str, status: str) 
     except OSError as e:
         print(f"Failed to update managed state: {e}")
         return False
+
+
+def update_managed_state_timing(
+    state_dir: str | Path, timing_s: float, project_id: str | None = None
+) -> bool:
+    """Update deployment timing in an existing managed state file.
+
+    This function can be called from within the deployment process to persist
+    timing information immediately after a deployment completes, before the
+    full state save happens.
+
+    Args:
+        state_dir: Path to the deployment state directory (contains benchkit_state.json)
+        timing_s: Deployment timing in seconds
+        project_id: Optional project_id for logging (not used for file path)
+
+    Returns:
+        True if timing was updated successfully
+    """
+    state_file = Path(state_dir) / STATE_FILENAME
+
+    if not state_file.exists():
+        # No state file yet - timing will be saved when full state is written
+        return False
+
+    try:
+        with open(state_file) as f:
+            state: dict[str, Any] = json.load(f)
+
+        state["deployment_timing_s"] = timing_s
+        state["timing_updated_at"] = datetime.now(timezone.utc).isoformat()
+
+        with open(state_file, "w") as f:
+            json.dump(state, f, indent=2)
+        return True
+    except (OSError, json.JSONDecodeError) as e:
+        print(f"Failed to update managed state timing: {e}")
+        return False

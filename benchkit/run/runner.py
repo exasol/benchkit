@@ -847,7 +847,6 @@ class BenchmarkRunner:
             console.print(
                 f"[green]✅ {system_name} managed infrastructure ready[/green]"
             )
-            timings["installation_s"] = 0
 
             # Prepare remote environment for package execution
             from ..common.cli_helpers import get_managed_deployment_dir
@@ -859,13 +858,19 @@ class BenchmarkRunner:
             )
             if deployment and deployment.SUPPORTS_REMOTE_EXECUTION:
                 console.print(f"🔧 Preparing remote environment for {system_name}...")
-                if not deployment.prepare_remote_environment(
-                    instance_manager, system=system
-                ):
-                    return False, {"error": "remote_environment_preparation_failed"}
+                with Timer(f"Remote env prep for {system_name}") as timer:
+                    if not deployment.prepare_remote_environment(
+                        instance_manager, system=system
+                    ):
+                        return False, {"error": "remote_environment_preparation_failed"}
+                timings["installation_s"] = timer.elapsed
+                self._save_installation_timing(system_name, timer.elapsed)
                 console.print(
-                    f"[green]✓ Remote environment ready for {system_name}[/green]"
+                    f"[green]✓ Remote environment ready for {system_name} ({timer.elapsed:.2f}s)[/green]"
                 )
+            else:
+                # No remote preparation needed
+                timings["installation_s"] = 0
 
             connection_info = self._build_connection_info(instance_manager)
 
