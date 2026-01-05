@@ -22,15 +22,15 @@ env:
 systems:
   - name: "trino"
     kind: "trino"
-    version: "478"                 # Latest Trino version
+    version: "447"                 # Trino 447 (compatible with Java 22)
     setup:
       method: "native"             # Native installation (Docker not supported)
       use_additional_disk: true    # Auto-detect and use additional NVMe disk
       host: "$TRINO_PUBLIC_IP"     # Will be resolved from infrastructure
       port: 8080                   # Trino HTTP port
       username: "admin"
-      catalog: "hive"
-      schema: "tpch"
+      catalog: "tpch"              # Use built-in TPC-H connector
+      schema: "sf1"                # Scale factor 1 (1GB)
       extra:
         query_max_memory: "50GB"
         query_max_memory_per_node: "40GB"

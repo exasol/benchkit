@@ -1,7 +1,7 @@
 """Trino database system implementation."""
 
 import uuid
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -85,16 +85,21 @@ class TrinoSystem(SystemUnderTest):
         schema = self.setup_config.get("schema", "tpch")
         return f"trino --server http://{public_ip}:{port} --catalog {catalog} --schema {schema}"
 
-    def __init__(self, config: dict[str, Any]):
-        super().__init__(config)
+    def __init__(
+        self,
+        config: dict[str, Any],
+        output_callback: Callable[[str], None] | None = None,
+        workload_config: dict[str, Any] | None = None,
+    ):
+        super().__init__(config, output_callback, workload_config)
         self.setup_method = self.setup_config.get("method", "native")
 
         # Connection settings
         self.host = self.setup_config.get("host", "localhost")
         self.port = self.setup_config.get("port", 8080)
         self.username = self.setup_config.get("username", "admin")
-        self.catalog = self.setup_config.get("catalog", "hive")
-        self.schema = self.setup_config.get("schema", "tpch")
+        self.catalog = self.setup_config.get("catalog", "tpch")
+        self.schema = self.setup_config.get("schema", "sf1")
 
         # Installation paths
         self.trino_home = "/opt/trino-server"
@@ -207,7 +212,7 @@ class TrinoSystem(SystemUnderTest):
         self.record_setup_note("Installing Trino single-node (coordinator only)")
 
         try:
-            # Step 1: Install Java 17+
+            # Step 1: Install Java 22+
             if not self._install_java():
                 return False
 
@@ -215,11 +220,7 @@ class TrinoSystem(SystemUnderTest):
             if not self._download_and_install_trino():
                 return False
 
-            # Step 3: Setup Hive Metastore
-            if not self._setup_hive_metastore():
-                return False
-
-            # Step 4: Configure Trino as coordinator
+            # Step 3: Configure Trino as coordinator
             coordinator_ip = "localhost"
             self._configure_node_properties()
             self._configure_jvm_settings()
@@ -228,10 +229,12 @@ class TrinoSystem(SystemUnderTest):
                 coordinator_ip=coordinator_ip,
                 include_coordinator_worker=True,
             )
-            self._configure_hive_catalog()
 
-            # Step 5: Create systemd service
-            self._create_systemd_service()
+            # Step 4: Configure catalogs (tpch, memory - no metastore needed)
+            self._configure_catalogs()
+
+            # Step 5: Create systemd service (no metastore dependency)
+            self._create_systemd_service(has_local_metastore=False)
 
             # Step 6: Start Trino
             self.record_setup_command(
@@ -395,29 +398,53 @@ class TrinoSystem(SystemUnderTest):
 
     @exclude_from_package
     def _install_java(self) -> bool:
-        """Install Java 17+ (required by Trino)."""
-        print("Installing Java 17...")
+        """Install Java 22+ (required by Trino 447+)."""
+        print("Installing Java 22...")
+
+        # Add Adoptium (Eclipse Temurin) repository for Java 22
+        add_repo_cmd = """
+wget -qO - https://packages.adoptium.net/artifactory/api/gpg/key/public | sudo gpg --dearmor -o /usr/share/keyrings/adoptium.gpg 2>/dev/null || true
+echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/adoptium.list
+"""
         self.record_setup_command(
-            "sudo apt-get update && sudo apt-get install -y openjdk-17-jdk",
-            "Install Java 17 (required by Trino)",
+            "Add Eclipse Temurin (Adoptium) repository for Java 22",
+            "Add Java 22 repository",
             "prerequisites",
         )
+        result = self.execute_command(add_repo_cmd, timeout=60)
+        if not result.get("success", False):
+            print(f"Warning: Failed to add Adoptium repo: {result.get('stderr', '')}")
 
+        # Install Java 22
+        self.record_setup_command(
+            "sudo apt-get update && sudo apt-get install -y temurin-22-jdk",
+            "Install Java 22 (required by Trino 447+)",
+            "prerequisites",
+        )
         result = self.execute_command(
-            "sudo apt-get update && sudo apt-get install -y openjdk-17-jdk", timeout=300
+            "sudo apt-get update && sudo apt-get install -y temurin-22-jdk", timeout=300
         )
 
         if not result.get("success", False):
-            print(f"Failed to install Java: {result.get('stderr', 'Unknown error')}")
+            print(f"Failed to install Java 22: {result.get('stderr', 'Unknown error')}")
             return False
 
-        print("✓ Java 17 installed")
+        # Install python-is-python3 (required by Trino launcher)
+        self.record_setup_command(
+            "sudo apt-get install -y python-is-python3",
+            "Install python symlink (required by Trino launcher)",
+            "prerequisites",
+        )
+        self.execute_command("sudo apt-get install -y python-is-python3", timeout=60)
+
+        print("✓ Java 22 installed")
         return True
 
     @exclude_from_package
     def _download_and_install_trino(self) -> bool:
         """Download and install Trino server."""
-        version = self.version if self.version and self.version != "latest" else "478"
+        # Default to version 447 which is compatible with Java 22
+        version = self.version if self.version and self.version != "latest" else "447"
         download_url = f"https://repo1.maven.org/maven2/io/trino/trino-server/{version}/trino-server-{version}.tar.gz"
 
         print(f"Downloading Trino {version}...")
@@ -473,6 +500,15 @@ class TrinoSystem(SystemUnderTest):
         for dir_path in ["/var/trino/data", "/etc/trino", "/var/log/trino"]:
             self.execute_command(f"sudo mkdir -p {dir_path}")
             self.execute_command(f"sudo chown -R trino:trino {dir_path}")
+
+        # Create etc symlink inside trino installation directory
+        # The Trino launcher looks for etc in the installation directory
+        self.record_setup_command(
+            f"sudo ln -sf /etc/trino {self.trino_home}/etc",
+            "Create etc symlink for Trino launcher",
+            "installation",
+        )
+        self.execute_command(f"sudo ln -sf /etc/trino {self.trino_home}/etc")
 
         print("✓ Trino server installed")
         return True
@@ -685,14 +721,12 @@ node-scheduler.include-coordinator={str(include_coordinator_worker).lower()}
 http-server.http.port=8080
 discovery.uri=http://{coordinator_ip}:8080
 query.max-memory={query_max_memory_gb}GB
-query.max-memory-per-node={query_max_memory_per_node_gb}GB
-query.max-total-memory-per-node={query_max_memory_per_node_gb}GB"""
+query.max-memory-per-node={query_max_memory_per_node_gb}GB"""
         else:
             config = f"""coordinator=false
 http-server.http.port=8080
 discovery.uri=http://{coordinator_ip}:8080
-query.max-memory-per-node={query_max_memory_per_node_gb}GB
-query.max-total-memory-per-node={query_max_memory_per_node_gb}GB"""
+query.max-memory-per-node={query_max_memory_per_node_gb}GB"""
 
         role = "coordinator" if is_coordinator else "worker"
         self._write_config_file(
@@ -730,6 +764,36 @@ hive.non-managed-table-creates-enabled=true"""
             "/etc/trino/catalog/hive.properties",
             hive_catalog,
             f"Configure Hive catalog with metastore at {metastore_uri}",
+        )
+
+    @exclude_from_package
+    def _configure_catalogs(self) -> None:
+        """
+        Configure Trino catalogs based on workload requirements.
+
+        Always adds:
+        - tpch: Built-in TPC-H connector for benchmarking
+        - memory: Memory connector for temporary tables
+
+        Additional catalogs can be configured via setup_config.
+        """
+        self.execute_command("sudo mkdir -p /etc/trino/catalog")
+
+        # Always add TPC-H connector (useful for benchmarking)
+        tpch_catalog = """connector.name=tpch
+tpch.splits-per-node=4"""
+        self._write_config_file(
+            "/etc/trino/catalog/tpch.properties",
+            tpch_catalog,
+            "Configure TPC-H connector catalog for benchmarking",
+        )
+
+        # Always add memory connector (useful for temporary tables)
+        memory_catalog = """connector.name=memory"""
+        self._write_config_file(
+            "/etc/trino/catalog/memory.properties",
+            memory_catalog,
+            "Configure memory connector catalog for temporary tables",
         )
 
     @exclude_from_package
