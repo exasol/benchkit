@@ -1,0 +1,74 @@
+title: "Trino vs ClickHouse Performance Comparison on TPC-H SF1"
+author: "Benchmark Team"
+
+# Execution configuration
+execution:
+  parallel: true           # Run both systems in parallel
+  max_workers: 2
+
+env:
+  mode: "aws"
+  region: "eu-west-1"
+  allow_external_database_access: true
+  instances:
+    trino:
+      instance_type: "r5d.4xlarge"  # 16 vCPUs, 128GB RAM, 2x300GB NVMe local storage
+      disk:
+        type: "local"
+      label: "ok-bench-trino"
+    clickhouse:
+      instance_type: "r5d.4xlarge"
+      disk:
+        type: "local"
+      label: "ok-bench-ch"
+  os_image: "ubuntu-22.04"
+  ssh_key_name: "ok-work3"
+  ssh_private_key_path: "~/.ssh/ok-work3.pem"
+
+systems:
+  # Trino with Hive connector
+  - name: "trino"
+    kind: "trino"
+    version: "478"
+    setup:
+      method: "native"
+      use_additional_disk: true
+      host: "$TRINO_PUBLIC_IP"
+      port: 8080
+      username: "admin"
+      catalog: "hive"
+      schema: "tpch"
+      extra:
+        query_max_memory: "50GB"
+        query_max_memory_per_node: "40GB"
+
+  # ClickHouse for comparison
+  - name: "clickhouse"
+    kind: "clickhouse"
+    version: "25.10.2.65"
+    setup:
+      method: "native"
+      use_additional_disk: true
+      data_dir: "/data/clickhouse"
+      host: "$CLICKHOUSE_PUBLIC_IP"
+      port: 8123
+      username: "default"
+      password: "clickhouse123"
+      extra:
+        memory_limit: "32g"
+        max_threads: "16"
+        max_memory_usage: "30000000000"
+
+workload:
+  name: "tpch"
+  scale_factor: 1
+  runs_per_query: 5
+  warmup_runs: 1
+  data_format: "csv"
+  generator: "dbgen"
+
+report:
+  show_boxplots: true
+  show_latency_cdf: true
+  show_bar_chart: true
+  show_heatmap: true

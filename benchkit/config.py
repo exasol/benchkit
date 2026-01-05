@@ -37,7 +37,7 @@ class SystemConfig(BaseModel):
     @classmethod
     def validate_kind(cls, v: str) -> str:
         """Ensure system kind is supported."""
-        valid_kinds = {"exasol", "clickhouse"}
+        valid_kinds = {"exasol", "clickhouse", "trino"}
         if v not in valid_kinds:
             raise ValueError(
                 f"Unknown system kind '{v}'. Supported: {', '.join(sorted(valid_kinds))}"
