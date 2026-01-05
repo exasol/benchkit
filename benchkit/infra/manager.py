@@ -444,20 +444,30 @@ class InfraManager:
         all_required_ports = self._collect_required_ports()
 
         # Build generic systems configuration for Terraform
-        # Support both legacy 'env.instances' and new 'environments.*.instances' formats
+        # Support both legacy 'env.instances' and new 'environments' formats
         instances_config = env_config.get("instances") or {}
 
         # If no instances in env, collect from environments
+        has_cloud_environments = False
         if not instances_config and environments:
-            for _env_name, env_cfg in environments.items():
+            systems_list = self.config.get("systems", [])
+            for env_name, env_cfg in environments.items():
                 if env_cfg.get("mode") in ["aws", "gcp", "azure"]:
-                    env_instances = env_cfg.get("instances") or {}
-                    instances_config.update(env_instances)
+                    has_cloud_environments = True
+                    instances_config.update(
+                        self._extract_instance_config(env_name, env_cfg, systems_list)
+                    )
 
         if not instances_config:
+            if not has_cloud_environments and environments:
+                raise ValueError(
+                    "No cloud environments found. All environments use 'managed' or 'local' mode. "
+                    "Terraform infrastructure is only needed for 'aws', 'gcp', or 'azure' modes."
+                )
             raise ValueError(
                 "Instance configuration is required for cloud benchmarks. "
-                "Define instances in 'env.instances' or 'environments.<name>.instances'"
+                "Define instances in 'env.instances' or 'environments.<name>.instance_type' "
+                "or use 'environments.<name>.instances.<system_name>' format"
             )
 
         # Get the actual systems that should be created (respects --systems filter)
@@ -526,6 +536,39 @@ class InfraManager:
         tf_vars["allow_external_database_access"] = str(allow_external).lower()
 
         return tf_vars
+
+    def _extract_instance_config(
+        self, env_name: str, env_cfg: dict, systems_list: list
+    ) -> dict[str, Any]:
+        """Extract instance config from environment, handling both formats.
+
+        Args:
+            env_name: Name of the environment
+            env_cfg: Environment configuration dict
+            systems_list: List of system configurations
+
+        Returns:
+            Dict mapping system name to instance config
+        """
+        # Direct instance config (simplified format)
+        if env_cfg.get("instance_type"):
+            for sys_cfg in systems_list:
+                if sys_cfg.get("environment") == env_name:
+                    return {
+                        sys_cfg["name"]: {
+                            "instance_type": env_cfg.get("instance_type"),
+                            "disk": env_cfg.get("disk", {}),
+                            "label": env_cfg.get("label", ""),
+                        }
+                    }
+            return {}
+
+        # Legacy format with instances dict
+        instances = env_cfg.get("instances")
+        if instances:
+            return dict(instances)
+
+        return {}
 
     def _collect_required_ports(self) -> dict[str, int]:
         """Collect all required ports from systems used in this benchmark."""

@@ -17,12 +17,10 @@ environments:
     mode: "aws"
     region: "eu-west-1"
     allow_external_database_access: true
-    instances:
-      clickhouse:
-        instance_type: "r5d.4xlarge"  # 16 vCPUs, 128GB RAM, 2x300GB NVMe local storage
-        disk:
-          type: "local"
-        label: "ok-bench-ch"
+    instance_type: "r5d.4xlarge"  # 16 vCPUs, 128GB RAM, 2x300GB NVMe local storage
+    disk:
+      type: "local"
+    label: "ok-bench-ch"
     os_image: "ubuntu-22.04"
     ssh_key_name: "ok-work3"
     ssh_private_key_path: "~/.ssh/ok-work3.pem"
