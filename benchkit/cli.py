@@ -903,19 +903,41 @@ def check(
 
     # Display Environment section
     env = cfg.get("env") or {}
+    environments = cfg.get("environments") or {}
     env_table = Table(show_header=False, box=None, padding=(0, 2))
     env_table.add_column("Key", style="bold")
     env_table.add_column("Value")
-    env_table.add_row("Mode", env.get("mode", "local"))
-    if env.get("region"):
-        env_table.add_row("Region", env.get("region"))
-    env_table.add_row(
-        "External DB Access",
-        "Yes" if env.get("allow_external_database_access") else "No",
-    )
-    if env.get("ssh_key_name"):
-        env_table.add_row("SSH Key", env.get("ssh_key_name"))
-    console.print(Panel(env_table, title="Environment", border_style="blue"))
+
+    if environments:
+        # New format: show each named environment
+        for env_name, env_cfg in environments.items():
+            mode = env_cfg.get("mode", "local")
+            instance_type = env_cfg.get("instance_type", "")
+            region = env_cfg.get("region", "")
+            details = []
+            if region:
+                details.append(region)
+            if instance_type:
+                details.append(instance_type)
+            value = mode
+            if details:
+                value += f" ({', '.join(details)})"
+            env_table.add_row(env_name, value)
+        panel_title = "Environments"
+    else:
+        # Legacy format
+        env_table.add_row("Mode", env.get("mode", "local"))
+        if env.get("region"):
+            env_table.add_row("Region", env.get("region"))
+        env_table.add_row(
+            "External DB Access",
+            "Yes" if env.get("allow_external_database_access") else "No",
+        )
+        if env.get("ssh_key_name"):
+            env_table.add_row("SSH Key", env.get("ssh_key_name"))
+        panel_title = "Environment"
+
+    console.print(Panel(env_table, title=panel_title, border_style="blue"))
 
     # Display Systems section
     systems = cfg.get("systems", [])

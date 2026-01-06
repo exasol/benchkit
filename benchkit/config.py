@@ -134,7 +134,15 @@ class EnvironmentConfig(BaseModel):
 
     mode: str = "local"  # local, aws, gcp, azure
     region: str | None = None
-    instances: dict[str, dict[str, Any]] | None = None  # Multi-system instances config
+
+    # Direct instance config (simplified format - when environment serves one system)
+    instance_type: str | None = None
+    disk: dict[str, Any] | None = None
+    label: str | None = None
+
+    # Legacy format (when multiple systems share one environment)
+    instances: dict[str, dict[str, Any]] | None = None
+
     os_image: str | None = None
     ssh_key_name: str | None = None  # SSH key name for cloud instances
     ssh_private_key_path: str | None = None  # Path to private key file for SSH access
