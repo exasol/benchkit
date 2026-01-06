@@ -1,5 +1,5 @@
 -- TPC-H Query 11: Important Stock Identification
-{% if system_kind == 'exasol' %}
+{% if system_kind in ['exasol', 'trino'] %}
 SELECT
     ps_partkey,
     SUM(ps_supplycost * ps_availqty) AS "value"

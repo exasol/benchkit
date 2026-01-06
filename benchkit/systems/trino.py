@@ -1239,6 +1239,9 @@ WantedBy=multi-user.target"""
         # Note: timeout parameter is accepted for API compatibility but not currently used
         _ = timeout
 
+        # Trino's Python driver doesn't accept trailing semicolons
+        query = query.strip().rstrip(";")
+
         if not query_name:
             query_name = "unnamed_query"
 
@@ -1524,31 +1527,43 @@ WantedBy=multi-user.target"""
 
     def get_data_generation_directory(self, workload: Any) -> Path | None:
         """
-        Get directory for TPC-H data generation on additional disk.
+        Get directory for TPC-H data generation.
+
+        For Trino, Parquet files are generated directly into the Hive warehouse
+        directory so external tables can read them without copying.
+
+        Structure: /data/trino/hive-warehouse/<schema>/
 
         Returns:
-            Path to data generation directory on additional disk, or None for default
+            Path to Hive warehouse schema directory for Parquet generation
         """
-        use_additional_disk = self.setup_config.get("use_additional_disk", False)
+        # Get Hive warehouse path from config (default: /data/trino/hive-warehouse)
+        hive_warehouse = self.setup_config.get(
+            "hive_warehouse", "/data/trino/hive-warehouse"
+        )
 
-        if use_additional_disk:
-            # Use shared /data/tpch_gen for TPC-H data generation
-            tpch_gen_dir = "/data/tpch_gen"
+        # Use the schema configured for this system (matches what external tables expect)
+        # This ensures Parquet files are in the same location as external_location
+        schema_name = self.schema if self.schema else "benchmark"
 
-            # Create directory with proper ownership
-            self.execute_command(
-                f"sudo mkdir -p {tpch_gen_dir} && sudo chown -R $(whoami):$(whoami) {tpch_gen_dir}",
-                record=False,
-            )
+        # For Trino, generate directly to Hive warehouse for external tables
+        parquet_dir = Path(hive_warehouse) / schema_name
 
-            data_gen_dir = (
-                Path(tpch_gen_dir) / workload.name / f"sf{workload.scale_factor}"
-            )
-            print(f"Trino: Using additional disk for data generation: {data_gen_dir}")
-            return cast(Path, data_gen_dir)
+        # Create directory with proper ownership
+        # Must be owned by the user running tpchgen-cli (not trino)
+        self.execute_command(
+            f"sudo mkdir -p {parquet_dir} && sudo chown -R $(whoami):$(whoami) {parquet_dir}",
+            record=False,
+        )
 
-        # Use default local path
-        return None
+        print(f"Trino: Using Hive warehouse for Parquet data: {parquet_dir}")
+        return cast(Path, parquet_dir)
+
+    def get_hive_warehouse_path(self) -> str:
+        """Get the configured Hive warehouse path."""
+        return str(
+            self.setup_config.get("hive_warehouse", "/data/trino/hive-warehouse")
+        )
 
     def set_cloud_instance_manager(self, instance_manager: Any | list[Any]) -> None:
         """
