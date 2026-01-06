@@ -26,6 +26,17 @@ class TrinoSystem(SystemUnderTest):
         return ["trino>=0.336.0"]
 
     @classmethod
+    def _get_connection_defaults(cls) -> dict[str, Any]:
+        """Return default connection parameters for Trino."""
+        return {
+            "port": 8080,
+            "username": "admin",
+            "password": "",
+            "schema_key": "schema",
+            "schema": "benchmark",
+        }
+
+    @classmethod
     def extract_workload_connection_info(
         cls, setup_config: dict[str, Any], for_local_execution: bool = False
     ) -> dict[str, Any]:
@@ -54,13 +65,14 @@ class TrinoSystem(SystemUnderTest):
             # For external/remote execution, resolve env vars and use configured host
             host = resolve_env_var(setup_config.get("host", "localhost"))
 
-        # Return connection info with defaults matching __init__
+        # Get defaults from class method and override with setup_config
+        defaults = cls._get_connection_defaults()
         connection_info = {
             "host": host,
-            "port": setup_config.get("port", 8080),
-            "username": setup_config.get("username", "admin"),
+            "port": setup_config.get("port", defaults["port"]),
+            "username": setup_config.get("username", defaults["username"]),
             "catalog": setup_config.get("catalog", "hive"),
-            "schema": setup_config.get("schema", "tpch"),
+            "schema": setup_config.get("schema", defaults["schema"]),
         }
 
         # Preserve use_additional_disk setting for data generation on remote instances
@@ -80,9 +92,10 @@ class TrinoSystem(SystemUnderTest):
 
     def get_connection_string(self, public_ip: str, private_ip: str) -> str:
         """Get Trino connection string with full CLI command."""
-        port = self.setup_config.get("port", 8080)
+        defaults = self._get_connection_defaults()
+        port = self.setup_config.get("port", defaults["port"])
         catalog = self.setup_config.get("catalog", "hive")
-        schema = self.setup_config.get("schema", "tpch")
+        schema = self.setup_config.get("schema", defaults["schema"])
         return f"trino --server http://{public_ip}:{port} --catalog {catalog} --schema {schema}"
 
     def __init__(
@@ -94,12 +107,15 @@ class TrinoSystem(SystemUnderTest):
         super().__init__(config, output_callback, workload_config)
         self.setup_method = self.setup_config.get("method", "native")
 
-        # Connection settings
+        # Get defaults from class method
+        defaults = self._get_connection_defaults()
+
+        # Connection settings - catalog defaults to "hive", schema from defaults
         self.host = self.setup_config.get("host", "localhost")
-        self.port = self.setup_config.get("port", 8080)
-        self.username = self.setup_config.get("username", "admin")
-        self.catalog = self.setup_config.get("catalog", "tpch")
-        self.schema = self.setup_config.get("schema", "sf1")
+        self.port = self.setup_config.get("port", defaults["port"])
+        self.username = self.setup_config.get("username", defaults["username"])
+        self.catalog = self.setup_config.get("catalog", "hive")
+        self.schema = self.setup_config.get("schema", defaults["schema"])
 
         # Installation paths
         self.trino_home = "/opt/trino-server"
@@ -158,7 +174,7 @@ class TrinoSystem(SystemUnderTest):
     def _get_connection(self) -> Any:
         """Get a connection to Trino database using Python client."""
         try:
-            import trino  # type: ignore[import-not-found]
+            import trino  # type: ignore[import-not-found,import-untyped]
         except ImportError:
             print("Warning: trino package not available")
             return None
@@ -769,32 +785,80 @@ hive.non-managed-table-creates-enabled=true"""
     @exclude_from_package
     def _configure_catalogs(self) -> None:
         """
-        Configure Trino catalogs based on workload requirements.
+        Configure Trino catalogs based on setup_config.
 
-        Always adds:
-        - tpch: Built-in TPC-H connector for benchmarking
+        Catalogs can be configured via:
+        - setup_config["catalogs"]: List of catalog names to configure
+          Default: ["memory", "hive"]
+
+        Available catalogs:
         - memory: Memory connector for temporary tables
+        - hive: Hive connector with file-based metastore (no external service needed)
+        - tpch: Built-in TPC-H connector for benchmarking
 
-        Additional catalogs can be configured via setup_config.
+        Example config:
+            setup:
+              catalogs: ["memory", "hive"]  # Default
+              # or: catalogs: ["memory", "hive", "tpch"]
         """
         self.execute_command("sudo mkdir -p /etc/trino/catalog")
 
-        # Always add TPC-H connector (useful for benchmarking)
-        tpch_catalog = """connector.name=tpch
-tpch.splits-per-node=4"""
-        self._write_config_file(
-            "/etc/trino/catalog/tpch.properties",
-            tpch_catalog,
-            "Configure TPC-H connector catalog for benchmarking",
-        )
+        # Get catalog list from config (default: memory + hive)
+        catalogs = self.setup_config.get("catalogs", ["memory", "hive"])
+        print(f"Configuring Trino catalogs: {catalogs}")
 
-        # Always add memory connector (useful for temporary tables)
-        memory_catalog = """connector.name=memory"""
-        self._write_config_file(
-            "/etc/trino/catalog/memory.properties",
-            memory_catalog,
-            "Configure memory connector catalog for temporary tables",
-        )
+        for catalog_name in catalogs:
+            self._configure_catalog(catalog_name)
+
+    @exclude_from_package
+    def _configure_catalog(self, catalog_name: str) -> None:
+        """
+        Configure a specific Trino catalog.
+
+        Args:
+            catalog_name: Name of the catalog to configure (memory, hive, tpch)
+        """
+        if catalog_name == "memory":
+            memory_catalog = """connector.name=memory"""
+            self._write_config_file(
+                "/etc/trino/catalog/memory.properties",
+                memory_catalog,
+                "Configure memory connector catalog for temporary tables",
+            )
+
+        elif catalog_name == "hive":
+            # Use file-based metastore (no external Hive Metastore service needed)
+            # This is simpler and doesn't require Hadoop dependencies
+            hive_warehouse = self.setup_config.get(
+                "hive_warehouse", "/data/trino/hive-warehouse"
+            )
+            # Note: hive.allow-drop-table and hive.non-managed-table-* are deprecated
+            # in Trino 447+. Only include minimal required config for file metastore.
+            hive_catalog = f"""connector.name=hive
+hive.metastore=file
+hive.metastore.catalog.dir=file://{hive_warehouse}"""
+
+            # Create warehouse directory
+            self.execute_command(f"sudo mkdir -p {hive_warehouse}")
+            self.execute_command(f"sudo chown -R trino:trino {hive_warehouse}")
+
+            self._write_config_file(
+                "/etc/trino/catalog/hive.properties",
+                hive_catalog,
+                f"Configure Hive connector with file-based metastore at {hive_warehouse}",
+            )
+
+        elif catalog_name == "tpch":
+            tpch_catalog = """connector.name=tpch
+tpch.splits-per-node=4"""
+            self._write_config_file(
+                "/etc/trino/catalog/tpch.properties",
+                tpch_catalog,
+                "Configure TPC-H connector catalog for benchmarking",
+            )
+
+        else:
+            print(f"Warning: Unknown catalog '{catalog_name}', skipping")
 
     @exclude_from_package
     def _write_config_file(self, path: str, content: str, description: str) -> None:
@@ -1034,9 +1098,19 @@ WantedBy=multi-user.target"""
         return success
 
     def load_data(self, table_name: str, data_path: Path, **kwargs: Any) -> bool:
-        """Load data into Trino table using INSERT."""
+        """Load data into Trino table using INSERT.
+
+        Args:
+            table_name: Target table name
+            data_path: Path to data file (pipe-delimited .tbl format)
+            **kwargs: Additional options:
+                - schema: Schema name (default: self.schema)
+                - columns: List of column names
+                - column_types: List of type identifiers (INTEGER, BIGINT, DECIMAL, VARCHAR, DATE)
+        """
         schema_name = kwargs.get("schema", self.schema)
         columns = kwargs.get("columns", None)
+        column_types = kwargs.get("column_types", None)
 
         try:
             print(f"Loading {data_path} into {table_name}...")
@@ -1055,6 +1129,24 @@ WantedBy=multi-user.target"""
             # Read data file and insert
             # TPC-H files are pipe-delimited with trailing pipe
             import csv
+            from datetime import date
+            from decimal import Decimal
+
+            def convert_value(value: str, col_type: str) -> Any:
+                """Convert string value to appropriate Python type for Trino."""
+                if value == "" or value is None:
+                    return None
+                if col_type == "INTEGER":
+                    return int(value)
+                elif col_type == "BIGINT":
+                    return int(value)
+                elif col_type == "DECIMAL":
+                    return Decimal(value)
+                elif col_type == "DATE":
+                    # TPC-H dates are in YYYY-MM-DD format
+                    return date.fromisoformat(value)
+                else:  # VARCHAR or unknown
+                    return value
 
             with open(data_path) as f:
                 reader = csv.reader(f, delimiter="|")
@@ -1079,10 +1171,15 @@ WantedBy=multi-user.target"""
                     if not row or all(x == "" for x in row):
                         continue
 
-                    # Convert empty strings to None for NULL values
-                    processed_row: list[str | None] = [
-                        None if x == "" else x for x in row
-                    ]
+                    # Convert values to proper types if column_types provided
+                    if column_types and len(column_types) == len(row):
+                        processed_row: list[Any] = [
+                            convert_value(val, col_type)
+                            for val, col_type in zip(row, column_types, strict=False)
+                        ]
+                    else:
+                        # Fallback: keep as strings, convert empty to None
+                        processed_row = [None if x == "" else x for x in row]
 
                     batch.append(processed_row)
                     total_rows += 1
@@ -1148,7 +1245,7 @@ WantedBy=multi-user.target"""
         timer_obj: Timer | None = None
 
         try:
-            import trino  # type: ignore[import-not-found]
+            import trino  # type: ignore[import-not-found,import-untyped]
         except ImportError:
             return {
                 "success": False,
@@ -1168,13 +1265,17 @@ WantedBy=multi-user.target"""
             with Timer(f"Query {query_name}") as timer:
                 timer_obj = timer
 
+                # Use active schema if set (from workload), else fall back to instance schema
+                # _active_schema is set by workload.run_workload() for thread-safe multi-stream
+                schema_to_use = getattr(self, "_active_schema", None) or self.schema
+
                 # Connect to Trino
                 conn = trino.dbapi.connect(
                     host=self.host,
                     port=self.port,
                     user=self.username,
                     catalog=self.catalog,
-                    schema=self.schema,
+                    schema=schema_to_use,
                 )
                 cursor = conn.cursor()
 

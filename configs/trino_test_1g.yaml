@@ -29,8 +29,9 @@ systems:
       host: "$TRINO_PUBLIC_IP"     # Will be resolved from infrastructure
       port: 8080                   # Trino HTTP port
       username: "admin"
-      catalog: "tpch"              # Use built-in TPC-H connector
-      schema: "sf1"                # Scale factor 1 (1GB)
+      catalog: "hive"              # Hive connector with file-based metastore
+      schema: "benchmark"          # Schema name (workload-agnostic)
+      catalogs: ["memory", "hive"] # Catalogs to configure (hive uses file-based metastore)
       extra:
         query_max_memory: "50GB"
         query_max_memory_per_node: "40GB"

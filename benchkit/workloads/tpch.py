@@ -209,12 +209,14 @@ class TPCH(Workload):
 
             print(f"Loading {table_name}...")
             columns = self.get_table_columns(table_name)
+            column_types = self.get_table_column_types(table_name)
             success = system.load_data(
                 table_name,
                 data_file,
                 schema=schema_name,
                 format=self.data_format,
                 columns=columns,
+                column_types=column_types,
             )
 
             if not success:
@@ -394,6 +396,88 @@ class TPCH(Workload):
             ],
         }
         return table_columns.get(table_name, [])
+
+    def get_table_column_types(self, table_name: str) -> list[str]:
+        """Get column types for a TPC-H table.
+
+        Returns simplified type identifiers that can be used for type conversion:
+        - INTEGER: 32-bit integer
+        - BIGINT: 64-bit integer
+        - DECIMAL: Fixed-point decimal number
+        - VARCHAR: Variable-length string
+        - DATE: Date without time
+        """
+        table_column_types = {
+            "nation": ["INTEGER", "VARCHAR", "INTEGER", "VARCHAR"],
+            "region": ["INTEGER", "VARCHAR", "VARCHAR"],
+            "part": [
+                "INTEGER",  # p_partkey
+                "VARCHAR",  # p_name
+                "VARCHAR",  # p_mfgr
+                "VARCHAR",  # p_brand
+                "VARCHAR",  # p_type
+                "INTEGER",  # p_size
+                "VARCHAR",  # p_container
+                "DECIMAL",  # p_retailprice
+                "VARCHAR",  # p_comment
+            ],
+            "supplier": [
+                "INTEGER",  # s_suppkey
+                "VARCHAR",  # s_name
+                "VARCHAR",  # s_address
+                "INTEGER",  # s_nationkey
+                "VARCHAR",  # s_phone
+                "DECIMAL",  # s_acctbal
+                "VARCHAR",  # s_comment
+            ],
+            "partsupp": [
+                "INTEGER",  # ps_partkey
+                "INTEGER",  # ps_suppkey
+                "INTEGER",  # ps_availqty
+                "DECIMAL",  # ps_supplycost
+                "VARCHAR",  # ps_comment
+            ],
+            "customer": [
+                "INTEGER",  # c_custkey
+                "VARCHAR",  # c_name
+                "VARCHAR",  # c_address
+                "INTEGER",  # c_nationkey
+                "VARCHAR",  # c_phone
+                "DECIMAL",  # c_acctbal
+                "VARCHAR",  # c_mktsegment
+                "VARCHAR",  # c_comment
+            ],
+            "orders": [
+                "BIGINT",  # o_orderkey
+                "INTEGER",  # o_custkey
+                "VARCHAR",  # o_orderstatus
+                "DECIMAL",  # o_totalprice
+                "DATE",  # o_orderdate
+                "VARCHAR",  # o_orderpriority
+                "VARCHAR",  # o_clerk
+                "INTEGER",  # o_shippriority
+                "VARCHAR",  # o_comment
+            ],
+            "lineitem": [
+                "BIGINT",  # l_orderkey
+                "INTEGER",  # l_partkey
+                "INTEGER",  # l_suppkey
+                "INTEGER",  # l_linenumber
+                "DECIMAL",  # l_quantity
+                "DECIMAL",  # l_extendedprice
+                "DECIMAL",  # l_discount
+                "DECIMAL",  # l_tax
+                "VARCHAR",  # l_returnflag
+                "VARCHAR",  # l_linestatus
+                "DATE",  # l_shipdate
+                "DATE",  # l_commitdate
+                "DATE",  # l_receiptdate
+                "VARCHAR",  # l_shipinstruct
+                "VARCHAR",  # l_shipmode
+                "VARCHAR",  # l_comment
+            ],
+        }
+        return table_column_types.get(table_name, [])
 
     def get_table_info(self) -> dict[str, dict[str, Any]]:
         """Return TPC-H table metadata."""
