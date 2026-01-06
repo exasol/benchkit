@@ -3,7 +3,7 @@
 import uuid
 from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from benchkit.common import DataFormat, exclude_from_package
 
@@ -1557,7 +1557,7 @@ WantedBy=multi-user.target"""
         )
 
         print(f"Trino: Using Hive warehouse for Parquet data: {parquet_dir}")
-        return cast(Path, parquet_dir)
+        return parquet_dir
 
     def get_hive_warehouse_path(self) -> str:
         """Get the configured Hive warehouse path."""
