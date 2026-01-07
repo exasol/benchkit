@@ -1980,7 +1980,9 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
         self.record_setup_note("Installing Exasol license...")
 
         # Build the license upload command
-        license_cmd = f"cat {license_file_path} | c4 connect -s cos -i {play_id} -- confd_client license_upload license: '\"{{< -}}\"'"
+        json_txt = '"{< -}"'
+        # need lots of quoting so json_txt arrives intact at confd_client, including its double-quotes
+        license_cmd = f"""cat {license_file_path} | c4 connect -s cos -i {play_id} -- confd_client license_upload license: '\\"{json_txt}\\"'"""
 
         # Record the license command for report
         self.record_setup_command(
