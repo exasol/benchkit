@@ -1502,7 +1502,7 @@ def infra(
         return
 
     # Import managed systems helpers
-    from .common.cli_helpers import is_any_system_managed_mode, is_any_system_cloud_mode
+    from .common.cli_helpers import is_any_system_cloud_mode, is_any_system_managed_mode
 
     has_cloud = is_any_system_cloud_mode(cfg)
     has_managed = is_any_system_managed_mode(cfg)
