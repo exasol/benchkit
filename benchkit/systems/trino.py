@@ -81,6 +81,11 @@ class TrinoSystem(SystemUnderTest):
         if setup_config.get("use_additional_disk", False):
             connection_info["use_additional_disk"] = True
 
+        # Include storage configuration for external table data loading
+        # This is critical for S3 storage to work in remote packages
+        if "storage" in setup_config:
+            connection_info["storage"] = setup_config["storage"]
+
         return connection_info
 
     @classmethod
@@ -399,15 +404,10 @@ class TrinoSystem(SystemUnderTest):
                     print(f"[Node {idx}] ✗ Trino installation failed")
                     return False
 
-                # Only install Hive Metastore on coordinator (node 0)
-                # Workers will connect to coordinator's Hive Metastore
                 is_coordinator = idx == 0
-                if is_coordinator:
-                    if not self._setup_hive_metastore():
-                        print(f"[Node {idx}] ✗ Hive Metastore setup failed")
-                        return False
-                else:
-                    print(f"[Node {idx}] Skipping Hive Metastore (using coordinator's)")
+
+                # File-based metastore doesn't require Hive Metastore service
+                # Skip the _setup_hive_metastore() - no longer needed
 
                 # Configure based on role
                 self._configure_node_properties()
@@ -417,12 +417,11 @@ class TrinoSystem(SystemUnderTest):
                     coordinator_ip=coordinator_ip,
                     include_coordinator_worker=False,  # Don't include coordinator as worker in multinode
                 )
-                # For workers, point to coordinator's Hive Metastore
-                hive_metastore_ip = None if is_coordinator else coordinator_ip
-                self._configure_hive_catalog(coordinator_ip=hive_metastore_ip)
+                # Configure Hive catalog with file-based metastore (S3 or local)
+                self._configure_hive_catalog()
 
-                # Create systemd service (workers don't have local Hive Metastore)
-                self._create_systemd_service(has_local_metastore=is_coordinator)
+                # Create systemd service (no Hive Metastore dependency with file-based metastore)
+                self._create_systemd_service(has_local_metastore=False)
 
                 print(f"[Node {idx} - {role}] ✓ Installation complete")
 
@@ -814,23 +813,33 @@ query.max-memory-per-node={query_max_memory_per_node_gb}GB"""
         """
         Configure Hive catalog for Trino.
 
-        Args:
-            coordinator_ip: For multinode clusters, the coordinator's private IP.
-                          Workers use this to connect to the shared Hive Metastore.
-                          For coordinator or single-node, pass None to use localhost.
-        """
-        # Determine metastore URI based on node role
-        if coordinator_ip:
-            # Worker node: connect to coordinator's Hive Metastore
-            metastore_uri = f"thrift://{coordinator_ip}:9083"
-        else:
-            # Coordinator or single-node: use local Hive Metastore
-            metastore_uri = "thrift://localhost:9083"
+        Uses file-based metastore which doesn't require external services.
+        For S3 storage, the metastore catalog dir points to S3.
+        For local storage, it points to local filesystem.
 
-        # Note: hive.allow-drop-table and hive.non-managed-table-* are deprecated
-        # in Trino 447+. Use minimal config compatible with newer versions.
+        Args:
+            coordinator_ip: Unused, kept for backward compatibility.
+        """
+        from benchkit.storage import S3Storage
+
+        # Determine metastore catalog directory based on storage type
+        if isinstance(self._storage_backend, S3Storage):
+            # S3 storage: use s3a:// path for metastore catalog
+            catalog_dir = f"s3a://{self._storage_backend.bucket}"
+            if self._storage_backend.prefix:
+                catalog_dir = f"{catalog_dir}/{self._storage_backend.prefix}"
+            catalog_dir = f"{catalog_dir}/hive-metastore"
+        else:
+            # Local storage: use file:// path
+            hive_warehouse = self.setup_config.get(
+                "hive_warehouse", "/data/trino/hive-warehouse"
+            )
+            catalog_dir = f"file://{hive_warehouse}"
+
+        # File-based metastore doesn't require external Hive Metastore service
         hive_catalog = f"""connector.name=hive
-hive.metastore.uri={metastore_uri}
+hive.metastore=file
+hive.metastore.catalog.dir={catalog_dir}
 hive.storage-format=PARQUET
 hive.compression-codec=SNAPPY"""
 
@@ -838,7 +847,7 @@ hive.compression-codec=SNAPPY"""
         self._write_config_file(
             "/etc/trino/catalog/hive.properties",
             hive_catalog,
-            f"Configure Hive catalog with metastore at {metastore_uri}",
+            f"Configure Hive catalog with file metastore at {catalog_dir}",
         )
 
     @exclude_from_package
