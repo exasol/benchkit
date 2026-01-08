@@ -815,6 +815,22 @@ __all__ = ["Workload", "{class_name}", "create_workload", "WORKLOAD_IMPLEMENTATI
                 f"Warning: Error loading dependencies for workload '{workload_name}': {e}"
             )
 
+        # Add storage-specific dependencies (e.g., boto3 for S3)
+        for system_config in self.config.get("systems", []):
+            setup_config = system_config.get("setup", {})
+            storage_config = setup_config.get("storage", {})
+            storage_type = storage_config.get("type", "").lower()
+
+            if storage_type == "s3":
+                try:
+                    from ..storage.s3 import S3Storage
+
+                    if hasattr(S3Storage, "get_python_dependencies"):
+                        requirements.extend(S3Storage.get_python_dependencies())
+                except ImportError:
+                    # S3Storage not available, add boto3 directly
+                    requirements.append("boto3>=1.26.0")
+
         # Remove duplicates
         unique_requirements = list(dict.fromkeys(requirements))
 

@@ -54,6 +54,12 @@ variable "allow_external_database_access" {
   default     = false
 }
 
+variable "s3_buckets" {
+  description = "List of S3 bucket names to grant access to (for storage backends)"
+  type        = list(string)
+  default     = []
+}
+
 # Data sources
 data "aws_ami" "ubuntu" {
   most_recent = true
@@ -210,6 +216,66 @@ resource "aws_security_group" "benchmark" {
   }
 }
 
+# IAM role for EC2 instances (optional, only created if s3_buckets is configured)
+resource "aws_iam_role" "benchmark" {
+  count = length(var.s3_buckets) > 0 ? 1 : 0
+  name  = "benchmark-${var.project_id}-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name    = "benchmark-${var.project_id}-role"
+    Project = var.project_id
+  }
+}
+
+resource "aws_iam_role_policy" "s3_access" {
+  count = length(var.s3_buckets) > 0 ? 1 : 0
+  name  = "benchmark-${var.project_id}-s3-access"
+  role  = aws_iam_role.benchmark[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:ListBucket",
+          "s3:GetBucketLocation",
+          "s3:HeadObject",
+          "s3:CreateBucket"
+        ]
+        Resource = flatten([
+          for bucket in var.s3_buckets : [
+            "arn:aws:s3:::${bucket}",
+            "arn:aws:s3:::${bucket}/*"
+          ]
+        ])
+      }
+    ]
+  })
+}
+
+resource "aws_iam_instance_profile" "benchmark" {
+  count = length(var.s3_buckets) > 0 ? 1 : 0
+  name  = "benchmark-${var.project_id}-profile"
+  role  = aws_iam_role.benchmark[0].name
+}
+
 # Flatten systems into individual nodes
 # This creates a list where each element represents a single node
 # For multinode systems (node_count > 1), creates multiple entries
@@ -266,6 +332,7 @@ resource "aws_instance" "system" {
   subnet_id              = aws_subnet.benchmark.id
   vpc_security_group_ids = [aws_security_group.benchmark.id]
   key_name               = var.ssh_key_name != "" ? var.ssh_key_name : null
+  iam_instance_profile   = length(var.s3_buckets) > 0 ? aws_iam_instance_profile.benchmark[0].name : null
 
   root_block_device {
     volume_type = "gp3"
