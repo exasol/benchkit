@@ -19,6 +19,8 @@ class TrinoSystem(SystemUnderTest):
 
     # Trino supports multinode clusters (coordinator + workers)
     SUPPORTS_MULTINODE = True
+    # Trino uses external tables via Hive connector (reads data from storage)
+    SUPPORTS_EXTERNAL_TABLES = True
 
     @classmethod
     def get_python_dependencies(cls) -> list[str]:
@@ -127,6 +129,64 @@ class TrinoSystem(SystemUnderTest):
         self._cloud_instance_manager: Any = None  # Primary node (node 0)
         self._cloud_instance_managers: list[Any] = []  # All nodes for multinode
         self._external_host: str | None = None  # For cloud instance external IP
+
+        # Initialize storage backend for external tables
+        self._storage_backend = self._create_storage_backend()
+
+        # Validate multinode configuration
+        self._validate_multinode_storage()
+
+    def _create_storage_backend(self) -> Any:
+        """Create storage backend from configuration.
+
+        Returns:
+            StorageBackend instance (LocalStorage or S3Storage)
+        """
+        from benchkit.storage import LocalStorage, S3Storage
+
+        storage_config = self.setup_config.get("storage", {})
+        storage_type = storage_config.get("type", "local")
+
+        if storage_type == "s3":
+            return S3Storage(
+                bucket=storage_config["bucket"],
+                prefix=storage_config.get("prefix", ""),
+                region=storage_config.get("region", "us-east-1"),
+            )
+        else:
+            # Default to local storage
+            hive_warehouse = self.setup_config.get(
+                "hive_warehouse", "/data/trino/hive-warehouse"
+            )
+            return LocalStorage(base_path=hive_warehouse)
+
+    def _validate_multinode_storage(self) -> None:
+        """Validate that multinode clusters use S3 storage.
+
+        Raises:
+            ValueError: If multinode configured without S3 storage
+        """
+        from benchkit.storage import S3Storage
+
+        if self.node_count > 1:
+            if not isinstance(self._storage_backend, S3Storage):
+                raise ValueError(
+                    f"Trino multinode cluster (node_count={self.node_count}) requires S3 storage. "
+                    "Local storage cannot be shared across nodes efficiently. "
+                    "Please add storage configuration:\n"
+                    "  storage:\n"
+                    "    type: s3\n"
+                    "    bucket: your-bucket-name\n"
+                    "    region: your-region"
+                )
+
+    def get_storage_backend(self) -> Any:
+        """Return the storage backend for this Trino system.
+
+        Returns:
+            StorageBackend instance (LocalStorage or S3Storage)
+        """
+        return self._storage_backend
 
     @exclude_from_package
     def is_already_installed(self) -> bool:
@@ -767,13 +827,12 @@ query.max-memory-per-node={query_max_memory_per_node_gb}GB"""
             # Coordinator or single-node: use local Hive Metastore
             metastore_uri = "thrift://localhost:9083"
 
+        # Note: hive.allow-drop-table and hive.non-managed-table-* are deprecated
+        # in Trino 447+. Use minimal config compatible with newer versions.
         hive_catalog = f"""connector.name=hive
 hive.metastore.uri={metastore_uri}
 hive.storage-format=PARQUET
-hive.compression-codec=SNAPPY
-hive.allow-drop-table=true
-hive.non-managed-table-writes-enabled=true
-hive.non-managed-table-creates-enabled=true"""
+hive.compression-codec=SNAPPY"""
 
         self.execute_command("sudo mkdir -p /etc/trino/catalog")
         self._write_config_file(
