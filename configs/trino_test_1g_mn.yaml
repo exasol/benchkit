@@ -22,7 +22,7 @@ env:
 systems:
   - name: "trino"
     kind: "trino"
-    version: "478"                 # Latest Trino version
+    version: "447"                 # Compatible with Java 22
     setup:
       method: "native"             # Native installation
       node_count: 3                # 3-node cluster: 1 coordinator + 2 workers
@@ -30,8 +30,12 @@ systems:
       host: "$TRINO_PUBLIC_IP"     # Coordinator public IP
       port: 8080                   # Trino HTTP port
       username: "admin"
-      catalog: "hive"
-      schema: "tpch"
+      catalog: "hive"               # Use views that wrap tpch connector
+      schema: "tpch_views"          # Views with TPC-H standard column names
+      storage:                      # S3 storage for multinode (required)
+        type: "s3"
+        bucket: "benchkit-trino-test-eu-west-1"
+        region: "eu-west-1"
       extra:
         # Memory settings for multinode cluster
         query_max_memory: "100GB"           # Total across cluster
