@@ -18,6 +18,11 @@ from ..systems.base import SystemUnderTest
 class Workload(ABC):
     """Abstract base class for benchmark workloads."""
 
+    # Class attribute indicating if this workload supports external tables.
+    # Workloads that support external tables can generate data in formats like
+    # Parquet that can be read directly by systems like Trino without INSERT loading.
+    SUPPORTS_EXTERNAL_TABLES: bool = False
+
     def __init__(self, config: dict[str, Any]):
         self.name = config["name"]
         self.scale_factor = config.get("scale_factor", 1)
@@ -132,6 +137,85 @@ class Workload(ABC):
             True if data loading successful, False otherwise
         """
         pass
+
+    # -------------------------------------------------------------------------
+    # External Table Support Methods
+    # -------------------------------------------------------------------------
+
+    def get_external_table_format(self) -> str:
+        """Return data format for external tables.
+
+        Override in subclasses that support external tables.
+
+        Returns:
+            Data format string (e.g., 'PARQUET', 'CSV', 'ORC')
+        """
+        return "PARQUET"
+
+    def get_external_table_columns(self, table_name: str) -> list[tuple[str, str]]:
+        """Return column definitions for external table.
+
+        Override in subclasses that support external tables.
+
+        Args:
+            table_name: Name of the table
+
+        Returns:
+            List of (column_name, column_type) tuples
+        """
+        raise NotImplementedError(
+            f"Workload {self.name} must implement get_external_table_columns "
+            "to support external tables"
+        )
+
+    def get_table_names(self) -> list[str]:
+        """Get list of table names in this workload.
+
+        Override in subclasses.
+
+        Returns:
+            List of table names
+        """
+        raise NotImplementedError(
+            f"Workload {self.name} must implement get_table_names"
+        )
+
+    def generate_data_for_external_tables(self, storage: Any, schema: str) -> bool:
+        """Generate data and upload to storage backend for external table access.
+
+        This is the entry point for systems that use external tables.
+        Generates data locally (e.g., Parquet files), then uploads to storage.
+
+        Override in subclasses that support external tables.
+
+        Args:
+            storage: StorageBackend instance (LocalStorage or S3Storage)
+            schema: Schema name for the data
+
+        Returns:
+            True if generation and upload successful, False otherwise
+        """
+        raise NotImplementedError(
+            f"Workload {self.name} must implement generate_data_for_external_tables "
+            "to support external tables"
+        )
+
+    def get_data_locations(self, storage: Any, schema: str) -> dict[str, str]:
+        """Get data location URLs for all tables.
+
+        Used to pass to SQL templates for external table creation.
+
+        Args:
+            storage: StorageBackend instance
+            schema: Schema name
+
+        Returns:
+            Dictionary mapping table names to their data location URLs
+        """
+        return {
+            table: storage.get_data_location(schema, table)
+            for table in self.get_table_names()
+        }
 
     def get_queries(self, system: SystemUnderTest | None = None) -> dict[str, str]:
         """
@@ -710,12 +794,20 @@ class Workload(ABC):
             node_count = getattr(system, "node_count", 1)
             cluster = getattr(system, "cluster_name", "benchmark_cluster")
 
-            # Get hive_warehouse for Trino external tables
+            # Get hive_warehouse for Trino external tables (legacy, kept for compatibility)
             hive_warehouse = "/data/trino/hive-warehouse"  # default
             if hasattr(system, "setup_config"):
                 hive_warehouse = system.setup_config.get(
                     "hive_warehouse", hive_warehouse
                 )
+
+            # Get data_locations for external table systems
+            data_locations: dict[str, str] = {}
+            if system.SUPPORTS_EXTERNAL_TABLES:
+                storage = system.get_storage_backend()
+                if storage is not None:
+                    schema = self.get_schema_name()
+                    data_locations = self.get_data_locations(storage, schema)
 
             rendered_sql = template.render(
                 system_kind=system.kind,
@@ -725,6 +817,7 @@ class Workload(ABC):
                 node_count=node_count,
                 cluster=cluster,
                 hive_warehouse=hive_warehouse,
+                data_locations=data_locations,  # NEW: for external tables
             )
 
             # Split SQL into individual statements and execute them one by one
