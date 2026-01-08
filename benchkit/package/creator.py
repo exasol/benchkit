@@ -362,6 +362,9 @@ class WorkloadPackage:
         # Copy only configured systems (not all systems)
         self._copy_configured_systems()
 
+        # Copy storage module if needed by any configured system
+        self._copy_storage_module_if_needed()
+
     def _copy_run_module(self) -> None:
         """Copy minimal run module with only parsers.py."""
         src_dir = Path("benchkit/run")
@@ -485,6 +488,7 @@ class WorkloadPackage:
             "exasol": "ExasolSystem",
             "clickhouse": "ClickHouseSystem",
             "postgresql": "PostgreSQLSystem",
+            "trino": "TrinoSystem",
         }
 
         imports = ["from .base import SystemUnderTest"]
@@ -516,6 +520,34 @@ def create_system(config: dict) -> SystemUnderTest:
 __all__ = ["SystemUnderTest", "create_system", "SYSTEM_IMPLEMENTATIONS"]
 '''
         (dst_dir / "__init__.py").write_text(init_content)
+
+    def _copy_storage_module_if_needed(self) -> None:
+        """Copy storage module if any configured system supports external tables.
+
+        Systems like Trino use storage backends (LocalStorage, S3Storage) for
+        external table data. This module needs to be in the package for remote
+        execution.
+        """
+        # Systems that need the storage module
+        systems_needing_storage = {"trino"}
+
+        configured_kinds = {s["kind"] for s in self.config.get("systems", [])}
+
+        # Check if any configured system needs storage
+        if not configured_kinds & systems_needing_storage:
+            return
+
+        src_dir = Path("benchkit/storage")
+        dst_dir = self.package_dir / "benchkit" / "storage"
+
+        if not src_dir.exists():
+            return
+
+        ensure_directory(dst_dir)
+
+        # Copy all storage module files
+        for src_file in src_dir.glob("*.py"):
+            shutil.copy2(src_file, dst_dir / src_file.name)
 
     def _copy_workload_config(self) -> None:
         """Copy configuration modified for workload execution only."""
