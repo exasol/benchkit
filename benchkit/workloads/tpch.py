@@ -16,6 +16,9 @@ from .base import Workload
 class TPCH(Workload):
     """TPC-H benchmark workload implementation."""
 
+    # TPC-H supports external tables via Parquet format
+    SUPPORTS_EXTERNAL_TABLES: bool = True
+
     @classmethod
     def get_python_dependencies(cls) -> list[str]:
         """Return Python packages required for TPC-H workload."""
@@ -205,30 +208,80 @@ class TPCH(Workload):
         """Complete TPC-H setup process: generate data, create tables, load data, create indexes, analyze tables."""
         print("Setting up TPC-H workload...")
 
+        # Store system reference for template resolution
+        self._current_system = system
+        schema = self.get_schema_name()
+
+        # Check if system uses external tables (e.g., Trino with Hive connector)
+        if system.SUPPORTS_EXTERNAL_TABLES:
+            return self._prepare_for_external_tables(system, schema)
+        else:
+            return self._prepare_traditional(system)
+
+    def _prepare_for_external_tables(
+        self, system: SystemUnderTest, schema: str
+    ) -> bool:
+        """Prepare TPC-H for systems that use external tables (Trino).
+
+        For external table systems:
+        1. Generate Parquet data and upload to storage
+        2. Create external tables pointing to storage
+        3. No INSERT-based loading needed
+        """
+        storage = system.get_storage_backend()
+        if storage is None:
+            print("ERROR: System supports external tables but has no storage backend")
+            return False
+
+        # Step 0: Generate Parquet data and upload to storage
+        print(f"0. Generating and uploading Parquet data to {storage}...")
+        if not self.generate_data_for_external_tables(storage, schema):
+            print("Failed to generate/upload Parquet data")
+            return False
+
+        # Step 1: Create tables and schema (external table DDL)
+        print("1. Creating external tables...")
+        if not self.create_schema(system):
+            print("Failed to create schema and tables")
+            return False
+
+        # Step 2: No data loading needed for external tables
+        print("2. Skipping data load (external tables read from storage)")
+
+        # Step 3: Create indexes (if applicable)
+        print("3. Creating indexes...")
+        if not self.create_indexes(system):
+            print("Failed to create indexes")
+            return False
+
+        # Step 4: Analyze tables
+        print("4. Analyzing tables...")
+        if not self.analyze_tables(system):
+            print("Failed to analyze tables")
+            return False
+
+        print("TPC-H workload setup completed successfully (external tables)")
+        return True
+
+    def _prepare_traditional(self, system: SystemUnderTest) -> bool:
+        """Prepare TPC-H for traditional systems (Exasol, ClickHouse).
+
+        For traditional systems:
+        1. Generate data files (.tbl format)
+        2. Create tables
+        3. Load data via INSERT statements
+        """
         # Check if system provides a custom data generation directory (e.g., on additional disk)
         custom_data_dir = system.get_data_generation_directory(self)
         if custom_data_dir:
             self.data_dir = Path(custom_data_dir)
             print(f"Using system-provided data directory: {self.data_dir}")
 
-        # Determine data format based on system type
-        # Trino uses Parquet external tables for optimal performance
-        data_format = "parquet" if system.kind == "trino" else "tbl"
-
         # Step 0: Generate TPC-H data
-        print(f"0. Generating TPC-H data (format: {data_format})...")
-        if not self.generate_data(self.data_dir, data_format=data_format):
+        print("0. Generating TPC-H data (format: tbl)...")
+        if not self.generate_data(self.data_dir, data_format="tbl"):
             print("Failed to generate TPC-H data")
             return False
-
-        # For Trino: change ownership of Parquet directories to trino user
-        # so Hive metastore can write schema/table metadata
-        if system.kind == "trino" and hasattr(system, "execute_command"):
-            print("   Fixing permissions for Trino Hive metastore...")
-            system.execute_command(
-                f"sudo chown -R trino:trino {self.data_dir}",
-                record=False,
-            )
 
         # Step 1: Create tables and schema
         print("1. Creating tables and schema...")
@@ -259,11 +312,11 @@ class TPCH(Workload):
 
     def load_data(self, system: SystemUnderTest) -> bool:
         """Load TPC-H data into the database system."""
-        # Trino uses external Parquet tables - data is already in place
-        # from generate_data() step, no additional loading needed
-        if system.kind == "trino":
-            print("Trino: Using external Parquet tables - no data loading needed")
-            print("  Data files are read directly by Trino Hive connector")
+        # External table systems don't need INSERT-based loading
+        # Data is read directly from storage (S3, local files)
+        if system.SUPPORTS_EXTERNAL_TABLES:
+            print("Using external tables - no data loading needed")
+            print("  Data files are read directly from storage")
             return True
 
         if self.generator == "dbgen-pipe" and system.SUPPORTS_STREAMLOAD:
@@ -556,6 +609,21 @@ class TPCH(Workload):
         }
         return table_column_types.get(table_name, [])
 
+    def get_external_table_columns(self, table_name: str) -> list[tuple[str, str]]:
+        """Return column definitions for TPC-H external tables.
+
+        Combines column names with their type identifiers.
+
+        Args:
+            table_name: Name of the TPC-H table
+
+        Returns:
+            List of (column_name, column_type) tuples
+        """
+        columns = self.get_table_columns(table_name)
+        types = self.get_table_column_types(table_name)
+        return list(zip(columns, types, strict=True))
+
     def get_table_info(self) -> dict[str, dict[str, Any]]:
         """Return TPC-H table metadata."""
         return {
@@ -699,3 +767,58 @@ class TPCH(Workload):
             return int(max(sf * scale_multiplier(sf), 3.0))
 
         return estimate_gb(float(self.scale_factor))
+
+    def generate_data_for_external_tables(self, storage: Any, schema: str) -> bool:
+        """Generate Parquet data and upload to storage for external table access.
+
+        This is used by systems that support external tables (like Trino).
+        Generates Parquet files locally, then uploads them to the storage backend.
+
+        Args:
+            storage: StorageBackend instance (LocalStorage or S3Storage)
+            schema: Schema name for the data
+
+        Returns:
+            True if generation and upload successful, False otherwise
+        """
+        import tempfile
+
+        try:
+            # Prepare storage
+            if not storage.prepare():
+                print("Failed to prepare storage backend")
+                return False
+
+            # Create temp directory for data generation
+            with tempfile.TemporaryDirectory(prefix="tpch_parquet_") as temp_dir:
+                temp_path = Path(temp_dir)
+
+                # Generate Parquet data to temp directory
+                print(f"Generating TPC-H Parquet data (SF {self.scale_factor})...")
+                if not self._generate_with_tpchgen_cli(
+                    temp_path, force=False, data_format="parquet"
+                ):
+                    print("Failed to generate Parquet data")
+                    return False
+
+                # Upload each table to storage
+                for table_name in self.get_table_names():
+                    table_dir = temp_path / table_name
+                    if not table_dir.exists():
+                        print(f"Table data not found: {table_dir}")
+                        return False
+
+                    print(f"Uploading {table_name} to storage...")
+                    if not storage.upload_data(table_dir, schema, table_name):
+                        print(f"Failed to upload {table_name}")
+                        return False
+
+            print(f"Successfully uploaded TPC-H data to {storage}")
+            return True
+
+        except Exception as e:
+            print(f"Failed to generate/upload external table data: {e}")
+            import traceback
+
+            traceback.print_exc()
+            return False
