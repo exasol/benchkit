@@ -1,5 +1,5 @@
 -- TPC-H Query 15: Top Supplier
-{% if system_kind == 'exasol' %}
+{% if system_kind in ['exasol', 'trino'] %}
 WITH revenue AS (
     SELECT
         l_suppkey AS supplier_no,

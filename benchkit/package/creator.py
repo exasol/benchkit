@@ -356,7 +356,7 @@ class WorkloadPackage:
         # Copy run module (only parsers.py)
         self._copy_run_module()
 
-        # Copy only essential common modules (not cli_helpers, enums, multinode, markers)
+        # Copy only essential common modules (not cli_helpers, enums, multinode)
         self._copy_essential_common_modules()
 
         # Copy only configured systems (not all systems)
@@ -388,7 +388,6 @@ class WorkloadPackage:
         - cli_helpers.py (only used by main CLI)
         - enums.py (only used by cli_helpers)
         - multinode.py (not imported by package runtime)
-        - markers.py (only used during package creation)
         """
         src_dir = Path("benchkit/common")
         dst_dir = self.package_dir / "benchkit" / "common"
@@ -417,7 +416,8 @@ class WorkloadPackage:
             List of filenames to include (e.g., ['file_management.py', 'dbgen.py'])
         """
         # file_management.py is always needed (DataFormat, download_file_to_storage)
-        essential = ["file_management.py"]
+        # markers.py is needed as it's imported by other modules at runtime
+        essential = ["file_management.py", "markers.py"]
 
         # Add workload-specific modules
         workload_name = self.config["workload"]["name"]
@@ -438,6 +438,10 @@ class WorkloadPackage:
             imports.append("from .dbgen import DbGenPipe as DbGenPipe")
         if "file_management.py" in included_files:
             imports.append("from .file_management import DataFormat as DataFormat")
+        if "markers.py" in included_files:
+            imports.append(
+                "from .markers import exclude_from_package as exclude_from_package"
+            )
 
         init_content = "\n".join(imports) + "\n"
         (dst_dir / "__init__.py").write_text(init_content)

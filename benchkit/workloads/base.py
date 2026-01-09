@@ -710,6 +710,13 @@ class Workload(ABC):
             node_count = getattr(system, "node_count", 1)
             cluster = getattr(system, "cluster_name", "benchmark_cluster")
 
+            # Get hive_warehouse for Trino external tables
+            hive_warehouse = "/data/trino/hive-warehouse"  # default
+            if hasattr(system, "setup_config"):
+                hive_warehouse = system.setup_config.get(
+                    "hive_warehouse", hive_warehouse
+                )
+
             rendered_sql = template.render(
                 system_kind=system.kind,
                 scale_factor=self.scale_factor,
@@ -717,6 +724,7 @@ class Workload(ABC):
                 system_extra=system_extra,
                 node_count=node_count,
                 cluster=cluster,
+                hive_warehouse=hive_warehouse,
             )
 
             # Split SQL into individual statements and execute them one by one

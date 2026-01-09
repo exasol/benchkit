@@ -25,31 +25,58 @@ class TPCH(Workload):
         super().__init__(config)
         assert self.generator in ["dbgen", "dbgen-pipe"]
 
-    def generate_data(self, output_dir: Path, force: bool = False) -> bool:
-        """Generate TPC-H data using tpchgen-cli (modern Python approach)."""
+    def generate_data(
+        self, output_dir: Path, force: bool = False, data_format: str = "tbl"
+    ) -> bool:
+        """Generate TPC-H data using tpchgen-cli (modern Python approach).
+
+        Args:
+            output_dir: Directory to store generated data
+            force: Force regeneration even if data exists
+            data_format: Output format - "tbl" (default) or "parquet"
+        """
         if self.generator == "dbgen":
-            return self._generate_with_tpchgen_cli(output_dir, force)
+            return self._generate_with_tpchgen_cli(output_dir, force, data_format)
         # else: generate data on the fly later
         return True
 
-    def _generate_with_tpchgen_cli(self, output_dir: Path, force: bool = False) -> bool:
-        """Generate TPC-H data using tpchgen-cli (modern Python package)."""
+    def _generate_with_tpchgen_cli(
+        self, output_dir: Path, force: bool = False, data_format: str = "tbl"
+    ) -> bool:
+        """Generate TPC-H data using tpchgen-cli (modern Python package).
 
+        Args:
+            output_dir: Directory to store generated data
+            force: Force regeneration even if data exists
+            data_format: Output format - "tbl" (pipe-delimited) or "parquet"
+        """
         # precheck: is data already there?
         if not force:
-            missing: bool = False
-            for table in self.get_table_names():
-                tbl_file = output_dir / f"{table}.tbl"
-                if not tbl_file.exists():
-                    missing = True
-                    break
-            if not missing:
-                # all files already there
-                return True
+            if data_format == "parquet":
+                # For parquet with parts, check for directory with parquet files
+                missing = False
+                for table in self.get_table_names():
+                    table_dir = output_dir / table
+                    if not table_dir.exists() or not any(table_dir.glob("*.parquet")):
+                        missing = True
+                        break
+                if not missing:
+                    print("Parquet data already exists, skipping generation")
+                    return True
+            else:
+                # For tbl format, check for single file
+                missing = False
+                for table in self.get_table_names():
+                    tbl_file = output_dir / f"{table}.tbl"
+                    if not tbl_file.exists():
+                        missing = True
+                        break
+                if not missing:
+                    # all files already there
+                    return True
 
         try:
             # Check if tpchgen-cli is available
-
             result = safe_command("python -m pip show tpchgen-cli")
             if not result["success"]:
                 print("tpchgen-cli not found. Install with: pip install tpchgen-cli")
@@ -59,33 +86,63 @@ class TPCH(Workload):
             output_dir.mkdir(parents=True, exist_ok=True)
 
             # Generate TPC-H data using tpchgen-cli
-            # Format: tbl = pipe-delimited files (TPC-H standard)
             cmd = [
                 "tpchgen-cli",
                 f"--output-dir={output_dir}",
-                "--format=tbl",
+                f"--format={data_format}",
                 f"-s {self.scale_factor}",
             ]
 
-            print(
-                f"Generating TPC-H data (scale factor {self.scale_factor}) using tpchgen-cli..."
-            )
+            # For Parquet, add parts for better parallelism and SNAPPY compression
+            if data_format == "parquet":
+                # Use parts based on scale factor for parallelism
+                # Minimum 1, scale up with data size, max 16
+                num_parts = max(1, min(self.scale_factor // 10, 16))
+                if num_parts < 1:
+                    num_parts = 1
+                cmd.append(f"--parts={num_parts}")
+                # SNAPPY is already the default but be explicit
+                print(
+                    f"Generating TPC-H Parquet data (SF {self.scale_factor}, "
+                    f"{num_parts} parts, SNAPPY compression)..."
+                )
+            else:
+                print(
+                    f"Generating TPC-H data (scale factor {self.scale_factor}) "
+                    "using tpchgen-cli..."
+                )
+
             result = safe_command(" ".join(cmd), timeout=3600)  # 1 hour timeout
 
             if not result["success"]:
                 print(f"tpchgen-cli failed: {result.get('stderr', 'Unknown error')}")
                 return False
 
-            # Verify all table files were created
-            missing_files = []
-            for table in self.get_table_names():
-                tbl_file = output_dir / f"{table}.tbl"
-                if not tbl_file.exists():
-                    missing_files.append(str(tbl_file))
-
-            if missing_files:
-                print(f"Missing data files: {missing_files}")
-                return False
+            # Verify files were created
+            if data_format == "parquet":
+                missing_tables = []
+                for table in self.get_table_names():
+                    table_dir = output_dir / table
+                    if not table_dir.exists():
+                        missing_tables.append(table)
+                    else:
+                        parquet_files = list(table_dir.glob("*.parquet"))
+                        if not parquet_files:
+                            missing_tables.append(table)
+                        else:
+                            print(f"  ✓ {table}: {len(parquet_files)} parquet file(s)")
+                if missing_tables:
+                    print(f"Missing Parquet data for tables: {missing_tables}")
+                    return False
+            else:
+                missing_files = []
+                for table in self.get_table_names():
+                    tbl_file = output_dir / f"{table}.tbl"
+                    if not tbl_file.exists():
+                        missing_files.append(str(tbl_file))
+                if missing_files:
+                    print(f"Missing data files: {missing_files}")
+                    return False
 
             print(f"Successfully generated TPC-H data in {output_dir}")
             return True
@@ -154,11 +211,24 @@ class TPCH(Workload):
             self.data_dir = Path(custom_data_dir)
             print(f"Using system-provided data directory: {self.data_dir}")
 
+        # Determine data format based on system type
+        # Trino uses Parquet external tables for optimal performance
+        data_format = "parquet" if system.kind == "trino" else "tbl"
+
         # Step 0: Generate TPC-H data
-        print("0. Generating TPC-H data...")
-        if not self.generate_data(self.data_dir):
+        print(f"0. Generating TPC-H data (format: {data_format})...")
+        if not self.generate_data(self.data_dir, data_format=data_format):
             print("Failed to generate TPC-H data")
             return False
+
+        # For Trino: change ownership of Parquet directories to trino user
+        # so Hive metastore can write schema/table metadata
+        if system.kind == "trino" and hasattr(system, "execute_command"):
+            print("   Fixing permissions for Trino Hive metastore...")
+            system.execute_command(
+                f"sudo chown -R trino:trino {self.data_dir}",
+                record=False,
+            )
 
         # Step 1: Create tables and schema
         print("1. Creating tables and schema...")
@@ -189,6 +259,13 @@ class TPCH(Workload):
 
     def load_data(self, system: SystemUnderTest) -> bool:
         """Load TPC-H data into the database system."""
+        # Trino uses external Parquet tables - data is already in place
+        # from generate_data() step, no additional loading needed
+        if system.kind == "trino":
+            print("Trino: Using external Parquet tables - no data loading needed")
+            print("  Data files are read directly by Trino Hive connector")
+            return True
+
         if self.generator == "dbgen-pipe" and system.SUPPORTS_STREAMLOAD:
             return self._load_data_from_pipe(system)
         else:
@@ -209,12 +286,14 @@ class TPCH(Workload):
 
             print(f"Loading {table_name}...")
             columns = self.get_table_columns(table_name)
+            column_types = self.get_table_column_types(table_name)
             success = system.load_data(
                 table_name,
                 data_file,
                 schema=schema_name,
                 format=self.data_format,
                 columns=columns,
+                column_types=column_types,
             )
 
             if not success:
@@ -395,6 +474,88 @@ class TPCH(Workload):
         }
         return table_columns.get(table_name, [])
 
+    def get_table_column_types(self, table_name: str) -> list[str]:
+        """Get column types for a TPC-H table.
+
+        Returns simplified type identifiers that can be used for type conversion:
+        - INTEGER: 32-bit integer
+        - BIGINT: 64-bit integer
+        - DECIMAL: Fixed-point decimal number
+        - VARCHAR: Variable-length string
+        - DATE: Date without time
+        """
+        table_column_types = {
+            "nation": ["INTEGER", "VARCHAR", "INTEGER", "VARCHAR"],
+            "region": ["INTEGER", "VARCHAR", "VARCHAR"],
+            "part": [
+                "INTEGER",  # p_partkey
+                "VARCHAR",  # p_name
+                "VARCHAR",  # p_mfgr
+                "VARCHAR",  # p_brand
+                "VARCHAR",  # p_type
+                "INTEGER",  # p_size
+                "VARCHAR",  # p_container
+                "DECIMAL",  # p_retailprice
+                "VARCHAR",  # p_comment
+            ],
+            "supplier": [
+                "INTEGER",  # s_suppkey
+                "VARCHAR",  # s_name
+                "VARCHAR",  # s_address
+                "INTEGER",  # s_nationkey
+                "VARCHAR",  # s_phone
+                "DECIMAL",  # s_acctbal
+                "VARCHAR",  # s_comment
+            ],
+            "partsupp": [
+                "INTEGER",  # ps_partkey
+                "INTEGER",  # ps_suppkey
+                "INTEGER",  # ps_availqty
+                "DECIMAL",  # ps_supplycost
+                "VARCHAR",  # ps_comment
+            ],
+            "customer": [
+                "INTEGER",  # c_custkey
+                "VARCHAR",  # c_name
+                "VARCHAR",  # c_address
+                "INTEGER",  # c_nationkey
+                "VARCHAR",  # c_phone
+                "DECIMAL",  # c_acctbal
+                "VARCHAR",  # c_mktsegment
+                "VARCHAR",  # c_comment
+            ],
+            "orders": [
+                "BIGINT",  # o_orderkey
+                "INTEGER",  # o_custkey
+                "VARCHAR",  # o_orderstatus
+                "DECIMAL",  # o_totalprice
+                "DATE",  # o_orderdate
+                "VARCHAR",  # o_orderpriority
+                "VARCHAR",  # o_clerk
+                "INTEGER",  # o_shippriority
+                "VARCHAR",  # o_comment
+            ],
+            "lineitem": [
+                "BIGINT",  # l_orderkey
+                "INTEGER",  # l_partkey
+                "INTEGER",  # l_suppkey
+                "INTEGER",  # l_linenumber
+                "DECIMAL",  # l_quantity
+                "DECIMAL",  # l_extendedprice
+                "DECIMAL",  # l_discount
+                "DECIMAL",  # l_tax
+                "VARCHAR",  # l_returnflag
+                "VARCHAR",  # l_linestatus
+                "DATE",  # l_shipdate
+                "DATE",  # l_commitdate
+                "DATE",  # l_receiptdate
+                "VARCHAR",  # l_shipinstruct
+                "VARCHAR",  # l_shipmode
+                "VARCHAR",  # l_comment
+            ],
+        }
+        return table_column_types.get(table_name, [])
+
     def get_table_info(self) -> dict[str, dict[str, Any]]:
         """Return TPC-H table metadata."""
         return {
@@ -472,6 +633,13 @@ class TPCH(Workload):
                 node_count = getattr(system, "node_count", 1)
                 cluster = getattr(system, "cluster_name", "benchmark_cluster")
 
+                # Get hive_warehouse for Trino external tables
+                hive_warehouse = "/data/trino/hive-warehouse"  # default
+                if hasattr(system, "setup_config"):
+                    hive_warehouse = system.setup_config.get(
+                        "hive_warehouse", hive_warehouse
+                    )
+
                 rendered = template.render(
                     system_kind=system.kind,
                     scale_factor=self.scale_factor,
@@ -479,6 +647,7 @@ class TPCH(Workload):
                     system_extra=system_extra,
                     node_count=node_count,
                     cluster=cluster,
+                    hive_warehouse=hive_warehouse,
                 )
                 scripts[script_name] = rendered
             except Exception as e:

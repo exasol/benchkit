@@ -72,6 +72,15 @@ COMMIT;
 -- For analytical workloads, well-designed ORDER BY clauses are more effective than skip indexes
 
 SELECT 'ClickHouse indexing: Using MergeTree primary keys only (skip indexes disabled for analytical workload)';
+{% elif system_kind == 'trino' %}
+-- Trino/Hive: No traditional indexes supported
+-- Hive connector uses columnar storage formats (ORC/Parquet) for efficient data access
+-- Performance optimizations come from:
+-- 1. Columnar storage format (reads only needed columns)
+-- 2. Predicate pushdown (filters applied at storage layer)
+-- 3. Partition pruning (if tables are partitioned)
+
+SELECT 'Trino: No indexes needed (using columnar storage for efficient data access)';
 {% else %}
 {{ UNSUPPORTED_SYSTEM_KIND_ERROR_FOR[system_kind] }}
 {% endif %}
