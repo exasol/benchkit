@@ -779,46 +779,61 @@ class Workload(ABC):
             "schema_name": self.get_schema_name(),
         }
 
+    def _get_template_context(self, system: SystemUnderTest) -> dict[str, Any]:
+        """Build template context for rendering setup scripts.
+
+        Consolidates all template variables needed for SQL template rendering,
+        including generic variables and system-specific overrides.
+
+        Args:
+            system: System under test
+
+        Returns:
+            Dictionary of template variables
+        """
+        # Get system extra config for conditional features
+        system_extra = {}
+        if hasattr(system, "setup_config"):
+            system_extra = system.setup_config.get("extra", {})
+
+        # Get node_count and cluster for multinode support
+        node_count = getattr(system, "node_count", 1)
+        cluster = getattr(system, "cluster_name", "benchmark_cluster")
+
+        # Build base context
+        context: dict[str, Any] = {
+            "system_kind": system.kind,
+            "scale_factor": self.scale_factor,
+            "schema": self.get_schema_name(),
+            "system_extra": system_extra,
+            "node_count": node_count,
+            "cluster": cluster,
+        }
+
+        # Add data_locations for systems that support external tables
+        if system.SUPPORTS_EXTERNAL_TABLES:
+            storage = system.get_storage_backend()
+            if storage is not None:
+                context["data_locations"] = self.get_data_locations(
+                    storage, self.get_schema_name()
+                )
+            else:
+                context["data_locations"] = {}
+        else:
+            context["data_locations"] = {}
+
+        # Add system-specific variables (e.g., hive_warehouse for Trino)
+        context.update(system.get_template_variables())
+
+        return context
+
     def execute_setup_script(self, system: SystemUnderTest, script_name: str) -> bool:
         """Execute a templated setup script by rendering the jinja2 template and splitting into individual statements."""
         try:
-            # Get system extra config for conditional features
-            system_extra = {}
-            if hasattr(system, "setup_config"):
-                system_extra = system.setup_config.get("extra", {})
-
             # Load and render the template
             template = self.get_template_env().get_template(script_name)
-
-            # Get node_count and cluster for multinode support
-            node_count = getattr(system, "node_count", 1)
-            cluster = getattr(system, "cluster_name", "benchmark_cluster")
-
-            # Get hive_warehouse for Trino external tables (legacy, kept for compatibility)
-            hive_warehouse = "/data/trino/hive-warehouse"  # default
-            if hasattr(system, "setup_config"):
-                hive_warehouse = system.setup_config.get(
-                    "hive_warehouse", hive_warehouse
-                )
-
-            # Get data_locations for external table systems
-            data_locations: dict[str, str] = {}
-            if system.SUPPORTS_EXTERNAL_TABLES:
-                storage = system.get_storage_backend()
-                if storage is not None:
-                    schema = self.get_schema_name()
-                    data_locations = self.get_data_locations(storage, schema)
-
-            rendered_sql = template.render(
-                system_kind=system.kind,
-                scale_factor=self.scale_factor,
-                schema=self.get_schema_name(),
-                system_extra=system_extra,
-                node_count=node_count,
-                cluster=cluster,
-                hive_warehouse=hive_warehouse,
-                data_locations=data_locations,  # NEW: for external tables
-            )
+            context = self._get_template_context(system)
+            rendered_sql = template.render(**context)
 
             # Split SQL into individual statements and execute them one by one
             statements = system.split_sql_statements(rendered_sql)

@@ -239,6 +239,12 @@ class TPCH(Workload):
             print("Failed to generate/upload Parquet data")
             return False
 
+        # Ensure storage permissions are correct for table creation
+        # (After data upload, directories may have restrictive permissions)
+        if not system.ensure_storage_permissions():
+            print("Failed to ensure storage permissions")
+            return False
+
         # Step 1: Create tables and schema (external table DDL)
         print("1. Creating external tables...")
         if not self.create_schema(system):
@@ -689,35 +695,12 @@ class TPCH(Workload):
     def get_rendered_setup_scripts(self, system: SystemUnderTest) -> dict[str, str]:
         """Render setup scripts for specific system."""
         scripts = {}
+        context = self._get_template_context(system)
 
         for script_name in ["create_tables", "create_indexes", "analyze_tables"]:
             try:
                 template = self.get_template_env().get_template(f"{script_name}.sql")
-                system_extra = {}
-                if hasattr(system, "setup_config"):
-                    system_extra = system.setup_config.get("extra", {})
-
-                # Get node_count and cluster for multinode support
-                node_count = getattr(system, "node_count", 1)
-                cluster = getattr(system, "cluster_name", "benchmark_cluster")
-
-                # Get hive_warehouse for Trino external tables
-                hive_warehouse = "/data/trino/hive-warehouse"  # default
-                if hasattr(system, "setup_config"):
-                    hive_warehouse = system.setup_config.get(
-                        "hive_warehouse", hive_warehouse
-                    )
-
-                rendered = template.render(
-                    system_kind=system.kind,
-                    scale_factor=self.scale_factor,
-                    schema=self.get_schema_name(),
-                    system_extra=system_extra,
-                    node_count=node_count,
-                    cluster=cluster,
-                    hive_warehouse=hive_warehouse,
-                )
-                scripts[script_name] = rendered
+                scripts[script_name] = template.render(**context)
             except Exception as e:
                 print(f"Warning: Failed to render {script_name}.sql: {e}")
                 scripts[script_name] = f"-- Error rendering script: {e}"

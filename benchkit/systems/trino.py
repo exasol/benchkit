@@ -193,6 +193,54 @@ class TrinoSystem(SystemUnderTest):
         """
         return self._storage_backend
 
+    def ensure_storage_permissions(self) -> bool:
+        """Ensure Hive warehouse directory has correct permissions.
+
+        After data upload, the uploaded directories may have restrictive permissions
+        (owned by ubuntu:ubuntu with 755). The Hive metastore (running as trino user)
+        needs to write metadata files to these directories during table creation.
+
+        This sets world-writable permissions on the entire warehouse directory
+        to allow both users to write.
+
+        Returns:
+            True if permissions set successfully, False otherwise.
+        """
+        if self._storage_backend is None:
+            return True
+
+        # Only needed for local storage
+        if hasattr(self._storage_backend, "base_path"):
+            hive_warehouse = self._storage_backend.base_path
+            print(f"Setting permissions on {hive_warehouse}...")
+            result = self.execute_command(
+                f"sudo chmod -R 777 {hive_warehouse}", record=False
+            )
+            if not result.get("success", False):
+                print(f"Failed to set permissions on {hive_warehouse}")
+                return False
+            print(f"✓ Permissions set on {hive_warehouse}")
+
+        return True
+
+    def get_template_variables(self) -> dict[str, Any]:
+        """Return Trino-specific template variables.
+
+        Provides hive_warehouse path for external table DDL templates.
+
+        Returns:
+            Dictionary with 'hive_warehouse' path
+        """
+        variables = super().get_template_variables()
+
+        # Add hive_warehouse path for external table DDL
+        hive_warehouse = self.setup_config.get(
+            "hive_warehouse", "/data/trino/hive-warehouse"
+        )
+        variables["hive_warehouse"] = hive_warehouse
+
+        return variables
+
     @exclude_from_package
     def is_already_installed(self) -> bool:
         """Check if Trino is already installed and running."""
@@ -323,7 +371,7 @@ class TrinoSystem(SystemUnderTest):
                 "Start Trino server service",
                 "service_management",
             )
-            result = self.execute_command("sudo systemctl start trino")
+            result = self.execute_command("sudo systemctl start trino", record=False)
             if not result["success"]:
                 print(
                     f"Failed to start Trino service: {result.get('stderr', 'Unknown error')}"
@@ -335,7 +383,7 @@ class TrinoSystem(SystemUnderTest):
                 "Enable Trino server to start on boot",
                 "service_management",
             )
-            self.execute_command("sudo systemctl enable trino")
+            self.execute_command("sudo systemctl enable trino", record=False)
 
             # Step 7: Wait for health
             self.record_setup_note("Waiting for Trino to be ready for connections...")
@@ -477,16 +525,14 @@ class TrinoSystem(SystemUnderTest):
         print("Installing Java 22...")
 
         # Add Adoptium (Eclipse Temurin) repository for Java 22
-        add_repo_cmd = """
-wget -qO - https://packages.adoptium.net/artifactory/api/gpg/key/public | sudo gpg --dearmor -o /usr/share/keyrings/adoptium.gpg 2>/dev/null || true
-echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/adoptium.list
-"""
+        add_repo_cmd = """wget -qO - https://packages.adoptium.net/artifactory/api/gpg/key/public | sudo gpg --dearmor -o /usr/share/keyrings/adoptium.gpg 2>/dev/null || true
+echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/adoptium.list"""
         self.record_setup_command(
+            add_repo_cmd,
             "Add Eclipse Temurin (Adoptium) repository for Java 22",
-            "Add Java 22 repository",
             "prerequisites",
         )
-        result = self.execute_command(add_repo_cmd, timeout=60)
+        result = self.execute_command(add_repo_cmd, timeout=60, record=False)
         if not result.get("success", False):
             print(f"Warning: Failed to add Adoptium repo: {result.get('stderr', '')}")
 
@@ -497,7 +543,9 @@ echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium
             "prerequisites",
         )
         result = self.execute_command(
-            "sudo apt-get update && sudo apt-get install -y temurin-22-jdk", timeout=300
+            "sudo apt-get update && sudo apt-get install -y temurin-22-jdk",
+            timeout=300,
+            record=False,
         )
 
         if not result.get("success", False):
@@ -510,7 +558,9 @@ echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium
             "Install python symlink (required by Trino launcher)",
             "prerequisites",
         )
-        self.execute_command("sudo apt-get install -y python-is-python3", timeout=60)
+        self.execute_command(
+            "sudo apt-get install -y python-is-python3", timeout=60, record=False
+        )
 
         print("✓ Java 22 installed")
         return True
@@ -531,7 +581,9 @@ echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium
             "installation",
         )
         result = self.execute_command(
-            f"wget {download_url} -O /tmp/trino-server.tar.gz", timeout=300
+            f"wget {download_url} -O /tmp/trino-server.tar.gz",
+            timeout=300,
+            record=False,
         )
         if not result.get("success", False):
             print(f"Failed to download Trino: {result.get('stderr', 'Unknown error')}")
@@ -543,7 +595,9 @@ echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium
             "Extract Trino server to /opt",
             "installation",
         )
-        result = self.execute_command("sudo tar -xzf /tmp/trino-server.tar.gz -C /opt/")
+        result = self.execute_command(
+            "sudo tar -xzf /tmp/trino-server.tar.gz -C /opt/", record=False
+        )
         if not result.get("success", False):
             print(f"Failed to extract Trino: {result.get('stderr', 'Unknown error')}")
             return False
@@ -555,7 +609,7 @@ echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium
             "installation",
         )
         self.execute_command(
-            f"sudo ln -sf /opt/trino-server-{version} {self.trino_home}"
+            f"sudo ln -sf /opt/trino-server-{version} {self.trino_home}", record=False
         )
 
         # Create trino user
@@ -564,7 +618,9 @@ echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium
             "Create Trino system user",
             "user_setup",
         )
-        self.execute_command("sudo useradd -r -s /bin/false trino || true")
+        self.execute_command(
+            "sudo useradd -r -s /bin/false trino || true", record=False
+        )
 
         # Create directories
         self.record_setup_command(
@@ -573,8 +629,8 @@ echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium
             "installation",
         )
         for dir_path in ["/var/trino/data", "/etc/trino", "/var/log/trino"]:
-            self.execute_command(f"sudo mkdir -p {dir_path}")
-            self.execute_command(f"sudo chown -R trino:trino {dir_path}")
+            self.execute_command(f"sudo mkdir -p {dir_path}", record=False)
+            self.execute_command(f"sudo chown -R trino:trino {dir_path}", record=False)
 
         # Create etc symlink inside trino installation directory
         # The Trino launcher looks for etc in the installation directory
@@ -583,7 +639,9 @@ echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium
             "Create etc symlink for Trino launcher",
             "installation",
         )
-        self.execute_command(f"sudo ln -sf /etc/trino {self.trino_home}/etc")
+        self.execute_command(
+            f"sudo ln -sf /etc/trino {self.trino_home}/etc", record=False
+        )
 
         print("✓ Trino server installed")
         return True
@@ -603,7 +661,9 @@ echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium
             "hive_setup",
         )
         result = self.execute_command(
-            f"wget {download_url} -O /tmp/hive-metastore.tar.gz", timeout=300
+            f"wget {download_url} -O /tmp/hive-metastore.tar.gz",
+            timeout=300,
+            record=False,
         )
         if not result.get("success", False):
             print(
@@ -617,7 +677,9 @@ echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium
             "Extract Hive Metastore to /opt",
             "hive_setup",
         )
-        self.execute_command("sudo tar -xzf /tmp/hive-metastore.tar.gz -C /opt/")
+        self.execute_command(
+            "sudo tar -xzf /tmp/hive-metastore.tar.gz -C /opt/", record=False
+        )
 
         # Create symlink
         self.record_setup_command(
@@ -626,17 +688,20 @@ echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium
             "hive_setup",
         )
         self.execute_command(
-            f"sudo ln -sf /opt/apache-hive-metastore-{metastore_version}-bin {self.hive_metastore_home}"
+            f"sudo ln -sf /opt/apache-hive-metastore-{metastore_version}-bin {self.hive_metastore_home}",
+            record=False,
         )
 
         # Create Hive data directory
         self.record_setup_command(
-            f"sudo mkdir -p {self.hive_data_dir}",
+            f"sudo mkdir -p {self.hive_data_dir} && sudo chown -R trino:trino {self.hive_data_dir}",
             f"Create Hive data directory at {self.hive_data_dir}",
             "hive_setup",
         )
-        self.execute_command(f"sudo mkdir -p {self.hive_data_dir}")
-        self.execute_command(f"sudo chown -R trino:trino {self.hive_data_dir}")
+        self.execute_command(f"sudo mkdir -p {self.hive_data_dir}", record=False)
+        self.execute_command(
+            f"sudo chown -R trino:trino {self.hive_data_dir}", record=False
+        )
 
         # Configure metastore (use embedded Derby database)
         metastore_config = f"""<?xml version="1.0"?>
@@ -659,14 +724,13 @@ echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium
     </property>
 </configuration>"""
 
+        create_config_cmd = f"sudo tee {self.hive_metastore_home}/conf/metastore-site.xml > /dev/null << 'EOF'\n{metastore_config}\nEOF"
         self.record_setup_command(
-            f"sudo tee {self.hive_metastore_home}/conf/metastore-site.xml > /dev/null",
+            create_config_cmd,
             "Configure Hive Metastore with embedded Derby database",
             "hive_setup",
         )
-
-        create_config_cmd = f"sudo tee {self.hive_metastore_home}/conf/metastore-site.xml > /dev/null << 'EOF'\n{metastore_config}\nEOF"
-        result = self.execute_command(create_config_cmd)
+        result = self.execute_command(create_config_cmd, record=False)
         if not result.get("success", False):
             print(
                 f"Failed to create Hive Metastore config: {result.get('stderr', 'Unknown error')}"
@@ -674,18 +738,20 @@ echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium
             return False
 
         # Create metastore directory
-        self.execute_command("sudo mkdir -p /var/trino")
-        self.execute_command("sudo chown -R trino:trino /var/trino")
+        self.execute_command("sudo mkdir -p /var/trino", record=False)
+        self.execute_command("sudo chown -R trino:trino /var/trino", record=False)
 
         # Initialize metastore schema
+        init_cmd = f"sudo -u trino {self.hive_metastore_home}/bin/schematool -dbType derby -initSchema"
         self.record_setup_command(
-            f"{self.hive_metastore_home}/bin/schematool -dbType derby -initSchema",
+            init_cmd,
             "Initialize Hive Metastore schema",
             "hive_setup",
         )
         init_result = self.execute_command(
-            f"sudo -u trino {self.hive_metastore_home}/bin/schematool -dbType derby -initSchema",
+            init_cmd,
             timeout=120,
+            record=False,
         )
         # Schema init may fail if already initialized, which is okay
         if not init_result.get(
@@ -704,7 +770,9 @@ echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium
             "Start Hive Metastore service",
             "service_management",
         )
-        result = self.execute_command("sudo systemctl start hive-metastore")
+        result = self.execute_command(
+            "sudo systemctl start hive-metastore", record=False
+        )
         if not result.get("success", False):
             print(
                 f"Failed to start Hive Metastore: {result.get('stderr', 'Unknown error')}"
@@ -716,7 +784,7 @@ echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium
             "Enable Hive Metastore to start on boot",
             "service_management",
         )
-        self.execute_command("sudo systemctl enable hive-metastore")
+        self.execute_command("sudo systemctl enable hive-metastore", record=False)
 
         print("✓ Hive Metastore setup complete")
         return True
@@ -906,9 +974,11 @@ hive.compression-codec=SNAPPY"""
 hive.metastore=file
 hive.metastore.catalog.dir=file://{hive_warehouse}"""
 
-            # Create warehouse directory
+            # Create warehouse directory with world-writable permissions
+            # This allows both 'ubuntu' (data generation) and 'trino' (metastore) to write
             self.execute_command(f"sudo mkdir -p {hive_warehouse}")
             self.execute_command(f"sudo chown -R trino:trino {hive_warehouse}")
+            self.execute_command(f"sudo chmod -R 777 {hive_warehouse}")
 
             self._write_config_file(
                 "/etc/trino/catalog/hive.properties",
@@ -931,13 +1001,13 @@ tpch.splits-per-node=4"""
     @exclude_from_package
     def _write_config_file(self, path: str, content: str, description: str) -> None:
         """Helper to write configuration files."""
+        cmd = f"sudo tee {path} > /dev/null << 'EOF'\n{content}\nEOF"
         self.record_setup_command(
-            f"sudo tee {path} > /dev/null << 'EOF'\n{content}\nEOF",
+            cmd,
             description,
             "configuration",
         )
-        cmd = f"sudo tee {path} > /dev/null << 'EOF'\n{content}\nEOF"
-        result = self.execute_command(cmd)
+        result = self.execute_command(cmd, record=False)
         if not result.get("success", False):
             print(
                 f"Warning: Failed to create {path}: {result.get('stderr', 'Unknown error')}"
@@ -998,7 +1068,7 @@ WantedBy=multi-user.target"""
             "Reload systemd daemon",
             "service_management",
         )
-        self.execute_command("sudo systemctl daemon-reload")
+        self.execute_command("sudo systemctl daemon-reload", record=False)
 
     @exclude_from_package
     def _create_metastore_service(self) -> None:
@@ -1024,7 +1094,7 @@ WantedBy=multi-user.target"""
             service_content,
             "Create Hive Metastore systemd service",
         )
-        self.execute_command("sudo systemctl daemon-reload")
+        self.execute_command("sudo systemctl daemon-reload", record=False)
 
     @exclude_from_package
     def _detect_hardware_specs(self) -> dict[str, int]:
@@ -1617,10 +1687,10 @@ WantedBy=multi-user.target"""
         # For Trino, generate directly to Hive warehouse for external tables
         parquet_dir = Path(hive_warehouse) / schema_name
 
-        # Create directory with proper ownership
-        # Must be owned by the user running tpchgen-cli (not trino)
+        # Create directory with world-writable permissions
+        # This allows both 'ubuntu' (data generation) and 'trino' (metastore writes) access
         self.execute_command(
-            f"sudo mkdir -p {parquet_dir} && sudo chown -R $(whoami):$(whoami) {parquet_dir}",
+            f"sudo mkdir -p {parquet_dir} && sudo chmod -R 777 {hive_warehouse}",
             record=False,
         )
 

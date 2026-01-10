@@ -1,0 +1,115 @@
+title: "Exasol vs ClickHouse vs Trino Performance Comparison on TPC-H SF30 (Multi-User)"
+author: "Benchmark Team"
+
+# Execution configuration
+execution:
+  parallel: true          # Enable parallel execution of systems
+  max_workers: 3          # Max concurrent systems
+
+env:
+  mode: "aws"
+  region: "eu-west-1"
+  allow_external_database_access: true
+  instances:
+    exasol:
+      instance_type: "r5d.4xlarge"  # 16 vCPUs, 128GB RAM, 2x300GB NVMe
+      disk:
+        type: "local"
+      label: "ok-bench-exa-mu"
+    clickhouse:
+      instance_type: "r5d.4xlarge"  # 16 vCPUs, 128GB RAM, 2x300GB NVMe
+      disk:
+        type: "local"
+      label: "ok-bench-ch-mu"
+    trino:
+      instance_type: "r5d.4xlarge"  # 16 vCPUs, 128GB RAM, 2x300GB NVMe
+      disk:
+        type: "local"
+      label: "ok-bench-trino-mu"
+  os_image: "ubuntu-22.04"
+  ssh_key_name: "ok-work3"
+  ssh_private_key_path: "~/.ssh/ok-work3.pem"
+
+systems:
+  # Exasol - analytical database (baseline)
+  - name: "exasol"
+    kind: "exasol"
+    version: "2025.1.8"
+    setup:
+      method: "installer"
+      use_additional_disk: true
+      c4_version: "4.28.5"
+      host_addrs: "$EXASOL_PRIVATE_IP"
+      host_external_addrs: "$EXASOL_PUBLIC_IP"
+      image_password: "exasol123"
+      db_password: "exasol456"
+      admin_password: "exasol789"
+      license_file: "configs/exasol.license"
+      db_mem_size: 64000  # 64GB for SF30
+      extra:
+        optimizer_mode: "analytical"
+        db_params:
+          - "-writeTouchInit=1"
+          - "-cacheMonitorLimit=0"
+          - "-maxOverallSlbUsageRatio=0.95"
+          - "-useQueryCache=0"
+          - "-query_log_timeout=0"
+          - "-joinOrderMethod=0"
+          - "-etlCheckCertsDefault=0"
+
+  # ClickHouse - columnar OLAP database
+  - name: "clickhouse"
+    kind: "clickhouse"
+    version: "25.10.2.65"
+    setup:
+      method: "native"
+      use_additional_disk: true
+      data_dir: "/data/clickhouse"
+      host: "$CLICKHOUSE_PUBLIC_IP"
+      port: 8123
+      username: "default"
+      password: "clickhouse123"
+      extra:
+        memory_limit: "64g"                      # Total memory limit
+        max_threads: "16"
+        # Per-query limits adjusted for 5 concurrent streams
+        max_memory_usage: "11000000000"          # ~11GB per query (55GB / 5 streams)
+        max_bytes_before_external_group_by: "5000000000"  # Spill earlier under concurrency
+        max_bytes_before_external_sort: "5000000000"
+
+  # Trino - distributed SQL query engine
+  - name: "trino"
+    kind: "trino"
+    version: "447"
+    setup:
+      method: "native"
+      use_additional_disk: true
+      host: "$TRINO_PUBLIC_IP"
+      port: 8080
+      username: "admin"
+      catalog: "hive"
+      schema: "benchmark"
+      catalogs: ["memory", "hive"]
+      extra:
+        query_max_memory: "50GB"            # Must fit within JVM heap - heap headroom
+        query_max_memory_per_node: "40GB"   # ~40% of JVM heap to leave room for headroom
+
+workload:
+  name: "tpch"
+  scale_factor: 30        # 30GB dataset
+  runs_per_query: 7
+  warmup_runs: 1
+  data_format: "csv"
+  generator: "dbgen"
+  # Multi-user concurrent execution
+  multiuser:
+    enabled: true
+    num_streams: 5        # 5 concurrent query streams
+    randomize: true       # Randomize query order across streams
+    random_seed: 42       # Fixed seed for reproducibility
+
+report:
+  show_boxplots: true
+  show_latency_cdf: true
+  show_bar_chart: true
+  show_heatmap: true

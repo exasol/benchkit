@@ -486,6 +486,34 @@ class SystemUnderTest(ABC):
         """
         return None
 
+    def ensure_storage_permissions(self) -> bool:
+        """Ensure storage directory has correct permissions for table creation.
+
+        For systems that use external tables (like Trino with Hive metastore),
+        the storage directories may need specific permissions to allow both
+        the data upload process and the metastore to write.
+
+        This is called AFTER data upload but BEFORE table creation.
+
+        Returns:
+            True if permissions are correct, False on failure.
+
+        Override in subclasses that need special permission handling.
+        """
+        return True
+
+    def get_template_variables(self) -> dict[str, Any]:
+        """Return system-specific template variables for SQL template rendering.
+
+        Override in subclasses to provide custom variables like external table
+        locations, storage paths, etc. These variables are merged into the
+        template context when rendering setup scripts.
+
+        Returns:
+            Dictionary of template variable names to values
+        """
+        return {}
+
     @abstractmethod
     def load_data(self, table_name: str, data_path: Path, **kwargs: Any) -> bool:
         """
