@@ -104,8 +104,9 @@ systems:
         region: "eu-west-1"
       extra:
         # Cluster-wide and per-node memory limits for smaller instances
-        query_max_memory: "60GB"            # Total across cluster
-        query_max_memory_per_node: "24GB"   # Per-node limit (~75% of 32GB)
+        # JVM heap is ~24GB on 32GB instance, need headroom (~30%) for GC
+        query_max_memory: "40GB"            # Total across cluster
+        query_max_memory_per_node: "16GB"   # Per-node limit (must leave room for heap headroom)
 
 workload:
   name: "tpch"

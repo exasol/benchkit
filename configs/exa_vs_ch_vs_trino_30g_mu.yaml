@@ -73,9 +73,11 @@ systems:
         memory_limit: "64g"                      # Total memory limit
         max_threads: "16"
         # Per-query limits adjusted for 5 concurrent streams
-        max_memory_usage: "11000000000"          # ~11GB per query (55GB / 5 streams)
-        max_bytes_before_external_group_by: "5000000000"  # Spill earlier under concurrency
-        max_bytes_before_external_sort: "5000000000"
+        max_memory_usage: "12000000000"          # ~12GB per query (60GB / 5 streams)
+        max_bytes_before_external_group_by: "6000000000"  # Spill earlier under concurrency
+        max_bytes_before_external_sort: "6000000000"
+        join_algorithm: "grace_hash"             # Spill joins to disk when memory exceeded
+        max_bytes_in_join: "3000000000"          # 3GB before spilling to disk
 
   # Trino - distributed SQL query engine
   - name: "trino"

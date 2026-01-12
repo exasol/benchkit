@@ -905,6 +905,7 @@ query.max-memory-per-node={query_max_memory_per_node_gb}GB"""
             catalog_dir = f"file://{hive_warehouse}"
 
         # File-based metastore doesn't require external Hive Metastore service
+        # S3 access is handled via EC2 IAM roles - no explicit credentials needed
         hive_catalog = f"""connector.name=hive
 hive.metastore=file
 hive.metastore.catalog.dir={catalog_dir}
