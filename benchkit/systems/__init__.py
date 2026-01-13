@@ -8,6 +8,7 @@ from .base import SystemUnderTest
 SYSTEM_IMPLEMENTATIONS = {
     "exasol": "ExasolSystem",
     "clickhouse": "ClickHouseSystem",
+    "trino": "TrinoSystem",
 }
 
 
@@ -32,6 +33,10 @@ def _lazy_import_system(kind: str) -> type[SystemUnderTest]:
         from .clickhouse import ClickHouseSystem
 
         return ClickHouseSystem
+    if kind == "trino":
+        from .trino import TrinoSystem
+
+        return TrinoSystem
     raise ValueError(f"Unknown system kind: {kind}")
 
 

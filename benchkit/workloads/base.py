@@ -18,6 +18,11 @@ from ..systems.base import SystemUnderTest
 class Workload(ABC):
     """Abstract base class for benchmark workloads."""
 
+    # Class attribute indicating if this workload supports external tables.
+    # Workloads that support external tables can generate data in formats like
+    # Parquet that can be read directly by systems like Trino without INSERT loading.
+    SUPPORTS_EXTERNAL_TABLES: bool = False
+
     def __init__(self, config: dict[str, Any]):
         self.name = config["name"]
         self.scale_factor = config.get("scale_factor", 1)
@@ -132,6 +137,85 @@ class Workload(ABC):
             True if data loading successful, False otherwise
         """
         pass
+
+    # -------------------------------------------------------------------------
+    # External Table Support Methods
+    # -------------------------------------------------------------------------
+
+    def get_external_table_format(self) -> str:
+        """Return data format for external tables.
+
+        Override in subclasses that support external tables.
+
+        Returns:
+            Data format string (e.g., 'PARQUET', 'CSV', 'ORC')
+        """
+        return "PARQUET"
+
+    def get_external_table_columns(self, table_name: str) -> list[tuple[str, str]]:
+        """Return column definitions for external table.
+
+        Override in subclasses that support external tables.
+
+        Args:
+            table_name: Name of the table
+
+        Returns:
+            List of (column_name, column_type) tuples
+        """
+        raise NotImplementedError(
+            f"Workload {self.name} must implement get_external_table_columns "
+            "to support external tables"
+        )
+
+    def get_table_names(self) -> list[str]:
+        """Get list of table names in this workload.
+
+        Override in subclasses.
+
+        Returns:
+            List of table names
+        """
+        raise NotImplementedError(
+            f"Workload {self.name} must implement get_table_names"
+        )
+
+    def generate_data_for_external_tables(self, storage: Any, schema: str) -> bool:
+        """Generate data and upload to storage backend for external table access.
+
+        This is the entry point for systems that use external tables.
+        Generates data locally (e.g., Parquet files), then uploads to storage.
+
+        Override in subclasses that support external tables.
+
+        Args:
+            storage: StorageBackend instance (LocalStorage or S3Storage)
+            schema: Schema name for the data
+
+        Returns:
+            True if generation and upload successful, False otherwise
+        """
+        raise NotImplementedError(
+            f"Workload {self.name} must implement generate_data_for_external_tables "
+            "to support external tables"
+        )
+
+    def get_data_locations(self, storage: Any, schema: str) -> dict[str, str]:
+        """Get data location URLs for all tables.
+
+        Used to pass to SQL templates for external table creation.
+
+        Args:
+            storage: StorageBackend instance
+            schema: Schema name
+
+        Returns:
+            Dictionary mapping table names to their data location URLs
+        """
+        return {
+            table: storage.get_data_location(schema, table)
+            for table in self.get_table_names()
+        }
 
     def get_queries(self, system: SystemUnderTest | None = None) -> dict[str, str]:
         """
@@ -695,29 +779,61 @@ class Workload(ABC):
             "schema_name": self.get_schema_name(),
         }
 
+    def _get_template_context(self, system: SystemUnderTest) -> dict[str, Any]:
+        """Build template context for rendering setup scripts.
+
+        Consolidates all template variables needed for SQL template rendering,
+        including generic variables and system-specific overrides.
+
+        Args:
+            system: System under test
+
+        Returns:
+            Dictionary of template variables
+        """
+        # Get system extra config for conditional features
+        system_extra = {}
+        if hasattr(system, "setup_config"):
+            system_extra = system.setup_config.get("extra", {})
+
+        # Get node_count and cluster for multinode support
+        node_count = getattr(system, "node_count", 1)
+        cluster = getattr(system, "cluster_name", "benchmark_cluster")
+
+        # Build base context
+        context: dict[str, Any] = {
+            "system_kind": system.kind,
+            "scale_factor": self.scale_factor,
+            "schema": self.get_schema_name(),
+            "system_extra": system_extra,
+            "node_count": node_count,
+            "cluster": cluster,
+        }
+
+        # Add data_locations for systems that support external tables
+        if system.SUPPORTS_EXTERNAL_TABLES:
+            storage = system.get_storage_backend()
+            if storage is not None:
+                context["data_locations"] = self.get_data_locations(
+                    storage, self.get_schema_name()
+                )
+            else:
+                context["data_locations"] = {}
+        else:
+            context["data_locations"] = {}
+
+        # Add system-specific variables (e.g., hive_warehouse for Trino)
+        context.update(system.get_template_variables())
+
+        return context
+
     def execute_setup_script(self, system: SystemUnderTest, script_name: str) -> bool:
         """Execute a templated setup script by rendering the jinja2 template and splitting into individual statements."""
         try:
-            # Get system extra config for conditional features
-            system_extra = {}
-            if hasattr(system, "setup_config"):
-                system_extra = system.setup_config.get("extra", {})
-
             # Load and render the template
             template = self.get_template_env().get_template(script_name)
-
-            # Get node_count and cluster for multinode support
-            node_count = getattr(system, "node_count", 1)
-            cluster = getattr(system, "cluster_name", "benchmark_cluster")
-
-            rendered_sql = template.render(
-                system_kind=system.kind,
-                scale_factor=self.scale_factor,
-                schema=self.get_schema_name(),
-                system_extra=system_extra,
-                node_count=node_count,
-                cluster=cluster,
-            )
+            context = self._get_template_context(system)
+            rendered_sql = template.render(**context)
 
             # Split SQL into individual statements and execute them one by one
             statements = system.split_sql_statements(rendered_sql)

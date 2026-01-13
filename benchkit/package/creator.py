@@ -356,11 +356,14 @@ class WorkloadPackage:
         # Copy run module (only parsers.py)
         self._copy_run_module()
 
-        # Copy only essential common modules (not cli_helpers, enums, multinode, markers)
+        # Copy only essential common modules (not cli_helpers, enums, multinode)
         self._copy_essential_common_modules()
 
         # Copy only configured systems (not all systems)
         self._copy_configured_systems()
+
+        # Copy storage module if needed by any configured system
+        self._copy_storage_module_if_needed()
 
     def _copy_run_module(self) -> None:
         """Copy minimal run module with only parsers.py."""
@@ -388,7 +391,6 @@ class WorkloadPackage:
         - cli_helpers.py (only used by main CLI)
         - enums.py (only used by cli_helpers)
         - multinode.py (not imported by package runtime)
-        - markers.py (only used during package creation)
         """
         src_dir = Path("benchkit/common")
         dst_dir = self.package_dir / "benchkit" / "common"
@@ -417,7 +419,8 @@ class WorkloadPackage:
             List of filenames to include (e.g., ['file_management.py', 'dbgen.py'])
         """
         # file_management.py is always needed (DataFormat, download_file_to_storage)
-        essential = ["file_management.py"]
+        # markers.py is needed as it's imported by other modules at runtime
+        essential = ["file_management.py", "markers.py"]
 
         # Add workload-specific modules
         workload_name = self.config["workload"]["name"]
@@ -438,6 +441,10 @@ class WorkloadPackage:
             imports.append("from .dbgen import DbGenPipe as DbGenPipe")
         if "file_management.py" in included_files:
             imports.append("from .file_management import DataFormat as DataFormat")
+        if "markers.py" in included_files:
+            imports.append(
+                "from .markers import exclude_from_package as exclude_from_package"
+            )
 
         init_content = "\n".join(imports) + "\n"
         (dst_dir / "__init__.py").write_text(init_content)
@@ -481,6 +488,7 @@ class WorkloadPackage:
             "exasol": "ExasolSystem",
             "clickhouse": "ClickHouseSystem",
             "postgresql": "PostgreSQLSystem",
+            "trino": "TrinoSystem",
         }
 
         imports = ["from .base import SystemUnderTest"]
@@ -512,6 +520,34 @@ def create_system(config: dict) -> SystemUnderTest:
 __all__ = ["SystemUnderTest", "create_system", "SYSTEM_IMPLEMENTATIONS"]
 '''
         (dst_dir / "__init__.py").write_text(init_content)
+
+    def _copy_storage_module_if_needed(self) -> None:
+        """Copy storage module if any configured system supports external tables.
+
+        Systems like Trino use storage backends (LocalStorage, S3Storage) for
+        external table data. This module needs to be in the package for remote
+        execution.
+        """
+        # Systems that need the storage module
+        systems_needing_storage = {"trino"}
+
+        configured_kinds = {s["kind"] for s in self.config.get("systems", [])}
+
+        # Check if any configured system needs storage
+        if not configured_kinds & systems_needing_storage:
+            return
+
+        src_dir = Path("benchkit/storage")
+        dst_dir = self.package_dir / "benchkit" / "storage"
+
+        if not src_dir.exists():
+            return
+
+        ensure_directory(dst_dir)
+
+        # Copy all storage module files
+        for src_file in src_dir.glob("*.py"):
+            shutil.copy2(src_file, dst_dir / src_file.name)
 
     def _copy_workload_config(self) -> None:
         """Copy configuration modified for workload execution only."""
@@ -778,6 +814,22 @@ __all__ = ["Workload", "{class_name}", "create_workload", "WORKLOAD_IMPLEMENTATI
             print(
                 f"Warning: Error loading dependencies for workload '{workload_name}': {e}"
             )
+
+        # Add storage-specific dependencies (e.g., boto3 for S3)
+        for system_config in self.config.get("systems", []):
+            setup_config = system_config.get("setup", {})
+            storage_config = setup_config.get("storage", {})
+            storage_type = storage_config.get("type", "").lower()
+
+            if storage_type == "s3":
+                try:
+                    from ..storage.s3 import S3Storage
+
+                    if hasattr(S3Storage, "get_python_dependencies"):
+                        requirements.extend(S3Storage.get_python_dependencies())
+                except ImportError:
+                    # S3Storage not available, add boto3 directly
+                    requirements.append("boto3>=1.26.0")
 
         # Remove duplicates
         unique_requirements = list(dict.fromkeys(requirements))

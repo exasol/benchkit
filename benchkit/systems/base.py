@@ -31,6 +31,10 @@ class SystemUnderTest(ABC):
     SUPPORTS_MULTINODE: bool = False
     # attribute indicating capability (or implementation) of streaming data import
     SUPPORTS_STREAMLOAD: bool = False
+    # attribute indicating if this system supports external tables (e.g., Trino with Hive)
+    # Systems with external tables read data directly from storage (S3, local files)
+    # instead of loading data through INSERT statements
+    SUPPORTS_EXTERNAL_TABLES: bool = False
 
     def __init__(
         self,
@@ -467,6 +471,48 @@ class SystemUnderTest(ABC):
             )
             return Path(tpch_gen_dir, workload.safe_display_name())
         return None
+
+    def get_storage_backend(self) -> Any:
+        """Get the storage backend configured for this system.
+
+        For systems that support external tables (SUPPORTS_EXTERNAL_TABLES=True),
+        this returns the storage backend (LocalStorage or S3Storage) used for
+        storing workload data.
+
+        Returns:
+            StorageBackend instance or None if not applicable
+
+        Override in subclasses that support external tables.
+        """
+        return None
+
+    def ensure_storage_permissions(self) -> bool:
+        """Ensure storage directory has correct permissions for table creation.
+
+        For systems that use external tables (like Trino with Hive metastore),
+        the storage directories may need specific permissions to allow both
+        the data upload process and the metastore to write.
+
+        This is called AFTER data upload but BEFORE table creation.
+
+        Returns:
+            True if permissions are correct, False on failure.
+
+        Override in subclasses that need special permission handling.
+        """
+        return True
+
+    def get_template_variables(self) -> dict[str, Any]:
+        """Return system-specific template variables for SQL template rendering.
+
+        Override in subclasses to provide custom variables like external table
+        locations, storage paths, etc. These variables are merged into the
+        template context when rendering setup scripts.
+
+        Returns:
+            Dictionary of template variable names to values
+        """
+        return {}
 
     @abstractmethod
     def load_data(self, table_name: str, data_path: Path, **kwargs: Any) -> bool:

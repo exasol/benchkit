@@ -14,7 +14,7 @@ FROM lineitem
 WHERE
     {% if system_kind == 'exasol' %}
     l_shipdate <= '1998-09-02'
-    {% elif system_kind == 'clickhouse' %}
+    {% elif system_kind in ['clickhouse', 'trino'] %}
     l_shipdate <= DATE '1998-09-02'
     {% else %}
     {{ UNSUPPORTED_SYSTEM_KIND_ERROR_FOR[system_kind] }}

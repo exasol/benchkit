@@ -115,8 +115,9 @@ class CodeMinimizer:
         if filepath.name == "__init__.py":
             return False
 
-        # Skip files in test directories
-        if "test" in str(filepath):
+        # Skip files in test directories (check path parts, not substring)
+        path_parts = filepath.parts
+        if any(part in ("tests", "test") for part in path_parts):
             return False
 
         return True

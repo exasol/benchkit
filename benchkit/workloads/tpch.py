@@ -16,6 +16,9 @@ from .base import Workload
 class TPCH(Workload):
     """TPC-H benchmark workload implementation."""
 
+    # TPC-H supports external tables via Parquet format
+    SUPPORTS_EXTERNAL_TABLES: bool = True
+
     @classmethod
     def get_python_dependencies(cls) -> list[str]:
         """Return Python packages required for TPC-H workload."""
@@ -25,31 +28,58 @@ class TPCH(Workload):
         super().__init__(config)
         assert self.generator in ["dbgen", "dbgen-pipe"]
 
-    def generate_data(self, output_dir: Path, force: bool = False) -> bool:
-        """Generate TPC-H data using tpchgen-cli (modern Python approach)."""
+    def generate_data(
+        self, output_dir: Path, force: bool = False, data_format: str = "tbl"
+    ) -> bool:
+        """Generate TPC-H data using tpchgen-cli (modern Python approach).
+
+        Args:
+            output_dir: Directory to store generated data
+            force: Force regeneration even if data exists
+            data_format: Output format - "tbl" (default) or "parquet"
+        """
         if self.generator == "dbgen":
-            return self._generate_with_tpchgen_cli(output_dir, force)
+            return self._generate_with_tpchgen_cli(output_dir, force, data_format)
         # else: generate data on the fly later
         return True
 
-    def _generate_with_tpchgen_cli(self, output_dir: Path, force: bool = False) -> bool:
-        """Generate TPC-H data using tpchgen-cli (modern Python package)."""
+    def _generate_with_tpchgen_cli(
+        self, output_dir: Path, force: bool = False, data_format: str = "tbl"
+    ) -> bool:
+        """Generate TPC-H data using tpchgen-cli (modern Python package).
 
+        Args:
+            output_dir: Directory to store generated data
+            force: Force regeneration even if data exists
+            data_format: Output format - "tbl" (pipe-delimited) or "parquet"
+        """
         # precheck: is data already there?
         if not force:
-            missing: bool = False
-            for table in self.get_table_names():
-                tbl_file = output_dir / f"{table}.tbl"
-                if not tbl_file.exists():
-                    missing = True
-                    break
-            if not missing:
-                # all files already there
-                return True
+            if data_format == "parquet":
+                # For parquet with parts, check for directory with parquet files
+                missing = False
+                for table in self.get_table_names():
+                    table_dir = output_dir / table
+                    if not table_dir.exists() or not any(table_dir.glob("*.parquet")):
+                        missing = True
+                        break
+                if not missing:
+                    print("Parquet data already exists, skipping generation")
+                    return True
+            else:
+                # For tbl format, check for single file
+                missing = False
+                for table in self.get_table_names():
+                    tbl_file = output_dir / f"{table}.tbl"
+                    if not tbl_file.exists():
+                        missing = True
+                        break
+                if not missing:
+                    # all files already there
+                    return True
 
         try:
             # Check if tpchgen-cli is available
-
             result = safe_command("python -m pip show tpchgen-cli")
             if not result["success"]:
                 print("tpchgen-cli not found. Install with: pip install tpchgen-cli")
@@ -59,33 +89,63 @@ class TPCH(Workload):
             output_dir.mkdir(parents=True, exist_ok=True)
 
             # Generate TPC-H data using tpchgen-cli
-            # Format: tbl = pipe-delimited files (TPC-H standard)
             cmd = [
                 "tpchgen-cli",
                 f"--output-dir={output_dir}",
-                "--format=tbl",
+                f"--format={data_format}",
                 f"-s {self.scale_factor}",
             ]
 
-            print(
-                f"Generating TPC-H data (scale factor {self.scale_factor}) using tpchgen-cli..."
-            )
+            # For Parquet, add parts for better parallelism and SNAPPY compression
+            if data_format == "parquet":
+                # Use parts based on scale factor for parallelism
+                # Minimum 1, scale up with data size, max 16
+                num_parts = max(1, min(self.scale_factor // 10, 16))
+                if num_parts < 1:
+                    num_parts = 1
+                cmd.append(f"--parts={num_parts}")
+                # SNAPPY is already the default but be explicit
+                print(
+                    f"Generating TPC-H Parquet data (SF {self.scale_factor}, "
+                    f"{num_parts} parts, SNAPPY compression)..."
+                )
+            else:
+                print(
+                    f"Generating TPC-H data (scale factor {self.scale_factor}) "
+                    "using tpchgen-cli..."
+                )
+
             result = safe_command(" ".join(cmd), timeout=3600)  # 1 hour timeout
 
             if not result["success"]:
                 print(f"tpchgen-cli failed: {result.get('stderr', 'Unknown error')}")
                 return False
 
-            # Verify all table files were created
-            missing_files = []
-            for table in self.get_table_names():
-                tbl_file = output_dir / f"{table}.tbl"
-                if not tbl_file.exists():
-                    missing_files.append(str(tbl_file))
-
-            if missing_files:
-                print(f"Missing data files: {missing_files}")
-                return False
+            # Verify files were created
+            if data_format == "parquet":
+                missing_tables = []
+                for table in self.get_table_names():
+                    table_dir = output_dir / table
+                    if not table_dir.exists():
+                        missing_tables.append(table)
+                    else:
+                        parquet_files = list(table_dir.glob("*.parquet"))
+                        if not parquet_files:
+                            missing_tables.append(table)
+                        else:
+                            print(f"  ✓ {table}: {len(parquet_files)} parquet file(s)")
+                if missing_tables:
+                    print(f"Missing Parquet data for tables: {missing_tables}")
+                    return False
+            else:
+                missing_files = []
+                for table in self.get_table_names():
+                    tbl_file = output_dir / f"{table}.tbl"
+                    if not tbl_file.exists():
+                        missing_files.append(str(tbl_file))
+                if missing_files:
+                    print(f"Missing data files: {missing_files}")
+                    return False
 
             print(f"Successfully generated TPC-H data in {output_dir}")
             return True
@@ -148,6 +208,75 @@ class TPCH(Workload):
         """Complete TPC-H setup process: generate data, create tables, load data, create indexes, analyze tables."""
         print("Setting up TPC-H workload...")
 
+        # Store system reference for template resolution
+        self._current_system = system
+        schema = self.get_schema_name()
+
+        # Check if system uses external tables (e.g., Trino with Hive connector)
+        if system.SUPPORTS_EXTERNAL_TABLES:
+            return self._prepare_for_external_tables(system, schema)
+        else:
+            return self._prepare_traditional(system)
+
+    def _prepare_for_external_tables(
+        self, system: SystemUnderTest, schema: str
+    ) -> bool:
+        """Prepare TPC-H for systems that use external tables (Trino).
+
+        For external table systems:
+        1. Generate Parquet data and upload to storage
+        2. Create external tables pointing to storage
+        3. No INSERT-based loading needed
+        """
+        storage = system.get_storage_backend()
+        if storage is None:
+            print("ERROR: System supports external tables but has no storage backend")
+            return False
+
+        # Step 0: Generate Parquet data and upload to storage
+        print(f"0. Generating and uploading Parquet data to {storage}...")
+        if not self.generate_data_for_external_tables(storage, schema):
+            print("Failed to generate/upload Parquet data")
+            return False
+
+        # Ensure storage permissions are correct for table creation
+        # (After data upload, directories may have restrictive permissions)
+        if not system.ensure_storage_permissions():
+            print("Failed to ensure storage permissions")
+            return False
+
+        # Step 1: Create tables and schema (external table DDL)
+        print("1. Creating external tables...")
+        if not self.create_schema(system):
+            print("Failed to create schema and tables")
+            return False
+
+        # Step 2: No data loading needed for external tables
+        print("2. Skipping data load (external tables read from storage)")
+
+        # Step 3: Create indexes (if applicable)
+        print("3. Creating indexes...")
+        if not self.create_indexes(system):
+            print("Failed to create indexes")
+            return False
+
+        # Step 4: Analyze tables
+        print("4. Analyzing tables...")
+        if not self.analyze_tables(system):
+            print("Failed to analyze tables")
+            return False
+
+        print("TPC-H workload setup completed successfully (external tables)")
+        return True
+
+    def _prepare_traditional(self, system: SystemUnderTest) -> bool:
+        """Prepare TPC-H for traditional systems (Exasol, ClickHouse).
+
+        For traditional systems:
+        1. Generate data files (.tbl format)
+        2. Create tables
+        3. Load data via INSERT statements
+        """
         # Check if system provides a custom data generation directory (e.g., on additional disk)
         custom_data_dir = system.get_data_generation_directory(self)
         if custom_data_dir:
@@ -155,8 +284,8 @@ class TPCH(Workload):
             print(f"Using system-provided data directory: {self.data_dir}")
 
         # Step 0: Generate TPC-H data
-        print("0. Generating TPC-H data...")
-        if not self.generate_data(self.data_dir):
+        print("0. Generating TPC-H data (format: tbl)...")
+        if not self.generate_data(self.data_dir, data_format="tbl"):
             print("Failed to generate TPC-H data")
             return False
 
@@ -189,6 +318,13 @@ class TPCH(Workload):
 
     def load_data(self, system: SystemUnderTest) -> bool:
         """Load TPC-H data into the database system."""
+        # External table systems don't need INSERT-based loading
+        # Data is read directly from storage (S3, local files)
+        if system.SUPPORTS_EXTERNAL_TABLES:
+            print("Using external tables - no data loading needed")
+            print("  Data files are read directly from storage")
+            return True
+
         if self.generator == "dbgen-pipe" and system.SUPPORTS_STREAMLOAD:
             return self._load_data_from_pipe(system)
         else:
@@ -209,12 +345,14 @@ class TPCH(Workload):
 
             print(f"Loading {table_name}...")
             columns = self.get_table_columns(table_name)
+            column_types = self.get_table_column_types(table_name)
             success = system.load_data(
                 table_name,
                 data_file,
                 schema=schema_name,
                 format=self.data_format,
                 columns=columns,
+                column_types=column_types,
             )
 
             if not success:
@@ -395,6 +533,103 @@ class TPCH(Workload):
         }
         return table_columns.get(table_name, [])
 
+    def get_table_column_types(self, table_name: str) -> list[str]:
+        """Get column types for a TPC-H table.
+
+        Returns simplified type identifiers that can be used for type conversion:
+        - INTEGER: 32-bit integer
+        - BIGINT: 64-bit integer
+        - DECIMAL: Fixed-point decimal number
+        - VARCHAR: Variable-length string
+        - DATE: Date without time
+        """
+        table_column_types = {
+            "nation": ["INTEGER", "VARCHAR", "INTEGER", "VARCHAR"],
+            "region": ["INTEGER", "VARCHAR", "VARCHAR"],
+            "part": [
+                "INTEGER",  # p_partkey
+                "VARCHAR",  # p_name
+                "VARCHAR",  # p_mfgr
+                "VARCHAR",  # p_brand
+                "VARCHAR",  # p_type
+                "INTEGER",  # p_size
+                "VARCHAR",  # p_container
+                "DECIMAL",  # p_retailprice
+                "VARCHAR",  # p_comment
+            ],
+            "supplier": [
+                "INTEGER",  # s_suppkey
+                "VARCHAR",  # s_name
+                "VARCHAR",  # s_address
+                "INTEGER",  # s_nationkey
+                "VARCHAR",  # s_phone
+                "DECIMAL",  # s_acctbal
+                "VARCHAR",  # s_comment
+            ],
+            "partsupp": [
+                "INTEGER",  # ps_partkey
+                "INTEGER",  # ps_suppkey
+                "INTEGER",  # ps_availqty
+                "DECIMAL",  # ps_supplycost
+                "VARCHAR",  # ps_comment
+            ],
+            "customer": [
+                "INTEGER",  # c_custkey
+                "VARCHAR",  # c_name
+                "VARCHAR",  # c_address
+                "INTEGER",  # c_nationkey
+                "VARCHAR",  # c_phone
+                "DECIMAL",  # c_acctbal
+                "VARCHAR",  # c_mktsegment
+                "VARCHAR",  # c_comment
+            ],
+            "orders": [
+                "BIGINT",  # o_orderkey
+                "INTEGER",  # o_custkey
+                "VARCHAR",  # o_orderstatus
+                "DECIMAL",  # o_totalprice
+                "DATE",  # o_orderdate
+                "VARCHAR",  # o_orderpriority
+                "VARCHAR",  # o_clerk
+                "INTEGER",  # o_shippriority
+                "VARCHAR",  # o_comment
+            ],
+            "lineitem": [
+                "BIGINT",  # l_orderkey
+                "INTEGER",  # l_partkey
+                "INTEGER",  # l_suppkey
+                "INTEGER",  # l_linenumber
+                "DECIMAL",  # l_quantity
+                "DECIMAL",  # l_extendedprice
+                "DECIMAL",  # l_discount
+                "DECIMAL",  # l_tax
+                "VARCHAR",  # l_returnflag
+                "VARCHAR",  # l_linestatus
+                "DATE",  # l_shipdate
+                "DATE",  # l_commitdate
+                "DATE",  # l_receiptdate
+                "VARCHAR",  # l_shipinstruct
+                "VARCHAR",  # l_shipmode
+                "VARCHAR",  # l_comment
+            ],
+        }
+        return table_column_types.get(table_name, [])
+
+    def get_external_table_columns(self, table_name: str) -> list[tuple[str, str]]:
+        """Return column definitions for TPC-H external tables.
+
+        Combines column names with their type identifiers.
+
+        Args:
+            table_name: Name of the TPC-H table
+
+        Returns:
+            List of (column_name, column_type) tuples
+        """
+        columns = self.get_table_columns(table_name)
+        types = self.get_table_column_types(table_name)
+        return list(zip(columns, types, strict=True))
+
     def get_table_info(self) -> dict[str, dict[str, Any]]:
         """Return TPC-H table metadata."""
         return {
@@ -460,27 +695,12 @@ class TPCH(Workload):
     def get_rendered_setup_scripts(self, system: SystemUnderTest) -> dict[str, str]:
         """Render setup scripts for specific system."""
         scripts = {}
+        context = self._get_template_context(system)
 
         for script_name in ["create_tables", "create_indexes", "analyze_tables"]:
             try:
                 template = self.get_template_env().get_template(f"{script_name}.sql")
-                system_extra = {}
-                if hasattr(system, "setup_config"):
-                    system_extra = system.setup_config.get("extra", {})
-
-                # Get node_count and cluster for multinode support
-                node_count = getattr(system, "node_count", 1)
-                cluster = getattr(system, "cluster_name", "benchmark_cluster")
-
-                rendered = template.render(
-                    system_kind=system.kind,
-                    scale_factor=self.scale_factor,
-                    schema=self.get_schema_name(),
-                    system_extra=system_extra,
-                    node_count=node_count,
-                    cluster=cluster,
-                )
-                scripts[script_name] = rendered
+                scripts[script_name] = template.render(**context)
             except Exception as e:
                 print(f"Warning: Failed to render {script_name}.sql: {e}")
                 scripts[script_name] = f"-- Error rendering script: {e}"
@@ -530,3 +750,58 @@ class TPCH(Workload):
             return int(max(sf * scale_multiplier(sf), 3.0))
 
         return estimate_gb(float(self.scale_factor))
+
+    def generate_data_for_external_tables(self, storage: Any, schema: str) -> bool:
+        """Generate Parquet data and upload to storage for external table access.
+
+        This is used by systems that support external tables (like Trino).
+        Generates Parquet files locally, then uploads them to the storage backend.
+
+        Args:
+            storage: StorageBackend instance (LocalStorage or S3Storage)
+            schema: Schema name for the data
+
+        Returns:
+            True if generation and upload successful, False otherwise
+        """
+        import tempfile
+
+        try:
+            # Prepare storage
+            if not storage.prepare():
+                print("Failed to prepare storage backend")
+                return False
+
+            # Create temp directory for data generation
+            with tempfile.TemporaryDirectory(prefix="tpch_parquet_") as temp_dir:
+                temp_path = Path(temp_dir)
+
+                # Generate Parquet data to temp directory
+                print(f"Generating TPC-H Parquet data (SF {self.scale_factor})...")
+                if not self._generate_with_tpchgen_cli(
+                    temp_path, force=False, data_format="parquet"
+                ):
+                    print("Failed to generate Parquet data")
+                    return False
+
+                # Upload each table to storage
+                for table_name in self.get_table_names():
+                    table_dir = temp_path / table_name
+                    if not table_dir.exists():
+                        print(f"Table data not found: {table_dir}")
+                        return False
+
+                    print(f"Uploading {table_name} to storage...")
+                    if not storage.upload_data(table_dir, schema, table_name):
+                        print(f"Failed to upload {table_name}")
+                        return False
+
+            print(f"Successfully uploaded TPC-H data to {storage}")
+            return True
+
+        except Exception as e:
+            print(f"Failed to generate/upload external table data: {e}")
+            import traceback
+
+            traceback.print_exc()
+            return False

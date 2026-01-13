@@ -535,6 +535,11 @@ class InfraManager:
                         break
         tf_vars["allow_external_database_access"] = str(allow_external).lower()
 
+        # Collect S3 buckets from system storage configurations
+        s3_buckets = self._collect_s3_buckets()
+        if s3_buckets:
+            tf_vars["s3_buckets"] = json.dumps(s3_buckets)
+
         return tf_vars
 
     def _extract_instance_config(
@@ -611,6 +616,27 @@ class InfraManager:
             all_ports[port_key] = port
 
         return all_ports
+
+    def _collect_s3_buckets(self) -> list[str]:
+        """Collect S3 bucket names from system storage configurations.
+
+        Returns:
+            List of unique S3 bucket names that need IAM access
+        """
+        buckets: set[str] = set()
+
+        systems_config = self.config.get("systems", [])
+        for system_config in systems_config:
+            setup_config = system_config.get("setup", {})
+            storage_config = setup_config.get("storage", {})
+
+            # Check for S3 storage configuration
+            if storage_config.get("type") == "s3":
+                bucket = storage_config.get("bucket")
+                if bucket:
+                    buckets.add(bucket)
+
+        return list(buckets)
 
     def _prepare_minimal_terraform_vars(self) -> dict[str, str]:
         """Prepare minimal terraform variables for destroy operations."""
