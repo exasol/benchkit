@@ -22,7 +22,7 @@ env:
 systems:
   - name: "trino"
     kind: "trino"
-    version: "447"                 # Compatible with Java 22
+    version: "479"                 # Requires Java 24
     setup:
       method: "native"             # Native installation
       node_count: 3                # 3-node cluster: 1 coordinator + 2 workers

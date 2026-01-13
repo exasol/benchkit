@@ -82,7 +82,7 @@ systems:
   # Trino - distributed SQL query engine
   - name: "trino"
     kind: "trino"
-    version: "447"
+    version: "479"
     setup:
       method: "native"
       use_additional_disk: true

@@ -7,10 +7,13 @@ from .base import StorageBackend
 
 
 class S3Storage(StorageBackend):
-    """S3 storage backend (s3a:// URLs).
+    """S3 storage backend (s3:// URLs for Trino 479+).
 
     Used for Trino deployments (especially multinode) where data is stored in S3
-    and accessed via the Hive connector's s3a:// protocol.
+    and accessed via Trino's native S3 filesystem (fs.native-s3.enabled=true).
+
+    Trino 479+ uses the s3:// URI scheme with native S3 support, not the legacy
+    s3a:// Hadoop-based scheme.
 
     Uses boto3 with the default credential chain (IAM role preferred).
 
@@ -43,20 +46,20 @@ class S3Storage(StorageBackend):
         return ["boto3>=1.26.0"]
 
     def get_location_prefix(self) -> str:
-        """Return the s3a:// URL prefix."""
-        return "s3a://"
+        """Return the s3:// URL prefix for Trino 479+ native S3."""
+        return "s3://"
 
     def get_data_location(self, schema: str, table: str) -> str:
-        """Return s3a:// URL for table data.
+        """Return s3:// URL for table data (Trino 479+ native S3).
 
         Args:
             schema: Schema name
             table: Table name
 
         Returns:
-            Full s3a:// URL (e.g., 's3a://bucket/prefix/schema/table')
+            Full s3:// URL (e.g., 's3://bucket/prefix/schema/table')
         """
-        parts = [f"s3a://{self.bucket}"]
+        parts = [f"s3://{self.bucket}"]
         if self.prefix:
             parts.append(self.prefix)
         parts.append(schema)

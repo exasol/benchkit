@@ -29,7 +29,7 @@ systems:
   # Trino with Hive connector
   - name: "trino"
     kind: "trino"
-    version: "478"
+    version: "479"
     setup:
       method: "native"
       use_additional_disk: true

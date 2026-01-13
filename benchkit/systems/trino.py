@@ -521,10 +521,10 @@ class TrinoSystem(SystemUnderTest):
 
     @exclude_from_package
     def _install_java(self) -> bool:
-        """Install Java 22+ (required by Trino 447+)."""
-        print("Installing Java 22...")
+        """Install Java 25+ (required by Trino 479+)."""
+        print("Installing Java 25...")
 
-        # Add Adoptium (Eclipse Temurin) repository for Java 22
+        # Add Adoptium (Eclipse Temurin) repository for Java 25
         add_repo_cmd = """wget -qO - https://packages.adoptium.net/artifactory/api/gpg/key/public | sudo gpg --dearmor -o /usr/share/keyrings/adoptium.gpg 2>/dev/null || true
 echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/adoptium.list"""
         self.record_setup_command(
@@ -536,20 +536,20 @@ echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium
         if not result.get("success", False):
             print(f"Warning: Failed to add Adoptium repo: {result.get('stderr', '')}")
 
-        # Install Java 22
+        # Install Java 25
         self.record_setup_command(
-            "sudo apt-get update && sudo apt-get install -y temurin-22-jdk",
-            "Install Java 22 (required by Trino 447+)",
+            "sudo apt-get update && sudo apt-get install -y temurin-25-jdk",
+            "Install Java 25 (required by Trino 479+)",
             "prerequisites",
         )
         result = self.execute_command(
-            "sudo apt-get update && sudo apt-get install -y temurin-22-jdk",
+            "sudo apt-get update && sudo apt-get install -y temurin-25-jdk",
             timeout=300,
             record=False,
         )
 
         if not result.get("success", False):
-            print(f"Failed to install Java 22: {result.get('stderr', 'Unknown error')}")
+            print(f"Failed to install Java 25: {result.get('stderr', 'Unknown error')}")
             return False
 
         # Install python-is-python3 (required by Trino launcher)
@@ -562,15 +562,21 @@ echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium
             "sudo apt-get install -y python-is-python3", timeout=60, record=False
         )
 
-        print("✓ Java 22 installed")
+        print("✓ Java 25 installed")
         return True
 
     @exclude_from_package
     def _download_and_install_trino(self) -> bool:
         """Download and install Trino server."""
-        # Default to version 447 which is compatible with Java 22
-        version = self.version if self.version and self.version != "latest" else "447"
-        download_url = f"https://repo1.maven.org/maven2/io/trino/trino-server/{version}/trino-server-{version}.tar.gz"
+        # Default to version 479 which is compatible with Java 25
+        version = self.version if self.version and self.version != "latest" else "479"
+
+        # Trino 477+ uses GitHub releases, older versions use Maven Central
+        version_int = int(version) if version.isdigit() else 479
+        if version_int >= 477:
+            download_url = f"https://github.com/trinodb/trino/releases/download/{version}/trino-server-{version}.tar.gz"
+        else:
+            download_url = f"https://repo1.maven.org/maven2/io/trino/trino-server/{version}/trino-server-{version}.tar.gz"
 
         print(f"Downloading Trino {version}...")
 
@@ -890,19 +896,38 @@ query.max-memory-per-node={query_max_memory_per_node_gb}GB"""
         """
         from benchkit.storage import S3Storage
 
-        # Determine metastore catalog directory based on storage type
+        # File-based metastore (hive.metastore=file) stores metadata as local files.
+        # The catalog dir MUST be a local filesystem path - it cannot be S3.
+        # For S3 storage: metastore is local, but table data is stored in S3.
+        # For local storage: both metastore and table data are local.
+        hive_warehouse = self.setup_config.get(
+            "hive_warehouse", "/data/trino/hive-metastore"
+        )
+        # Metastore catalog dir is always local (file metastore doesn't support S3)
+        catalog_dir = f"local://{hive_warehouse}"
+
         if isinstance(self._storage_backend, S3Storage):
-            # S3 storage: use s3a:// path for metastore catalog
-            catalog_dir = f"s3a://{self._storage_backend.bucket}"
-            if self._storage_backend.prefix:
-                catalog_dir = f"{catalog_dir}/{self._storage_backend.prefix}"
-            catalog_dir = f"{catalog_dir}/hive-metastore"
+            # S3 storage: enable BOTH local (for metastore) and S3 (for table data)
+            # - fs.native-local.enabled + local.location: for metastore catalog dir
+            # - fs.native-s3.enabled + s3.region: for table data in S3
+            s3_region = self._storage_backend.region
+            fs_config = f"""fs.native-local.enabled=true
+local.location=/
+fs.native-s3.enabled=true
+s3.region={s3_region}"""
         else:
-            # Local storage: use file:// path
-            hive_warehouse = self.setup_config.get(
-                "hive_warehouse", "/data/trino/hive-warehouse"
-            )
-            catalog_dir = f"file://{hive_warehouse}"
+            # Local storage: only need native local filesystem
+            # Trino 479+ requires:
+            # - local:// URI scheme (not file://) for catalog dir and external_location
+            # - fs.native-local.enabled=true
+            # - local.location set to root "/" to allow access to all external_location paths
+            fs_config = """fs.native-local.enabled=true
+local.location=/"""
+
+        # Create metastore directory with proper permissions for trino user
+        self.execute_command(f"sudo mkdir -p {hive_warehouse}")
+        self.execute_command(f"sudo chown -R trino:trino {hive_warehouse}")
+        self.execute_command(f"sudo chmod -R 755 {hive_warehouse}")
 
         # File-based metastore doesn't require external Hive Metastore service
         # S3 access is handled via EC2 IAM roles - no explicit credentials needed
@@ -910,7 +935,8 @@ query.max-memory-per-node={query_max_memory_per_node_gb}GB"""
 hive.metastore=file
 hive.metastore.catalog.dir={catalog_dir}
 hive.storage-format=PARQUET
-hive.compression-codec=SNAPPY"""
+hive.compression-codec=SNAPPY
+{fs_config}"""
 
         self.execute_command("sudo mkdir -p /etc/trino/catalog")
         self._write_config_file(
@@ -971,9 +997,15 @@ hive.compression-codec=SNAPPY"""
             )
             # Note: hive.allow-drop-table and hive.non-managed-table-* are deprecated
             # in Trino 447+. Only include minimal required config for file metastore.
+            # Trino 479+ requires:
+            # - local:// URI scheme (not file://) for catalog dir and external_location
+            # - fs.native-local.enabled=true for native local filesystem access
+            # - local.location=/ to allow access to all external_location paths
             hive_catalog = f"""connector.name=hive
 hive.metastore=file
-hive.metastore.catalog.dir=file://{hive_warehouse}"""
+hive.metastore.catalog.dir=local://{hive_warehouse}
+fs.native-local.enabled=true
+local.location=/"""
 
             # Create warehouse directory with world-writable permissions
             # This allows both 'ubuntu' (data generation) and 'trino' (metastore) to write
@@ -1082,7 +1114,7 @@ After=network.target
 Type=simple
 User=trino
 Group=trino
-Environment="JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64"
+Environment="JAVA_HOME=/usr/lib/jvm/temurin-25-jdk-amd64"
 ExecStart={self.hive_metastore_home}/bin/start-metastore
 Restart=on-failure
 RestartSec=10

@@ -7,10 +7,13 @@ from .base import StorageBackend
 
 
 class LocalStorage(StorageBackend):
-    """Local filesystem storage backend (file:// URLs).
+    """Local filesystem storage backend (local:// URLs for Trino 479+).
 
     Used for single-node Trino deployments where data is stored on the local
-    filesystem and accessed via the Hive connector's file:// protocol.
+    filesystem and accessed via Trino's native local filesystem connector.
+
+    Trino 479+ requires the local:// URI scheme (not file://) for native local
+    filesystem access when fs.native-local.enabled=true is set in catalog config.
 
     This is the default storage backend for Trino single-node configurations.
     """
@@ -24,20 +27,20 @@ class LocalStorage(StorageBackend):
         self.base_path = Path(base_path)
 
     def get_location_prefix(self) -> str:
-        """Return the file:// URL prefix."""
-        return "file://"
+        """Return the local:// URL prefix for Trino 479+ native filesystem."""
+        return "local://"
 
     def get_data_location(self, schema: str, table: str) -> str:
-        """Return file:// URL for table data.
+        """Return local:// URL for table data (Trino 479+ native filesystem).
 
         Args:
             schema: Schema name
             table: Table name
 
         Returns:
-            Full file:// URL (e.g., 'file:///data/hive-warehouse/benchmark/lineitem')
+            Full local:// URL (e.g., 'local:///data/hive-warehouse/benchmark/lineitem')
         """
-        return f"file://{self.base_path}/{schema}/{table}"
+        return f"local://{self.base_path}/{schema}/{table}"
 
     def get_local_path(self, schema: str, table: str) -> Path:
         """Get local filesystem path for table data.

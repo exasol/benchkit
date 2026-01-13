@@ -86,7 +86,7 @@ systems:
   # Trino - 3-node cluster (1 coordinator + 2 workers)
   - name: "trino"
     kind: "trino"
-    version: "447"
+    version: "479"
     setup:
       method: "native"
       node_count: 3                 # 3-node cluster: 1 coordinator + 2 workers
