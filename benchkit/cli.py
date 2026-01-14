@@ -3215,5 +3215,127 @@ def cleanup(
         raise typer.Exit(code=1) from e
 
 
+@app.command()
+def combine(
+    source: list[str] = typer.Option(
+        ...,
+        "--source",
+        "-s",
+        help=(
+            "Source specification: config.yaml:system1,system2 or "
+            "config.yaml:sys1:new_name,sys2 for renaming"
+        ),
+    ),
+    output: str = typer.Option(
+        ...,
+        "--output",
+        "-o",
+        help="Output project ID for combined results",
+    ),
+    title: str | None = typer.Option(
+        None,
+        "--title",
+        "-t",
+        help="Title for the combined benchmark report",
+    ),
+    author: str | None = typer.Option(
+        None,
+        "--author",
+        "-a",
+        help="Author for the combined benchmark report",
+    ),
+    no_report: bool = typer.Option(
+        False,
+        "--no-report",
+        help="Skip automatic report regeneration after combining",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        "-f",
+        help="Overwrite existing output project if it exists",
+    ),
+    debug: bool = typer.Option(
+        False,
+        "--debug",
+        help="Enable debug output for detailed tracing",
+    ),
+) -> None:
+    """Combine results from multiple benchmark projects into one.
+
+    Use this to create comparison reports from separately-run benchmarks.
+    All source projects must have identical workload configurations
+    (same scale factor, queries, runs_per_query, etc.).
+
+    Examples:
+
+        # Compare Exasol from one benchmark with ClickHouse from another
+        benchkit combine \\
+            --source configs/exasol_sf100.yaml:exasol \\
+            --source configs/clickhouse_sf100.yaml:clickhouse \\
+            --output exasol_vs_clickhouse
+
+        # Compare two versions with rename to avoid conflicts
+        benchkit combine \\
+            --source configs/exasol_v8.yaml:exasol:exasol_v8 \\
+            --source configs/exasol_v9.yaml:exasol:exasol_v9 \\
+            --output exasol_version_comparison
+
+        # Combine without auto-generating report
+        benchkit combine \\
+            --source proj1.yaml:sys1 \\
+            --source proj2.yaml:sys2 \\
+            --output combined \\
+            --no-report
+    """
+    from .combine import BenchmarkCombiner, parse_source_arg
+
+    set_debug(debug)
+
+    console.print("[bold blue]Combining benchmark results[/]")
+
+    try:
+        # Parse source arguments
+        sources = [parse_source_arg(s) for s in source]
+
+        # Create combiner and execute
+        combiner = BenchmarkCombiner(
+            sources=sources,
+            output_project_id=output,
+            title=title,
+            author=author,
+        )
+
+        output_dir = combiner.combine(force=force)
+        console.print(f"[green]✓ Combined results saved to:[/] {output_dir}")
+
+        # Auto-generate report unless disabled
+        if not no_report:
+            console.print("[blue]Generating combined report...[/]")
+            config_path = output_dir / "config.yaml"
+            if config_path.exists():
+                cfg = load_config(str(config_path))
+                report_path = render_report(cfg)
+                console.print(f"[green]✓ Report generated:[/] {report_path}")
+            else:
+                console.print(
+                    "[yellow]Warning: Could not generate report - "
+                    "config.yaml not found[/]"
+                )
+
+        console.print("[bold green]✓ Combine completed successfully![/]")
+
+    except FileExistsError as e:
+        console.print(f"[red]Error:[/] {e}")
+        raise typer.Exit(code=1) from e
+    except Exception as e:
+        console.print(f"[red]Error combining results:[/] {e}")
+        if debug:
+            import traceback
+
+            console.print(traceback.format_exc())
+        raise typer.Exit(code=1) from e
+
+
 if __name__ == "__main__":
     app()

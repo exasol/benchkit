@@ -70,7 +70,7 @@ pip install -e .
 benchkit --help
 ```
 
-You should see the framework's help message with 9 available commands.
+You should see the framework's help message with 10 available commands.
 
 ### 3. Install TPC-H Tools (Optional/Obsolete?)
 
@@ -158,7 +158,7 @@ ls -la results/exa_vs_ch_1g/
 
 ## CLI Commands Reference
 
-The framework provides 9 commands for complete benchmark lifecycle management.
+The framework provides 10 commands for complete benchmark lifecycle management.
 
 ### 1. `probe` - System Information Collection
 
@@ -391,6 +391,54 @@ benchkit cleanup --config configs/my_benchmark.yaml --confirm
 ```
 
 Use this to teardown systems without destroying cloud infrastructure.
+
+### 10. `combine` - Merge Multiple Benchmarks
+
+Combine benchmark results from multiple separately-run projects into a single unified project for comparison:
+
+```bash
+# Combine Exasol from one benchmark with ClickHouse from another
+benchkit combine \
+    --source configs/exasol_sf100.yaml:exasol \
+    --source configs/clickhouse_sf100.yaml:clickhouse \
+    --output exasol_vs_clickhouse
+
+# Compare two versions with rename to avoid name conflicts
+benchkit combine \
+    --source configs/exasol_v8.yaml:exasol:exasol_v8 \
+    --source configs/exasol_v9.yaml:exasol:exasol_v9 \
+    --output exasol_version_comparison
+
+# Combine with custom title and author
+benchkit combine \
+    --source proj1.yaml:sys1 \
+    --source proj2.yaml:sys2 \
+    --output combined \
+    --title "Performance Comparison" \
+    --author "Your Name"
+
+# Combine without auto-generating report
+benchkit combine \
+    --source proj1.yaml:sys1 \
+    --source proj2.yaml:sys2 \
+    --output combined \
+    --no-report
+```
+
+**Source Syntax**: `config.yaml:system1,system2` or with renaming: `config.yaml:sys1:new_name`
+
+**Options**:
+- `--source` / `-s` (required, multiple): Source specification
+- `--output` / `-o` (required): Output project ID
+- `--title` / `-t`: Report title
+- `--author` / `-a`: Report author
+- `--no-report`: Skip report generation
+- `--force` / `-f`: Overwrite existing output
+
+**Output**: Creates `results/<output>/` with merged results and regenerated report
+
+> [!IMPORTANT]
+> All source benchmarks must have identical workload configurations (scale factor, queries, runs per query) to be combined.
 
 ## Configuration Guide
 
