@@ -1511,7 +1511,11 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
                 self._log(
                     f"Configuring database parameters ({len(db_params)} parameters)..."
                 )
-                self._configure_database_parameters(play_id, db_params)
+                if not self._configure_database_parameters(play_id, db_params):
+                    self._log(
+                        "✗ Database parameter configuration failed - installation incomplete"
+                    )
+                    return False
                 self._log("✓ Database parameter configuration completed")
 
             # Record other applied configuration parameters
@@ -2002,8 +2006,12 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
     @exclude_from_package
     def _configure_database_parameters(
         self, play_id: str, db_params: list[str]
-    ) -> None:
-        """Configure Exasol database parameters using c4 connect."""
+    ) -> bool:
+        """Configure Exasol database parameters using c4 connect.
+
+        Returns:
+            True if configuration succeeded and database is running, False otherwise.
+        """
         self.record_setup_note("Configuring Exasol database parameters...")
         self._log(f"Configuring {len(db_params)} database parameters: {db_params}")
 
@@ -2028,7 +2036,7 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
                 "⚠ Warning: Failed to stop database for parameter configuration"
             )
             self._log("✗ Failed to stop database")
-            return
+            return False
         else:
             self._log("✓ Database stopped successfully")
 
@@ -2055,7 +2063,7 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
         ):
             self.record_setup_note("Warning: Database parameter configuration failed")
             self._log("✗ Failed to configure database parameters")
-            return
+            return False
         else:
             self._log("✓ Database parameters configured successfully")
 
@@ -2074,7 +2082,7 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
                 "⚠ Warning: Failed to start database after parameter configuration"
             )
             self._log("✗ Failed to start database after parameter configuration")
-            return
+            return False
         else:
             self._log("✓ Database start command completed")
 
@@ -2086,6 +2094,7 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
                 "✓ Database parameters configured and database started successfully"
             )
             self._log("✓ Database is fully ready after parameter configuration")
+            return True
         else:
             self.record_setup_note(
                 "⚠ Warning: Database started but initialization check failed"
@@ -2093,6 +2102,7 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
             self._log(
                 "✗ Database initialization check failed after parameter configuration"
             )
+            return False
 
     @exclude_from_package
     def _wait_for_database_ready(

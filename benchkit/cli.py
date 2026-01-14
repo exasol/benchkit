@@ -41,6 +41,57 @@ app = typer.Typer(
 console = Console()
 
 
+def _report_query_results(runs_file: Path, console: Console) -> bool:
+    """Report query results summary including any errors.
+
+    Returns:
+        True if all queries succeeded, False if any failed.
+    """
+    import csv
+
+    total = 0
+    successful = 0
+    failed = 0
+    # Track unique errors per system: system -> {query -> error}
+    errors_by_system: dict[str, dict[str, str]] = {}
+
+    with open(runs_file) as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            total += 1
+            if row.get("success", "").lower() == "true":
+                successful += 1
+            else:
+                failed += 1
+                system = row.get("system", "unknown")
+                query = row.get("query", "unknown")
+                error = row.get("error", "unknown error")
+                if system not in errors_by_system:
+                    errors_by_system[system] = {}
+                # Only keep first error per query per system
+                if query not in errors_by_system[system]:
+                    errors_by_system[system][query] = error
+
+    # Print summary
+    console.print()
+    console.print("[bold]Query Execution Summary:[/bold]")
+    console.print(f"  Total query runs: {total}")
+    console.print(f"  [green]Successful: {successful}[/green]")
+
+    if failed > 0:
+        console.print(f"  [red]Failed: {failed}[/red]")
+        console.print()
+        console.print("[bold red]Failed Queries:[/bold red]")
+        for system, errors in sorted(errors_by_system.items()):
+            console.print(f"  [bold]{system}:[/bold]")
+            for query, error in sorted(errors.items()):
+                error_preview = error[:80] + "..." if len(error) > 80 else error
+                console.print(f"    {query}: {error_preview}")
+        return False
+
+    return True
+
+
 @app.command()
 def probe(
     config: str = typer.Option(
@@ -304,15 +355,21 @@ def run(
         console.print(
             "[bold blue]Running full benchmark (setup + load + run)[/bold blue]"
         )
+        console.print()
 
+        # Phase 1: Setup
         if not runner.run_setup():
             console.print("[red]✗ Setup phase failed[/]")
             raise typer.Exit(1)
+        console.print()
 
+        # Phase 2: Load
         if not runner.run_load(local=local):
             console.print("[red]✗ Load phase failed[/]")
             raise typer.Exit(1)
+        console.print()
 
+        # Phase 3: Queries
         if not runner.run_queries(force=force, local=local):
             console.print("[red]✗ Query execution failed[/]")
             raise typer.Exit(1)
@@ -321,7 +378,18 @@ def run(
         if not runner.run_queries(force=force, local=local):
             raise typer.Exit(1)
 
-    console.print(f"[green]✓ Benchmark completed:[/] {outdir / 'runs.csv'}")
+    # Check for query errors in results and report them
+    runs_file = outdir / "runs.csv"
+    all_queries_passed = True
+    if runs_file.exists():
+        all_queries_passed = _report_query_results(runs_file, console)
+
+    if all_queries_passed:
+        console.print(f"\n[green]✓ Benchmark completed successfully:[/] {runs_file}")
+    else:
+        console.print(
+            f"\n[yellow]⚠ Benchmark completed with some query failures:[/] {runs_file}"
+        )
 
 
 @app.command()
