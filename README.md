@@ -59,7 +59,7 @@ make infra-destroy CFG=configs/exa_vs_ch_1g.yaml
 
 ## Usage
 
-The framework provides 9 commands for complete benchmark lifecycle management:
+The framework provides 10 commands for complete benchmark lifecycle management:
 
 ```bash
 # Manage infrastructure
@@ -74,7 +74,7 @@ benchkit run --config configs/my_benchmark.yaml [--systems exasol] [--queries Q0
 # Generate reports
 benchkit report --config configs/my_benchmark.yaml
 
-# Other commands: execute, status, package, verify, cleanup
+# Other commands: execute, status, package, verify, cleanup, combine
 ```
 
 > [!INFO]
