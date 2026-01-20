@@ -1,12 +1,6 @@
--- TPC-H Table Analysis Script
--- Analyzes tables and updates statistics for optimal query performance
+-- ClickHouse TPC-H Table Optimization
+-- Optimizes tables and optionally collects statistics for query optimizer
 
-{% if system_kind == 'exasol' %}
--- Analyze database to estimate statistics for query optimization
-ANALYZE DATABASE ESTIMATE STATISTICS;
-COMMIT;
-{% elif system_kind == 'clickhouse' %}
--- ClickHouse Table Optimization
 {% if system_extra.get('allow_statistics_optimize', 0) == 1 %}
 -- Statistics are enabled - collect statistics for query optimizer (ClickHouse 24.6+)
 -- Statistics help the query optimizer make better join order decisions
@@ -96,22 +90,4 @@ OPTIMIZE TABLE {{ schema }}.lineitem FINAL;
 SELECT 'ClickHouse statistics collected and tables optimized';
 {% else %}
 SELECT 'ClickHouse tables optimized (statistics disabled)';
-{% endif %}
-{% elif system_kind == 'trino' %}
--- Trino/Hive: Analyze tables to collect statistics for query optimization
--- ANALYZE collects column statistics that help the optimizer choose better join orders
--- and estimate cardinalities for cost-based optimization
-
-ANALYZE {{ schema }}.nation;
-ANALYZE {{ schema }}.region;
-ANALYZE {{ schema }}.part;
-ANALYZE {{ schema }}.supplier;
-ANALYZE {{ schema }}.partsupp;
-ANALYZE {{ schema }}.customer;
-ANALYZE {{ schema }}.orders;
-ANALYZE {{ schema }}.lineitem;
-
-SELECT 'Trino: Table statistics collected for query optimization';
-{% else %}
-{{ UNSUPPORTED_SYSTEM_KIND_ERROR_FOR[system_kind] }}
 {% endif %}

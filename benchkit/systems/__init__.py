@@ -9,6 +9,7 @@ SYSTEM_IMPLEMENTATIONS = {
     "exasol": "ExasolSystem",
     "clickhouse": "ClickHouseSystem",
     "trino": "TrinoSystem",
+    "starrocks": "StarrocksSystem",
 }
 
 
@@ -37,6 +38,10 @@ def _lazy_import_system(kind: str) -> type[SystemUnderTest]:
         from .trino import TrinoSystem
 
         return TrinoSystem
+    if kind == "starrocks":
+        from .starrocks import StarrocksSystem
+
+        return StarrocksSystem
     raise ValueError(f"Unknown system kind: {kind}")
 
 
