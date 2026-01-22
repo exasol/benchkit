@@ -719,7 +719,9 @@ class TPCH(Workload):
 
         for script_name in ["create_tables", "create_indexes", "analyze_tables"]:
             try:
-                template = self.get_template_env().get_template(f"{script_name}.sql")
+                template = self.get_template_env().get_template(
+                    f"{system.kind}/{script_name}.sql"
+                )
                 scripts[script_name] = template.render(**context)
             except Exception as e:
                 print(f"Warning: Failed to render {script_name}.sql: {e}")

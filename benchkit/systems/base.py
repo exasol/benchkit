@@ -846,20 +846,22 @@ class SystemUnderTest(ABC):
         sensitive_replacements = {}
 
         # Add password replacements from config
+        # Only add non-empty passwords to avoid replacing empty strings
+        # (which would insert placeholders between every character)
         if hasattr(self, "setup_config") and self.setup_config:
-            if "image_password" in self.setup_config:
+            if self.setup_config.get("image_password"):
                 sensitive_replacements[self.setup_config["image_password"]] = (
                     "<EXASOL_IMAGE_PASSWORD>"
                 )
-            if "db_password" in self.setup_config:
+            if self.setup_config.get("db_password"):
                 sensitive_replacements[self.setup_config["db_password"]] = (
                     "<EXASOL_DB_PASSWORD>"
                 )
-            if "admin_password" in self.setup_config:
+            if self.setup_config.get("admin_password"):
                 sensitive_replacements[self.setup_config["admin_password"]] = (
                     "<EXASOL_ADMIN_PASSWORD>"
                 )
-            if "password" in self.setup_config:
+            if self.setup_config.get("password"):
                 sensitive_replacements[self.setup_config["password"]] = (
                     "<DATABASE_PASSWORD>"
                 )
