@@ -1,0 +1,1272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Exasol vs StarRocks: TPC-H SF1 (Single-Node, 5 Streams) - Detailed Query Results">
+    <title>Exasol vs StarRocks: TPC-H SF1 (Single-Node, 5 Streams) | Detailed Query Results</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-badge">📊 Detailed Query Results</div>
+            <h1>Exasol vs StarRocks: TPC-H SF1 (Single-Node, 5 Streams)</h1>
+            <div class="metadata">
+                <span class="meta-item">
+                    <strong>Author:</strong> Benchmark Team
+                </span>
+                <span class="meta-item">
+                    <strong>Date:</strong> 2026-01-21 10:53:32
+                </span>
+                <span class="meta-item">
+                    <strong>Environment:</strong>
+                    <span class="badge badge-cloud">AWS</span>
+                    eu-west-1
+                </span>
+            </div>
+        </header>
+
+        <!-- Overview -->
+        <section class="section">
+            <h2>Overview</h2>
+            <p>This report presents the complete query-by-query performance results for <strong>2 database systems</strong> tested using the TPC-H benchmark at scale factor 1.</p>
+        </section>
+
+        <!-- Systems Under Test -->
+        <section class="section">
+            <h2>Systems Under Test</h2>
+
+            <div class="systems-grid">
+                <div class="system-card">
+                    <h3>Exasol 2025.1.8</h3>
+
+
+                    <div class="system-specs">
+                        <h4>Environment & Hardware</h4>
+                        <ul>
+                            <li><strong>Cloud:</strong> AWS eu-west-1</li>
+                            <li><strong>Instance:</strong> r6id.large</li>
+                            <li><strong>CPU:</strong> Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz (2 vCPUs)</li>
+                            <li><strong>Memory:</strong> 15.3GB RAM</li>
+                        </ul>
+
+                        <h4>Software</h4>
+                        <ul>
+                            <li><strong>Database:</strong> exasol 2025.1.8</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="system-card">
+                    <h3>Starrocks 4.0.4</h3>
+
+
+                    <div class="system-specs">
+                        <h4>Environment & Hardware</h4>
+                        <ul>
+                            <li><strong>Cloud:</strong> AWS eu-west-1</li>
+                            <li><strong>Instance:</strong> r6id.large</li>
+                            <li><strong>CPU:</strong> Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz (2 vCPUs)</li>
+                            <li><strong>Memory:</strong> 15.3GB RAM</li>
+                        </ul>
+
+                        <h4>Software</h4>
+                        <ul>
+                            <li><strong>Database:</strong> starrocks 4.0.4</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Performance Summary -->
+        <section class="section">
+            <h2>Performance Summary</h2>
+
+
+            <div class="key-findings">
+                <h3>Key Findings</h3>
+                <ul>
+                    <li><strong>exasol</strong> was the fastest overall with <strong>178.4ms</strong> median runtime</li>
+                    <li><strong>starrocks</strong> was <strong>3.2×</strong> slower</li>
+                    <li>Tested <strong>220</strong> total query executions across 22 different query types</li>
+                    <li><strong>Execution mode:</strong> Multiuser with <strong>5 concurrent streams</strong> (randomized distribution)</li>
+                </ul>
+            </div>
+
+            <h3>Performance Visualizations</h3>
+            <div class="chart-container">
+                <iframe src="attachments/figures/system_performance_overview.html" width="100%" height="550" frameborder="0"></iframe>
+            </div>
+            <div class="chart-container">
+                <iframe src="attachments/figures/all_systems_comparison.html" width="100%" height="550" frameborder="0"></iframe>
+            </div>
+            <div class="chart-container">
+                <iframe src="attachments/figures/performance_heatmap.html" width="100%" height="550" frameborder="0"></iframe>
+            </div>
+            <div class="chart-container">
+                <iframe src="attachments/figures/speedup_comparison.html" width="100%" height="550" frameborder="0"></iframe>
+            </div>
+        </section>
+
+        <!-- Detailed Analysis -->
+        <section class="section">
+            <h2>Detailed Analysis</h2>
+
+            <h3>Performance by Query Type</h3>
+            <p>The benchmark results reveal distinct performance characteristics across different query categories:</p>
+
+            <ul>
+                <li><strong>Aggregation queries</strong> (<a href="#" class="query-link" data-query="Q01">Q01</a>, <a href="#" class="query-link" data-query="Q06">Q06</a>, <a href="#" class="query-link" data-query="Q12">Q12</a>, <a href="#" class="query-link" data-query="Q14">Q14</a>, <a href="#" class="query-link" data-query="Q15">Q15</a>, <a href="#" class="query-link" data-query="Q19">Q19</a>, <a href="#" class="query-link" data-query="Q20">Q20</a>): Test data reduction and grouping operations</li>
+                <li><strong>Join-heavy queries</strong> (<a href="#" class="query-link" data-query="Q02">Q02</a>, <a href="#" class="query-link" data-query="Q05">Q05</a>, <a href="#" class="query-link" data-query="Q08">Q08</a>, <a href="#" class="query-link" data-query="Q09">Q09</a>, <a href="#" class="query-link" data-query="Q10">Q10</a>, <a href="#" class="query-link" data-query="Q11">Q11</a>, <a href="#" class="query-link" data-query="Q21">Q21</a>, <a href="#" class="query-link" data-query="Q22">Q22</a>): Evaluate multi-table join performance</li>
+                <li><strong>Complex analytical queries</strong> (<a href="#" class="query-link" data-query="Q03">Q03</a>, <a href="#" class="query-link" data-query="Q04">Q04</a>, <a href="#" class="query-link" data-query="Q07">Q07</a>, <a href="#" class="query-link" data-query="Q13">Q13</a>, <a href="#" class="query-link" data-query="Q16">Q16</a>, <a href="#" class="query-link" data-query="Q17">Q17</a>, <a href="#" class="query-link" data-query="Q18">Q18</a>): Combine multiple operations</li>
+            </ul>
+
+            <p>The following table shows the median performance for each query category across all systems:</p>
+            <table  class="query-type-table">
+<thead><tr>
+<th>Query Type</th>
+<th>exasol</th>
+<th>starrocks</th>
+<th>Winner</th>
+</tr></thead>
+<tbody>
+<tr >
+<td>Aggregation</td>
+<td class="perf-excellent">126.30</td>
+<td class="perf-excellent">430.00</td>
+<td>exasol</td>
+</tr>
+<tr >
+<td>Join-Heavy</td>
+<td class="perf-good">224.30</td>
+<td class="perf-poor">635.20</td>
+<td>exasol</td>
+</tr>
+<tr >
+<td>Complex Analytical</td>
+<td class="perf-poor">285.70</td>
+<td class="perf-good">628.70</td>
+<td>exasol</td>
+</tr>
+</tbody>
+</table>
+
+            <h3>Query-by-Query Results</h3>
+            <p>The following table shows the median execution time for each query across all systems:</p>
+            <table  class="comparison-table">
+<thead><tr>
+<th>query</th>
+<th>baseline_system</th>
+<th>comparison_system</th>
+<th>baseline_ms</th>
+<th>comparison_ms</th>
+<th>ratio</th>
+<th>speedup</th>
+<th>faster</th>
+</tr></thead>
+<tbody>
+<tr data-query-start="true" data-query-group="odd" data-query="Q01">
+<td>Q01</td>
+<td>exasol</td>
+<td>starrocks</td>
+<td class="perf-poor">562.80</td>
+<td class="perf-poor">904.90</td>
+<td>1.61</td>
+<td class="perf-excellent">0.62</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q02">
+<td>Q02</td>
+<td>exasol</td>
+<td>starrocks</td>
+<td class="perf-average">240.50</td>
+<td class="perf-average">559.70</td>
+<td>2.33</td>
+<td class="perf-good">0.43</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q03">
+<td>Q03</td>
+<td>exasol</td>
+<td>starrocks</td>
+<td class="perf-good">173.20</td>
+<td class="perf-good">463.00</td>
+<td>2.67</td>
+<td class="perf-good">0.37</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q04">
+<td>Q04</td>
+<td>exasol</td>
+<td>starrocks</td>
+<td class="perf-excellent">86.60</td>
+<td class="perf-average">626.00</td>
+<td>7.23</td>
+<td class="perf-poor">0.14</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q05">
+<td>Q05</td>
+<td>exasol</td>
+<td>starrocks</td>
+<td class="perf-average">203.80</td>
+<td class="perf-good">533.50</td>
+<td>2.62</td>
+<td class="perf-good">0.38</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q06">
+<td>Q06</td>
+<td>exasol</td>
+<td>starrocks</td>
+<td class="perf-excellent">85.20</td>
+<td class="perf-excellent">382.50</td>
+<td>4.49</td>
+<td class="perf-average">0.22</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q07">
+<td>Q07</td>
+<td>exasol</td>
+<td>starrocks</td>
+<td class="perf-average">258.90</td>
+<td class="perf-poor">941.70</td>
+<td>3.64</td>
+<td class="perf-average">0.27</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q08">
+<td>Q08</td>
+<td>exasol</td>
+<td>starrocks</td>
+<td class="perf-good">132.00</td>
+<td class="perf-poor">986.90</td>
+<td>7.48</td>
+<td class="perf-poor">0.13</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q09">
+<td>Q09</td>
+<td>exasol</td>
+<td>starrocks</td>
+<td class="perf-poor">539.50</td>
+<td class="perf-poor">1,006.10</td>
+<td>1.86</td>
+<td class="perf-excellent">0.54</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q10">
+<td>Q10</td>
+<td>exasol</td>
+<td>starrocks</td>
+<td class="perf-poor">473.20</td>
+<td class="perf-average">866.70</td>
+<td>1.83</td>
+<td class="perf-excellent">0.55</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q11">
+<td>Q11</td>
+<td>exasol</td>
+<td>starrocks</td>
+<td class="perf-average">225.30</td>
+<td class="perf-excellent">324.00</td>
+<td>1.44</td>
+<td class="perf-excellent">0.70</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q12">
+<td>Q12</td>
+<td>exasol</td>
+<td>starrocks</td>
+<td class="perf-good">156.60</td>
+<td class="perf-average">723.00</td>
+<td>4.62</td>
+<td class="perf-average">0.22</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q13">
+<td>Q13</td>
+<td>exasol</td>
+<td>starrocks</td>
+<td class="perf-poor">653.60</td>
+<td class="perf-good">519.00</td>
+<td>0.79</td>
+<td class="perf-excellent">1.26</td>
+<td>1</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q14">
+<td>Q14</td>
+<td>exasol</td>
+<td>starrocks</td>
+<td class="perf-excellent">67.30</td>
+<td class="perf-excellent">352.20</td>
+<td>5.23</td>
+<td class="perf-poor">0.19</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q15">
+<td>Q15</td>
+<td>exasol</td>
+<td>starrocks</td>
+<td class="perf-excellent">121.80</td>
+<td class="perf-excellent">380.90</td>
+<td>3.13</td>
+<td class="perf-average">0.32</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q16">
+<td>Q16</td>
+<td>exasol</td>
+<td>starrocks</td>
+<td class="perf-poor">378.10</td>
+<td class="perf-average">851.20</td>
+<td>2.25</td>
+<td class="perf-good">0.44</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q17">
+<td>Q17</td>
+<td>exasol</td>
+<td>starrocks</td>
+<td class="perf-excellent">53.20</td>
+<td class="perf-good">509.70</td>
+<td>9.58</td>
+<td class="perf-poor">0.10</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q18">
+<td>Q18</td>
+<td>exasol</td>
+<td>starrocks</td>
+<td class="perf-poor">345.70</td>
+<td class="perf-poor">1,772.80</td>
+<td>5.13</td>
+<td class="perf-poor">0.20</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q19">
+<td>Q19</td>
+<td>exasol</td>
+<td>starrocks</td>
+<td class="perf-excellent">85.60</td>
+<td class="perf-excellent">331.40</td>
+<td>3.87</td>
+<td class="perf-average">0.26</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q20">
+<td>Q20</td>
+<td>exasol</td>
+<td>starrocks</td>
+<td class="perf-good">195.50</td>
+<td class="perf-good">429.50</td>
+<td>2.20</td>
+<td class="perf-good">0.46</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q21">
+<td>Q21</td>
+<td>exasol</td>
+<td>starrocks</td>
+<td class="perf-average">319.90</td>
+<td class="perf-poor">2,133.70</td>
+<td>6.67</td>
+<td class="perf-poor">0.15</td>
+<td>0</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q22">
+<td>Q22</td>
+<td>exasol</td>
+<td>starrocks</td>
+<td class="perf-good">157.50</td>
+<td class="perf-excellent">296.20</td>
+<td>1.88</td>
+<td class="perf-excellent">0.53</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+
+            <h3>Detailed Statistics</h3>
+            <p>The complete performance statistics for all queries and systems:</p>
+            <table  class="summary-table">
+<thead><tr>
+<th>query</th>
+<th>system</th>
+<th>warmup</th>
+<th>runs</th>
+<th>median_ms</th>
+<th>mean_ms</th>
+<th>std_ms</th>
+<th>min_ms</th>
+<th>max_ms</th>
+</tr></thead>
+<tbody>
+<tr data-query-start="true" data-query-group="odd" data-query="Q01" data-system="exasol">
+<td>Q01</td>
+<td>exasol</td>
+<td class="perf-average">134.30</td>
+<td>5</td>
+<td class="perf-average">562.80</td>
+<td class="perf-average">568.60</td>
+<td class="perf-good">156.90</td>
+<td class="perf-average">334.80</td>
+<td class="perf-average">751.70</td>
+</tr>
+<tr data-query-group="odd" data-query="Q01" data-system="starrocks">
+<td>Q01</td>
+<td>starrocks</td>
+<td class="perf-poor">877.50</td>
+<td>5</td>
+<td class="perf-poor">904.90</td>
+<td class="perf-poor">989.30</td>
+<td class="perf-poor">368.70</td>
+<td class="perf-poor">698.60</td>
+<td class="perf-poor">1,611.60</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q02" data-system="exasol">
+<td>Q02</td>
+<td>exasol</td>
+<td class="perf-good">55.10</td>
+<td>5</td>
+<td class="perf-good">240.50</td>
+<td class="perf-good">238.50</td>
+<td class="perf-good">116.30</td>
+<td class="perf-good">93.80</td>
+<td class="perf-good">377.70</td>
+</tr>
+<tr data-query-group="even" data-query="Q02" data-system="starrocks">
+<td>Q02</td>
+<td>starrocks</td>
+<td class="perf-poor">568.60</td>
+<td>5</td>
+<td class="perf-average">559.70</td>
+<td class="perf-average">653.30</td>
+<td class="perf-average">213.90</td>
+<td class="perf-poor">519.20</td>
+<td class="perf-poor">1,031.30</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q03" data-system="exasol">
+<td>Q03</td>
+<td>exasol</td>
+<td class="perf-good">47.30</td>
+<td>5</td>
+<td class="perf-excellent">173.20</td>
+<td class="perf-good">268.30</td>
+<td class="perf-average">197.90</td>
+<td class="perf-excellent">45.90</td>
+<td class="perf-good">506.50</td>
+</tr>
+<tr data-query-group="odd" data-query="Q03" data-system="starrocks">
+<td>Q03</td>
+<td>starrocks</td>
+<td class="perf-poor">272.10</td>
+<td>5</td>
+<td class="perf-average">463.00</td>
+<td class="perf-average">466.60</td>
+<td class="perf-good">96.30</td>
+<td class="perf-average">318.60</td>
+<td class="perf-good">576.60</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q04" data-system="exasol">
+<td>Q04</td>
+<td>exasol</td>
+<td class="perf-excellent">18.30</td>
+<td>5</td>
+<td class="perf-excellent">86.60</td>
+<td class="perf-excellent">98.20</td>
+<td class="perf-excellent">39.90</td>
+<td class="perf-excellent">60.30</td>
+<td class="perf-excellent">150.20</td>
+</tr>
+<tr data-query-group="even" data-query="Q04" data-system="starrocks">
+<td>Q04</td>
+<td>starrocks</td>
+<td class="perf-average">184.10</td>
+<td>5</td>
+<td class="perf-poor">626.00</td>
+<td class="perf-poor">692.30</td>
+<td class="perf-average">196.60</td>
+<td class="perf-poor">472.40</td>
+<td class="perf-average">901.40</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q05" data-system="exasol">
+<td>Q05</td>
+<td>exasol</td>
+<td class="perf-good">55.80</td>
+<td>5</td>
+<td class="perf-good">203.80</td>
+<td class="perf-excellent">189.50</td>
+<td class="perf-excellent">39.60</td>
+<td class="perf-good">140.50</td>
+<td class="perf-excellent">225.40</td>
+</tr>
+<tr data-query-group="odd" data-query="Q05" data-system="starrocks">
+<td>Q05</td>
+<td>starrocks</td>
+<td class="perf-poor">272.90</td>
+<td>5</td>
+<td class="perf-average">533.50</td>
+<td class="perf-average">614.80</td>
+<td class="perf-average">168.80</td>
+<td class="perf-poor">469.80</td>
+<td class="perf-average">894.80</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q06" data-system="exasol">
+<td>Q06</td>
+<td>exasol</td>
+<td class="perf-excellent">11.50</td>
+<td>5</td>
+<td class="perf-excellent">85.20</td>
+<td class="perf-excellent">65.60</td>
+<td class="perf-excellent">35.00</td>
+<td class="perf-excellent">10.40</td>
+<td class="perf-excellent">92.40</td>
+</tr>
+<tr data-query-group="even" data-query="Q06" data-system="starrocks">
+<td>Q06</td>
+<td>starrocks</td>
+<td class="perf-good">65.00</td>
+<td>5</td>
+<td class="perf-average">382.50</td>
+<td class="perf-good">374.00</td>
+<td class="perf-good">108.80</td>
+<td class="perf-good">219.90</td>
+<td class="perf-good">509.20</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q07" data-system="exasol">
+<td>Q07</td>
+<td>exasol</td>
+<td class="perf-good">49.90</td>
+<td>5</td>
+<td class="perf-good">258.90</td>
+<td class="perf-good">252.10</td>
+<td class="perf-good">113.60</td>
+<td class="perf-good">131.10</td>
+<td class="perf-good">416.80</td>
+</tr>
+<tr data-query-group="odd" data-query="Q07" data-system="starrocks">
+<td>Q07</td>
+<td>starrocks</td>
+<td class="perf-poor">279.10</td>
+<td>5</td>
+<td class="perf-poor">941.70</td>
+<td class="perf-poor">846.20</td>
+<td class="perf-average">176.50</td>
+<td class="perf-poor">564.00</td>
+<td class="perf-average">989.90</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q08" data-system="exasol">
+<td>Q08</td>
+<td>exasol</td>
+<td class="perf-excellent">25.80</td>
+<td>5</td>
+<td class="perf-excellent">132.00</td>
+<td class="perf-excellent">114.80</td>
+<td class="perf-excellent">56.10</td>
+<td class="perf-excellent">25.80</td>
+<td class="perf-excellent">162.30</td>
+</tr>
+<tr data-query-group="even" data-query="Q08" data-system="starrocks">
+<td>Q08</td>
+<td>starrocks</td>
+<td class="perf-poor">347.80</td>
+<td>5</td>
+<td class="perf-poor">986.90</td>
+<td class="perf-poor">887.40</td>
+<td class="perf-poor">421.40</td>
+<td class="perf-average">350.00</td>
+<td class="perf-poor">1,340.60</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q09" data-system="exasol">
+<td>Q09</td>
+<td>exasol</td>
+<td class="perf-average">108.90</td>
+<td>5</td>
+<td class="perf-average">539.50</td>
+<td class="perf-average">527.00</td>
+<td class="perf-excellent">71.20</td>
+<td class="perf-average">424.10</td>
+<td class="perf-good">610.90</td>
+</tr>
+<tr data-query-group="odd" data-query="Q09" data-system="starrocks">
+<td>Q09</td>
+<td>starrocks</td>
+<td class="perf-poor">379.10</td>
+<td>5</td>
+<td class="perf-poor">1,006.10</td>
+<td class="perf-poor">992.10</td>
+<td class="perf-poor">292.10</td>
+<td class="perf-poor">605.50</td>
+<td class="perf-poor">1,419.50</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q10" data-system="exasol">
+<td>Q10</td>
+<td>exasol</td>
+<td class="perf-good">56.50</td>
+<td>5</td>
+<td class="perf-average">473.20</td>
+<td class="perf-average">448.90</td>
+<td class="perf-average">198.30</td>
+<td class="perf-good">207.10</td>
+<td class="perf-average">720.90</td>
+</tr>
+<tr data-query-group="even" data-query="Q10" data-system="starrocks">
+<td>Q10</td>
+<td>starrocks</td>
+<td class="perf-poor">295.50</td>
+<td>5</td>
+<td class="perf-poor">866.70</td>
+<td class="perf-poor">935.20</td>
+<td class="perf-poor">520.00</td>
+<td class="perf-average">332.30</td>
+<td class="perf-poor">1,703.60</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q11" data-system="exasol">
+<td>Q11</td>
+<td>exasol</td>
+<td class="perf-excellent">23.40</td>
+<td>5</td>
+<td class="perf-good">225.30</td>
+<td class="perf-excellent">179.30</td>
+<td class="perf-good">104.70</td>
+<td class="perf-excellent">60.50</td>
+<td class="perf-excellent">294.60</td>
+</tr>
+<tr data-query-group="odd" data-query="Q11" data-system="starrocks">
+<td>Q11</td>
+<td>starrocks</td>
+<td class="perf-good">105.10</td>
+<td>5</td>
+<td class="perf-good">324.00</td>
+<td class="perf-good">350.90</td>
+<td class="perf-average">187.00</td>
+<td class="perf-good">177.10</td>
+<td class="perf-average">627.00</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q12" data-system="exasol">
+<td>Q12</td>
+<td>exasol</td>
+<td class="perf-excellent">21.30</td>
+<td>5</td>
+<td class="perf-excellent">156.60</td>
+<td class="perf-excellent">163.30</td>
+<td class="perf-excellent">73.70</td>
+<td class="perf-excellent">86.50</td>
+<td class="perf-excellent">283.30</td>
+</tr>
+<tr data-query-group="even" data-query="Q12" data-system="starrocks">
+<td>Q12</td>
+<td>starrocks</td>
+<td class="perf-average">157.90</td>
+<td>5</td>
+<td class="perf-poor">723.00</td>
+<td class="perf-poor">712.30</td>
+<td class="perf-average">185.40</td>
+<td class="perf-poor">520.30</td>
+<td class="perf-poor">990.50</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q13" data-system="exasol">
+<td>Q13</td>
+<td>exasol</td>
+<td class="perf-average">114.60</td>
+<td>5</td>
+<td class="perf-poor">653.60</td>
+<td class="perf-poor">1,117.40</td>
+<td class="perf-poor">875.90</td>
+<td class="perf-poor">500.20</td>
+<td class="perf-poor">2,582.40</td>
+</tr>
+<tr data-query-group="odd" data-query="Q13" data-system="starrocks">
+<td>Q13</td>
+<td>starrocks</td>
+<td class="perf-average">265.80</td>
+<td>5</td>
+<td class="perf-average">519.00</td>
+<td class="perf-average">568.20</td>
+<td class="perf-average">170.80</td>
+<td class="perf-average">433.40</td>
+<td class="perf-average">866.60</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q14" data-system="exasol">
+<td>Q14</td>
+<td>exasol</td>
+<td class="perf-excellent">17.10</td>
+<td>5</td>
+<td class="perf-excellent">67.30</td>
+<td class="perf-excellent">160.70</td>
+<td class="perf-average">165.70</td>
+<td class="perf-excellent">17.20</td>
+<td class="perf-good">413.60</td>
+</tr>
+<tr data-query-group="even" data-query="Q14" data-system="starrocks">
+<td>Q14</td>
+<td>starrocks</td>
+<td class="perf-average">109.90</td>
+<td>5</td>
+<td class="perf-good">352.20</td>
+<td class="perf-average">526.90</td>
+<td class="perf-poor">325.50</td>
+<td class="perf-average">331.50</td>
+<td class="perf-poor">1,094.00</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q15" data-system="exasol">
+<td>Q15</td>
+<td>exasol</td>
+<td class="perf-excellent">24.20</td>
+<td>5</td>
+<td class="perf-excellent">121.80</td>
+<td class="perf-excellent">125.50</td>
+<td class="perf-excellent">79.10</td>
+<td class="perf-excellent">23.60</td>
+<td class="perf-excellent">243.90</td>
+</tr>
+<tr data-query-group="odd" data-query="Q15" data-system="starrocks">
+<td>Q15</td>
+<td>starrocks</td>
+<td class="perf-average">161.00</td>
+<td>5</td>
+<td class="perf-average">380.90</td>
+<td class="perf-average">391.00</td>
+<td class="perf-good">111.10</td>
+<td class="perf-average">271.60</td>
+<td class="perf-good">563.70</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q16" data-system="exasol">
+<td>Q16</td>
+<td>exasol</td>
+<td class="perf-good">102.90</td>
+<td>5</td>
+<td class="perf-good">378.10</td>
+<td class="perf-good">381.00</td>
+<td class="perf-average">194.40</td>
+<td class="perf-good">92.70</td>
+<td class="perf-good">594.30</td>
+</tr>
+<tr data-query-group="even" data-query="Q16" data-system="starrocks">
+<td>Q16</td>
+<td>starrocks</td>
+<td class="perf-poor">312.60</td>
+<td>5</td>
+<td class="perf-poor">851.20</td>
+<td class="perf-poor">843.60</td>
+<td class="perf-poor">249.70</td>
+<td class="perf-poor">589.20</td>
+<td class="perf-poor">1,239.00</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q17" data-system="exasol">
+<td>Q17</td>
+<td>exasol</td>
+<td class="perf-excellent">12.10</td>
+<td>5</td>
+<td class="perf-excellent">53.20</td>
+<td class="perf-excellent">69.40</td>
+<td class="perf-excellent">33.60</td>
+<td class="perf-excellent">33.90</td>
+<td class="perf-excellent">109.10</td>
+</tr>
+<tr data-query-group="odd" data-query="Q17" data-system="starrocks">
+<td>Q17</td>
+<td>starrocks</td>
+<td class="perf-average">112.70</td>
+<td>5</td>
+<td class="perf-average">509.70</td>
+<td class="perf-average">536.30</td>
+<td class="perf-good">155.60</td>
+<td class="perf-average">365.90</td>
+<td class="perf-average">751.50</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q18" data-system="exasol">
+<td>Q18</td>
+<td>exasol</td>
+<td class="perf-good">80.30</td>
+<td>5</td>
+<td class="perf-good">345.70</td>
+<td class="perf-good">343.90</td>
+<td class="perf-excellent">47.00</td>
+<td class="perf-average">285.70</td>
+<td class="perf-good">409.00</td>
+</tr>
+<tr data-query-group="even" data-query="Q18" data-system="starrocks">
+<td>Q18</td>
+<td>starrocks</td>
+<td class="perf-poor">276.00</td>
+<td>5</td>
+<td class="perf-poor">1,772.80</td>
+<td class="perf-poor">2,062.30</td>
+<td class="perf-poor">750.40</td>
+<td class="perf-poor">1,472.50</td>
+<td class="perf-poor">3,344.20</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q19" data-system="exasol">
+<td>Q19</td>
+<td>exasol</td>
+<td class="perf-excellent">11.50</td>
+<td>5</td>
+<td class="perf-excellent">85.60</td>
+<td class="perf-excellent">85.10</td>
+<td class="perf-excellent">26.10</td>
+<td class="perf-excellent">59.70</td>
+<td class="perf-excellent">124.90</td>
+</tr>
+<tr data-query-group="odd" data-query="Q19" data-system="starrocks">
+<td>Q19</td>
+<td>starrocks</td>
+<td class="perf-average">153.20</td>
+<td>5</td>
+<td class="perf-good">331.40</td>
+<td class="perf-good">362.30</td>
+<td class="perf-good">159.00</td>
+<td class="perf-good">176.20</td>
+<td class="perf-average">616.10</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q20" data-system="exasol">
+<td>Q20</td>
+<td>exasol</td>
+<td class="perf-excellent">31.00</td>
+<td>5</td>
+<td class="perf-excellent">195.50</td>
+<td class="perf-good">239.20</td>
+<td class="perf-good">85.40</td>
+<td class="perf-good">156.40</td>
+<td class="perf-excellent">349.20</td>
+</tr>
+<tr data-query-group="even" data-query="Q20" data-system="starrocks">
+<td>Q20</td>
+<td>starrocks</td>
+<td class="perf-average">173.00</td>
+<td>5</td>
+<td class="perf-average">429.50</td>
+<td class="perf-average">426.40</td>
+<td class="perf-good">93.50</td>
+<td class="perf-average">291.70</td>
+<td class="perf-good">543.80</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q21" data-system="exasol">
+<td>Q21</td>
+<td>exasol</td>
+<td class="perf-good">65.70</td>
+<td>5</td>
+<td class="perf-good">319.90</td>
+<td class="perf-good">370.70</td>
+<td class="perf-poor">257.60</td>
+<td class="perf-excellent">79.10</td>
+<td class="perf-average">772.30</td>
+</tr>
+<tr data-query-group="odd" data-query="Q21" data-system="starrocks">
+<td>Q21</td>
+<td>starrocks</td>
+<td class="perf-poor">592.30</td>
+<td>5</td>
+<td class="perf-poor">2,133.70</td>
+<td class="perf-poor">2,201.70</td>
+<td class="perf-poor">726.90</td>
+<td class="perf-poor">1,205.00</td>
+<td class="perf-poor">2,927.60</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q22" data-system="exasol">
+<td>Q22</td>
+<td>exasol</td>
+<td class="perf-excellent">23.50</td>
+<td>5</td>
+<td class="perf-excellent">157.50</td>
+<td class="perf-excellent">140.90</td>
+<td class="perf-excellent">31.50</td>
+<td class="perf-good">99.30</td>
+<td class="perf-excellent">167.10</td>
+</tr>
+<tr data-query-group="even" data-query="Q22" data-system="starrocks">
+<td>Q22</td>
+<td>starrocks</td>
+<td class="perf-good">82.90</td>
+<td>5</td>
+<td class="perf-good">296.20</td>
+<td class="perf-good">346.90</td>
+<td class="perf-poor">254.00</td>
+<td class="perf-good">147.90</td>
+<td class="perf-average">773.10</td>
+</tr>
+</tbody>
+</table>
+
+            <h3>System Rankings</h3>
+            <p>Based on median query execution time:</p>
+
+            <div class="comparison-table">
+                <table class="styled-table">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>System</th>
+                            <th>Median Runtime</th>
+                            <th>Average Runtime</th>
+                            <th>Range (Min - Max)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>1</strong></td>
+                            <td>Exasol</td>
+                            <td>178.4ms</td>
+                            <td>279.5ms</td>
+                            <td>10.4ms - 2582.4ms</td>
+                        </tr>
+                        <tr>
+                            <td><strong>2</strong></td>
+                            <td>Starrocks</td>
+                            <td>566.2ms</td>
+                            <td>762.7ms</td>
+                            <td>147.9ms - 3344.2ms</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h3>Per-Stream Performance Analysis</h3>
+            <div class="notice notice-info">
+                <p>This benchmark was executed using <strong>5 concurrent streams</strong> to simulate multi-user workload. The following tables show how queries were distributed and performed across each stream for each system:</p>
+            </div>
+
+            <h4>Exasol - Stream Performance</h4>
+            <div class="comparison-table">
+                <table class="styled-table">
+                    <thead>
+                        <tr>
+                            <th>Stream ID</th>
+                            <th>Queries Executed</th>
+                            <th>Avg Runtime (ms)</th>
+                            <th>Median Runtime (ms)</th>
+                            <th>Min Runtime (ms)</th>
+                            <th>Max Runtime (ms)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>0</strong></td>
+                            <td>22</td>
+                            <td>347.2</td>
+                            <td>166.8</td>
+                            <td>10.4</td>
+                            <td>2582.4</td>
+                        </tr>
+                        <tr>
+                            <td><strong>1</strong></td>
+                            <td>22</td>
+                            <td>224.6</td>
+                            <td>157.9</td>
+                            <td>64.7</td>
+                            <td>653.6</td>
+                        </tr>
+                        <tr>
+                            <td><strong>2</strong></td>
+                            <td>22</td>
+                            <td>278.7</td>
+                            <td>213.4</td>
+                            <td>53.2</td>
+                            <td>662.8</td>
+                        </tr>
+                        <tr>
+                            <td><strong>3</strong></td>
+                            <td>22</td>
+                            <td>276.9</td>
+                            <td>232.8</td>
+                            <td>49.4</td>
+                            <td>594.3</td>
+                        </tr>
+                        <tr>
+                            <td><strong>4</strong></td>
+                            <td>22</td>
+                            <td>270.0</td>
+                            <td>180.7</td>
+                            <td>60.5</td>
+                            <td>772.3</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="key-findings">
+                <h5>Stream Performance Analysis for Exasol</h5>
+                <ul>
+                    <li><strong>Best stream median:</strong> 157.9ms</li>
+                    <li><strong>Worst stream median:</strong> 232.8ms</li>
+                    <li><strong>Performance variance:</strong> 47.4% difference between fastest and slowest streams</li>
+                </ul>
+                <p>This demonstrates Exasol's ability to handle concurrent query loads with <strong>varying</strong> performance across streams.</p>
+            </div>
+            <h4>Starrocks - Stream Performance</h4>
+            <div class="comparison-table">
+                <table class="styled-table">
+                    <thead>
+                        <tr>
+                            <th>Stream ID</th>
+                            <th>Queries Executed</th>
+                            <th>Avg Runtime (ms)</th>
+                            <th>Median Runtime (ms)</th>
+                            <th>Min Runtime (ms)</th>
+                            <th>Max Runtime (ms)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>0</strong></td>
+                            <td>22</td>
+                            <td>815.2</td>
+                            <td>570.6</td>
+                            <td>190.9</td>
+                            <td>2886.3</td>
+                        </tr>
+                        <tr>
+                            <td><strong>1</strong></td>
+                            <td>22</td>
+                            <td>583.0</td>
+                            <td>519.6</td>
+                            <td>176.2</td>
+                            <td>1129.8</td>
+                        </tr>
+                        <tr>
+                            <td><strong>2</strong></td>
+                            <td>22</td>
+                            <td>820.1</td>
+                            <td>552.6</td>
+                            <td>161.8</td>
+                            <td>3344.2</td>
+                        </tr>
+                        <tr>
+                            <td><strong>3</strong></td>
+                            <td>22</td>
+                            <td>798.2</td>
+                            <td>743.0</td>
+                            <td>328.2</td>
+                            <td>2133.7</td>
+                        </tr>
+                        <tr>
+                            <td><strong>4</strong></td>
+                            <td>22</td>
+                            <td>797.1</td>
+                            <td>553.8</td>
+                            <td>147.9</td>
+                            <td>2927.6</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="key-findings">
+                <h5>Stream Performance Analysis for Starrocks</h5>
+                <ul>
+                    <li><strong>Best stream median:</strong> 519.6ms</li>
+                    <li><strong>Worst stream median:</strong> 743.0ms</li>
+                    <li><strong>Performance variance:</strong> 43.0% difference between fastest and slowest streams</li>
+                </ul>
+                <p>This demonstrates Starrocks's ability to handle concurrent query loads with <strong>varying</strong> performance across streams.</p>
+            </div>
+
+            <div class="notice notice-info">
+                <h5>Query Distribution Method</h5>
+                <p>Query distribution was <strong>randomized</strong> (seed: 42) for realistic concurrent user simulation</p>
+            </div>
+        </section>
+
+        <!-- Methodology -->
+        <section class="section">
+            <h2>Benchmark Methodology</h2>
+
+            <div class="methodology-grid">
+                <div class="method-card">
+                    <h3>Workload Configuration</h3>
+                    <p><strong>TPC-H Benchmark:</strong></p>
+                    <ul>
+                        <li><strong>Scale Factor:</strong> 1</li>
+                        <li><strong>Data Format:</strong> CSV</li>
+                        <li><strong>Data Generator:</strong> dbgen</li>
+                    </ul>
+                </div>
+
+                <div class="method-card">
+                    <h3>Execution Parameters</h3>
+                    <ul>
+                        <li><strong>Warmup Runs:</strong> 1</li>
+                        <li><strong>Measured Runs:</strong> 5</li>
+                        <li><strong>Execution Mode:</strong> Multiuser (5 concurrent streams)</li>
+                        <li><strong>Query Distribution:</strong> Randomized (seed: 42)</li>
+                        <li><strong>Metric Reported:</strong> Median execution time</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="notice notice-info">
+                <h4>Performance Measurement</h4>
+                <p>All queries were executed with the same data and parameters across all systems. The median execution time from 5 runs is reported for each query to minimize the impact of system variance and outliers.</p>
+            </div>
+        </section>
+
+        <!-- Conclusion -->
+        <section class="section">
+            <h2>Conclusion</h2>
+
+            <p>This benchmark provides a detailed, query-level comparison of 2 database systems on analytical workloads. The results demonstrate the performance characteristics and trade-offs of each system when processing TPC-H queries.</p>
+
+            <p>While <strong>exasol</strong> demonstrated the strongest overall performance in this test, the optimal choice for a specific use case depends on multiple factors including workload characteristics, operational requirements, and system integration needs.</p>
+        </section>
+    </div>
+
+    <!-- Query Modal -->
+    <div id="queryModal" class="query-modal">
+        <div class="query-modal-content">
+            <div class="query-modal-header">
+                <h3 id="modalTitle">Query Details</h3>
+                <button class="query-modal-close" onclick="closeQueryModal()">&times;</button>
+            </div>
+            <div id="modalBody">
+                <pre><code id="queryCode" class="language-sql"></code></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- Syntax Highlighting -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+
+    <script>
+        // Query data embedded from workload
+        const queryData = {
+            "Q01": {
+                "exasol": "attachments/queries/exasol/Q01.sql",                "starrocks": "attachments/queries/starrocks/Q01.sql"            },            "Q02": {
+                "exasol": "attachments/queries/exasol/Q02.sql",                "starrocks": "attachments/queries/starrocks/Q02.sql"            },            "Q03": {
+                "exasol": "attachments/queries/exasol/Q03.sql",                "starrocks": "attachments/queries/starrocks/Q03.sql"            },            "Q04": {
+                "exasol": "attachments/queries/exasol/Q04.sql",                "starrocks": "attachments/queries/starrocks/Q04.sql"            },            "Q05": {
+                "exasol": "attachments/queries/exasol/Q05.sql",                "starrocks": "attachments/queries/starrocks/Q05.sql"            },            "Q06": {
+                "exasol": "attachments/queries/exasol/Q06.sql",                "starrocks": "attachments/queries/starrocks/Q06.sql"            },            "Q07": {
+                "exasol": "attachments/queries/exasol/Q07.sql",                "starrocks": "attachments/queries/starrocks/Q07.sql"            },            "Q08": {
+                "exasol": "attachments/queries/exasol/Q08.sql",                "starrocks": "attachments/queries/starrocks/Q08.sql"            },            "Q09": {
+                "exasol": "attachments/queries/exasol/Q09.sql",                "starrocks": "attachments/queries/starrocks/Q09.sql"            },            "Q10": {
+                "exasol": "attachments/queries/exasol/Q10.sql",                "starrocks": "attachments/queries/starrocks/Q10.sql"            },            "Q11": {
+                "exasol": "attachments/queries/exasol/Q11.sql",                "starrocks": "attachments/queries/starrocks/Q11.sql"            },            "Q12": {
+                "exasol": "attachments/queries/exasol/Q12.sql",                "starrocks": "attachments/queries/starrocks/Q12.sql"            },            "Q13": {
+                "exasol": "attachments/queries/exasol/Q13.sql",                "starrocks": "attachments/queries/starrocks/Q13.sql"            },            "Q14": {
+                "exasol": "attachments/queries/exasol/Q14.sql",                "starrocks": "attachments/queries/starrocks/Q14.sql"            },            "Q15": {
+                "exasol": "attachments/queries/exasol/Q15.sql",                "starrocks": "attachments/queries/starrocks/Q15.sql"            },            "Q16": {
+                "exasol": "attachments/queries/exasol/Q16.sql",                "starrocks": "attachments/queries/starrocks/Q16.sql"            },            "Q17": {
+                "exasol": "attachments/queries/exasol/Q17.sql",                "starrocks": "attachments/queries/starrocks/Q17.sql"            },            "Q18": {
+                "exasol": "attachments/queries/exasol/Q18.sql",                "starrocks": "attachments/queries/starrocks/Q18.sql"            },            "Q19": {
+                "exasol": "attachments/queries/exasol/Q19.sql",                "starrocks": "attachments/queries/starrocks/Q19.sql"            },            "Q20": {
+                "exasol": "attachments/queries/exasol/Q20.sql",                "starrocks": "attachments/queries/starrocks/Q20.sql"            },            "Q21": {
+                "exasol": "attachments/queries/exasol/Q21.sql",                "starrocks": "attachments/queries/starrocks/Q21.sql"            },            "Q22": {
+                "exasol": "attachments/queries/exasol/Q22.sql",                "starrocks": "attachments/queries/starrocks/Q22.sql"            }        };
+
+        // Add click handlers to summary table rows
+        document.addEventListener('DOMContentLoaded', function() {
+            const summaryTable = document.querySelector('.summary-table');
+            if (summaryTable) {
+                const rows = summaryTable.querySelectorAll('tbody tr[data-query]');
+                rows.forEach(row => {
+                    row.addEventListener('click', function() {
+                        const query = this.dataset.query;
+                        const system = this.dataset.system;
+                        showQueryModal(query, system);
+                    });
+                });
+            }
+        });
+
+        // Add click handlers to query links
+        document.addEventListener('DOMContentLoaded', function() {
+            const queryLinks = document.querySelectorAll('.query-link');
+            queryLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const query = this.dataset.query;
+                    // Default to first system if not specified
+                    const system = this.dataset.system || Object.keys(queryData[query] || {})[0];
+                    showQueryModal(query, system);
+                });
+            });
+        });
+
+        function showQueryModal(query, system) {
+            const modal = document.getElementById('queryModal');
+            const title = document.getElementById('modalTitle');
+            const code = document.getElementById('queryCode');
+
+            title.textContent = `${query} - ${system}`;
+
+            // Load query from file
+            if (queryData[query] && queryData[query][system]) {
+                fetch(queryData[query][system])
+                    .then(response => response.text())
+                    .then(sql => {
+                        code.textContent = sql;
+                        Prism.highlightElement(code);
+                        modal.classList.add('active');
+                    })
+                    .catch(error => {
+                        code.textContent = `Error loading query: ${error}`;
+                        modal.classList.add('active');
+                    });
+            } else {
+                code.textContent = `Query ${query} not found for system ${system}`;
+                modal.classList.add('active');
+            }
+        }
+
+        function closeQueryModal() {
+            const modal = document.getElementById('queryModal');
+            modal.classList.remove('active');
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('queryModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeQueryModal();
+            }
+        });
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeQueryModal();
+            }
+        });
+
+        // Auto-resize iframes to match content height
+        function resizeIframe(iframe) {
+            try {
+                const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                if (iframeDoc && iframeDoc.body) {
+                    // Get the full height of the iframe content
+                    const height = iframeDoc.body.scrollHeight;
+                    // Set iframe height to match content (add small padding)
+                    iframe.style.height = (height + 20) + 'px';
+                }
+            } catch (e) {
+                // Cross-origin or access issues - keep default height
+                console.warn('Could not resize iframe:', e);
+            }
+        }
+
+        // Resize all iframes on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            const iframes = document.querySelectorAll('iframe');
+            iframes.forEach(function(iframe) {
+                // Resize on load
+                iframe.addEventListener('load', function() {
+                    resizeIframe(iframe);
+                });
+                // Also try to resize immediately in case already loaded
+                if (iframe.contentDocument && iframe.contentDocument.readyState === 'complete') {
+                    resizeIframe(iframe);
+                }
+            });
+        });
+    </script>
+</body>
+</html>

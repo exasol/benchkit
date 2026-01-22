@@ -1,0 +1,158 @@
+{
+  "system_name": "starrocks",
+  "system_kind": "starrocks",
+  "system_version": "4.0.4",
+  "commands": {
+    "storage_setup": [
+      {
+        "command": "sudo mkfs.ext4 -F /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS4821CB580A22C27EE",
+        "success": true,
+        "description": "Format /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS4821CB580A22C27EE with ext4 filesystem",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mkfs.ext4 -F /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS4821CB580A22C27EE",
+        "success": true,
+        "description": "Execute sudo command on remote system",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mkdir -p /data",
+        "success": true,
+        "description": "Create mount point /data",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mkdir -p /data",
+        "success": true,
+        "description": "Execute sudo command on remote system",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS4821CB580A22C27EE /data",
+        "success": true,
+        "description": "Mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS4821CB580A22C27EE to /data",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS4821CB580A22C27EE /data",
+        "success": true,
+        "description": "Execute sudo command on remote system",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo chown -R ubuntu:ubuntu /data",
+        "success": true,
+        "description": "Set ownership of /data to ubuntu:ubuntu",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo chown -R ubuntu:ubuntu /data",
+        "success": true,
+        "description": "Execute sudo command on remote system",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mkdir -p /data/starrocks",
+        "success": true,
+        "description": "Create StarRocks data directory",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo chown -R ubuntu:ubuntu /data/starrocks",
+        "success": true,
+        "description": "Set ownership of /data/starrocks to ubuntu:ubuntu",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo chown -R ubuntu:ubuntu /data/starrocks",
+        "success": true,
+        "description": "Execute sudo command on remote system",
+        "category": "storage_setup"
+      }
+    ],
+    "setup": [
+      {
+        "command": "sudo mkdir -p /data/starrocks",
+        "success": true,
+        "description": "Execute sudo command on remote system",
+        "category": "setup"
+      }
+    ],
+    "prerequisites": [
+      {
+        "command": "sudo apt-get update && sudo apt-get install -y openjdk-17-jdk curl wget mysql-client",
+        "success": true,
+        "description": "Install Java, MySQL client, and utilities",
+        "category": "prerequisites"
+      },
+      {
+        "command": "echo \"export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64\" | sudo tee -a /etc/profile.d/java.sh",
+        "success": true,
+        "description": "Set JAVA_HOME environment variable",
+        "category": "prerequisites"
+      }
+    ],
+    "installation": [
+      {
+        "command": "wget -q -O /tmp/starrocks-4.0.4.tar.gz https://releases.starrocks.io/starrocks/StarRocks-4.0.4-ubuntu-amd64.tar.gz",
+        "success": true,
+        "description": "Download StarRocks 4.0.4",
+        "category": "installation"
+      },
+      {
+        "command": "sudo mkdir -p /opt/starrocks && sudo tar -xzf /tmp/starrocks-4.0.4.tar.gz -C /opt/starrocks --strip-components=1",
+        "success": true,
+        "description": "Extract StarRocks to installation directory",
+        "category": "installation"
+      },
+      {
+        "command": "sudo chown -R $(whoami):$(whoami) /opt/starrocks",
+        "success": true,
+        "description": "Set StarRocks directory ownership",
+        "category": "installation"
+      }
+    ],
+    "configuration": [
+      {
+        "command": "sudo tee /opt/starrocks/fe/conf/fe.conf > /dev/null << 'EOF'\n# StarRocks FE Configuration\nLOG_DIR = /opt/starrocks/fe/log\nmeta_dir = /opt/starrocks/fe/meta\nhttp_port = 8030\nrpc_port = 9020\nquery_port = 9030\nedit_log_port = 9010\npriority_networks = 10.0.1.0/24\n# Performance tuning\nqe_max_connection = 1024\n# Memory settings\nmetadata_memory_limit = 8G\n\nEOF",
+        "success": true,
+        "description": "Configure StarRocks FE",
+        "category": "configuration"
+      },
+      {
+        "command": "sudo tee /opt/starrocks/be/conf/be.conf > /dev/null << 'EOF'\n# StarRocks BE Configuration\nLOG_DIR = /opt/starrocks/be/log\nbe_port = 9060\nbe_http_port = 8040\nheartbeat_service_port = 9050\nbrpc_port = 8060\npriority_networks = 10.0.1.0/24\nstorage_root_path = /data/starrocks\n# Performance tuning\nmem_limit = 80%\n# Parallel execution\nparallel_fragment_exec_instance_num = 16\n\nEOF",
+        "success": true,
+        "description": "Configure StarRocks BE",
+        "category": "configuration"
+      }
+    ],
+    "service_management": [
+      {
+        "command": "cd /opt/starrocks/fe && ./bin/start_fe.sh --daemon",
+        "success": true,
+        "description": "Start StarRocks FE",
+        "category": "service_management"
+      },
+      {
+        "command": "cd /opt/starrocks/be && ./bin/start_be.sh --daemon",
+        "success": true,
+        "description": "Start StarRocks BE",
+        "category": "service_management"
+      }
+    ]
+  },
+  "installation_notes": [
+    "Storage device /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS4821CB580A22C27EE mounted at /data",
+    "Installing StarRocks using official tarball"
+  ],
+  "config_parameters": {
+    "node_count": 1,
+    "use_additional_disk": true,
+    "host": "18.200.243.230",
+    "port": 9030,
+    "username": "root",
+    "password": ""
+  },
+  "data_directory": "/data/starrocks"
+}

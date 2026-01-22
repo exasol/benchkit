@@ -764,9 +764,10 @@ class ReportRenderer:
                 self.sensitive_values[config_params["host"]] = "<SERVER_IP>"
 
         # Also extract from main config if systems have passwords defined
+        # Only add non-empty passwords to avoid issues with empty string replacement
         for system_config in self.config.get("systems", []):
             setup = system_config.get("setup", {})
-            if "password" in setup:
+            if setup.get("password"):
                 self.sensitive_values[setup["password"]] = "<DATABASE_PASSWORD>"
 
     def _sanitize_for_report(self, value: Any) -> Any:

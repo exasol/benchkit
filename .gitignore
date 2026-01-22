@@ -52,6 +52,11 @@ docs/*/reports/*/workload-package
 packages/
 !posts/.gitkeep
 
+# Terraform state (large files, not needed for reports)
+**/terraform/
+# Benchmark execution logs (not needed for reports)
+docs/**/logs/
+
 # Temporary files
 *.tmp
 *.temp

@@ -828,10 +828,36 @@ class Workload(ABC):
         return context
 
     def execute_setup_script(self, system: SystemUnderTest, script_name: str) -> bool:
-        """Execute a templated setup script by rendering the jinja2 template and splitting into individual statements."""
+        """Execute a templated setup script with per-system file support.
+
+        Priority order for template loading:
+        1. setup/{system.kind}/{script_name}  (system-specific)
+        2. setup/{script_name}                (fallback/legacy)
+
+        This mirrors the query variant pattern, making each system's SQL
+        self-contained and easier to maintain.
+        """
         try:
-            # Load and render the template
-            template = self.get_template_env().get_template(script_name)
+            # Build priority-ordered list of template paths
+            template_paths = [
+                f"{system.kind}/{script_name}",  # System-specific path
+                script_name,  # Legacy fallback path
+            ]
+
+            template = None
+            for path in template_paths:
+                try:
+                    template = self.get_template_env().get_template(path)
+                    break
+                except Exception:
+                    continue
+
+            if template is None:
+                raise FileNotFoundError(
+                    f"Setup script {script_name} not found for system {system.kind}. "
+                    f"Tried: {', '.join(template_paths)}"
+                )
+
             context = self._get_template_context(system)
             rendered_sql = template.render(**context)
 

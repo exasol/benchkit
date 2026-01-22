@@ -6,7 +6,7 @@ FROM
     (
         SELECT
             c_custkey,
-            {% if system_kind in ['exasol', 'trino'] %}
+            {% if system_kind in ['exasol', 'trino', 'starrocks'] %}
             COUNT(o_orderkey) AS c_count
             {% elif system_kind == 'clickhouse' %}
             countIf(o_comment NOT LIKE '%special%requests%') AS c_count
@@ -15,7 +15,7 @@ FROM
             {% endif %}
         FROM customer
         LEFT OUTER JOIN orders ON c_custkey = o_custkey
-            {% if system_kind in ['exasol', 'trino'] %}
+            {% if system_kind in ['exasol', 'trino', 'starrocks'] %}
             AND o_comment NOT LIKE '%special%requests%'
             {% elif system_kind == 'clickhouse' %}
             -- ClickHouse handles the condition in countIf above

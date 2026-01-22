@@ -1,0 +1,280 @@
+{
+  "system_name": "exasol",
+  "system_kind": "exasol",
+  "system_version": "2025.1.8",
+  "commands": {
+    "storage_setup": [
+      {
+        "command": "sudo parted /dev/nvme1n1 mklabel gpt",
+        "success": true,
+        "description": "Create GPT partition table",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo parted -s /dev/nvme1n1 mklabel gpt",
+        "success": true,
+        "description": "Execute sudo command on remote system",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo parted /dev/nvme1n1 mkpart primary ext4 1MiB 3GiB",
+        "success": true,
+        "description": "Create 3GB partition for data generation",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo parted -s /dev/nvme1n1 mkpart primary ext4 1MiB 3GiB",
+        "success": true,
+        "description": "Execute sudo command on remote system",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo parted /dev/nvme1n1 mkpart primary 3GiB 100%",
+        "success": true,
+        "description": "Create raw partition for Exasol (106GB)",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo parted -s /dev/nvme1n1 mkpart primary 3GiB 100%",
+        "success": true,
+        "description": "Execute sudo command on remote system",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mkfs.ext4 -F /dev/nvme1n1p1",
+        "success": true,
+        "description": "Format /dev/nvme1n1p1 with ext4 filesystem",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mkfs.ext4 -F /dev/nvme1n1p1",
+        "success": true,
+        "description": "Execute sudo command on remote system",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mkdir -p /data",
+        "success": true,
+        "description": "Create mount point /data",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mkdir -p /data",
+        "success": true,
+        "description": "Execute sudo command on remote system",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mount /dev/nvme1n1p1 /data",
+        "success": true,
+        "description": "Mount /dev/nvme1n1p1 to /data",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mount /dev/nvme1n1p1 /data",
+        "success": true,
+        "description": "Execute sudo command on remote system",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo chown -R $(whoami):$(whoami) /data",
+        "success": true,
+        "description": "Set ownership of /data to $(whoami):$(whoami)",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo chown -R $(whoami):$(whoami) /data",
+        "success": true,
+        "description": "Execute sudo command on remote system",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo ln -sf /dev/nvme1n1p2 /dev/exasol.storage",
+        "success": true,
+        "description": "Create storage symlink: /dev/exasol.storage -> /dev/nvme1n1p2",
+        "category": "storage_setup"
+      }
+    ],
+    "user_setup": [
+      {
+        "command": "sudo useradd -m -s /bin/bash exasol",
+        "success": true,
+        "description": "Create Exasol system user",
+        "category": "user_setup"
+      },
+      {
+        "command": "sudo usermod -aG sudo exasol",
+        "success": true,
+        "description": "Add exasol user to sudo group",
+        "category": "user_setup"
+      },
+      {
+        "command": "sudo passwd exasol",
+        "success": true,
+        "description": "Set password for exasol user (interactive)",
+        "category": "user_setup"
+      }
+    ],
+    "setup": [
+      {
+        "command": "sudo useradd -m -s /bin/bash exasol || true",
+        "success": true,
+        "description": "Creating exasol user on all nodes",
+        "category": "setup"
+      },
+      {
+        "command": "sudo usermod -aG sudo exasol || true",
+        "success": true,
+        "description": "Adding exasol to sudo group on all nodes",
+        "category": "setup"
+      },
+      {
+        "command": "sudo sed -i \"/%sudo/s/) ALL$/) NOPASSWD: ALL/\" /etc/sudoers",
+        "success": true,
+        "description": "Configuring passwordless sudo on all nodes",
+        "category": "setup"
+      }
+    ],
+    "tool_setup": [
+      {
+        "command": "wget https://x-up.s3.amazonaws.com/releases/c4/linux/x86_64/4.28.5/c4 -O c4 && chmod +x c4",
+        "success": true,
+        "description": "Download c4 cluster management tool v4.28.5",
+        "category": "tool_setup"
+      }
+    ],
+    "ssh_setup": [
+      {
+        "command": "ssh-keygen -t rsa -b 2048 -f ~/.ssh/id_rsa -N \"\"",
+        "success": true,
+        "description": "Generate SSH key pair for cluster communication",
+        "category": "ssh_setup"
+      }
+    ],
+    "configuration": [
+      {
+        "command": "cat > /tmp/exasol_c4.conf << 'EOF'\nCCC_HOST_ADDRS=\"<PRIVATE_IP>\"\nCCC_HOST_EXTERNAL_ADDRS=\"<PUBLIC_IP>\"\nCCC_HOST_DATADISK=/dev/exasol.storage\nCCC_HOST_IMAGE_USER=exasol\nCCC_HOST_IMAGE_PASSWORD=<EXASOL_IMAGE_PASSWORD>\nCCC_HOST_KEY_PAIR_FILE=id_rsa\nCCC_PLAY_RESERVE_NODES=0\nCCC_PLAY_WORKING_COPY=@exasol-2025.1.8\nCCC_PLAY_DB_PASSWORD=<EXASOL_DB_PASSWORD>\nCCC_PLAY_ADMIN_PASSWORD=<EXASOL_ADMIN_PASSWORD>\nCCC_PLAY_DB_MEM_SIZE=8000\nCCC_ADMINUI_START_SERVER=true\nEOF",
+        "success": true,
+        "description": "Create c4 configuration file on remote system",
+        "category": "configuration"
+      }
+    ],
+    "cluster_deployment": [
+      {
+        "command": "./c4 host play -i /tmp/exasol_c4.conf",
+        "success": true,
+        "description": "Deploy Exasol cluster using c4",
+        "category": "cluster_deployment"
+      }
+    ],
+    "cluster_management": [
+      {
+        "command": "c4 ps",
+        "success": true,
+        "description": "Get cluster play ID for confd_client operations",
+        "category": "cluster_management"
+      }
+    ],
+    "license_setup": [
+      {
+        "command": "confd_client license_upload license: <LICENSE_CONTENT>",
+        "success": true,
+        "description": "Install Exasol license file",
+        "category": "license_setup"
+      }
+    ],
+    "database_tuning": [
+      {
+        "command": "confd_client db_stop db_name: Exasol",
+        "success": true,
+        "description": "Stop Exasol database for parameter configuration",
+        "category": "database_tuning"
+      },
+      {
+        "command": "confd_client db_stop db_name: Exasol",
+        "success": true,
+        "description": "Stop Exasol database for parameter configuration",
+        "category": "database_tuning"
+      },
+      {
+        "command": "confd_client db_configure db_name: Exasol params_add: \"['-writeTouchInit=1','-cacheMonitorLimit=0','-maxOverallSlbUsageRatio=0.95','-useQueryCache=0','-query_log_timeout=0','-joinOrderMethod=0','-etlCheckCertsDefault=0']\"",
+        "success": true,
+        "description": "Configure Exasol database parameters for analytical workload optimization",
+        "category": "database_tuning"
+      },
+      {
+        "command": "confd_client db_configure db_name: Exasol params_add: \"['-writeTouchInit=1','-cacheMonitorLimit=0','-maxOverallSlbUsageRatio=0.95','-useQueryCache=0','-query_log_timeout=0','-joinOrderMethod=0','-etlCheckCertsDefault=0']\"",
+        "success": true,
+        "description": "Configure Exasol database parameters for analytical workload optimization",
+        "category": "database_tuning"
+      },
+      {
+        "command": "confd_client db_start db_name: Exasol",
+        "success": true,
+        "description": "Starting database with new parameters",
+        "category": "database_tuning"
+      }
+    ]
+  },
+  "installation_notes": [
+    "Partitioned disk /dev/nvme1n1: 3GB for data generation, 106GB raw for Exasol",
+    "Installing Exasol using c4 native installer",
+    "Using Exasol license file: configs/exasol.license",
+    "Copying license file to remote system: /tmp/exasol.license",
+    "Using partitioned raw disk: /dev/nvme1n1p2 (via /dev/exasol.storage)",
+    "C4 Configuration file content:",
+    "  CCC_HOST_ADDRS=\"<PRIVATE_IP>\"",
+    "  CCC_HOST_EXTERNAL_ADDRS=\"<PUBLIC_IP>\"",
+    "  CCC_HOST_DATADISK=/dev/exasol.storage",
+    "  CCC_HOST_IMAGE_USER=exasol",
+    "  CCC_HOST_IMAGE_PASSWORD=<EXASOL_IMAGE_PASSWORD>",
+    "  CCC_HOST_KEY_PAIR_FILE=id_rsa",
+    "  CCC_PLAY_RESERVE_NODES=0",
+    "  CCC_PLAY_WORKING_COPY=@exasol-2025.1.8",
+    "  CCC_PLAY_DB_PASSWORD=<EXASOL_DB_PASSWORD>",
+    "  CCC_PLAY_ADMIN_PASSWORD=<EXASOL_ADMIN_PASSWORD>",
+    "  CCC_PLAY_DB_MEM_SIZE=8000",
+    "  CCC_ADMINUI_START_SERVER=true",
+    "Exasol cluster deployment initiated",
+    "Database will be accessible at: localhost:8563",
+    "Admin UI will be available (if enabled)",
+    "Waiting for Exasol cluster to be ready for connections...",
+    "\u2713 Exasol cluster is ready and accepting connections",
+    "Found cluster play ID: f0ebca67",
+    "Installing Exasol license...",
+    "Warning: License installation failed: LicenseVerificationError: schema_version must be exactly 1, but got 2 instead.\nError: in connect.(*UniversalConnector).ConnectWithPS: : non-zero exit code 1\nError: in connect.(*UniversalConnector).ConnectWithPS: : non-zero exit code 1\n",
+    "Configuring Exasol database parameters...",
+    "Stopping database for parameter configuration...",
+    "Starting database with new parameters...",
+    "Waiting for database to be fully initialized...",
+    "\u2713 Database parameters configured and database started successfully",
+    "Additional configuration parameters applied:",
+    "  optimizer_mode: analytical"
+  ],
+  "config_parameters": {
+    "node_count": 1,
+    "use_additional_disk": true,
+    "c4_version": "4.28.5",
+    "host_addrs": "<PRIVATE_IP>",
+    "host_external_addrs": "<PUBLIC_IP>",
+    "image_password": "<EXASOL_IMAGE_PASSWORD>",
+    "db_password": "<EXASOL_DB_PASSWORD>",
+    "admin_password": "<EXASOL_ADMIN_PASSWORD>",
+    "license_file": "configs/exasol.license",
+    "db_mem_size": 8000,
+    "extra": {
+      "optimizer_mode": "analytical",
+      "db_params": [
+        "-writeTouchInit=1",
+        "-cacheMonitorLimit=0",
+        "-maxOverallSlbUsageRatio=0.95",
+        "-useQueryCache=0",
+        "-query_log_timeout=0",
+        "-joinOrderMethod=0",
+        "-etlCheckCertsDefault=0"
+      ]
+    }
+  },
+  "data_directory": "None",
+  "data_device": "/dev/exasol.storage"
+}

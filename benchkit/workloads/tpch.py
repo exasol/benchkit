@@ -147,12 +147,32 @@ class TPCH(Workload):
                     print(f"Missing data files: {missing_files}")
                     return False
 
+            # Post-process .tbl files to strip trailing delimiters
+            # dbgen produces lines like "0|ALGERIA|0|comment|" (trailing pipe)
+            # Some databases (e.g., StarRocks) count this as an extra column
+            if data_format == "tbl":
+                self._strip_trailing_delimiters(output_dir)
+
             print(f"Successfully generated TPC-H data in {output_dir}")
             return True
 
         except Exception as e:
             print(f"Data generation failed: {e}")
             return False
+
+    def _strip_trailing_delimiters(self, data_dir: Path) -> None:
+        """Strip trailing pipe delimiters from TPC-H .tbl files.
+
+        TPC-H dbgen produces files with trailing delimiters (e.g., "0|ALGERIA|0|comment|")
+        which causes issues with some databases that count this as an extra empty column.
+        """
+        for tbl_file in data_dir.glob("*.tbl"):
+            # Use sed to strip trailing pipe in-place (efficient for large files)
+            result = safe_command(f"sed -i 's/|$//' {tbl_file}")
+            if not result["success"]:
+                print(
+                    f"  Warning: Failed to strip trailing delimiter from {tbl_file.name}"
+                )
 
     def create_indexes(self, system: SystemUnderTest) -> bool:
         """Create TPC-H indexes using templated setup scripts."""
@@ -699,7 +719,9 @@ class TPCH(Workload):
 
         for script_name in ["create_tables", "create_indexes", "analyze_tables"]:
             try:
-                template = self.get_template_env().get_template(f"{script_name}.sql")
+                template = self.get_template_env().get_template(
+                    f"{system.kind}/{script_name}.sql"
+                )
                 scripts[script_name] = template.render(**context)
             except Exception as e:
                 print(f"Warning: Failed to render {script_name}.sql: {e}")
