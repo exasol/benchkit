@@ -170,7 +170,9 @@ class TPCH(Workload):
             # Use sed to strip trailing pipe in-place (efficient for large files)
             result = safe_command(f"sed -i 's/|$//' {tbl_file}")
             if not result["success"]:
-                print(f"  Warning: Failed to strip trailing delimiter from {tbl_file.name}")
+                print(
+                    f"  Warning: Failed to strip trailing delimiter from {tbl_file.name}"
+                )
 
     def create_indexes(self, system: SystemUnderTest) -> bool:
         """Create TPC-H indexes using templated setup scripts."""

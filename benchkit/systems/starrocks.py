@@ -244,10 +244,27 @@ class StarrocksSystem(SystemUnderTest):
 
         return True
 
+    def _is_follower_node(self) -> bool:
+        """Check if current node is a follower (not the leader) in multinode setup."""
+        if not self._cloud_instance_managers or len(self._cloud_instance_managers) <= 1:
+            return False
+        # Current node is a follower if it's not the first node (node 0 is leader)
+        if self._cloud_instance_manager is not None:
+            is_follower: bool = (
+                self._cloud_instance_manager != self._cloud_instance_managers[0]
+            )
+            return is_follower
+        return False
+
     @exclude_from_package
     def _install_native_on_node(self) -> bool:
         """Install StarRocks on the current node."""
         try:
+            is_follower = self._is_follower_node()
+            is_multinode = (
+                self._cloud_instance_managers and len(self._cloud_instance_managers) > 1
+            )
+
             # Step 1: Install prerequisites
             # StarRocks 4.x requires JDK 17+, 3.x works with JDK 11
             major_version = int(self.version.split(".")[0])
@@ -258,10 +275,12 @@ class StarrocksSystem(SystemUnderTest):
                 jdk_package = "openjdk-11-jdk"
                 java_home = "/usr/lib/jvm/java-11-openjdk-amd64"
 
-            self._log(f"Installing prerequisites (JDK for StarRocks {major_version}.x)...")
+            self._log(
+                f"Installing prerequisites (JDK for StarRocks {major_version}.x)..."
+            )
             self.record_setup_command(
                 f"sudo apt-get update && sudo apt-get install -y {jdk_package} curl wget mysql-client",
-                f"Install Java, MySQL client, and utilities",
+                "Install Java, MySQL client, and utilities",
                 "prerequisites",
             )
             result = self.execute_command(
@@ -349,55 +368,65 @@ class StarrocksSystem(SystemUnderTest):
                 f"sudo chown -R $(whoami):$(whoami) {self.install_dir}"
             )
 
-            # Step 7: Start FE
-            self._log("Starting FE...")
-            self.record_setup_command(
-                f"cd {self.fe_dir} && ./bin/start_fe.sh --daemon",
-                "Start StarRocks FE",
-                "service_management",
-            )
-            result = self.execute_command(
-                f"export JAVA_HOME={self._java_home} && cd {self.fe_dir} && ./bin/start_fe.sh --daemon"
-            )
-            if not result.get("success", False):
-                self._log(f"Failed to start FE: {result.get('stderr', '')}")
-                return False
+            # Step 7: Start FE (skip on follower nodes - they'll be started with --helper)
+            if is_multinode and is_follower:
+                self._log(
+                    "Skipping FE startup on follower node (will join cluster later)"
+                )
+            else:
+                self._log("Starting FE...")
+                self.record_setup_command(
+                    f"cd {self.fe_dir} && ./bin/start_fe.sh --daemon",
+                    "Start StarRocks FE",
+                    "service_management",
+                )
+                result = self.execute_command(
+                    f"export JAVA_HOME={self._java_home} && cd {self.fe_dir} && ./bin/start_fe.sh --daemon"
+                )
+                if not result.get("success", False):
+                    self._log(f"Failed to start FE: {result.get('stderr', '')}")
+                    return False
 
-            # Wait for FE to be ready
-            self._log("Waiting for FE to be ready...")
-            if not self._wait_for_fe_ready(timeout=120):
-                self._log("FE failed to become ready")
-                return False
+                # Wait for FE to be ready
+                self._log("Waiting for FE to be ready...")
+                if not self._wait_for_fe_ready(timeout=120):
+                    self._log("FE failed to become ready")
+                    return False
 
-            # Step 8: Start BE
-            self._log("Starting BE...")
-            self.record_setup_command(
-                f"cd {self.be_dir} && ./bin/start_be.sh --daemon",
-                "Start StarRocks BE",
-                "service_management",
-            )
-            result = self.execute_command(
-                f"export JAVA_HOME={self._java_home} && cd {self.be_dir} && ./bin/start_be.sh --daemon"
-            )
-            if not result.get("success", False):
-                self._log(f"Failed to start BE: {result.get('stderr', '')}")
-                return False
+            # Step 8: Start BE (skip on follower nodes - they'll be started after cluster config)
+            if is_multinode and is_follower:
+                self._log(
+                    "Skipping BE startup on follower node (will start after cluster config)"
+                )
+            else:
+                self._log("Starting BE...")
+                self.record_setup_command(
+                    f"cd {self.be_dir} && ./bin/start_be.sh --daemon",
+                    "Start StarRocks BE",
+                    "service_management",
+                )
+                result = self.execute_command(
+                    f"export JAVA_HOME={self._java_home} && cd {self.be_dir} && ./bin/start_be.sh --daemon"
+                )
+                if not result.get("success", False):
+                    self._log(f"Failed to start BE: {result.get('stderr', '')}")
+                    return False
 
-            # Step 9: Register BE with FE (single node)
-            if (
-                not self._cloud_instance_managers
-                or len(self._cloud_instance_managers) <= 1
-            ):
+            # Step 9: Register BE with FE (single node only)
+            if not is_multinode:
                 self._log("Registering BE with FE...")
                 time.sleep(5)  # Give BE time to start
                 if not self._register_local_backend():
                     self._log("Warning: Failed to register BE, continuing anyway...")
 
-            # Step 10: Wait for system to be healthy
-            self._log("Waiting for StarRocks to be healthy...")
-            if not self.wait_for_health(max_attempts=30, delay=3.0):
-                self._log("StarRocks failed to become healthy")
-                return False
+            # Step 10: Wait for system to be healthy (skip on follower nodes)
+            if is_multinode and is_follower:
+                self._log("Skipping health check on follower node")
+            else:
+                self._log("Waiting for StarRocks to be healthy...")
+                if not self.wait_for_health(max_attempts=30, delay=3.0):
+                    self._log("StarRocks failed to become healthy")
+                    return False
 
             # Update connection parameters
             if self._cloud_instance_manager:
@@ -579,10 +608,18 @@ parallel_fragment_exec_instance_num = 16
             else:
                 self._log(f"  ⚠ Failed to register BE on node {idx}, continuing...")
 
-        # Step 4: Start BEs on all follower nodes
-        self._log("Starting BEs on follower nodes...")
-        for idx in range(1, len(self._cloud_instance_managers)):
-            mgr = self._cloud_instance_managers[idx]
+        # Step 4: Start BEs on all nodes (node 0's BE is already running, followers need to start)
+        self._log("Starting BEs on all nodes...")
+        for idx, mgr in enumerate(self._cloud_instance_managers):
+            # Check if BE process is actually running (use specific binary path)
+            check_result = mgr.run_remote_command(
+                f"pgrep -f '{self.be_dir}/lib/starrocks_be' > /dev/null 2>&1 && echo 'running' || echo 'stopped'",
+                timeout=10,
+            )
+            if check_result.get("stdout", "").strip() == "running":
+                self._log(f"  ✓ BE already running on node {idx}")
+                continue
+
             start_cmd = (
                 f"export JAVA_HOME={self._java_home} && "
                 f"cd {self.be_dir} && ./bin/start_be.sh --daemon"
@@ -615,6 +652,20 @@ parallel_fragment_exec_instance_num = 16
         self.record_setup_note(
             f"StarRocks cluster configured with {len(node_ips)} nodes"
         )
+
+        # Final health check
+        self._log("Waiting for cluster to be healthy...")
+        if not self.wait_for_health(max_attempts=30, delay=3.0):
+            self._log("⚠ Cluster health check failed, but continuing...")
+
+        # Mark all nodes as installed
+        self._log("Marking all nodes as installed...")
+        for mgr in self._cloud_instance_managers:
+            mgr.run_remote_command(
+                "echo 'installed' > ~/.starrocks_installed",
+                timeout=10,
+            )
+
         return True
 
     @exclude_from_package
@@ -893,6 +944,26 @@ parallel_fragment_exec_instance_num = 16
             metrics["error"] = str(e)
 
         return metrics
+
+    def get_template_variables(self) -> dict[str, Any]:
+        """Return StarRocks-specific template variables for SQL rendering.
+
+        Unpacks extra config values (bucket_count, replication_num) so templates
+        can use them directly as {{ bucket_count }} instead of {{ system_extra.bucket_count }}.
+
+        Returns:
+            Dictionary with bucket_count and replication_num
+        """
+        variables = super().get_template_variables()
+
+        # Unpack extra config for template access
+        extra = self.setup_config.get("extra", {})
+        if "bucket_count" in extra:
+            variables["bucket_count"] = extra["bucket_count"]
+        if "replication_num" in extra:
+            variables["replication_num"] = extra["replication_num"]
+
+        return variables
 
     def teardown(self) -> bool:
         """Clean up StarRocks installation."""
