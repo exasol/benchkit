@@ -2,7 +2,6 @@
 
 import json
 import threading
-import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -17,8 +16,11 @@ from benchkit.util import ensure_directory, load_json, save_json
 from ..debug import is_debug_enabled
 from ..systems import create_system
 from ..workloads import create_workload
+from .infrastructure import InfrastructureHelper
+from .infrastructure import setup_cloud_infrastructure as _setup_cloud_infra
 from .parallel_executor import ParallelExecutor
-from .parsers import normalize_runs
+from .remote_execution import RemoteExecutor
+from .results import ResultsManager
 
 if TYPE_CHECKING:
     from benchkit.systems import SystemUnderTest
@@ -122,6 +124,11 @@ class BenchmarkRunner:
         # But kept for future safety
         self._timings_lock = threading.Lock()
         self._results_lock = threading.Lock()
+
+        # Helper instances for delegated functionality
+        self._remote_executor = RemoteExecutor(self)
+        self._infra_helper = InfrastructureHelper(self)
+        self._results_manager = ResultsManager(self)
 
     def _load_provisioning_timing(self) -> float:
         """Load infrastructure provisioning timing from saved file."""
@@ -1386,135 +1393,7 @@ class BenchmarkRunner:
 
     def _setup_cloud_infrastructure(self) -> bool:
         """Setup cloud infrastructure connection and managers."""
-        from ..common.cli_helpers import (
-            get_cloud_ssh_key_path,
-            get_first_cloud_provider,
-        )
-        from ..util import Timer
-
-        try:
-            from ..infra.manager import CloudInstanceManager, InfraManager
-
-            cloud_provider = get_first_cloud_provider(self.config)
-            if not cloud_provider:
-                console.print("[red]❌ No cloud provider found in config[/red]")
-                return False
-
-            console.print(
-                f"🔗 Connecting to {cloud_provider.upper()} infrastructure..."
-            )
-
-            # Initialize infrastructure manager
-            infra_manager = InfraManager(cloud_provider, self.config)
-
-            # Check if instances exist, provision if needed
-            with Timer("Infrastructure provisioning") as provision_timer:
-                instance_info = infra_manager.get_instance_info()
-
-                # If no instances found, try to provision them
-                if "error" in instance_info or not instance_info:
-                    console.print(
-                        "[yellow]⚠ No instances found, provisioning infrastructure...[/yellow]"
-                    )
-
-                    # Apply infrastructure
-                    apply_result = infra_manager.apply(wait_for_init=True)
-                    if not apply_result.success:
-                        console.print(
-                            f"[red]❌ Failed to provision infrastructure: {apply_result.error}[/red]"
-                        )
-                        return False
-
-                    # Get instance info after provisioning
-                    instance_info = infra_manager.get_instance_info()
-                    self.infrastructure_provisioning_time = provision_timer.elapsed
-                    console.print(
-                        f"[green]✅ Infrastructure provisioned in {provision_timer.elapsed:.2f}s[/green]"
-                    )
-                else:
-                    # Instances already exist - load provisioning time from saved file
-                    self.infrastructure_provisioning_time = (
-                        self._load_provisioning_timing()
-                    )
-                    console.print(
-                        f"[green]✅ Using existing infrastructure (provisioned in {self.infrastructure_provisioning_time:.2f}s)[/green]"
-                    )
-
-            if "error" in instance_info:
-                console.print(
-                    f"[red]❌ Failed to get instance info: {instance_info['error']}[/red]"
-                )
-                return False
-
-            # Create cloud instance managers for each system
-            ssh_private_key_path = get_cloud_ssh_key_path(self.config)
-            for system_name, system_info in instance_info.items():
-                if system_name != "error" and system_info:
-                    # Check if this is a multinode system
-                    if system_info.get("multinode", False):
-                        # Create a list of instance managers for multinode
-                        node_managers = []
-                        for node_info in system_info["nodes"]:
-                            node_manager = CloudInstanceManager(
-                                node_info, ssh_private_key_path
-                            )
-                            node_managers.append(node_manager)
-
-                        self._cloud_instance_managers[system_name] = node_managers
-                        node_count = len(node_managers)
-                        primary_ip = node_managers[0].public_ip
-                        console.print(
-                            f"[green]✅ Connected to {system_name}: {node_count} nodes (primary: {primary_ip})[/green]"
-                        )
-
-                        # Set environment variables for IP resolution (use comma-separated lists for multinode)
-                        import os
-
-                        private_ips = ",".join(
-                            [
-                                str(mgr.private_ip)
-                                for mgr in node_managers
-                                if mgr.private_ip
-                            ]
-                        )
-                        public_ips = ",".join(
-                            [
-                                str(mgr.public_ip)
-                                for mgr in node_managers
-                                if mgr.public_ip
-                            ]
-                        )
-                        private_ip_var = f"{system_name.upper()}_PRIVATE_IP"
-                        public_ip_var = f"{system_name.upper()}_PUBLIC_IP"
-                        os.environ[private_ip_var] = private_ips
-                        os.environ[public_ip_var] = public_ips
-                    else:
-                        # Single node system
-                        instance_manager = CloudInstanceManager(
-                            system_info, ssh_private_key_path
-                        )
-                        self._cloud_instance_managers[system_name] = instance_manager
-                        console.print(
-                            f"[green]✅ Connected to {system_name}: {system_info.get('public_ip', 'N/A')}[/green]"
-                        )
-
-                        # Set environment variables for IP resolution
-                        import os
-
-                        private_ip_var = f"{system_name.upper()}_PRIVATE_IP"
-                        public_ip_var = f"{system_name.upper()}_PUBLIC_IP"
-                        os.environ[private_ip_var] = system_info.get("private_ip", "")
-                        os.environ[public_ip_var] = system_info.get("public_ip", "")
-
-            if not self._cloud_instance_managers:
-                console.print("[red]❌ No cloud instances found[/red]")
-                return False
-
-            return True
-
-        except Exception as e:
-            console.print(f"[red]❌ Infrastructure setup failed: {e}[/red]")
-            return False
+        return _setup_cloud_infra(self)
 
     def _prepare_storage_phase(self) -> bool:
         """Phase 0.5: Prepare storage (partition disks) before system installation."""
@@ -1630,45 +1509,17 @@ class BenchmarkRunner:
         warmup_results: list[dict[str, Any]] | None = None,
     ) -> None:
         """Save benchmark results to files."""
-        if not results:
-            console.print("[yellow]No results to save[/yellow]")
-            return
-
-        # Convert to DataFrame and save CSV
-        df = normalize_runs(results)
-        csv_path = self.output_dir / "runs.csv"
-        df.to_csv(csv_path, index=False)
-
-        console.print(f"Results saved to: {csv_path}")
-
-        # Save warmup results if present
-        warmup_df = None
-        if warmup_results:
-            warmup_df = normalize_runs(warmup_results)
-            warmup_csv_path = self.output_dir / "runs_warmup.csv"
-            warmup_df.to_csv(warmup_csv_path, index=False)
-            console.print(f"Warmup results saved to: {warmup_csv_path}")
-
-        # Save raw results as JSON
-        json_path = self.output_dir / "raw_results.json"
-        save_json(results, json_path)
-
-        # Create summary statistics (pass warmup_df and config)
-        summary = self._create_summary_stats(df, warmup_df, self.config)
-        summary_path = self.output_dir / "summary.json"
-        save_json(summary, summary_path)
+        self._results_manager.save_benchmark_results(results, warmup_results)
 
     def _save_system_metrics(self, system_name: str, metrics: dict[str, Any]) -> None:
         """Save system-specific metrics."""
-        metrics_path = self.output_dir / f"metrics_{system_name}.json"
-        save_json(metrics, metrics_path)
+        self._results_manager.save_system_metrics(system_name, metrics)
 
     def _save_setup_summary(
         self, system_name: str, setup_summary: dict[str, Any]
     ) -> None:
         """Save system setup summary for report reproduction."""
-        setup_path = self.output_dir / f"setup_{system_name}.json"
-        save_json(setup_summary, setup_path)
+        self._results_manager.save_setup_summary(system_name, setup_summary)
 
     def _load_setup_summary_to_system(
         self,
@@ -1677,36 +1528,9 @@ class BenchmarkRunner:
         executor: "ParallelExecutor | None" = None,
     ) -> None:
         """Load previously saved setup summary back into system object."""
-        setup_path = self.output_dir / f"setup_{system_name}.json"
-        if setup_path.exists():
-            try:
-                setup_summary = load_json(setup_path)
-
-                # Restore setup commands to system
-                if "commands" in setup_summary:
-                    # Get commands grouped by category
-                    commands_by_category = setup_summary["commands"]
-
-                    # Flatten all commands back into setup_commands list
-                    for _category, commands in commands_by_category.items():
-                        for cmd in commands:
-                            system.setup_commands.append(cmd)
-
-                # Restore installation notes
-                if "installation_notes" in setup_summary:
-                    system.installation_notes = setup_summary["installation_notes"]
-
-                self._log_output(
-                    f"[dim]  Loaded {len(system.setup_commands)} setup commands from previous run[/dim]",
-                    executor,
-                    system_name,
-                )
-            except Exception as e:
-                self._log_output(
-                    f"[yellow]  Warning: Could not load setup summary: {e}[/yellow]",
-                    executor,
-                    system_name,
-                )
+        self._results_manager.load_setup_summary_to_system(
+            system, system_name, executor
+        )
 
     def _create_summary_stats(
         self,
@@ -1715,390 +1539,11 @@ class BenchmarkRunner:
         config: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Create summary statistics from results."""
-        summary = {
-            "total_queries": len(df),
-            "systems": df["system"].unique().tolist(),
-            "query_names": df["query"].unique().tolist(),
-            "run_date": time.strftime("%Y-%m-%d %H:%M:%S"),
-        }
-
-        # Add variant information from config
-        if config and "workload" in config:
-            workload_config = config["workload"]
-            summary["variant"] = workload_config.get("variant", "official")
-            if (
-                "system_variants" in workload_config
-                and workload_config["system_variants"]
-            ):
-                summary["system_variants"] = workload_config["system_variants"]
-
-            # Add multiuser configuration
-            multiuser_config = workload_config.get("multiuser") or {}
-            if multiuser_config.get("enabled", False):
-                summary["execution_mode"] = "multiuser"
-                summary["multiuser"] = {
-                    "num_streams": multiuser_config.get("num_streams", 1),
-                    "randomize": multiuser_config.get("randomize", False),
-                    "random_seed": multiuser_config.get("random_seed"),
-                }
-            else:
-                summary["execution_mode"] = "sequential"
-
-        # Per-system statistics
-        summary["per_system"] = {}
-        for system in df["system"].unique():
-            system_df = df[df["system"] == system]
-            summary["per_system"][system] = {
-                "total_queries": len(system_df),
-                "avg_runtime_ms": float(system_df["elapsed_ms"].mean()),
-                "median_runtime_ms": float(system_df["elapsed_ms"].median()),
-                "min_runtime_ms": float(system_df["elapsed_ms"].min()),
-                "max_runtime_ms": float(system_df["elapsed_ms"].max()),
-            }
-
-        # Per-query statistics
-        summary["per_query"] = {}
-        for query in df["query"].unique():
-            query_df = df[df["query"] == query]
-            systems = query_df["system"].unique().tolist()
-
-            per_system_stats: dict[str, dict[str, float | int]] = {}
-            for system in systems:
-                system_query_df = query_df[query_df["system"] == system]
-                per_system_stats[system] = {
-                    "runs": int(len(system_query_df)),
-                    "avg_runtime_ms": float(system_query_df["elapsed_ms"].mean()),
-                    "median_runtime_ms": float(system_query_df["elapsed_ms"].median()),
-                    "min_runtime_ms": float(system_query_df["elapsed_ms"].min()),
-                    "max_runtime_ms": float(system_query_df["elapsed_ms"].max()),
-                }
-
-            summary["per_query"][query] = {
-                "systems": systems,
-                "per_system": per_system_stats,
-            }
-
-        # Add per-stream statistics if multiuser execution was used
-        # Calculate per-stream stats for each system separately
-        if "stream_id" in df.columns and df["stream_id"].notna().any():
-            summary["per_stream"] = {}
-
-            for system in df["system"].unique():
-                system_df = df[df["system"] == system]
-                summary["per_stream"][system] = {}
-
-                for stream_id in sorted(system_df["stream_id"].dropna().unique()):
-                    stream_df = system_df[system_df["stream_id"] == stream_id]
-                    summary["per_stream"][system][int(stream_id)] = {
-                        "queries_executed": len(stream_df),
-                        "avg_runtime_ms": float(stream_df["elapsed_ms"].mean()),
-                        "median_runtime_ms": float(stream_df["elapsed_ms"].median()),
-                        "min_runtime_ms": float(stream_df["elapsed_ms"].min()),
-                        "max_runtime_ms": float(stream_df["elapsed_ms"].max()),
-                    }
-
-        # Add warmup statistics if available
-        if warmup_df is not None and len(warmup_df) > 0:
-            summary["warmup_statistics"] = {
-                "total_warmup_queries": len(warmup_df),
-                "per_system": {},
-                "per_query": {},
-            }
-
-            # Warmup per-system statistics
-            for system in warmup_df["system"].unique():
-                system_warmup_df = warmup_df[warmup_df["system"] == system]
-                summary["warmup_statistics"]["per_system"][system] = {
-                    "total_queries": len(system_warmup_df),
-                    "avg_runtime_ms": float(system_warmup_df["elapsed_ms"].mean()),
-                    "median_runtime_ms": float(system_warmup_df["elapsed_ms"].median()),
-                    "min_runtime_ms": float(system_warmup_df["elapsed_ms"].min()),
-                    "max_runtime_ms": float(system_warmup_df["elapsed_ms"].max()),
-                }
-
-            # Warmup per-query statistics (aggregated across warmup runs)
-            normalized_warmup_df = warmup_df.copy()
-            normalized_warmup_df["base_query"] = normalized_warmup_df["query"].apply(
-                lambda name: (
-                    name.rsplit("_warmup_", 1)[0] if "_warmup_" in name else name
-                )
-            )
-
-            for base_query in normalized_warmup_df["base_query"].unique():
-                query_warmup_df = normalized_warmup_df[
-                    normalized_warmup_df["base_query"] == base_query
-                ]
-                summary["warmup_statistics"]["per_query"][base_query] = {}
-
-                for system in query_warmup_df["system"].unique():
-                    system_query_warmup_df = query_warmup_df[
-                        query_warmup_df["system"] == system
-                    ]
-                    summary["warmup_statistics"]["per_query"][base_query][system] = {
-                        "total_runs": int(len(system_query_warmup_df)),
-                        "avg_runtime_ms": float(
-                            system_query_warmup_df["elapsed_ms"].mean()
-                        ),
-                    }
-
-        return summary
-
-    def _setup_infrastructure(self) -> None:
-        """Set up cloud infrastructure if environment mode requires it."""
-        from ..common.cli_helpers import (
-            get_cloud_ssh_key_path,
-            get_first_cloud_provider,
-            is_any_system_cloud_mode,
-        )
-
-        if not is_any_system_cloud_mode(self.config):
-            return
-
-        cloud_provider = get_first_cloud_provider(self.config)
-        if not cloud_provider:
-            console.print(
-                "[yellow]Warning: Cloud mode detected but no provider found[/yellow]"
-            )
-            return
-
-        try:
-            from ..infra.manager import CloudInstanceManager, InfraManager
-
-            console.print(
-                f"[blue]Setting up {cloud_provider.upper()} infrastructure...[/blue]"
-            )
-
-            # Initialize infrastructure manager
-            infra_manager = InfraManager(cloud_provider, self.config)
-
-            # Get instance information (assumes infrastructure is already deployed)
-            instance_info = infra_manager.get_instance_info()
-
-            if "error" not in instance_info:
-                # Create separate cloud instance managers for each system
-                ssh_private_key_path = get_cloud_ssh_key_path(self.config)
-                for system_name, system_info in instance_info.items():
-                    if system_name != "error" and system_info:
-                        # Check if this is a multinode system
-                        is_multinode = system_info.get("multinode", False)
-
-                        if is_multinode:
-                            # Multinode: validate nodes have IPs and create managers
-                            nodes = system_info.get("nodes", [])
-                            if not nodes:
-                                console.print(
-                                    f"[yellow]Warning: {system_name} has no node info (infrastructure may be destroyed)[/yellow]"
-                                )
-                                continue
-
-                            # Check first node has valid IP
-                            if not nodes[0].get("public_ip"):
-                                console.print(
-                                    f"[yellow]Warning: {system_name} nodes have no public IPs (infrastructure may be destroyed)[/yellow]"
-                                )
-                                continue
-
-                            # Create list of managers for each node
-                            node_managers = []
-                            for node_info in nodes:
-                                if node_info.get("public_ip"):
-                                    node_managers.append(
-                                        CloudInstanceManager(
-                                            node_info, ssh_private_key_path
-                                        )
-                                    )
-
-                            if not node_managers:
-                                console.print(
-                                    f"[yellow]Warning: {system_name} has no reachable nodes[/yellow]"
-                                )
-                                continue
-
-                            self._cloud_instance_managers[system_name] = node_managers
-                            primary_ip = node_managers[0].public_ip
-                            console.print(
-                                f"[green]✓ Connected to {system_name}: {len(node_managers)} nodes (primary: {primary_ip})[/green]"
-                            )
-
-                            # Set environment variables (comma-separated for multinode)
-                            import os
-
-                            private_ips = ",".join(
-                                str(mgr.private_ip)
-                                for mgr in node_managers
-                                if mgr.private_ip
-                            )
-                            public_ips = ",".join(
-                                str(mgr.public_ip)
-                                for mgr in node_managers
-                                if mgr.public_ip
-                            )
-                            private_ip_var = f"{system_name.upper()}_PRIVATE_IP"
-                            public_ip_var = f"{system_name.upper()}_PUBLIC_IP"
-                            os.environ[private_ip_var] = private_ips
-                            os.environ[public_ip_var] = public_ips
-
-                            console.print(
-                                f"[blue]Set {private_ip_var}={private_ips}[/blue]"
-                            )
-                            console.print(
-                                f"[blue]Set {public_ip_var}={public_ips}[/blue]"
-                            )
-
-                            # Wait for SSH on primary node
-                            console.print(
-                                f"Waiting for {system_name} SSH access (primary node)..."
-                            )
-                            if node_managers[0].wait_for_ssh():
-                                console.print(
-                                    f"[green]✓ {system_name} SSH access ready[/green]"
-                                )
-                            else:
-                                console.print(
-                                    f"[yellow]Warning: {system_name} SSH access not confirmed[/yellow]"
-                                )
-                        else:
-                            # Single-node: validate public_ip exists
-                            public_ip = system_info.get("public_ip", "")
-                            if not public_ip:
-                                console.print(
-                                    f"[yellow]Warning: {system_name} has no public IP (infrastructure may be destroyed)[/yellow]"
-                                )
-                                continue
-
-                            instance_manager = CloudInstanceManager(
-                                system_info, ssh_private_key_path
-                            )
-                            self._cloud_instance_managers[system_name] = (
-                                instance_manager
-                            )
-                            console.print(
-                                f"[green]✓ Connected to {system_name} instance: {public_ip}[/green]"
-                            )
-
-                            # Set environment variables for IP resolution
-                            import os
-
-                            private_ip_var = f"{system_name.upper()}_PRIVATE_IP"
-                            public_ip_var = f"{system_name.upper()}_PUBLIC_IP"
-
-                            os.environ[private_ip_var] = system_info.get(
-                                "private_ip", ""
-                            )
-                            os.environ[public_ip_var] = public_ip
-
-                            console.print(
-                                f"[blue]Set {private_ip_var}={os.environ[private_ip_var]}[/blue]"
-                            )
-                            console.print(
-                                f"[blue]Set {public_ip_var}={os.environ[public_ip_var]}[/blue]"
-                            )
-
-                            # Wait for SSH to be ready
-                            console.print(f"Waiting for {system_name} SSH access...")
-                            if instance_manager.wait_for_ssh():
-                                console.print(
-                                    f"[green]✓ {system_name} SSH access ready[/green]"
-                                )
-                            else:
-                                console.print(
-                                    f"[yellow]Warning: {system_name} SSH access not confirmed[/yellow]"
-                                )
-            else:
-                console.print(
-                    f"[yellow]Warning: Could not get instance info: {instance_info['error']}[/yellow]"
-                )
-
-        except ImportError as e:
-            console.print(
-                f"[yellow]Warning: Infrastructure management not available: {e}[/yellow]"
-            )
-        except Exception as e:
-            console.print(f"[yellow]Warning: Infrastructure setup failed: {e}[/yellow]")
+        return self._results_manager.create_summary_stats(df, warmup_df, config)
 
     def _check_system_state(self, system: Any, instance_manager: Any) -> str:
-        """
-        Enhanced system state detection with comprehensive checks.
-
-        Returns one of:
-        - NEEDS_INSTALLATION: System not installed or broken installation
-        - NEEDS_SERVICE_RESTART: System installed but services down
-        - NEEDS_DB_RESTART: Services running but database not accessible
-        - READY: System fully operational
-        """
-        system_name = system.name
-
-        try:
-            # Handle multinode case: check ALL nodes for multinode systems
-            is_multinode = (
-                isinstance(instance_manager, list) and len(instance_manager) > 1
-            )
-
-            # 1. Check system-specific installation marker
-            marker_file = system.get_install_marker_path()
-            if marker_file:
-                if is_multinode:
-                    # For multinode, check markers on ALL nodes
-                    # If ANY node is missing the marker, we need to install
-                    missing_markers = []
-                    for idx, node_manager in enumerate(instance_manager):
-                        marker_result = node_manager.run_remote_command(
-                            f"test -f {marker_file} && echo 'marker_found' || echo 'no_marker'",
-                            debug=False,
-                        )
-
-                        if not (
-                            marker_result.get("success")
-                            and "marker_found" in marker_result.get("stdout", "")
-                        ):
-                            missing_markers.append(idx)
-
-                    if missing_markers:
-                        console.print(
-                            f"🔍 {system_name}: Missing installation markers on node(s): {missing_markers}"
-                        )
-                        return "NEEDS_INSTALLATION"
-                else:
-                    # Single node check
-                    primary_manager = (
-                        instance_manager[0]
-                        if isinstance(instance_manager, list)
-                        else instance_manager
-                    )
-                    marker_result = primary_manager.run_remote_command(
-                        f"test -f {marker_file} && echo 'marker_found' || echo 'no_marker'",
-                        debug=False,
-                    )
-
-                    if not (
-                        marker_result.get("success")
-                        and "marker_found" in marker_result.get("stdout", "")
-                    ):
-                        console.print(
-                            f"🔍 {system_name}: No installation marker ({marker_file})"
-                        )
-                        return "NEEDS_INSTALLATION"
-
-            # 2. System-specific checks based on system type
-            for system_config in self.config["systems"]:
-                if system_config["name"] == system_name:
-                    break
-                else:
-                    system_config = None
-            if not system_config:
-                raise SystemError(f"System {system_name} not found")
-            # Inject project_id so system can access it
-            system_config["project_id"] = self.project_id
-            system = create_system(system_config)
-
-            if system.is_healthy():
-                return "READY"
-
-            return "NEEDS_SERVICE_RESTART"
-
-        except Exception as e:
-            console.print(f"[yellow]⚠️ {system_name}: State check failed: {e}[/yellow]")
-            return "NEEDS_INSTALLATION"
+        """Enhanced system state detection with comprehensive checks."""
+        return self._infra_helper.check_system_state(system, instance_manager)
 
     def _install_system_remotely(
         self,
@@ -2108,155 +1553,9 @@ class BenchmarkRunner:
         system_name: str | None = None,
     ) -> bool:
         """Install system via remote commands (recorded for reports)."""
-        try:
-            # Check if this is a multinode system
-            is_multinode = (
-                isinstance(instance_manager, list) and len(instance_manager) > 1
-            )
-
-            # For multinode systems, DON'T override execute_command
-            # Let the system handle its own multinode installation logic
-            if is_multinode:
-                # Multinode systems handle their own remote execution
-                self._log_output(
-                    f"Installing on multinode cluster ({len(instance_manager)} nodes)...",
-                    executor,
-                    system_name,
-                )
-                success: bool = system.install()
-
-                if success:
-                    marker_path = system.get_install_marker_path()
-                    if marker_path:
-                        # For multinode, create markers on ALL nodes
-                        markers_created = 0
-                        for idx, node_manager in enumerate(instance_manager):
-                            # Check if marker exists on this node
-                            check_result = node_manager.run_remote_command(
-                                f"test -f {marker_path} && echo 'exists' || echo 'missing'",
-                                debug=False,
-                            )
-
-                            if check_result.get(
-                                "success"
-                            ) and "missing" in check_result.get("stdout", ""):
-                                # Create marker on this node
-                                marker_result = node_manager.run_remote_command(
-                                    f"touch {marker_path}",
-                                    debug=False,
-                                )
-                                if marker_result.get("success"):
-                                    markers_created += 1
-                                    self._log_output(
-                                        f"✅ Node {idx}: Installation marker created: {marker_path}",
-                                        executor,
-                                        system_name,
-                                    )
-                                else:
-                                    self._log_output(
-                                        f"[yellow]⚠️ Node {idx}: Failed to create installation marker[/yellow]",
-                                        executor,
-                                        system_name,
-                                    )
-                            elif "exists" in check_result.get("stdout", ""):
-                                self._log_output(
-                                    f"✓ Node {idx}: Installation marker already exists",
-                                    executor,
-                                    system_name,
-                                )
-
-                        if markers_created > 0:
-                            self._log_output(
-                                f"✅ Created installation markers on {markers_created} node(s)",
-                                executor,
-                                system_name,
-                            )
-
-                return success
-
-            # Single node: override execute_command to use remote execution
-            primary_manager = (
-                instance_manager[0]
-                if isinstance(instance_manager, list)
-                else instance_manager
-            )
-
-            # Override the system's execute_command to use remote execution
-            original_execute = system.execute_command
-
-            def remote_execute_command(
-                cmd: str,
-                timeout: int = 300,
-                record: bool = True,
-                category: str = "installation",
-            ) -> dict[str, Any]:
-                # Show command being executed
-                self._log_output(f"[dim]$ {cmd}[/dim]", executor, system_name)
-
-                # Create streaming callback for local tagging
-                def tag_output(line: str, stream_name: str) -> None:
-                    tagged_line = f"[{system_name}] {line}"
-                    if stream_name == "stderr":
-                        tagged_line = f"[{system_name}] [stderr] {line}"
-                    self._log_output(tagged_line, executor, system_name)
-
-                result = primary_manager.run_remote_command(
-                    cmd,
-                    timeout=timeout,
-                    debug=is_debug_enabled(),  # Use global debug state
-                    stream_callback=tag_output,  # Local tagging via callback
-                )
-
-                # Show command result status
-                if result.get("success"):
-                    self._log_output(
-                        "[green]✓ Command completed successfully[/green]",
-                        executor,
-                        system_name,
-                    )
-                else:
-                    self._log_output(
-                        "[red]✗ Command failed[/red]", executor, system_name
-                    )
-                    if result.get("stderr"):
-                        self._log_output(
-                            f"[red]Error: {result.get('stderr')}[/red]",
-                            executor,
-                            system_name,
-                        )
-
-                return dict(result) if result else {}
-
-            system.execute_command = remote_execute_command
-
-            try:
-                success = system.install()
-
-                if success:
-                    marker_path = system.get_install_marker_path()
-                    if marker_path and not system.has_install_marker():
-                        if system.mark_installed(record=False):
-                            self._log_output(
-                                f"✅ Installation marker created: {marker_path}",
-                                executor,
-                                system_name,
-                            )
-                        else:
-                            self._log_output(
-                                f"[yellow]⚠️ Failed to create installation marker: {marker_path}[/yellow]",
-                                executor,
-                                system_name,
-                            )
-
-                return success
-            finally:
-                system.execute_command = original_execute
-
-        except Exception as e:
-            self._log_output(
-                f"[red]Installation failed: {e}[/red]", executor, system_name
-            )
-            return False
+        return self._remote_executor.install_system(
+            system, instance_manager, executor, system_name
+        )
 
     def _restart_system_remotely(
         self,
@@ -2266,268 +1565,27 @@ class BenchmarkRunner:
         system_name: str | None = None,
     ) -> bool:
         """Restart system via remote commands."""
-        try:
-            # Handle multinode case: use primary node for command execution
-            primary_manager = (
-                instance_manager[0]
-                if isinstance(instance_manager, list)
-                else instance_manager
-            )
-
-            system_kind = system.kind
-
-            if system_kind == "exasol":
-                # For Exasol, restart the c4_cloud_command service
-                self._log_output(
-                    "[dim]$ sudo systemctl restart c4_cloud_command[/dim]",
-                    executor,
-                    system_name,
-                )
-                restart_result = primary_manager.run_remote_command(
-                    "sudo systemctl restart c4_cloud_command", debug=True
-                )
-                if not restart_result.get("success"):
-                    self._log_output(
-                        "[red]❌ Failed to restart c4_cloud_command service[/red]",
-                        executor,
-                        system_name,
-                    )
-                    if restart_result.get("stderr"):
-                        self._log_output(
-                            f"[red]Error: {restart_result.get('stderr')}[/red]",
-                            executor,
-                            system_name,
-                        )
-                    return False
-
-                self._log_output(
-                    f"✅ Restarted c4_cloud_command service for {system.name}",
-                    executor,
-                    system_name,
-                )
-
-                # Wait for Exasol cluster to be ready again
-                self._log_output(
-                    "⏳ Waiting for Exasol cluster to be ready...",
-                    executor,
-                    system_name,
-                )
-                if not self._wait_for_exasol_ready(primary_manager):
-                    self._log_output(
-                        "[red]❌ Exasol cluster failed to become ready after restart[/red]",
-                        executor,
-                        system_name,
-                    )
-                    return False
-
-                self._log_output("✅ Exasol cluster is ready", executor, system_name)
-
-                # Clean up interfering services again (restart may bring them back)
-                self._log_output(
-                    "🧹 Cleaning up interfering services after restart...",
-                    executor,
-                    system_name,
-                )
-                cleanup_success = self._cleanup_exasol_services(system, primary_manager)
-                if cleanup_success:
-                    self._log_output(
-                        "✅ Service cleanup completed after restart",
-                        executor,
-                        system_name,
-                    )
-                else:
-                    self._log_output(
-                        "[yellow]⚠️ Service cleanup had issues, but continuing[/yellow]",
-                        executor,
-                        system_name,
-                    )
-
-                return True
-
-            elif system_kind == "clickhouse":
-                # For ClickHouse, restart the clickhouse-server service
-                self._log_output(
-                    "[dim]$ sudo systemctl restart clickhouse-server[/dim]",
-                    executor,
-                    system_name,
-                )
-                restart_result = primary_manager.run_remote_command(
-                    "sudo systemctl restart clickhouse-server", debug=True
-                )
-                if not restart_result.get("success"):
-                    self._log_output(
-                        "[red]❌ Failed to restart clickhouse-server service[/red]",
-                        executor,
-                        system_name,
-                    )
-                    if restart_result.get("stderr"):
-                        self._log_output(
-                            f"[red]Error: {restart_result.get('stderr')}[/red]",
-                            executor,
-                            system_name,
-                        )
-                    return False
-
-                self._log_output(
-                    f"✅ Restarted clickhouse-server service for {system.name}",
-                    executor,
-                    system_name,
-                )
-
-                # Wait for ClickHouse to be ready again
-                self._log_output(
-                    "⏳ Waiting for ClickHouse to be ready...", executor, system_name
-                )
-                if not self._wait_for_clickhouse_ready(instance_manager):
-                    self._log_output(
-                        "[red]❌ ClickHouse failed to become ready after restart[/red]",
-                        executor,
-                        system_name,
-                    )
-                    return False
-
-                self._log_output("✅ ClickHouse is ready", executor, system_name)
-                return True
-
-            else:
-                # Generic system restart - try common service restart
-                self._log_output(
-                    f"[yellow]⚠️ Unknown system type '{system_kind}', skipping restart[/yellow]",
-                    executor,
-                    system_name,
-                )
-                return True
-
-        except Exception as e:
-            self._log_output(f"[red]Restart failed: {e}[/red]", executor, system_name)
-            return False
+        return self._remote_executor.restart_system(
+            system, instance_manager, executor, system_name
+        )
 
     def _wait_for_exasol_ready(
         self, instance_manager: Any, max_attempts: int = 30
     ) -> bool:
         """Wait for Exasol cluster to be ready after restart."""
-        import time
-
-        for attempt in range(max_attempts):
-            # Check if database port is accessible
-            db_result = instance_manager.run_remote_command(
-                "timeout 5 bash -c '</dev/tcp/localhost/8563' 2>/dev/null && echo 'db_accessible' || echo 'db_not_accessible'",
-                debug=False,
-            )
-
-            db_accessible = db_result.get(
-                "success"
-            ) and "db_accessible" in db_result.get("stdout", "")
-
-            if db_accessible:
-                # Get the play_id to check init status
-                play_id_result = instance_manager.run_remote_command(
-                    "c4 ps | tail -n +2 | head -1 | awk '{print $2}'",
-                    debug=False,
-                )
-
-                if (
-                    play_id_result.get("success")
-                    and play_id_result.get("stdout", "").strip()
-                ):
-                    play_id = play_id_result.get("stdout", "").strip()
-
-                    # Check if initialization is complete
-                    init_result = instance_manager.run_remote_command(
-                        f"c4 connect -s cos -i {play_id} -- cat /exa/etc/init_done",
-                        debug=False,
-                    )
-
-                    if (
-                        init_result.get("success")
-                        and init_result.get("stdout", "").strip()
-                    ):
-                        init_timestamp = init_result.get("stdout", "").strip()
-                        console.print(
-                            f"[green]✓ Exasol ready - init timestamp: {init_timestamp}[/green]"
-                        )
-                        return True
-
-            # Debug info every 3rd attempt
-            if attempt % 3 == 0:
-                console.print(f"[dim]Debug: DB port accessible: {db_accessible}[/dim]")
-
-            if attempt < max_attempts - 1:
-                console.print(
-                    f"⏳ Cluster not ready yet, waiting... ({max_attempts - attempt - 1} attempts remaining)"
-                )
-                time.sleep(10)  # Wait 10 seconds between checks
-
-        return False
+        return self._infra_helper.wait_for_exasol_ready(instance_manager, max_attempts)
 
     def _wait_for_clickhouse_ready(
         self, instance_manager: Any, max_attempts: int = 20
     ) -> bool:
         """Wait for ClickHouse to be ready after restart."""
-        import time
-
-        for attempt in range(max_attempts):
-            # Check if ClickHouse process is running and ports are accessible
-            process_result = instance_manager.run_remote_command(
-                "pgrep -f 'clickhouse-server' >/dev/null && echo 'process_running' || echo 'process_not_running'",
-                debug=False,
-            )
-
-            if process_result.get(
-                "success"
-            ) and "process_running" in process_result.get("stdout", ""):
-                # Check database port accessibility
-                db_result = instance_manager.run_remote_command(
-                    "timeout 5 bash -c '</dev/tcp/localhost/9000' 2>/dev/null && echo 'db_accessible' || timeout 5 bash -c '</dev/tcp/localhost/8123' 2>/dev/null && echo 'db_accessible' || echo 'db_not_accessible'",
-                    debug=False,
-                )
-                if db_result.get("success") and "db_accessible" in db_result.get(
-                    "stdout", ""
-                ):
-                    return True
-
-            if attempt < max_attempts - 1:
-                console.print(
-                    f"⏳ ClickHouse not ready yet, waiting... ({max_attempts - attempt - 1} attempts remaining)"
-                )
-                time.sleep(5)  # Wait 5 seconds between checks
-
-        return False
+        return self._infra_helper.wait_for_clickhouse_ready(
+            instance_manager, max_attempts
+        )
 
     def _cleanup_exasol_services(self, system: Any, instance_manager: Any) -> bool:
         """Clean up interfering Exasol services after restart."""
-        try:
-            # Override the system's execute_command to use remote execution
-            original_execute = system.execute_command
-
-            def remote_execute_command(
-                cmd: str,
-                timeout: int = 300,
-                record: bool = True,
-                category: str = "installation",
-            ) -> dict[str, Any]:
-                result = instance_manager.run_remote_command(
-                    cmd, timeout=timeout, debug=False
-                )
-                return dict(result) if result else {}
-
-            system.execute_command = remote_execute_command
-
-            # Call the service cleanup method if it exists
-            if hasattr(system, "_cleanup_disturbing_services"):
-                success: bool = system._cleanup_disturbing_services()
-                system.execute_command = original_execute
-                return success
-            else:
-                console.print(
-                    "[yellow]⚠️ No service cleanup method available for this system[/yellow]"
-                )
-                system.execute_command = original_execute
-                return True
-
-        except Exception as e:
-            console.print(f"[yellow]⚠️ Service cleanup failed: {e}[/yellow]")
-            return False
+        return self._infra_helper.cleanup_exasol_services(system, instance_manager)
 
     def _get_workload_execution_timeout(self) -> int:
         """
@@ -2576,154 +1634,17 @@ class BenchmarkRunner:
         executor: "ParallelExecutor | None" = None,
     ) -> list[dict[str, Any]] | None:
         """Deploy minimal package and execute workload remotely."""
-        try:
-            # Handle multinode case: use primary node for workload execution
-            primary_manager = (
-                instance_manager[0]
-                if isinstance(instance_manager, list)
-                else instance_manager
-            )
-
-            project_id = self.config["project_id"]
-            system_name = system_config["name"]
-
-            # Deploy package
-            self._log_output(
-                f"📦 Deploying workload package to {system_name}...",
-                executor,
-                system_name,
-            )
-            if not self._deploy_minimal_package(
-                primary_manager, package_path, project_id
-            ):
-                return None
-
-            # Calculate appropriate timeout based on scale factor
-            execution_timeout = self._get_workload_execution_timeout()
-            timeout_hours = execution_timeout / 3600
-
-            # Execute workload
-            self._log_output(
-                f"🚀 Executing workload on {system_name} (timeout: {timeout_hours:.1f}h)...",
-                executor,
-                system_name,
-            )
-
-            # Create streaming callback for remote output with local tagging
-            def stream_remote_output(line: str, stream_name: str) -> None:
-                # Add system tag prefix for parallel output identification
-                tagged_line = f"[{system_name}] {line}"
-                if stream_name == "stderr":
-                    tagged_line = f"[{system_name}] [stderr] {line}"
-                self._log_output(tagged_line, executor, system_name)
-
-            workload_result = primary_manager.run_remote_command(
-                f"cd /home/ubuntu/{project_id} && ./run_queries.sh {system_name}",
-                timeout=execution_timeout,
-                debug=True,
-                stream_callback=stream_remote_output,
-            )
-
-            command_success = workload_result.get("success")
-            returncode = workload_result.get("returncode", -1)
-
-            # Check if command timed out
-            timed_out = returncode == -1 and not command_success
-
-            if command_success:
-                # Normal successful completion
-                return self._collect_workload_results(
-                    primary_manager, project_id, system_name, executor
-                )
-            elif timed_out:
-                # Command timed out, but workload may have completed successfully
-                # Check the output for completion marker
-                stdout = workload_result.get("stdout", "")
-                if (
-                    "Completed workload" in stdout
-                    or "✓ Workload execution completed" in stdout
-                ):
-                    self._log_output(
-                        f"[yellow]⚠️ SSH command timed out after {timeout_hours:.1f}h, but workload appears to have completed[/yellow]",
-                        executor,
-                        system_name,
-                    )
-                    self._log_output(
-                        f"[yellow]Attempting to collect results from {system_name}...[/yellow]",
-                        executor,
-                        system_name,
-                    )
-                    # Attempt to collect results despite timeout
-                    results = self._collect_workload_results(
-                        primary_manager, project_id, system_name, executor
-                    )
-                    if results:
-                        self._log_output(
-                            f"[green]✅ Successfully recovered results from {system_name} after timeout[/green]",
-                            executor,
-                            system_name,
-                        )
-                        return results
-                    else:
-                        self._log_output(
-                            f"[red]❌ Failed to collect results from {system_name} after timeout[/red]",
-                            executor,
-                            system_name,
-                        )
-                        return None
-                else:
-                    self._log_output(
-                        f"[red]❌ Workload execution timed out on {system_name} after {timeout_hours:.1f}h[/red]",
-                        executor,
-                        system_name,
-                    )
-                    return None
-            else:
-                # Command failed for reasons other than timeout
-                self._log_output(
-                    f"[red]Workload execution failed on {system_name}[/red]",
-                    executor,
-                    system_name,
-                )
-                return None
-
-        except Exception as e:
-            self._log_output(
-                f"[red]Remote workload execution failed: {e}[/red]",
-                executor,
-                system_name,
-            )
-            return None
+        return self._remote_executor.execute_workload(
+            system_config, instance_manager, package_path, executor
+        )
 
     def _deploy_minimal_package(
         self, instance_manager: Any, package_path: Path, project_id: str
     ) -> bool:
         """Deploy minimal package to remote instance."""
-        try:
-            # Copy package
-            remote_path = f"/home/ubuntu/{package_path.name}"
-            if not instance_manager.copy_file_to_instance(package_path, remote_path):
-                return False
-
-            # Extract package
-            extract_commands = [
-                f"rm -rf /home/ubuntu/{project_id}",
-                f"mkdir -p /home/ubuntu/{project_id}",
-                f"cd /home/ubuntu && unzip -o -q {package_path.name} -d {project_id}",
-                f"cd /home/ubuntu/{project_id} && python3 -m pip install -r requirements.txt",
-            ]
-
-            for cmd in extract_commands:
-                result = instance_manager.run_remote_command(cmd, debug=False)
-                if not result.get("success"):
-                    console.print(f"[red]Deploy command failed: {cmd}[/red]")
-                    return False
-
-            return True
-
-        except Exception as e:
-            console.print(f"[red]Package deployment failed: {e}[/red]")
-            return False
+        return self._remote_executor.deploy_package(
+            instance_manager, package_path, project_id
+        )
 
     def _collect_workload_results(
         self,
@@ -2733,84 +1654,9 @@ class BenchmarkRunner:
         executor: "ParallelExecutor | None" = None,
     ) -> list[dict[str, Any]] | None:
         """Collect workload results from remote instance."""
-        try:
-            # Copy results file
-            remote_results = f"/home/ubuntu/{project_id}/results/{project_id}/runs.csv"
-            local_results = self.output_dir / f"runs_{system_name}.csv"
-            remote_warmup = (
-                f"/home/ubuntu/{project_id}/results/{project_id}/runs_warmup.csv"
-            )
-            local_warmup = self.output_dir / f"runs_{system_name}_warmup.csv"
-
-            # Also collect preparation timings
-            remote_prep = f"/home/ubuntu/{project_id}/results/{project_id}/preparation_{system_name}.json"
-            local_prep = self.output_dir / f"preparation_{system_name}.json"
-
-            if instance_manager.copy_file_from_instance(remote_results, local_results):
-                # Load CSV results and convert to list of dicts
-                df = pd.read_csv(local_results)
-                results = []
-                for res in df.to_dict("records"):
-                    dat = {}
-                    for k, v in res.items():
-                        dat[str(k)] = v
-                    results.append(dat)
-
-                # Try to collect warmup results (optional)
-                warmup_records: list[dict[str, Any]] = []
-                if instance_manager.copy_file_from_instance(
-                    remote_warmup, local_warmup
-                ):
-                    warmup_df = pd.read_csv(local_warmup)
-                    for rec in warmup_df.to_dict("records"):
-                        warmup_records.append({str(k): v for k, v in rec.items()})
-
-                    if warmup_records:
-                        if not hasattr(self, "_all_warmup_results"):
-                            self._all_warmup_results = []
-                        self._all_warmup_results.extend(warmup_records)
-                        self._log_output(
-                            f"✅ Warmup results collected from {system_name}",
-                            executor,
-                            system_name,
-                        )
-                else:
-                    self._log_output(
-                        f"[dim]No warmup results from {system_name}[/dim]",
-                        executor,
-                        system_name,
-                    )
-
-                # Try to collect preparation timings (may not exist if skipped)
-                if instance_manager.copy_file_from_instance(remote_prep, local_prep):
-                    self._log_output(
-                        f"✅ Results and preparation timings collected from {system_name}",
-                        executor,
-                        system_name,
-                    )
-                else:
-                    self._log_output(
-                        f"✅ Results collected from {system_name} (no preparation timings)",
-                        executor,
-                        system_name,
-                    )
-
-                return results
-            else:
-                self._log_output(
-                    f"[red]Failed to collect results from {system_name}[/red]",
-                    executor,
-                    system_name,
-                )
-                return None
-
-        except Exception as e:
-            self._log_output(
-                f"[red]Result collection failed: {e}[/red]",
-                executor,
-                system_name,
-            )
-            return None
+        return self._remote_executor.collect_results(
+            instance_manager, project_id, system_name, executor
+        )
 
 
 def run_benchmark(config: dict[str, Any], output_dir: Path) -> bool:
