@@ -137,6 +137,12 @@ docs/references/
 workloads/*/data/
 generated_data/
 
+# Logs directory
+logs/
+
+# Temporary PR directories
+clickbench-pr/
+
 # Other files
 *.md
 *.yaml
