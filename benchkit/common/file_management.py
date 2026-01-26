@@ -201,6 +201,77 @@ def _extract_tarball(tarball_path: str, target_dir: Path, binary_name: str) -> P
 
 
 @exclude_from_package
+def download_exasol_personal_cli_direct(
+    version: str,
+    target_dir: Path,
+    binary_name: str = "exasol",
+) -> Path:
+    """
+    Download Exasol Personal Edition CLI directly from S3.
+
+    Uses the direct S3 URL pattern for Exasol Personal 1.0.0+:
+    https://x-up.s3.eu-west-1.amazonaws.com/releases/exasol-personal/{os}/{arch}/{version}/exasol
+
+    Args:
+        version: CLI version (e.g., "1.0.0")
+        target_dir: Directory to save binary to
+        binary_name: Name for the downloaded binary (default: "exasol")
+
+    Returns:
+        Path to the downloaded binary
+
+    Raises:
+        RuntimeError: If download fails
+    """
+    import platform
+
+    import requests
+
+    target_dir = Path(target_dir)
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    # Determine platform
+    system = platform.system()
+    machine = platform.machine()
+
+    # Map to S3 URL conventions
+    os_map = {"Linux": "linux", "Darwin": "darwin"}
+    arch_map = {"x86_64": "x86_64", "aarch64": "arm64", "arm64": "arm64"}
+
+    if system not in os_map:
+        raise RuntimeError(f"Unsupported platform: {system}")
+    if machine not in arch_map:
+        raise RuntimeError(f"Unsupported architecture: {machine}")
+
+    target_os = os_map[system]
+    target_arch = arch_map[machine]
+
+    # Construct direct S3 URL
+    # Pattern: https://x-up.s3.eu-west-1.amazonaws.com/releases/exasol-personal/{os}/{arch}/{version}/exasol
+    base_url = "https://x-up.s3.eu-west-1.amazonaws.com/releases/exasol-personal"
+    download_url = f"{base_url}/{target_os}/{target_arch}/{version}/exasol"
+
+    # Download the binary
+    try:
+        response = requests.get(download_url, allow_redirects=True, stream=True)
+        response.raise_for_status()
+    except requests.RequestException as e:
+        raise RuntimeError(f"Failed to download CLI from {download_url}: {e}") from e
+
+    binary_path = target_dir / binary_name
+
+    # Download file
+    with open(binary_path, "wb") as f:
+        for chunk in response.iter_content(chunk_size=8192):
+            f.write(chunk)
+
+    # Make executable
+    binary_path.chmod(0o755)
+
+    return binary_path
+
+
+@exclude_from_package
 def discover_exasol_manifest_url(downloads_page_url: str) -> str:
     """
     Discover the packages.json manifest URL from Exasol downloads page.
