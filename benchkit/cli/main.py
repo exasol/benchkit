@@ -1,15 +1,9 @@
 """Command line interface for the benchmark framework."""
 
-import json
-import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import typer
-
-if TYPE_CHECKING:
-    import pandas as pd
-
 from rich.console import Console
 from rich.table import Table
 
@@ -23,14 +17,24 @@ try:
 except ImportError:
     pass  # python-dotenv not installed, continue without .env support
 
-from .config import load_config
-from .debug import set_debug
-from .gather.system_probe import probe_all
-from .infra.manager import InfraManager
-from .infra.self_managed import SelfManagedDeployment, get_self_managed_deployment
-from .package.creator import create_workload_zip
-from .report.render import render_global_report_index, render_report
-from .run.runner import run_benchmark
+from ..config import load_config
+from ..debug import set_debug
+from ..gather.system_probe import probe_all
+from ..infra.manager import InfraManager
+from ..infra.self_managed import SelfManagedDeployment, get_self_managed_deployment
+from ..package.creator import create_workload_zip
+from ..report.render import render_global_report_index, render_report
+from ..run.runner import run_benchmark
+
+# Import from refactored modules
+from .probing import probe_managed_systems, probe_remote_systems
+from .status import (
+    show_all_projects,
+    show_configs_summary,
+    show_detailed_status,
+    show_project_status_basic,
+)
+from .workflows import report_query_results, run_probe_for_full, run_report_for_full
 
 app = typer.Typer(
     name="benchkit",
@@ -39,57 +43,6 @@ app = typer.Typer(
 )
 
 console = Console()
-
-
-def _report_query_results(runs_file: Path, console: Console) -> bool:
-    """Report query results summary including any errors.
-
-    Returns:
-        True if all queries succeeded, False if any failed.
-    """
-    import csv
-
-    total = 0
-    successful = 0
-    failed = 0
-    # Track unique errors per system: system -> {query -> error}
-    errors_by_system: dict[str, dict[str, str]] = {}
-
-    with open(runs_file) as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            total += 1
-            if row.get("success", "").lower() == "true":
-                successful += 1
-            else:
-                failed += 1
-                system = row.get("system", "unknown")
-                query = row.get("query", "unknown")
-                error = row.get("error", "unknown error")
-                if system not in errors_by_system:
-                    errors_by_system[system] = {}
-                # Only keep first error per query per system
-                if query not in errors_by_system[system]:
-                    errors_by_system[system][query] = error
-
-    # Print summary
-    console.print()
-    console.print("[bold]Query Execution Summary:[/bold]")
-    console.print(f"  Total query runs: {total}")
-    console.print(f"  [green]Successful: {successful}[/green]")
-
-    if failed > 0:
-        console.print(f"  [red]Failed: {failed}[/red]")
-        console.print()
-        console.print("[bold red]Failed Queries:[/bold red]")
-        for system, errors in sorted(errors_by_system.items()):
-            console.print(f"  [bold]{system}:[/bold]")
-            for query, error in sorted(errors.items()):
-                error_preview = error[:80] + "..." if len(error) > 80 else error
-                console.print(f"    {query}: {error_preview}")
-        return False
-
-    return True
 
 
 @app.command()
@@ -132,7 +85,10 @@ def probe(
     console.print(f"[blue]Probing system info for project:[/] {cfg['project_id']}")
 
     # Check if this is a cloud or managed benchmark
-    from .common.cli_helpers import is_any_system_cloud_mode, is_any_system_managed_mode
+    from ..common.cli_helpers import (
+        is_any_system_cloud_mode,
+        is_any_system_managed_mode,
+    )
 
     has_cloud = is_any_system_cloud_mode(cfg)
     has_managed = is_any_system_managed_mode(cfg)
@@ -141,7 +97,7 @@ def probe(
 
     if has_cloud:
         console.print("[blue]Cloud benchmark detected - probing remote instances...[/]")
-        success = _probe_remote_systems(cfg, outdir)
+        success = probe_remote_systems(cfg, outdir)
         if success:
             console.print("[green]✓ Cloud system probes completed[/]")
         else:
@@ -152,7 +108,7 @@ def probe(
         console.print(
             "[blue]Managed systems detected - probing managed deployments...[/]"
         )
-        success = _probe_managed_systems(cfg, outdir)
+        success = probe_managed_systems(cfg, outdir)
         if success:
             console.print("[green]✓ Managed system probes completed[/]")
         else:
@@ -193,7 +149,7 @@ def setup(
 
     After setup completes, use 'benchkit load' to load data.
     """
-    from .run.runner import BenchmarkRunner
+    from ..run.runner import BenchmarkRunner
 
     set_debug(debug)
 
@@ -254,7 +210,7 @@ def load(
     against remote databases (using their public IPs). This is useful for
     faster iteration during workload development and debugging.
     """
-    from .run.runner import BenchmarkRunner
+    from ..run.runner import BenchmarkRunner
 
     set_debug(debug)
 
@@ -300,7 +256,9 @@ def run(
         False, "--force", "-f", help="Force run even if results already exist"
     ),
     full: bool = typer.Option(
-        False, "--full", help="Run full benchmark (setup + load + run)"
+        False,
+        "--full",
+        help="Run complete workflow (probe + setup + load + run + report)",
     ),
     local: bool = typer.Option(
         False,
@@ -317,13 +275,13 @@ def run(
     This is Phase 3 of the benchmark workflow (query execution only).
     Requires setup and load phases to be completed first.
 
-    Use --full flag to run the complete benchmark (setup + load + run).
+    Use --full flag to run the complete workflow (probe + setup + load + run + report).
 
     Use --local to execute queries from your local machine directly
     against remote databases (using their public IPs). This is useful for
     faster iteration during workload development and debugging.
     """
-    from .run.runner import BenchmarkRunner
+    from ..run.runner import BenchmarkRunner
 
     set_debug(debug)
 
@@ -351,28 +309,39 @@ def run(
     runner = BenchmarkRunner(cfg, outdir)
 
     if full:
-        # Run all phases: setup -> load -> run
-        console.print(
-            "[bold blue]Running full benchmark (setup + load + run)[/bold blue]"
-        )
+        # Run all phases: probe -> setup -> load -> run -> report
+        console.print("[bold blue]Running full benchmark workflow[/bold blue]")
+        console.print()
+
+        # Phase 0: Probe
+        console.print("[bold]Phase 0: System Probe[/bold]")
+        run_probe_for_full(cfg, outdir)
         console.print()
 
         # Phase 1: Setup
+        console.print("[bold]Phase 1: Setup[/bold]")
         if not runner.run_setup():
             console.print("[red]✗ Setup phase failed[/]")
             raise typer.Exit(1)
         console.print()
 
         # Phase 2: Load
+        console.print("[bold]Phase 2: Load[/bold]")
         if not runner.run_load(local=local):
             console.print("[red]✗ Load phase failed[/]")
             raise typer.Exit(1)
         console.print()
 
         # Phase 3: Queries
+        console.print("[bold]Phase 3: Query Execution[/bold]")
         if not runner.run_queries(force=force, local=local):
             console.print("[red]✗ Query execution failed[/]")
             raise typer.Exit(1)
+
+        # Phase 4: Report
+        console.print()
+        console.print("[bold]Phase 4: Report Generation[/bold]")
+        run_report_for_full(cfg, _collect_report_files)
     else:
         # Run queries only (strict mode - check prerequisites)
         if not runner.run_queries(force=force, local=local):
@@ -382,7 +351,7 @@ def run(
     runs_file = outdir / "runs.csv"
     all_queries_passed = True
     if runs_file.exists():
-        all_queries_passed = _report_query_results(runs_file, console)
+        all_queries_passed = report_query_results(runs_file)
 
     if all_queries_passed:
         console.print(f"\n[green]✓ Benchmark completed successfully:[/] {runs_file}")
@@ -499,7 +468,7 @@ def status(
         config_file = _find_config_for_project(project, configs_dir)
         if config_file:
             cfg = load_config(str(config_file))
-            _show_detailed_status(cfg, config_file)
+            show_detailed_status(cfg, config_file, _collect_report_files)
         else:
             # Fallback to basic status if no config found
             console.print(
@@ -509,12 +478,12 @@ def status(
             if not project_dir.exists():
                 console.print(f"[red]Project not found:[/] {project}")
                 raise typer.Exit(1)
-            _show_project_status_basic(project, project_dir)
+            show_project_status_basic(project, project_dir)
     elif config:
         # Show status for specific config(s)
         for config_path in config:
             cfg = load_config(config_path)
-            _show_detailed_status(cfg, Path(config_path))
+            show_detailed_status(cfg, Path(config_path), _collect_report_files)
             console.print()  # Empty line between configs
     else:
         # Show status for all configs in configs directory
@@ -522,7 +491,7 @@ def status(
             console.print(
                 "[yellow]No configs directory found. Showing all projects in results.[/]"
             )
-            _show_all_projects(results_dir)
+            show_all_projects(results_dir, load_config, _collect_report_files)
             return
 
         config_files = sorted(configs_dir.glob("*.yaml"))
@@ -531,7 +500,7 @@ def status(
             return
 
         console.print("[bold blue]Benchmark Status Summary[/bold blue]\n")
-        _show_configs_summary(config_files)
+        show_configs_summary(config_files, load_config, _collect_report_files)
 
 
 def _dump_config_yaml(cfg: dict[str, Any], config_path: Path | str) -> None:
@@ -1153,8 +1122,8 @@ def check(
         console.print(Panel(report_table, title="Report Settings", border_style="blue"))
 
     # Run pre-flight validation for cloud modes and display at the bottom
-    from .common.cli_helpers import is_any_system_cloud_mode
-    from .validation import PreflightChecker
+    from ..common.cli_helpers import is_any_system_cloud_mode
+    from ..validation import PreflightChecker
 
     preflight_failed = False
 
@@ -1224,9 +1193,8 @@ def _apply_managed_systems(cfg: dict[str, Any]) -> bool:
     Returns:
         True if all managed systems deployed successfully
     """
-    from .common.cli_helpers import get_managed_deployment_dir, get_managed_systems
-    from .infra.managed_state import save_managed_state
-    from .infra.self_managed import get_self_managed_deployment
+    from ..common.cli_helpers import get_managed_deployment_dir, get_managed_systems
+    from ..infra.managed_state import save_managed_state
 
     managed_systems = get_managed_systems(cfg)
     project_id = cfg.get("project_id", "default")
@@ -1343,8 +1311,9 @@ def _destroy_all_environments(cfg: dict[str, Any]) -> tuple[bool, list[str]]:
     Returns:
         Tuple of (all_success, list of error messages)
     """
-    from .common.cli_helpers import get_all_environments
-    from .common.enums import EnvironmentMode
+    from ..common.cli_helpers import get_all_environments, get_managed_deployment_dir
+    from ..common.enums import EnvironmentMode
+    from ..infra.managed_state import clear_managed_state
 
     environments = get_all_environments(cfg)
     project_id = cfg.get("project_id", "default")
@@ -1410,9 +1379,6 @@ def _destroy_all_environments(cfg: dict[str, Any]) -> tuple[bool, list[str]]:
             console.print(f"  [red]✗ {error_msg}[/red]")
 
     # Destroy managed environments (e.g., Exasol Personal Edition)
-    from .common.cli_helpers import get_managed_deployment_dir
-    from .infra.managed_state import clear_managed_state
-
     for env_name, _env_config, system_config in managed_envs:
         system_name = system_config.get("name", "unknown")
 
@@ -1534,8 +1500,8 @@ def infra(
 
     # Run pre-flight validation for apply and plan
     if action in ["apply", "plan"] and not skip_preflight:
-        from .common.cli_helpers import is_any_system_cloud_mode
-        from .validation import PreflightChecker
+        from ..common.cli_helpers import is_any_system_cloud_mode
+        from ..validation import PreflightChecker
 
         # Check if any system uses cloud mode (supports both env and environments)
         if is_any_system_cloud_mode(cfg):
@@ -1592,7 +1558,10 @@ def infra(
         return
 
     # Import managed systems helpers
-    from .common.cli_helpers import is_any_system_cloud_mode, is_any_system_managed_mode
+    from ..common.cli_helpers import (
+        is_any_system_cloud_mode,
+        is_any_system_managed_mode,
+    )
 
     has_cloud = is_any_system_cloud_mode(cfg)
     has_managed = is_any_system_managed_mode(cfg)
@@ -1711,8 +1680,7 @@ def _find_config_for_project(project_id: str, configs_dir: Path) -> Path | None:
 
 
 def _collect_report_files(report_dir: Path) -> list[Path]:
-    """
-    Return available REPORT.md files for a generated benchmark report directory.
+    """Return available REPORT.md files for a generated benchmark report directory.
 
     Prefers the new multi-variant layout (3-full, 2-results, 1-short) but
     gracefully falls back to legacy single-report structures. Only immediate
@@ -1741,1419 +1709,6 @@ def _collect_report_files(report_dir: Path) -> list[Path]:
             report_files.append(candidate)
 
     return report_files
-
-
-# =============================================================================
-# Status Command Helper Functions
-# =============================================================================
-
-
-def _extract_error_summary(error_msg: str | None) -> str:
-    """
-    Extract key error type from verbose error messages.
-
-    Examples:
-        'MEMORY_LIMIT_EXCEEDED (14.07 GiB > 13.97 GiB)'
-        'Query timeout'
-        'Connection refused'
-    """
-    if not error_msg:
-        return "-"
-
-    error_lower = error_msg.lower()
-
-    # ClickHouse specific errors
-    if "memory_limit_exceeded" in error_lower:
-        # Extract memory values if present
-        import re
-
-        match = re.search(
-            r"would use ([\d.]+\s*\w+).*maximum:\s*([\d.]+\s*\w+)", error_msg
-        )
-        if match:
-            return f"MEMORY_LIMIT_EXCEEDED ({match.group(1)} > {match.group(2)})"
-        return "MEMORY_LIMIT_EXCEEDED"
-
-    if "timeout" in error_lower:
-        return "Query timeout"
-
-    if "connection refused" in error_lower:
-        return "Connection refused"
-
-    if "syntax error" in error_lower:
-        return "Syntax error"
-
-    # Exasol specific errors
-    if "exasol" in error_lower and "exception" in error_lower:
-        # Try to extract error code
-        import re
-
-        match = re.search(r"error code:\s*(\w+)", error_msg, re.IGNORECASE)
-        if match:
-            return f"Exasol: {match.group(1)}"
-
-    # Generic truncation for unknown errors
-    if len(error_msg) > 50:
-        return error_msg[:47] + "..."
-    return error_msg
-
-
-def _load_phase_data(
-    results_dir: Path, system_names: list[str]
-) -> dict[str, dict[str, Any]]:
-    """Load phase completion data for all systems.
-
-    Returns dict: {system_name: {'setup': {...}, 'load': {...}, 'infra_timing_s': float|None}}
-    """
-    from .util import load_json
-
-    phase_data: dict[str, dict[str, Any]] = {}
-
-    for system_name in system_names:
-        # Get deployment timing (unified: checks managed state first, then cloud infra)
-        infra_timing_s = _get_deployment_timing(results_dir, system_name)
-
-        phase_data[system_name] = {
-            "setup": None,
-            "load": None,
-            "infra_timing_s": infra_timing_s,
-        }
-
-        # Load setup completion data
-        setup_path = results_dir / f"setup_complete_{system_name}.json"
-        if setup_path.exists():
-            try:
-                phase_data[system_name]["setup"] = load_json(setup_path)
-            except Exception:
-                phase_data[system_name]["setup"] = {"exists": True}
-
-        # Load load completion data
-        load_path = results_dir / f"load_complete_{system_name}.json"
-        if load_path.exists():
-            try:
-                phase_data[system_name]["load"] = load_json(load_path)
-            except Exception:
-                phase_data[system_name]["load"] = {"exists": True}
-
-    return phase_data
-
-
-def _get_deployment_timing(results_dir: Path, system_name: str) -> float | None:
-    """Get deployment timing in seconds for any system type.
-
-    Timing retrieval that checks the appropriate source based on system type:
-    - Managed systems: Only use managed state file (no fallback to terraform)
-    - Cloud systems: Use global terraform timing
-
-    Args:
-        results_dir: Results directory path
-        system_name: Name of the system
-
-    Returns:
-        Deployment timing in seconds, or None if not available.
-    """
-    from .util import load_json
-
-    # Check managed state first (per-system timing for self-managed deployments)
-    state_file = results_dir / "managed" / system_name / "benchkit_state.json"
-    if state_file.exists():
-        # This is a managed system - only use its own timing, don't fall back to terraform
-        try:
-            data = load_json(state_file)
-            if isinstance(data, dict):
-                timing = data.get("deployment_timing_s")
-                if timing and timing > 0:
-                    return float(timing)
-        except Exception:
-            pass
-        # Managed system with no timing recorded - return None (don't use terraform timing)
-        return None
-
-    # Only use terraform timing for cloud systems (no managed state file exists)
-    infra_path = results_dir / "infrastructure_provisioning.json"
-    if infra_path.exists():
-        try:
-            data = load_json(infra_path)
-            if isinstance(data, dict):
-                timing = data.get("infrastructure_provisioning_s")
-                if timing and timing > 0:
-                    return float(timing)
-        except Exception:
-            pass
-
-    return None
-
-
-def _load_runs_data(results_dir: Path) -> "pd.DataFrame | None":
-    """Load runs.csv and return as DataFrame, or None if not found."""
-    import pandas as pd
-
-    runs_csv = results_dir / "runs.csv"
-    if not runs_csv.exists():
-        return None
-
-    try:
-        return pd.read_csv(runs_csv)
-    except Exception:
-        return None
-
-
-def _get_query_stats_per_system(
-    df: "pd.DataFrame",
-) -> dict[str, dict[str, Any]]:
-    """
-    Compute query statistics per system.
-
-    Returns: {system: {total, success, failed, avg_ms, errors: [(query, failed, total, error)]}}
-    """
-    stats: dict[str, dict[str, Any]] = {}
-
-    for system in df["system"].unique():
-        system_df = df[df["system"] == system]
-        total = len(system_df)
-        success = len(system_df[system_df["success"] == True])  # noqa: E712
-        failed = total - success
-
-        # Calculate average for successful queries only
-        success_df = system_df[system_df["success"] == True]  # noqa: E712
-        avg_ms = success_df["elapsed_ms"].mean() if len(success_df) > 0 else 0
-
-        # Get error details for failed queries
-        errors: list[tuple[str, int, int, str]] = []
-        if failed > 0:
-            failed_df = system_df[system_df["success"] == False]  # noqa: E712
-            for query in failed_df["query"].unique():
-                query_df = system_df[system_df["query"] == query]
-                query_failed = len(query_df[query_df["success"] == False])  # noqa: E712
-                query_total = len(query_df)
-                # Get first error message
-                first_error = failed_df[failed_df["query"] == query]["error"].iloc[0]
-                error_summary = _extract_error_summary(first_error)
-                errors.append((query, query_failed, query_total, error_summary))
-
-        stats[system] = {
-            "total": total,
-            "success": success,
-            "failed": failed,
-            "avg_ms": avg_ms,
-            "errors": errors,
-        }
-
-    return stats
-
-
-def _check_infra_available(
-    cfg: dict[str, Any], system_name: str, infra_ips: dict[str, Any] | None
-) -> tuple[str, str]:
-    """
-    Check if infrastructure for system is still running.
-
-    Handles both cloud (Terraform) and managed (self-managed) systems.
-
-    Returns (status, display):
-    - ('up', '[green]✓ up[/]') - SSH connectivity confirmed
-    - ('down', '[red]✗ down[/]') - Cannot reach instance
-    - ('na', '[dim]-[/]') - Local mode, N/A
-    - ('unknown', '[yellow]?[/]') - No IP info available
-    """
-    import re
-    import subprocess
-
-    from .common.cli_helpers import (
-        get_cloud_ssh_key_path,
-        is_any_system_cloud_mode,
-        is_managed_system,
-    )
-
-    # Check if system has infrastructure (cloud or managed)
-    has_cloud = is_any_system_cloud_mode(cfg)
-    has_managed = is_managed_system(cfg, system_name)
-
-    # Local mode - infrastructure N/A
-    if not has_cloud and not has_managed:
-        return ("na", "[dim]-[/]")
-
-    # No infrastructure IPs available
-    if not infra_ips or system_name not in infra_ips:
-        return ("unknown", "[yellow]?[/]")
-
-    system_ips = infra_ips[system_name]
-
-    # Get the public IP (handle both single and multinode)
-    if "public_ip" in system_ips:
-        ip = system_ips["public_ip"]
-    elif "public_ips" in system_ips:
-        ip = system_ips["public_ips"][0]  # Check first node
-    else:
-        return ("unknown", "[yellow]?[/]")
-
-    # For managed systems, check if we have SSH command in infra_ips
-    ssh_command = system_ips.get("ssh_command")
-    if ssh_command and has_managed:
-        # Parse the SSH command to extract key path
-        key_match = re.search(r"-i\s+([^\s]+)", ssh_command)
-        key_path = key_match.group(1) if key_match else None
-
-        # Extract user from command
-        user_match = re.search(r"(\w+)@", ssh_command)
-        ssh_user = user_match.group(1) if user_match else "ubuntu"
-
-        # Resolve key path (may be relative to deployment dir)
-        if key_path:
-            key_path = os.path.expanduser(key_path)
-            # If relative, try to resolve from managed system deployment dir
-            if not os.path.isabs(key_path) and not os.path.exists(key_path):
-                from .common.cli_helpers import (
-                    get_managed_deployment_dir,
-                    get_managed_systems,
-                )
-
-                for system in get_managed_systems(cfg):
-                    if system["name"] == system_name:
-                        deployment_dir = get_managed_deployment_dir(cfg, system)
-                        resolved_path = os.path.join(deployment_dir, key_path)
-                        if os.path.exists(resolved_path):
-                            key_path = resolved_path
-                        break
-
-        ssh_opts = "-o ConnectTimeout=5 -o StrictHostKeyChecking=no -o BatchMode=yes"
-        if key_path and os.path.exists(key_path):
-            ssh_opts += f" -i {key_path}"
-
-        cmd = f'ssh {ssh_opts} {ssh_user}@{ip} "echo ok" 2>/dev/null'
-    else:
-        # Cloud system - use cloud SSH key
-        ssh_key = get_cloud_ssh_key_path(cfg) or ""
-        if ssh_key:
-            ssh_key = os.path.expanduser(ssh_key)
-
-        ssh_opts = "-o ConnectTimeout=5 -o StrictHostKeyChecking=no -o BatchMode=yes"
-        if ssh_key and os.path.exists(ssh_key):
-            ssh_opts += f" -i {ssh_key}"
-
-        cmd = f'ssh {ssh_opts} ubuntu@{ip} "echo ok" 2>/dev/null'
-
-    try:
-        result = subprocess.run(
-            cmd, shell=True, capture_output=True, text=True, timeout=10  # nosec B602
-        )
-        if result.returncode == 0 and "ok" in result.stdout:
-            return ("up", "[green]✓ up[/]")
-        else:
-            return ("down", "[red]✗ down[/]")
-    except subprocess.TimeoutExpired:
-        return ("down", "[red]✗ down[/]")
-    except Exception:
-        return ("unknown", "[yellow]?[/]")
-
-
-def _format_timing(seconds: float | None) -> str:
-    """Format timing value for display."""
-    if seconds is None or seconds == 0:
-        return ""
-    if seconds < 60:
-        return f"({seconds:.1f}s)"
-    minutes = seconds / 60
-    return f"({minutes:.1f}m)"
-
-
-def _show_project_status_basic(project: str, project_dir: Path) -> None:
-    """Show basic status for a single project (without config)."""
-    console.print(f"\n[bold]Project: {project}[/bold]")
-
-    table = Table(show_header=True, header_style="bold blue")
-    table.add_column("File")
-    table.add_column("Status")
-    table.add_column("Size")
-    table.add_column("Modified")
-
-    # Check for system info - handle both local and cloud benchmarks
-    system_json = project_dir / "system.json"
-    system_pattern_files = list(project_dir.glob("system_*.json"))
-
-    if system_json.exists():
-        # Local benchmark - single system.json
-        stat = system_json.stat()
-        size = f"{stat.st_size:,} bytes"
-        modified = system_json.stat().st_mtime
-        table.add_row("system.json", "[green]✓[/]", size, str(modified))
-    elif system_pattern_files:
-        # Cloud benchmark - multiple system_*.json files
-        total_size = sum(f.stat().st_size for f in system_pattern_files)
-        latest_modified = max(f.stat().st_mtime for f in system_pattern_files)
-        system_count = len(system_pattern_files)
-        table.add_row(
-            f"system_*.json ({system_count} systems)",
-            "[green]✓[/]",
-            f"{total_size:,} bytes",
-            str(latest_modified),
-        )
-    else:
-        # No system info found
-        table.add_row("system.json", "[red]✗[/]", "-", "-")
-
-    # Check other files
-    other_files = ["runs.csv", "summary.json"]
-    for filename in other_files:
-        filepath = project_dir / filename
-        if filepath.exists():
-            stat = filepath.stat()
-            size = f"{stat.st_size:,} bytes"
-            modified = filepath.stat().st_mtime
-            table.add_row(filename, "[green]✓[/]", size, str(modified))
-        else:
-            table.add_row(filename, "[red]✗[/]", "-", "-")
-
-    console.print(table)
-
-
-def _show_detailed_status(cfg: dict[str, Any], config_file: Path) -> None:
-    """Show detailed status for a benchmark including config information."""
-    project_id = cfg.get("project_id", "unknown")
-    results_dir = Path("results") / project_id
-
-    console.print(f"\n[bold cyan]═══ {project_id} ═══[/bold cyan]")
-    console.print(f"[dim]Config: {config_file}[/dim]\n")
-
-    # Project Info
-    info_table = Table(show_header=False, box=None, padding=(0, 2))
-    info_table.add_column("Key", style="bold")
-    info_table.add_column("Value")
-
-    info_table.add_row("Title", cfg.get("title", "-"))
-    info_table.add_row("Author", cfg.get("author", "-"))
-    info_table.add_row("Environment", (cfg.get("env") or {}).get("mode", "local"))
-
-    systems = cfg.get("systems", [])
-    system_names = [s["name"] for s in systems]
-    info_table.add_row("Systems", ", ".join(system_names))
-
-    workload = cfg.get("workload", {})
-    info_table.add_row(
-        "Workload",
-        f"{workload.get('name', '-')} (SF={workload.get('scale_factor', '-')})",
-    )
-    info_table.add_row(
-        "Queries/Runs",
-        f"{workload.get('runs_per_query', '-')} runs, {workload.get('warmup_runs', '-')} warmup",
-    )
-
-    console.print(info_table)
-    console.print()
-
-    # Check if results directory exists
-    if not results_dir.exists():
-        console.print("[red]No results directory found[/red]")
-        console.print("[dim]Run 'benchkit setup' to begin[/dim]")
-        return
-
-    # Load phase data and run results
-    phase_data = _load_phase_data(results_dir, system_names)
-    runs_df = _load_runs_data(results_dir)
-    query_stats = _get_query_stats_per_system(runs_df) if runs_df is not None else {}
-
-    # Get infrastructure IPs for availability check (cloud + managed)
-    from .common.cli_helpers import (
-        get_all_infrastructure_ips,
-        is_any_system_cloud_mode,
-        is_any_system_managed_mode,
-    )
-
-    is_cloud = is_any_system_cloud_mode(cfg)
-    is_managed = is_any_system_managed_mode(cfg)
-    has_infra = is_cloud or is_managed
-
-    # Get combined infrastructure IPs from both cloud and managed systems
-    infra_ips: dict[str, Any] | None = None
-    if has_infra:
-        try:
-            infra_ips = get_all_infrastructure_ips(cfg)
-        except Exception:
-            infra_ips = None
-
-    # Phase Status Table
-    phase_table = Table(
-        show_header=True, header_style="bold blue", title="Phase Status by System"
-    )
-    phase_table.add_column("System", style="bold")
-    phase_table.add_column("Setup", justify="center")
-    phase_table.add_column("Load", justify="center")
-    phase_table.add_column("Run", justify="center")
-    if has_infra:
-        phase_table.add_column("Infra", justify="center")
-
-    # Track overall health
-    has_errors = False
-    all_phases_complete = True
-    total_failed_queries = 0
-
-    for system_name in system_names:
-        system_phase = phase_data.get(system_name, {"setup": None, "load": None})
-
-        # Setup status
-        setup_data = system_phase.get("setup")
-        if setup_data:
-            timing = setup_data.get("installation_s", 0)
-            setup_cell = f"[green]✓[/] {_format_timing(timing)}"
-        else:
-            setup_cell = "[dim]-[/]"
-            all_phases_complete = False
-
-        # Load status
-        load_data = system_phase.get("load")
-        if load_data:
-            load_timing = (
-                load_data.get("data_generation_s", 0)
-                + load_data.get("schema_creation_s", 0)
-                + load_data.get("data_loading_s", 0)
-            )
-            load_cell = f"[green]✓[/] {_format_timing(load_timing)}"
-        else:
-            load_cell = "[dim]-[/]"
-            all_phases_complete = False
-
-        # Run status
-        if system_name in query_stats:
-            stats = query_stats[system_name]
-            total = stats["total"]
-            failed = stats["failed"]
-            total_failed_queries += failed
-
-            if failed == 0:
-                run_cell = f"[green]✓[/] {total} queries"
-            elif failed == total:
-                run_cell = f"[red]✗[/] {total} failed"
-                has_errors = True
-            else:
-                run_cell = f"[yellow]⚠[/] {total - failed}/{total}"
-                has_errors = True
-        else:
-            run_cell = "[dim]-[/]"
-            all_phases_complete = False
-
-        # Infrastructure availability (cloud or managed)
-        if has_infra:
-            _, infra_cell = _check_infra_available(cfg, system_name, infra_ips)
-            # Add infrastructure provisioning timing if available
-            infra_timing = system_phase.get("infra_timing_s")
-            if infra_timing and infra_timing > 0:
-                infra_cell = infra_cell + f" {_format_timing(infra_timing)}"
-            phase_table.add_row(
-                system_name, setup_cell, load_cell, run_cell, infra_cell
-            )
-        else:
-            phase_table.add_row(system_name, setup_cell, load_cell, run_cell)
-
-    console.print(phase_table)
-
-    # Show error details (only when there are failures)
-    if has_errors:
-        for system_name in system_names:
-            if system_name in query_stats and query_stats[system_name]["errors"]:
-                errors = query_stats[system_name]["errors"]
-                error_table = Table(
-                    show_header=True,
-                    header_style="bold red",
-                    title=f"Failed Queries: {system_name}",
-                )
-                error_table.add_column("Query", style="bold")
-                error_table.add_column("Failed", justify="center")
-                error_table.add_column("Error", style="dim")
-
-                for query, failed_count, total_count, error_msg in errors:
-                    error_table.add_row(
-                        query, f"{failed_count}/{total_count}", error_msg
-                    )
-
-                console.print()
-                console.print(error_table)
-
-    # Overall status line
-    console.print()
-    if has_errors:
-        console.print(
-            f"[yellow]Overall: ⚠ {total_failed_queries} query failures detected[/yellow]"
-        )
-    elif all_phases_complete:
-        console.print("[green]Overall: ✓ All phases completed successfully[/green]")
-    else:
-        console.print("[dim]Overall: Some phases pending[/dim]")
-
-    # Report status (compact)
-    report_config = cfg.get("report", {})
-    output_path = Path(
-        report_config.get("output_path", f"results/{project_id}/reports")
-    )
-    report_dir = output_path.parent / output_path.stem
-    report_files = _collect_report_files(report_dir)
-    if report_files:
-        console.print(f"[dim]Report: {report_files[0]}[/dim]")
-
-    # Show infrastructure details (IPs and connection strings) for cloud and managed
-    if has_infra:
-        console.print()
-        _show_infrastructure_details(cfg, systems)
-
-
-def _show_infrastructure_details(
-    cfg: dict[str, Any], systems: list[dict[str, Any]]
-) -> None:
-    """Show infrastructure details including IPs, connection strings, and SSH commands.
-
-    This function displays a unified table for both cloud (Terraform) and
-    managed (self-managed) systems.
-    """
-    from .common.cli_helpers import get_all_infrastructure_ips
-    from .systems import SYSTEM_IMPLEMENTATIONS, _lazy_import_system
-
-    try:
-        # Get combined infrastructure IPs from cloud and managed systems
-        infra_ips = get_all_infrastructure_ips(cfg)
-        if not infra_ips:
-            console.print("\n[dim]Infrastructure details not available[/dim]")
-            return
-
-        # Create infrastructure table
-        infra_table = Table(
-            show_header=True,
-            header_style="bold magenta",
-            title="Infrastructure Details",
-        )
-        infra_table.add_column("System", style="bold", no_wrap=True)
-        infra_table.add_column("Public IP", no_wrap=True)
-        infra_table.add_column("Private IP", no_wrap=True)
-        infra_table.add_column("Connection String", overflow="fold")
-
-        # Collect SSH commands for display after table
-        ssh_commands: list[tuple[str, str]] = []
-
-        for system in systems:
-            system_name = system["name"]
-            system_kind = system.get("kind", "")
-
-            ips = infra_ips.get(system_name)
-            if not ips:
-                continue
-
-            # Handle both single-node and multi-node formats
-            if "public_ips" in ips:
-                # Multi-node: show all IPs
-                public_ip_list = ips["public_ips"]
-                private_ip_list = ips["private_ips"]
-                public_ip = ", ".join(public_ip_list)
-                private_ip = ", ".join(private_ip_list)
-                # Use first IP for connection string
-                first_public_ip = public_ip_list[0]
-                first_private_ip = private_ip_list[0]
-            else:
-                # Single-node
-                public_ip = ips["public_ip"]
-                private_ip = ips["private_ip"]
-                first_public_ip = public_ip
-                first_private_ip = private_ip
-
-            # Get connection string from system class
-            connection_str = "-"
-            if system_kind in SYSTEM_IMPLEMENTATIONS:
-                try:
-                    system_class = _lazy_import_system(system_kind)
-                    # Create temporary system configuration for connection string
-                    system_config = {
-                        "name": system_name,
-                        "kind": system_kind,
-                        "version": system.get("version", "unknown"),
-                        "setup": system.get("setup", {}).copy(),
-                    }
-                    # Override host with first public IP
-                    system_config["setup"]["host"] = first_public_ip
-
-                    system_instance = system_class(system_config)
-                    connection_str = system_instance.get_connection_string(
-                        first_public_ip, first_private_ip
-                    )
-                except Exception:
-                    connection_str = f"{system_kind}://{first_public_ip}"
-
-            # Build SSH command
-            ssh_command = _build_ssh_command(cfg, system, ips, first_public_ip)
-            if ssh_command and ssh_command != "-":
-                ssh_commands.append((system_name, ssh_command))
-
-            infra_table.add_row(system_name, public_ip, private_ip, connection_str)
-
-        console.print(infra_table)
-
-        # Print SSH commands separately for easy copy-paste
-        if ssh_commands:
-            console.print("\n[bold magenta]SSH Commands[/bold magenta]")
-            for system_name, ssh_cmd in ssh_commands:
-                console.print(f"  [bold]{system_name}:[/bold]")
-                console.print(f"    {ssh_cmd}", soft_wrap=True)
-
-    except Exception as e:
-        console.print(
-            f"[yellow]Could not retrieve infrastructure details: {e}[/yellow]"
-        )
-
-
-def _build_ssh_command(
-    cfg: dict[str, Any],
-    system: dict[str, Any],
-    ips: dict[str, Any],
-    public_ip: str,
-) -> str:
-    """Build SSH command for a system.
-
-    For managed systems, uses the SSH command stored in their deployment state.
-    For cloud systems, constructs the SSH command from the environment config.
-
-    Args:
-        cfg: Full configuration dict
-        system: System configuration dict
-        ips: IP information dict for the system (may include ssh_command for managed)
-        public_ip: The public IP to connect to
-
-    Returns:
-        SSH command string or "-" if not available
-    """
-    import re
-
-    from .common.cli_helpers import (
-        get_environment_for_system,
-        get_managed_deployment_dir,
-        get_managed_systems,
-        is_managed_system,
-    )
-
-    system_name = system["name"]
-
-    # For managed systems, use the stored SSH command
-    if is_managed_system(cfg, system_name):
-        ssh_command = str(ips.get("ssh_command", ""))
-        if ssh_command:
-            # For managed systems, the key path may be relative to deployment dir
-            # Make it copy-pasteable by making paths absolute if needed
-            if " -i " in ssh_command:
-                key_match = re.search(r"-i\s+([^\s]+)", ssh_command)
-                if key_match:
-                    key_path = key_match.group(1)
-                    # Check if key is relative path
-                    if not os.path.isabs(key_path) and not key_path.startswith("~"):
-                        # Try to resolve from managed deployment dir
-                        for managed_sys in get_managed_systems(cfg):
-                            if managed_sys["name"] == system_name:
-                                deployment_dir = get_managed_deployment_dir(
-                                    cfg, managed_sys
-                                )
-                                resolved_path = os.path.join(deployment_dir, key_path)
-                                if os.path.exists(resolved_path):
-                                    ssh_command = ssh_command.replace(
-                                        f"-i {key_path}", f"-i {resolved_path}"
-                                    )
-                                break
-            return ssh_command
-        return "-"
-
-    # For cloud systems, construct SSH command from environment config
-    _, env_config = get_environment_for_system(cfg, system_name)
-    ssh_key_path = str(env_config.get("ssh_private_key_path", ""))
-
-    if ssh_key_path:
-        # Expand ~ to full path for copy-paste convenience
-        expanded_path = os.path.expanduser(ssh_key_path)
-        return f"ssh -i {expanded_path} ubuntu@{public_ip}"
-
-    # No SSH key configured
-    return f"ssh ubuntu@{public_ip}"
-
-
-def _show_configs_summary(config_files: list[Path]) -> None:
-    """Show summary table of all configs."""
-    table = Table(show_header=True, header_style="bold blue")
-    table.add_column("Project", style="bold")
-    table.add_column("Systems")
-    table.add_column("Workload")
-    table.add_column("Probe", justify="center")
-    table.add_column("Bench", justify="center")
-    table.add_column("Report", justify="center")
-
-    results_dir = Path("results")
-
-    for config_file in config_files:
-        try:
-            cfg = load_config(str(config_file))
-            project_id = cfg.get("project_id", config_file.stem)
-            project_dir = results_dir / project_id
-
-            # System names
-            systems = cfg.get("systems", [])
-            system_names = ", ".join([s["name"] for s in systems])
-
-            # Workload info
-            workload = cfg.get("workload", {})
-            workload_str = (
-                f"{workload.get('name', '-')} SF{workload.get('scale_factor', '?')}"
-            )
-
-            # Check statuses
-            has_system_json = (project_dir / "system.json").exists()
-            has_system_pattern = len(list(project_dir.glob("system_*.json"))) > 0
-            probe_status = (
-                "[green]✓[/]"
-                if (has_system_json or has_system_pattern)
-                else "[red]✗[/]"
-            )
-
-            runs_csv = project_dir / "runs.csv"
-            summary_json = project_dir / "summary.json"
-            bench_status = (
-                "[green]✓[/]"
-                if (runs_csv.exists() and summary_json.exists())
-                else "[red]✗[/]"
-            )
-
-            # Use output_path from config
-            report_config = cfg.get("report", {})
-            output_path = Path(
-                report_config.get("output_path", f"results/{project_id}/reports")
-            )
-            report_dir = output_path.parent / output_path.stem
-            report_files = _collect_report_files(report_dir)
-            report_status = "[green]✓[/]" if report_files else "[red]✗[/]"
-
-            table.add_row(
-                project_id,
-                system_names,
-                workload_str,
-                probe_status,
-                bench_status,
-                report_status,
-            )
-
-        except Exception as e:
-            console.print(
-                f"[yellow]Warning: Could not load {config_file}: {e}[/yellow]"
-            )
-
-    console.print(table)
-
-
-def _probe_remote_systems(config: dict[str, Any], outdir: Path) -> bool:
-    """Probe system information on remote cloud instances."""
-
-    from .common.cli_helpers import (
-        get_all_environments,
-        get_cloud_ssh_key_path,
-        get_first_cloud_provider,
-    )
-    from .common.enums import EnvironmentMode
-    from .infra.manager import InfraManager
-
-    try:
-        # Get cloud provider from config
-        provider = get_first_cloud_provider(config)
-        if not provider:
-            console.print("[yellow]No cloud provider found in configuration[/yellow]")
-            return False
-
-        # Create infrastructure manager to get instance information
-        infra_manager = InfraManager(provider, config)
-
-        # Get terraform outputs to find instances
-        result = infra_manager._run_terraform_command("output", ["-json"])
-        if not result.success:
-            console.print(f"[red]Failed to get terraform outputs: {result.error}[/red]")
-            return False
-
-        outputs = result.outputs or {}
-
-        # Extract instance information from new terraform output format
-        # After Terraform fix, IPs are always lists: ["ip"] for single-node, ["ip1", "ip2"] for multinode
-        instances_to_probe = (
-            []
-        )  # List of (system_name, node_idx, public_ip, private_ip)
-
-        # New format: system_public_ips = {"exasol": ["ip"], "clickhouse": ["ip1", "ip2"]}
-        # Note: _parse_terraform_outputs already extracted the "value" field
-        if "system_public_ips" in outputs:
-            public_ips = outputs["system_public_ips"] or {}
-            private_ips = outputs.get("system_private_ips", {}) or {}
-
-            for system_name, public_ip_list in public_ips.items():
-                private_ip_list = private_ips.get(system_name)
-
-                # Handle both list and single IP (backward compatibility)
-                if isinstance(public_ip_list, list):
-                    for idx, public_ip in enumerate(public_ip_list):
-                        private_ip = (
-                            private_ip_list[idx]
-                            if isinstance(private_ip_list, list)
-                            else private_ip_list
-                        )
-                        instances_to_probe.append(
-                            (system_name, idx, public_ip, private_ip)
-                        )
-                else:
-                    # Backward compatibility: single IP (not a list)
-                    instances_to_probe.append(
-                        (system_name, 0, public_ip_list, private_ip_list)
-                    )
-
-        if not instances_to_probe:
-            console.print("[yellow]No instances found in terraform outputs[/yellow]")
-            return False
-
-        # SSH configuration - use helper to support multi-environment configs
-        ssh_key_path = get_cloud_ssh_key_path(config)
-        if not ssh_key_path:
-            ssh_key_path = "~/.ssh/id_rsa"
-
-        # Get ssh_user from first cloud environment
-        environments = get_all_environments(config)
-        ssh_user = "ubuntu"
-        for env_cfg in environments.values():
-            mode = env_cfg.get("mode", EnvironmentMode.LOCAL.value)
-            if EnvironmentMode.is_cloud_provider(mode):
-                ssh_user = env_cfg.get("ssh_user", "ubuntu")
-                break
-
-        # Expand tilde in SSH key path
-        import os
-
-        ssh_key_path = os.path.expanduser(ssh_key_path)
-
-        success_count = 0
-        total_instances = len(instances_to_probe)
-
-        for system_name, node_idx, public_ip, _private_ip in instances_to_probe:
-            # Show node index for multinode systems
-            node_label = (
-                f"-node{node_idx}"
-                if any(
-                    s == system_name and i != node_idx
-                    for s, i, _, _ in instances_to_probe
-                )
-                else ""
-            )
-            console.print(
-                f"[blue]Probing {system_name}{node_label} ([{public_ip}])...[/blue]"
-            )
-
-            if _probe_single_remote_system(
-                f"{system_name}{node_label}", public_ip, ssh_key_path, ssh_user, outdir
-            ):
-                console.print(
-                    f"[green]✓ {system_name}{node_label} probe completed[/green]"
-                )
-                success_count += 1
-            else:
-                console.print(f"[red]✗ {system_name}{node_label} probe failed[/red]")
-
-        console.print(
-            f"[blue]Completed {success_count}/{total_instances} system probes[/blue]"
-        )
-        return success_count == total_instances
-
-    except Exception as e:
-        console.print(f"[red]Error during remote system probing: {e}[/red]")
-        return False
-
-
-def _probe_managed_systems(config: dict[str, Any], outdir: Path) -> bool:
-    """Probe system information on managed deployments (like Exasol PE).
-
-    Managed systems are probed either via SSH (if ssh info is in connection_info.extra)
-    or via API using the deployment's get_system_info() method.
-
-    Note: We fetch fresh connection info from the deployment rather than relying
-    on potentially stale state data.
-    """
-    from .common.cli_helpers import get_managed_deployment_dir, get_managed_systems
-    from .infra.managed_state import load_managed_state
-
-    try:
-        managed_systems = get_managed_systems(config)
-        if not managed_systems:
-            console.print("[yellow]No managed systems found in config[/yellow]")
-            return True
-
-        project_id = config.get("project_id", "default")
-        success_count = 0
-        total_systems = len(managed_systems)
-
-        for system in managed_systems:
-            system_name = system["name"]
-            system_kind = system["kind"]
-
-            console.print(f"[blue]Probing managed system: {system_name}...[/blue]")
-
-            # Check state exists (system must be deployed via infra apply)
-            state = load_managed_state(project_id, system_name)
-            if not state:
-                console.print(
-                    f"[red]No state found for {system_name}. "
-                    f"Run 'infra apply' first to deploy managed systems.[/red]"
-                )
-                continue
-
-            # Get deployment_dir (where CLI and state files live)
-            deployment_dir = get_managed_deployment_dir(config, system)
-
-            # Get fresh connection info from the deployment instead of stale state
-            deployment = get_self_managed_deployment(
-                system_kind, deployment_dir, console.print
-            )
-
-            if not deployment:
-                console.print(
-                    f"[red]Could not create deployment handler for {system_name}[/red]"
-                )
-                continue
-
-            # Fetch fresh connection info
-            connection_info = deployment.get_connection_info()
-            if not connection_info:
-                console.print(
-                    f"[red]Could not get connection info for {system_name}[/red]"
-                )
-                continue
-
-            extra = connection_info.extra or {}
-
-            # Try SSH probing first if SSH info is available
-            ssh_command = extra.get("ssh_command")
-            if ssh_command:
-                # Parse SSH command to extract host, user, and key
-                # Pass deployment_dir as state_dir for resolving relative key paths
-                success = _probe_managed_via_ssh(
-                    system_name, ssh_command, outdir, state_dir=deployment_dir
-                )
-                if success:
-                    console.print(
-                        f"[green]✓ {system_name} probe completed (via SSH)[/green]"
-                    )
-                    success_count += 1
-                    continue
-                else:
-                    console.print(
-                        f"[yellow]SSH probe failed for {system_name}, "
-                        f"trying API probe...[/yellow]"
-                    )
-
-            # Fall back to API probing via get_system_info()
-            system_info = deployment.get_system_info()
-            if system_info:
-                # Save the system info to a file
-                system_file = outdir / f"system_{system_name}.json"
-                with open(system_file, "w") as f:
-                    json.dump(system_info, f, indent=2)
-                console.print(
-                    f"[green]✓ {system_name} probe completed (via API)[/green]"
-                )
-                success_count += 1
-                continue
-
-            console.print(f"[red]✗ {system_name} probe failed[/red]")
-
-        console.print(
-            f"[blue]Completed {success_count}/{total_systems} managed system probes[/blue]"
-        )
-        return success_count == total_systems
-
-    except Exception as e:
-        console.print(f"[red]Error during managed system probing: {e}[/red]")
-        return False
-
-
-def _probe_managed_via_ssh(
-    system_name: str, ssh_command: str, outdir: Path, state_dir: str | None = None
-) -> bool:
-    """Probe a managed system via SSH using its ssh_command from connection info.
-
-    Args:
-        system_name: Name of the system
-        ssh_command: Full SSH command (e.g., "ssh -i key.pem user@host -p 22")
-        outdir: Output directory for probe results
-        state_dir: Directory where the SSH key file might be located (for relative paths)
-    """
-    import os
-    import re
-
-    # Parse the SSH command to extract components
-    # Format can be: "ssh -i key.pem user@host -p 22" or "ssh -i /path/to/key user@host"
-    # The -p port can come before or after user@host
-    # Extract key path (if present)
-    key_match = re.search(r"-i\s+([^\s]+)", ssh_command)
-    key_path = key_match.group(1) if key_match else "~/.ssh/id_rsa"
-
-    # Extract user@host
-    user_host_match = re.search(r"(\w+)@([\w\.\-]+)", ssh_command)
-    if not user_host_match:
-        console.print(f"[yellow]Could not parse SSH command: {ssh_command}[/yellow]")
-        return False
-
-    ssh_user = user_host_match.group(1)
-    host = user_host_match.group(2)
-
-    # Expand tilde in key path
-    key_path = os.path.expanduser(key_path)
-
-    # If key path is relative and we have a state_dir, resolve it
-    if not os.path.isabs(key_path) and state_dir:
-        key_path = os.path.join(state_dir, key_path)
-
-    # Check if key file exists
-    if not os.path.exists(key_path):
-        console.print(f"[yellow]SSH key not found: {key_path}[/yellow]")
-        return False
-
-    return _probe_single_remote_system(system_name, host, key_path, ssh_user, outdir)
-
-
-def _probe_single_remote_system(
-    system_name: str, public_ip: str, ssh_key_path: str, ssh_user: str, outdir: Path
-) -> bool:
-    """Probe a single remote system and save results."""
-    import tempfile
-
-    from .debug import debug_log_command, debug_log_result
-    from .util import safe_command
-
-    try:
-        # Create a temporary Python script for remote execution
-        probe_script = '''
-import json
-import subprocess
-import platform
-import os
-import time
-
-def get_cpu_info():
-    """Get detailed CPU information."""
-    cpu_info = {}
-
-    # Basic info from platform
-    cpu_info["architecture"] = platform.machine()
-
-    try:
-        # Try to get detailed CPU info from /proc/cpuinfo
-        with open("/proc/cpuinfo", "r") as f:
-            cpuinfo = f.read()
-
-        lines = cpuinfo.strip().split("\\n")
-        cpu_data = {}
-
-        for line in lines:
-            if ":" in line:
-                key, value = line.split(":", 1)
-                key = key.strip()
-                value = value.strip()
-
-                if key == "model name":
-                    cpu_info["model_name"] = value
-                elif key == "vendor_id":
-                    cpu_info["vendor_id"] = value
-                elif key == "cpu family":
-                    cpu_info["cpu_family"] = int(value) if value.isdigit() else value
-                elif key == "model":
-                    cpu_info["model"] = int(value) if value.isdigit() else value
-                elif key == "stepping":
-                    cpu_info["stepping"] = int(value) if value.isdigit() else value
-                elif key == "microcode":
-                    cpu_info["microcode"] = value
-                elif key == "cpu MHz":
-                    cpu_info["cpu_mhz"] = float(value) if value.replace(".", "").isdigit() else value
-                elif key == "cache size":
-                    cpu_info["cache_size"] = value
-                elif key == "physical id":
-                    cpu_data["physical_id"] = value
-                elif key == "siblings":
-                    cpu_data["siblings"] = int(value) if value.isdigit() else value
-                elif key == "core id":
-                    cpu_data["core_id"] = value
-                elif key == "cpu cores":
-                    cpu_data["cpu_cores"] = int(value) if value.isdigit() else value
-
-        # Count logical and physical CPUs
-        try:
-            cpu_info["count_logical"] = int(subprocess.check_output("nproc", shell=True).decode().strip())
-        except:
-            cpu_info["count_logical"] = os.cpu_count() or 1
-
-        # Get physical CPU count
-        try:
-            cpu_info["count_physical"] = len(set([line.split(":")[1].strip() for line in cpuinfo.split("\\n") if line.startswith("physical id")]))
-        except:
-            cpu_info["count_physical"] = 1
-
-    except Exception as e:
-        cpu_info["error"] = str(e)
-
-    return cpu_info
-
-def get_memory_info():
-    """Get detailed memory information."""
-    memory_info = {}
-
-    try:
-        with open("/proc/meminfo", "r") as f:
-            meminfo = f.read()
-
-        for line in meminfo.split("\\n"):
-            if ":" in line:
-                key, value = line.split(":", 1)
-                key = key.strip()
-                value = value.strip()
-
-                if key == "MemTotal":
-                    memory_kb = int(value.split()[0])
-                    memory_info["total_kb"] = memory_kb
-                    memory_info["total_gb"] = round(memory_kb / 1024 / 1024, 1)
-                elif key == "MemAvailable":
-                    memory_info["available_kb"] = int(value.split()[0])
-                elif key == "MemFree":
-                    memory_info["free_kb"] = int(value.split()[0])
-                elif key == "Buffers":
-                    memory_info["buffers_kb"] = int(value.split()[0])
-                elif key == "Cached":
-                    memory_info["cached_kb"] = int(value.split()[0])
-    except Exception as e:
-        memory_info["error"] = str(e)
-
-    return memory_info
-
-def get_disk_info():
-    """Get disk information."""
-    disk_info = {}
-
-    try:
-        # Get disk usage for root filesystem
-        result = subprocess.check_output("df -h /", shell=True).decode()
-        lines = result.strip().split("\\n")
-        if len(lines) > 1:
-            parts = lines[1].split()
-            disk_info["root_filesystem"] = {
-                "total": parts[1],
-                "used": parts[2],
-                "available": parts[3],
-                "usage_percent": parts[4]
-            }
-
-        # Get block device information
-        try:
-            result = subprocess.check_output("lsblk -J", shell=True).decode()
-            disk_info["block_devices"] = json.loads(result)
-        except:
-            pass
-
-    except Exception as e:
-        disk_info["error"] = str(e)
-
-    return disk_info
-
-def get_network_info():
-    """Get network information."""
-    network_info = {}
-
-    try:
-        # Get network interfaces
-        result = subprocess.check_output("ip -j addr show", shell=True).decode()
-        network_info["interfaces"] = json.loads(result)
-    except Exception as e:
-        network_info["error"] = str(e)
-
-    return network_info
-
-def get_system_info():
-    """Get general system information."""
-    system_info = {}
-
-    system_info["hostname"] = platform.node()
-    system_info["system"] = platform.system()
-    system_info["release"] = platform.release()
-    system_info["version"] = platform.version()
-    system_info["machine"] = platform.machine()
-    system_info["processor"] = platform.processor()
-
-    # Get uptime
-    try:
-        with open("/proc/uptime", "r") as f:
-            uptime_seconds = float(f.read().split()[0])
-            system_info["uptime_seconds"] = uptime_seconds
-    except:
-        pass
-
-    # Get load average
-    try:
-        system_info["load_average"] = os.getloadavg()
-    except:
-        pass
-
-    return system_info
-
-# Collect all system information
-probe_data = {
-    "timestamp": time.time(),
-    "cpu": get_cpu_info(),
-    "memory": get_memory_info(),
-    "disk": get_disk_info(),
-    "network": get_network_info(),
-    "system": get_system_info()
-}
-
-# Convert to the expected format
-result = {
-    "timestamp": probe_data["timestamp"],
-    "hostname": probe_data["system"].get("hostname", "unknown"),
-    "cpu_model": probe_data["cpu"].get("model_name", "unknown"),
-    "cpu_vendor": probe_data["cpu"].get("vendor_id", "unknown"),
-    "cpu_count_logical": probe_data["cpu"].get("count_logical", 1),
-    "cpu_count_physical": probe_data["cpu"].get("count_physical", 1),
-    "cpu_mhz": probe_data["cpu"].get("cpu_mhz", 0),
-    "memory_total_kb": probe_data["memory"].get("total_kb", 0),
-    "memory_total_gb": probe_data["memory"].get("total_gb", 0),
-    "system_info": probe_data["system"],
-    "cpu_info": probe_data["cpu"],
-    "memory_info": probe_data["memory"],
-    "disk_info": probe_data["disk"],
-    "network_info": probe_data["network"]
-}
-
-print(json.dumps(result))
-'''
-
-        # Write script to temporary file
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
-            f.write(probe_script)
-            temp_script_path = f.name
-
-        try:
-            # Copy script to remote system
-            scp_cmd = (
-                f'scp -i "{ssh_key_path}" -o StrictHostKeyChecking=no '
-                f"{temp_script_path} {ssh_user}@{public_ip}:/tmp/probe_system.py"
-            )
-            debug_log_command(scp_cmd, timeout=30)
-            scp_result = safe_command(scp_cmd, timeout=30)
-            debug_log_result(
-                scp_result.get("success", False),
-                scp_result.get("stdout"),
-                scp_result.get("stderr"),
-            )
-
-            if not scp_result.get("success", False):
-                console.print(
-                    f"[red]Failed to copy probe script to {system_name}[/red]"
-                )
-                return False
-
-            # Execute probe script on remote system
-            ssh_cmd = (
-                f'ssh -i "{ssh_key_path}" -o StrictHostKeyChecking=no '
-                f'{ssh_user}@{public_ip} "python3 /tmp/probe_system.py"'
-            )
-            debug_log_command(ssh_cmd, timeout=60)
-            probe_result = safe_command(ssh_cmd, timeout=60)
-            debug_log_result(
-                probe_result.get("success", False),
-                probe_result.get("stdout"),
-                probe_result.get("stderr"),
-            )
-
-            if not probe_result.get("success", False):
-                console.print(
-                    f"[red]Failed to execute probe script on {system_name}[/red]"
-                )
-                return False
-
-            # Parse the result
-            probe_output = probe_result.get("stdout", "")
-            system_data = json.loads(probe_output)
-
-            # Save system-specific probe result
-            system_probe_file = outdir / f"system_{system_name}.json"
-            with open(system_probe_file, "w") as f:
-                json.dump(system_data, f, indent=2)
-
-            # Clean up remote script
-            safe_command(
-                f'ssh -i "{ssh_key_path}" -o StrictHostKeyChecking=no '
-                f'{ssh_user}@{public_ip} "rm -f /tmp/probe_system.py"',
-                timeout=10,
-            )
-
-            return True
-
-        finally:
-            # Clean up local temporary file
-            os.unlink(temp_script_path)
-
-    except Exception as e:
-        console.print(f"[red]Error probing {system_name}: {e}[/red]")
-        return False
-
-
-def _show_all_projects(results_dir: Path) -> None:
-    """Show overview of all projects."""
-    if not results_dir.exists():
-        console.print(
-            "[yellow]No results directory found. Run 'benchkit probe' first.[/]"
-        )
-        return
-
-    projects = [d for d in results_dir.iterdir() if d.is_dir()]
-
-    if not projects:
-        console.print("[yellow]No benchmark projects found.[/]")
-        return
-
-    table = Table(show_header=True, header_style="bold blue")
-    table.add_column("Project")
-    table.add_column("System Info")
-    table.add_column("Benchmark Data")
-    table.add_column("Report")
-
-    for project_dir in sorted(projects):
-        project_name = project_dir.name
-
-        # Check for system info - handle both local (system.json) and cloud (system_*.json) benchmarks
-        has_system_json = (project_dir / "system.json").exists()
-        has_system_pattern = len(list(project_dir.glob("system_*.json"))) > 0
-        system_status = (
-            "[green]✓[/]" if (has_system_json or has_system_pattern) else "[red]✗[/]"
-        )
-
-        runs_status = (
-            "[green]✓[/]" if (project_dir / "runs.csv").exists() else "[red]✗[/]"
-        )
-
-        # Check if report exists using default output_path pattern
-        # Try to find config to get actual output_path, otherwise use default
-        config_file = Path("configs") / f"{project_name}.yaml"
-        if config_file.exists():
-            try:
-                cfg = load_config(str(config_file))
-                report_config = cfg.get("report", {})
-                output_path = Path(
-                    report_config.get("output_path", f"results/{project_name}/reports")
-                )
-                report_dir = output_path.parent / output_path.stem
-                report_files = _collect_report_files(report_dir)
-                report_status = "[green]✓[/]" if report_files else "[red]✗[/]"
-            except Exception:
-                # Fallback to checking default location
-                report_dir = Path("results") / project_name / "reports"
-                report_files = _collect_report_files(report_dir)
-                report_status = "[green]✓[/]" if report_files else "[red]✗[/]"
-        else:
-            # No config found, check default location
-            report_dir = Path("results") / project_name / "reports"
-            report_files = _collect_report_files(report_dir)
-            report_status = "[green]✓[/]" if report_files else "[red]✗[/]"
-
-        table.add_row(project_name, system_status, runs_status, report_status)
-
-    console.print(table)
 
 
 @app.command()
@@ -3196,7 +1751,7 @@ def verify(
     console.print(f"[blue]Verifying results for project:[/] {cfg['project_id']}")
 
     # Run verification
-    from .verify import verify_results
+    from ..verify import verify_results
 
     success = verify_results(cfg, outdir)
 
@@ -3222,14 +1777,14 @@ def cleanup(
     cfg["preserve_systems_for_rerun"] = False
 
     try:
-        from .run.runner import BenchmarkRunner
+        from ..run.runner import BenchmarkRunner
 
         # Create runner and set up infrastructure
         runner = BenchmarkRunner(cfg, Path("results") / cfg["project_id"])
-        runner._setup_infrastructure()
+        runner._setup_cloud_infrastructure()
 
         # For cloud environments, check if any systems were connected
-        from .common.cli_helpers import is_any_system_cloud_mode
+        from ..common.cli_helpers import is_any_system_cloud_mode
 
         if is_any_system_cloud_mode(cfg) and not runner._cloud_instance_managers:
             console.print(
@@ -3245,7 +1800,7 @@ def cleanup(
             console.print(f"[yellow]Cleaning up {system_config['name']}...[/yellow]")
 
             try:
-                from .systems import create_system
+                from ..systems import create_system
 
                 system = create_system(system_config)
 
@@ -3356,7 +1911,7 @@ def combine(
             --output combined \\
             --no-report
     """
-    from .combine import BenchmarkCombiner, parse_source_arg
+    from ..combine import BenchmarkCombiner, parse_source_arg
 
     set_debug(debug)
 
