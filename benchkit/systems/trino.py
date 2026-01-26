@@ -27,6 +27,13 @@ class TrinoSystem(SystemUnderTest):
         """Return Python packages required by Trino system."""
         return ["trino>=0.336.0"]
 
+    def get_storage_config(self) -> tuple[str | None, str]:
+        """Return Trino-specific storage configuration.
+
+        Trino uses /data/trino subdirectory with trino user ownership.
+        """
+        return "/data/trino", "trino:trino"
+
     @classmethod
     def _get_connection_defaults(cls) -> dict[str, Any]:
         """Return default connection parameters for Trino."""
@@ -1581,17 +1588,14 @@ WantedBy=multi-user.target"""
 
     @exclude_from_package
     def _setup_database_storage(self, workload: "Workload") -> bool:
-        """
-        Override base class to setup Trino storage on additional disk.
+        """Setup Trino storage on additional disk.
 
         For multinode clusters, this runs on ALL nodes.
-
-        Returns:
-            True if successful, False otherwise
+        Subdirectory and ownership are handled via get_storage_config() hook.
         """
-        # For multinode, we need to setup storage on ALL nodes
+        # For multinode, setup storage on ALL nodes
         if self._cloud_instance_managers and len(self._cloud_instance_managers) > 1:
-            print(
+            self._log(
                 f"Setting up storage on all {len(self._cloud_instance_managers)} nodes..."
             )
             return self._setup_multinode_storage(workload)
@@ -1600,99 +1604,19 @@ WantedBy=multi-user.target"""
         return self._setup_single_node_storage(workload)
 
     @exclude_from_package
-    def _setup_multinode_storage(self, workload: "Workload") -> bool:
-        """
-        Setup storage on all nodes in a multinode cluster.
-        Each node gets its own RAID0 and Trino data directory.
-        """
-        all_success = True
-
-        # Store original setup_commands to prevent duplicate recording
-        original_commands_count = len(self.setup_commands)
-
-        for idx, mgr in enumerate(self._cloud_instance_managers):
-            print(f"\n  [Node {idx}] Setting up storage...")
-
-            # Temporarily override execute_command to use this specific node
-            original_mgr = self._cloud_instance_manager
-            self._cloud_instance_manager = mgr
-
-            # For nodes after the first, temporarily disable recording to avoid duplicates
-            if idx > 0:
-                commands_before = len(self.setup_commands)
-
-            try:
-                # Run single-node storage setup on this node
-                success = self._setup_single_node_storage(workload)
-                if not success:
-                    print(f"  [Node {idx}] ✗ Storage setup failed")
-                    all_success = False
-                else:
-                    print(f"  [Node {idx}] ✓ Storage setup completed")
-            finally:
-                # For nodes after the first, remove any commands that were recorded
-                if idx > 0:
-                    self.setup_commands = self.setup_commands[:commands_before]
-
-                # Restore primary manager
-                self._cloud_instance_manager = original_mgr
-
-        # Add node_info to all commands recorded during storage setup if multinode
-        if len(self._cloud_instance_managers) > 1:
-            node_info = f"all_nodes_{len(self._cloud_instance_managers)}"
-            for i in range(original_commands_count, len(self.setup_commands)):
-                self.setup_commands[i]["node_info"] = node_info
-
-        return all_success
-
-    @exclude_from_package
     def _setup_single_node_storage(self, workload: "Workload") -> bool:
-        """
-        Setup storage on a single node. Used by both single-node and multinode setups.
-        """
-        # Check if /data is already mounted
-        check_mount = self.execute_command("mount | grep ' /data '", record=False)
-        if check_mount.get("success", False) and check_mount.get("stdout", "").strip():
-            print("    Storage already mounted at /data, creating Trino subdirectory")
-            # Create Trino subdirectories
-            trino_dir = "/data/trino"
-            self.record_setup_command(
-                f"sudo mkdir -p {trino_dir}",
-                "Create Trino data directory under /data",
-                "storage_setup",
-            )
-            self.execute_command(
-                f"sudo mkdir -p {trino_dir}", record=True, category="storage_setup"
-            )
-            self.execute_command(f"sudo mkdir -p {trino_dir}/hive-data")
-            self._set_ownership(trino_dir, owner="trino:trino")
-            self.data_dir = Path(trino_dir)
-            self.hive_data_dir = Path(f"{trino_dir}/hive-data")
-            return True
-
-        # Use base class to mount disk/RAID at /data
+        """Setup storage on a single node with Trino-specific hive-data directory."""
+        # Use base class for disk mounting and subdirectory creation
         if not super()._setup_database_storage(workload):
             return False
 
-        # Create Trino subdirectories under /data
-        trino_dir = "/data/trino"
-        self.record_setup_command(
-            f"sudo mkdir -p {trino_dir}",
-            "Create Trino data directory under /data",
-            "storage_setup",
-        )
-        self.execute_command(
-            f"sudo mkdir -p {trino_dir}", record=True, category="storage_setup"
-        )
-        self.execute_command(f"sudo mkdir -p {trino_dir}/hive-data")
-        self._set_ownership(trino_dir, owner="trino:trino")
-
-        # Update data_dir to point to Trino subdirectory
-        self.data_dir = Path(trino_dir)
-        self.hive_data_dir = Path(f"{trino_dir}/hive-data")
-
-        self.record_setup_note(f"Trino data directory: {trino_dir}")
-        print(f"    Trino data directory configured: {trino_dir}")
+        # Create additional hive-data subdirectory (Trino-specific)
+        trino_dir, _ = self.get_storage_config()
+        if trino_dir:
+            hive_data_path = f"{trino_dir}/hive-data"
+            self.execute_command(f"sudo mkdir -p {hive_data_path}", record=False)
+            self._set_ownership(hive_data_path, owner="trino:trino")
+            self.hive_data_dir = Path(hive_data_path)
 
         return True
 

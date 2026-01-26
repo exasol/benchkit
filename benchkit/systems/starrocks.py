@@ -65,6 +65,13 @@ class StarrocksSystem(SystemUnderTest):
         """Return Python packages required by StarRocks system."""
         return ["pymysql>=1.0.0", "requests>=2.28.0"]
 
+    def get_storage_config(self) -> tuple[str | None, str]:
+        """Return StarRocks-specific storage configuration.
+
+        StarRocks uses /data/starrocks subdirectory with ubuntu user ownership.
+        """
+        return "/data/starrocks", "ubuntu:ubuntu"
+
     @classmethod
     def _get_connection_defaults(cls) -> dict[str, Any]:
         return {
@@ -985,7 +992,11 @@ parallel_fragment_exec_instance_num = 16
 
     @exclude_from_package
     def _setup_database_storage(self, workload: Workload) -> bool:
-        """Setup storage for StarRocks."""
+        """Setup storage for StarRocks.
+
+        For multinode, setup on all nodes.
+        Subdirectory and ownership are handled via get_storage_config() hook.
+        """
         # For multinode, setup on all nodes
         if self._cloud_instance_managers and len(self._cloud_instance_managers) > 1:
             self._log(
@@ -993,42 +1004,8 @@ parallel_fragment_exec_instance_num = 16
             )
             return self._setup_multinode_storage(workload)
 
-        return self._setup_single_node_storage(workload)
-
-    @exclude_from_package
-    def _setup_single_node_storage(self, workload: Workload) -> bool:
-        """Setup storage on a single node."""
-        # Check if /data is already mounted
-        check_mount = self.execute_command("mount | grep '/data'", record=False)
-        if check_mount.get("success", False) and check_mount.get("stdout", "").strip():
-            self._log("Storage already mounted at /data")
-            starrocks_dir = "/data/starrocks"
-            self.record_setup_command(
-                f"sudo mkdir -p {starrocks_dir}",
-                "Create StarRocks data directory",
-                "storage_setup",
-            )
-            self.execute_command(f"sudo mkdir -p {starrocks_dir}")
-            self._set_ownership(starrocks_dir, owner="ubuntu:ubuntu")
-            self.data_dir = Path(starrocks_dir)
-            return True
-
-        # Use base class to mount disk
-        if not super()._setup_database_storage(workload):
-            return False
-
-        # Create StarRocks subdirectory
-        starrocks_dir = "/data/starrocks"
-        self.record_setup_command(
-            f"sudo mkdir -p {starrocks_dir}",
-            "Create StarRocks data directory",
-            "storage_setup",
-        )
-        self.execute_command(f"sudo mkdir -p {starrocks_dir}")
-        self._set_ownership(starrocks_dir, owner="ubuntu:ubuntu")
-        self.data_dir = Path(starrocks_dir)
-
-        return True
+        # Single node - use base class with hook
+        return super()._setup_database_storage(workload)
 
     def _should_execute_remotely(self) -> bool:
         """StarRocks only executes remotely for native installations."""

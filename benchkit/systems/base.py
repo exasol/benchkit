@@ -1,6 +1,5 @@
 """Base classes for database systems under test."""
 
-import re
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
 from datetime import timedelta
@@ -14,6 +13,7 @@ from ..util import safe_command
 if TYPE_CHECKING:
     # avoid cyclic dependency problems
     from ..workloads import Workload
+    from .storage import StorageManager
 
 
 TableOperation = Literal[
@@ -92,6 +92,11 @@ class SystemUnderTest(ABC):
         self._cloud_instance_managers: list[Any] = []
         self._external_host: str | None = None
 
+        # Storage manager for centralized storage operations (lazy-initialized)
+        self._storage_manager: StorageManager | None = None
+        # Flag to prevent duplicate storage setup (idempotent)
+        self._storage_setup_complete: bool = False
+
     def _log(self, message: str) -> None:
         """
         Thread-safe logging that respects parallel execution context.
@@ -118,6 +123,31 @@ class SystemUnderTest(ABC):
             self._output_callback(message)
         else:
             print(message)
+
+    @property
+    def storage_manager(self) -> "StorageManager":
+        """Get or create the storage manager helper."""
+        if self._storage_manager is None:
+            from benchkit.systems.storage import StorageManager
+
+            self._storage_manager = StorageManager(self)
+        return self._storage_manager
+
+    def get_storage_config(self) -> tuple[str | None, str]:
+        """Return storage configuration for this system.
+
+        Override in subclasses to provide system-specific storage paths and ownership.
+        This hook is used by StorageManager to create the correct subdirectory
+        under /data with the appropriate ownership.
+
+        Returns:
+            Tuple of (subdirectory_path, owner:group)
+            - subdirectory_path: Full path like "/data/clickhouse" or None if no subdirectory needed
+            - owner: Owner in "user:group" format like "clickhouse:clickhouse"
+
+        Default implementation returns ("/data/{kind}", "ubuntu:ubuntu")
+        """
+        return f"/data/{self.kind}", "ubuntu:ubuntu"
 
     @exclude_from_package
     def get_install_marker_path(self) -> str | None:
@@ -464,12 +494,12 @@ class SystemUnderTest(ABC):
                 str(explicit_data_dir), "generated", workload.safe_display_name()
             )
         if self.setup_config.get("use_additional_disk", False):
-            tpch_gen_dir = "/data/generated"
+            data_gen_dir = "/data/generated"
             self.execute_command(
-                f"sudo mkdir -p {tpch_gen_dir} && sudo chown -R $(whoami):$(whoami) {tpch_gen_dir}",
+                f"sudo mkdir -p {data_gen_dir} && sudo chown -R $(whoami):$(whoami) {data_gen_dir}",
                 record=False,
             )
-            return Path(tpch_gen_dir, workload.safe_display_name())
+            return Path(data_gen_dir, workload.safe_display_name())
         return None
 
     def get_storage_backend(self) -> Any:
@@ -610,6 +640,33 @@ class SystemUnderTest(ABC):
         return self.load_data_from_url_with_download(
             schema_name, table_name, data_url, extension=extension, **kwargs
         )
+
+    def load_data_from_http_url(
+        self,
+        table_name: str,
+        url: str,
+        schema: str,
+        format: str = "tsv",
+        columns: list[str] | None = None,
+    ) -> bool:
+        """Load data directly from HTTP URL without downloading locally.
+
+        This method is for databases that support native HTTP import
+        (e.g., Exasol's IMPORT FROM CSV AT). Default implementation
+        returns False (not supported).
+
+        Args:
+            table_name: Name of target table
+            url: HTTP(S) URL to data file
+            schema: Schema name
+            format: Data format (tsv or csv)
+            columns: Optional list of column names
+
+        Returns:
+            True if successful, False if not supported or failed
+        """
+        # Default implementation: not supported
+        return False
 
     def set_active_schema(self, schema_name: str) -> None:
         """Set the active schema for all subsequent query executions.
@@ -953,6 +1010,61 @@ class SystemUnderTest(ABC):
         """Return list of Python packages required by this system."""
         return []
 
+    @classmethod  # noqa: B027
+    def validate_setup(
+        cls, setup_config: dict[str, Any], name: str, node_count: int = 1
+    ) -> None:
+        """Validate system-specific setup configuration.
+
+        Override in subclasses to validate system-specific requirements.
+        Raises ValueError with descriptive message if validation fails.
+
+        Args:
+            setup_config: Setup configuration dictionary
+            name: System name (for error messages)
+            node_count: Number of nodes (for multinode validation)
+        """
+        # Base implementation is a no-op - subclasses override for specific validation
+        pass
+
+    @classmethod
+    def get_valid_setup_methods(cls) -> list[str]:
+        """Return list of valid setup methods for this system.
+
+        Override in subclasses to specify supported setup methods.
+
+        Returns:
+            List of valid method names (e.g., ['docker', 'native', 'preinstalled'])
+        """
+        return ["docker", "native", "preinstalled", "managed", "installer"]
+
+    def format_error(self, error: Exception | str) -> str:
+        """Format system-specific error for display.
+
+        Override in subclasses for better error formatting.
+
+        Args:
+            error: Exception or error message string
+
+        Returns:
+            Formatted error message
+        """
+        error_msg = str(error)
+        if len(error_msg) > 100:
+            return error_msg[:97] + "..."
+        return error_msg
+
+    def get_schema_attribute_name(self) -> str:
+        """Return the attribute name this system uses for schema.
+
+        Some systems use 'schema', others use 'database'.
+        Override in subclasses if different.
+
+        Returns:
+            Attribute name ('schema' or 'database')
+        """
+        return "schema"
+
     @staticmethod
     def _resolve_env_var(value: str) -> str:
         """Resolve environment variable placeholders like $VAR_NAME."""
@@ -1026,668 +1138,67 @@ class SystemUnderTest(ABC):
 
     # ===================================================================
     # Generic Storage Management Methods
+    # (Delegated to StorageManager for centralized implementation)
     # ===================================================================
 
     @exclude_from_package
     def _detect_storage_devices(
         self, skip_root: bool = True, device_filter: str | None = None
     ) -> list[dict[str, str]]:
-        """
-        Detect available storage devices (NVMe, EBS, etc.).
-
-        Args:
-            skip_root: If True, skip the root disk (nvme0n1)
-            device_filter: Filter devices by type ("local", "ebs", or None for all)
-
-        Returns:
-            List of dicts with 'name', 'path', 'size', 'type', 'mounted_at', 'storage_type'
-            storage_type is either 'local' (instance store) or 'ebs'
-        """
-        result = self.execute_command(
-            "lsblk -dn -o NAME,SIZE,TYPE | grep disk", record=False
-        )
-
-        if not result.get("success", False):
-            self._log("Warning: Could not detect storage devices")
-            return []
-
-        devices = []
-        lines = result.get("stdout", "").strip().split("\n")
-
-        for line in lines:
-            parts = line.split()
-            if len(parts) >= 3:
-                device_name = parts[0]
-                device_size = parts[1]
-                device_type = parts[2]
-                device_path = f"/dev/{device_name}"
-
-                # Skip root disk if requested
-                if skip_root:
-                    # Dynamically detect root disk by checking what's mounted as /
-                    # Use findmnt which properly resolves /dev/root symlinks
-                    root_check = self.execute_command(
-                        "findmnt -n -o SOURCE /", record=False
-                    )
-
-                    # Fallback to df if findmnt not available
-                    if not root_check.get("success", False):
-                        root_check = self.execute_command(
-                            "df / | tail -1 | awk '{print $1}'", record=False
-                        )
-
-                    if root_check.get("success", False):
-                        root_device = root_check.get("stdout", "").strip()
-
-                        # If we got /dev/root symlink, resolve it to actual device
-                        if root_device == "/dev/root":
-                            readlink_check = self.execute_command(
-                                "readlink -f /dev/root", record=False
-                            )
-                            if readlink_check.get("success", False):
-                                root_device = readlink_check.get("stdout", "").strip()
-
-                        # Extract base device name (e.g., /dev/nvme1n1p1 -> nvme1n1)
-                        if "/" in root_device:
-                            # Use regex to remove partition suffix (p1, p15, or just digits)
-                            # This correctly handles: nvme0n1p1 -> nvme0n1, sda1 -> sda
-                            device_part = root_device.split("/")[-1]
-                            root_base = re.sub(r"p?\d+$", "", device_part)
-                            if device_name == root_base:
-                                continue
-
-                # Check if device exists
-                check_result = self.execute_command(
-                    f"test -b {device_path} && echo 'exists'", record=False
-                )
-                if not (
-                    check_result.get("success", False)
-                    and "exists" in check_result.get("stdout", "")
-                ):
-                    continue
-
-                # Determine storage type (local instance store vs EBS)
-                storage_type = "unknown"
-                if device_name.startswith("nvme"):
-                    # Use nvme id-ctrl to check if it's EBS or local instance store
-                    nvme_result = self.execute_command(
-                        f"nvme id-ctrl {device_path} 2>/dev/null | grep -q 'Amazon Elastic Block Store' && echo 'ebs' || echo 'local'",
-                        record=False,
-                    )
-                    if nvme_result.get("success", False):
-                        storage_type = nvme_result.get("stdout", "").strip()
-                    else:
-                        # Fallback: Check /dev/disk/by-id for EBS markers
-                        # AWS EBS volumes attached as NVMe have Amazon_Elastic_Block_Store in by-id
-                        by_id_check = self.execute_command(
-                            f"ls -la /dev/disk/by-id/ 2>/dev/null | grep '{device_name}' | grep -q 'Amazon_Elastic_Block_Store' && echo 'ebs' || echo 'local'",
-                            record=False,
-                        )
-                        if by_id_check.get("success", False):
-                            storage_type = by_id_check.get("stdout", "").strip()
-                elif device_name.startswith(("sd", "xvd")):
-                    # Traditional block device names (sd*, xvd*) are typically EBS volumes
-                    # on AWS. Instance store NVMe devices use nvme* prefix on modern instances.
-                    storage_type = "ebs"
-
-                # Apply device filter if specified
-                if device_filter and storage_type != device_filter:
-                    continue
-
-                # Check mount status - use exact match to avoid matching partitions
-                mount_result = self.execute_command(
-                    f"mount | grep '^{device_path} '", record=False
-                )
-                mounted_at = None
-                if (
-                    mount_result.get("success", False)
-                    and mount_result.get("stdout", "").strip()
-                ):
-                    # Extract mount point (3rd field in mount output)
-                    mount_parts = mount_result.get("stdout", "").split()
-                    if len(mount_parts) >= 3:
-                        mounted_at = mount_parts[2]
-
-                # Resolve to stable /dev/disk/by-id/ path for multinode consistency
-                stable_path = device_path
-                by_id_result = self.execute_command(
-                    f"ls -l /dev/disk/by-id/ | grep '{device_name}$' | grep -v -- '-part' | grep -v '_[0-9]*$' | head -1 | awk '{{print \"/dev/disk/by-id/\" $9}}'",
-                    record=False,
-                )
-                if (
-                    by_id_result.get("success", False)
-                    and by_id_result.get("stdout", "").strip()
-                ):
-                    # Ensure we only have a single line (no embedded newlines)
-                    stable_path_raw = by_id_result.get("stdout", "").strip()
-                    stable_path = (
-                        stable_path_raw.split("\n")[0]
-                        if stable_path_raw
-                        else device_path
-                    )
-
-                devices.append(
-                    {
-                        "name": device_name,
-                        "path": device_path,
-                        "size": device_size,
-                        "type": device_type,
-                        "storage_type": storage_type,
-                        "mounted_at": mounted_at,
-                        "stable_path": stable_path,
-                    }
-                )
-
-        # Sort devices by stable_path for deterministic ordering across nodes
-        # This is critical for multinode consistency:
-        # - Single disk: ensures same disk selected on all nodes
-        # - RAID: ensures same device order → consistent RAID layout
-        # - Multiple disks: ensures consistent device assignment
-        devices.sort(key=lambda d: d["stable_path"])
-
-        return devices
+        """Detect available storage devices (NVMe, EBS, etc.)."""
+        return self.storage_manager.detect_storage_devices(skip_root, device_filter)
 
     @exclude_from_package
     def _unmount_disk(self, device_or_mount: str) -> bool:
-        """
-        Unmount a disk or mount point.
-
-        Args:
-            device_or_mount: Device path (e.g., /dev/nvme1n1) or mount point (e.g., /data)
-
-        Returns:
-            True if successful, False otherwise
-        """
-        self.record_setup_command(
-            f"sudo umount {device_or_mount}",
-            f"Unmount {device_or_mount}",
-            "storage_setup",
-        )
-
-        result = self.execute_command(
-            f"sudo umount {device_or_mount}", record=True, category="storage_setup"
-        )
-        return bool(result.get("success", False))
+        """Unmount a disk or mount point."""
+        return self.storage_manager.unmount_disk(device_or_mount)
 
     @exclude_from_package
     def _format_disk(self, device: str, filesystem: str = "ext4") -> bool:
-        """
-        Format a disk with specified filesystem.
-
-        Args:
-            device: Device path (e.g., /dev/nvme1n1)
-            filesystem: Filesystem type (default: ext4)
-
-        Returns:
-            True if successful, False otherwise
-        """
-        self.record_setup_command(
-            f"sudo mkfs.{filesystem} -F {device}",
-            f"Format {device} with {filesystem} filesystem",
-            "storage_setup",
-        )
-
-        result = self.execute_command(
-            f"sudo mkfs.{filesystem} -F {device}",
-            record=True,
-            category="storage_setup",
-        )
-        return bool(result.get("success", False))
+        """Format a disk with specified filesystem."""
+        return self.storage_manager.format_disk(device, filesystem)
 
     @exclude_from_package
     def _mount_disk(
         self, device: str, mount_point: str, create_mount_point: bool = True
     ) -> bool:
-        """
-        Mount a disk at specified mount point.
-
-        Args:
-            device: Device path (e.g., /dev/nvme1n1)
-            mount_point: Where to mount (e.g., /data)
-            create_mount_point: If True, create mount point directory if it doesn't exist
-
-        Returns:
-            True if successful, False otherwise
-        """
-        # Create mount point if needed
-        if create_mount_point:
-            self.record_setup_command(
-                f"sudo mkdir -p {mount_point}",
-                f"Create mount point {mount_point}",
-                "storage_setup",
-            )
-            self.execute_command(
-                f"sudo mkdir -p {mount_point}", record=True, category="storage_setup"
-            )
-
-        # Mount the disk
-        self.record_setup_command(
-            f"sudo mount {device} {mount_point}",
-            f"Mount {device} to {mount_point}",
-            "storage_setup",
-        )
-
-        result = self.execute_command(
-            f"sudo mount {device} {mount_point}", record=True, category="storage_setup"
-        )
-        return bool(result.get("success", False))
+        """Mount a disk at specified mount point."""
+        return self.storage_manager.mount_disk(device, mount_point, create_mount_point)
 
     @exclude_from_package
     def _set_ownership(self, path: str, owner: str = "ubuntu:ubuntu") -> bool:
-        """
-        Set directory/file ownership.
-
-        Args:
-            path: Path to set ownership for
-            owner: Owner in format "user:group" (default: ubuntu:ubuntu)
-
-        Returns:
-            True if successful, False otherwise
-        """
-        # Check if owner exists (user:group format)
-        user = owner.split(":")[0]
-        check_user = self.execute_command(
-            f"id {user} >/dev/null 2>&1 && echo 'exists'", record=False
-        )
-
-        # Distinguish between SSH failure and user not existing
-        # If command failed but stderr contains connection errors, it's SSH failure
-        stderr = check_user.get("stderr", "").lower()
-        is_ssh_failure = any(
-            err in stderr
-            for err in [
-                "connection",
-                "broken pipe",
-                "timeout",
-                "no route",
-                "refused",
-            ]
-        )
-
-        if is_ssh_failure:
-            # SSH failure - try chown anyway as the user might exist
-            self._log(
-                f"Warning: SSH connection issue while checking user {user}, attempting chown anyway"
-            )
-        elif not (
-            check_user.get("success", False)
-            and "exists" in check_user.get("stdout", "")
-        ):
-            # User genuinely doesn't exist
-            self._log(
-                f"Warning: User {user} does not exist yet, skipping ownership setting"
-            )
-            self._log("  Ownership will need to be set later during installation")
-            return True
-
-        self.record_setup_command(
-            f"sudo chown -R {owner} {path}",
-            f"Set ownership of {path} to {owner}",
-            "storage_setup",
-        )
-
-        result = self.execute_command(
-            f"sudo chown -R {owner} {path}", record=True, category="storage_setup"
-        )
-        return bool(result.get("success", False))
+        """Set directory/file ownership."""
+        return self.storage_manager.set_ownership(path, owner)
 
     @exclude_from_package
     def _create_raid0(
         self, device_paths: list[str], raid_device: str = "/dev/md0"
     ) -> bool:
-        """
-        Create RAID0 array from multiple devices.
-
-        Args:
-            device_paths: List of device paths to combine (e.g., ['/dev/nvme1n1', '/dev/nvme2n1'])
-            raid_device: Path for the RAID device (default: /dev/md0)
-
-        Returns:
-            True if successful, False otherwise
-        """
-        if len(device_paths) < 2:
-            self._log(
-                f"Warning: Need at least 2 devices for RAID0, got {len(device_paths)}"
-            )
-            return False
-
-        devices_str = " ".join(device_paths)
-        self._log(
-            f"Creating RAID0 array from {len(device_paths)} device(s): {devices_str}"
-        )
-
-        # Step 1: Stop any existing RAID arrays on the target device
-        self.record_setup_command(
-            f"sudo mdadm --stop {raid_device} 2>/dev/null || true",
-            f"Stop existing RAID array at {raid_device} if present",
-            "storage_setup",
-        )
-        self.execute_command(
-            f"sudo mdadm --stop {raid_device} 2>/dev/null || true",
-            record=True,
-            category="storage_setup",
-        )
-
-        # Step 2: Clean devices - unmount if needed and clear filesystem signatures
-        for dev in device_paths:
-            # Check if device is mounted
-            mount_check = self.execute_command(f"mount | grep '^{dev} '", record=False)
-            if (
-                mount_check.get("success", False)
-                and mount_check.get("stdout", "").strip()
-            ):
-                self._log(f"Device {dev} is mounted, unmounting...")
-                self.record_setup_command(
-                    f"sudo umount {dev}",
-                    f"Unmount {dev} before RAID creation",
-                    "storage_setup",
-                )
-                umount_result = self.execute_command(
-                    f"sudo umount {dev}", record=True, category="storage_setup"
-                )
-                if not umount_result.get("success", False):
-                    self._log(f"Warning: Failed to unmount {dev}, continuing anyway...")
-
-            # Clear filesystem signatures
-            self.record_setup_command(
-                f"sudo wipefs -a {dev} 2>/dev/null || true",
-                f"Clear filesystem signatures on {dev}",
-                "storage_setup",
-            )
-            self.execute_command(
-                f"sudo wipefs -a {dev} 2>/dev/null || true",
-                record=True,
-                category="storage_setup",
-            )
-
-        # Step 3: Zero superblocks on all devices
-        for dev in device_paths:
-            self.record_setup_command(
-                f"sudo mdadm --zero-superblock {dev} 2>/dev/null || true",
-                f"Clear RAID superblock on {dev}",
-                "storage_setup",
-            )
-            self.execute_command(
-                f"sudo mdadm --zero-superblock {dev} 2>/dev/null || true",
-                record=True,
-                category="storage_setup",
-            )
-
-        # Step 4: Create RAID0 array
-        create_cmd = (
-            f"yes | sudo mdadm --create {raid_device} "
-            f"--level=0 --raid-devices={len(device_paths)} {devices_str}"
-        )
-        self.record_setup_command(
-            create_cmd,
-            f"Create RAID0 array from {len(device_paths)} devices",
-            "storage_setup",
-        )
-
-        result = self.execute_command(create_cmd, record=True, category="storage_setup")
-        if not result.get("success", False):
-            self._log(
-                f"Failed to create RAID0 array: {result.get('stderr', 'Unknown error')}"
-            )
-            return False
-
-        # Step 5: Wait for array to be ready (non-fatal)
-        self.record_setup_command(
-            f"sudo mdadm --wait {raid_device} 2>/dev/null || true",
-            f"Wait for RAID array {raid_device} to be ready",
-            "storage_setup",
-        )
-        self.execute_command(
-            f"sudo mdadm --wait {raid_device} 2>/dev/null || true",
-            record=True,
-            category="storage_setup",
-        )
-
-        # Step 5: Save RAID configuration
-        self.record_setup_command(
-            "sudo mkdir -p /etc/mdadm",
-            "Create mdadm configuration directory",
-            "storage_setup",
-        )
-        self.execute_command(
-            "sudo mkdir -p /etc/mdadm", record=True, category="storage_setup"
-        )
-
-        self.record_setup_command(
-            "sudo mdadm --detail --scan | sudo tee -a /etc/mdadm/mdadm.conf",
-            "Save RAID configuration",
-            "storage_setup",
-        )
-        self.execute_command(
-            "sudo mdadm --detail --scan | sudo tee -a /etc/mdadm/mdadm.conf",
-            record=True,
-            category="storage_setup",
-        )
-
-        # Update initramfs (non-fatal on failure)
-        self.execute_command(
-            "sudo update-initramfs -u 2>/dev/null || true", record=False
-        )
-
-        self.record_setup_note(
-            f"RAID0 array created: {raid_device} from {len(device_paths)} devices"
-        )
-        self._log(f"✓ RAID0 array created successfully: {raid_device}")
-
-        return True
+        """Create RAID0 array from multiple devices."""
+        return self.storage_manager.create_raid0(device_paths, raid_device)
 
     @exclude_from_package
     def setup_storage(self, workload: "Workload") -> bool:
+        """Setup storage based on configuration.
+
+        This is the main entry point for storage setup. Uses StorageManager
+        and calls get_storage_config() hook for system-specific configuration.
         """
-        Setup storage based on configuration.
-
-        This is the main entry point for storage setup. It checks the config
-        and calls either system-specific storage setup or directory-based setup.
-
-        Idempotent: Can be called multiple times safely. Returns immediately
-        if storage was already set up successfully.
-
-        Returns:
-            True if successful, False otherwise
-        """
-        # Check if storage setup was already completed
-        if getattr(self, "_storage_setup_complete", False):
-            self._log(f"✓ Storage already configured for {self.name}, skipping setup")
-            return True
-
-        use_additional_disk = self.setup_config.get("use_additional_disk", False)
-
-        result = False
-        if use_additional_disk:
-            self._log(f"Setting up additional disk storage for {self.name}...")
-            result = self._setup_database_storage(workload)
-        else:
-            self._log(f"Setting up directory-based storage for {self.name}...")
-            result = self._setup_directory_storage(workload)
-
-        # Mark storage setup as complete if successful
-        if result:
-            self._storage_setup_complete = True
-
-        return result
+        return self.storage_manager.setup_storage(workload)
 
     @exclude_from_package
     def _setup_database_storage(self, workload: "Workload") -> bool:
+        """Setup storage for databases using additional disks.
+
+        Override this method in subclasses for custom storage requirements.
+        For simple subdirectory/ownership changes, override get_storage_config() instead.
         """
-        System-specific storage setup for databases using additional disks.
-
-        This default implementation:
-        1. Detects local instance store devices
-        2. Creates RAID0 if multiple local devices found
-        3. Mounts single disk or RAID array
-
-        Override this method in subclasses to implement system-specific
-        storage requirements (e.g., partitioning, raw devices).
-
-        Returns:
-            True if successful, False otherwise
-        """
-        # Check if /data is already mounted - skip if so (idempotent)
-        # Use space-padded grep to match exact mount point (not subdirectories)
-        check_mount = self.execute_command("mount | grep ' /data '", record=False)
-        if check_mount.get("success", False) and check_mount.get("stdout", "").strip():
-            self._log("✓ Storage already mounted at /data, skipping setup")
-            self.data_dir = Path("/data")
-            return True
-
-        # First, try to detect local instance store devices
-        local_devices = self._detect_storage_devices(
-            skip_root=True, device_filter="local"
-        )
-
-        device_to_use = None
-        # Mount at /data for shared access (data generation, databases)
-        mount_point = "/data"
-
-        if len(local_devices) > 1:
-            # Multiple local instance store devices → create RAID0
-            self._log(
-                f"Detected {len(local_devices)} local instance store devices, creating RAID0..."
-            )
-
-            # Check if RAID already exists
-            raid_device = "/dev/md0"
-            raid_check = self.execute_command(
-                f"test -b {raid_device} && echo 'exists'", record=False
-            )
-
-            if raid_check.get("success", False) and "exists" in raid_check.get(
-                "stdout", ""
-            ):
-                self._log(f"✓ RAID array {raid_device} already exists")
-                device_to_use = raid_device
-            else:
-                # Create RAID0 from all local devices
-                # Use stable_path for consistent device identification across nodes
-                device_paths = [d.get("stable_path", d["path"]) for d in local_devices]
-
-                # Validate device paths - ensure no embedded newlines
-                for idx, path in enumerate(device_paths):
-                    if "\n" in path:
-                        self._log(
-                            f"[yellow]Warning: Device path {idx} contains newlines, using regular path instead[/yellow]"
-                        )
-                        # Fall back to regular path
-                        device_paths[idx] = local_devices[idx]["path"]
-
-                if self._create_raid0(device_paths, raid_device):
-                    device_to_use = raid_device
-                else:
-                    self._log(
-                        "Warning: RAID0 creation failed, falling back to first device"
-                    )
-                    # Prefer stable_path for multinode consistency
-                    device_to_use = local_devices[0].get(
-                        "stable_path", local_devices[0]["path"]
-                    )
-
-        elif len(local_devices) == 1:
-            # Single local instance store device
-            # Prefer stable_path for multinode consistency
-            device_path = local_devices[0].get("stable_path", local_devices[0]["path"])
-            self._log(f"Detected single local instance store device: {device_path}")
-            device_to_use = device_path
-
-        else:
-            # No local devices, check for any additional devices (EBS, etc.)
-            self._log(
-                "No local instance store devices found, checking for EBS volumes..."
-            )
-            all_devices = self._detect_storage_devices(skip_root=True)
-
-            if not all_devices:
-                self._log(
-                    f"Warning: No additional storage devices found for {self.name}, using directory storage"
-                )
-                return self._setup_directory_storage(workload)
-
-            # Prefer stable_path for multinode consistency
-            device_to_use = all_devices[0].get("stable_path", all_devices[0]["path"])
-            self._log(f"Using EBS device: {device_to_use}")
-
-        # Check if device is already mounted
-        mount_check = self.execute_command(
-            f"mount | grep {device_to_use}", record=False
-        )
-        if mount_check.get("success", False) and mount_check.get("stdout", "").strip():
-            mount_parts = mount_check.get("stdout", "").split()
-            if len(mount_parts) >= 3:
-                current_mount = mount_parts[2]
-                if current_mount == mount_point:
-                    self._log(
-                        f"✓ Device {device_to_use} already mounted at {mount_point}"
-                    )
-                    self.data_dir = Path(mount_point)
-                    return True
-                else:
-                    # Mounted elsewhere, unmount first
-                    self._log(
-                        f"Device {device_to_use} mounted at {current_mount}, unmounting..."
-                    )
-                    if not self._unmount_disk(device_to_use):
-                        self._log(f"Failed to unmount {device_to_use}")
-                        return False
-
-        # Format and mount
-        if not self._format_disk(device_to_use):
-            return False
-
-        if not self._mount_disk(device_to_use, mount_point):
-            return False
-
-        # Set ownership
-        self._set_ownership(mount_point)
-
-        self.record_setup_note(
-            f"Storage device {device_to_use} mounted at {mount_point}"
-        )
-        self._log(f"✓ Storage setup complete: {device_to_use} → {mount_point}")
-
-        # Update data_dir to actual mount point
-        self.data_dir = Path(mount_point)
-
-        return True
+        return self.storage_manager.setup_database_storage(workload)
 
     @exclude_from_package
     def _setup_directory_storage(self, workload: "Workload") -> bool:
-        """
-        Setup directory-based storage (no additional disks).
-
-        Creates data_dir if specified in configuration.
-
-        Returns:
-            True if successful, False otherwise
-        """
-        if not self.data_dir:
-            self._log(f"No data directory configured for {self.name}, skipping")
-            return True
-
-        # Create directory
-        self.record_setup_command(
-            f"sudo mkdir -p {self.data_dir}",
-            f"Create data directory {self.data_dir}",
-            "storage_setup",
-        )
-        result = self.execute_command(
-            f"sudo mkdir -p {self.data_dir}", record=True, category="storage_setup"
-        )
-
-        if not result.get("success", False):
-            self._log(f"Failed to create data directory {self.data_dir}")
-            return False
-
-        # Set ownership
-        self._set_ownership(str(self.data_dir))
-
-        self.record_setup_note(f"✓ Data directory created: {self.data_dir}")
-        self._log(f"✓ Directory storage setup complete: {self.data_dir}")
-
-        return True
+        """Setup directory-based storage (no additional disks)."""
+        return self.storage_manager.setup_directory_storage(workload)
 
     # ===================================================================
     # Cloud Instance Management Methods
@@ -2036,7 +1547,7 @@ class SystemUnderTest(ABC):
         return statements
 
 
-def get_system_class(system_kind: str) -> type | None:
+def get_system_class(system_kind: str) -> type["SystemUnderTest"] | None:
     """
     Dynamically import and return the system class for the given system kind.
 

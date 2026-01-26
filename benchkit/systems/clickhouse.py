@@ -34,6 +34,13 @@ class ClickHouseSystem(SystemUnderTest):
         """Return Python packages required by ClickHouse system."""
         return ["clickhouse-connect>=0.6.0"]
 
+    def get_storage_config(self) -> tuple[str | None, str]:
+        """Return ClickHouse-specific storage configuration.
+
+        ClickHouse uses /data/clickhouse subdirectory with clickhouse user ownership.
+        """
+        return "/data/clickhouse", "clickhouse:clickhouse"
+
     @classmethod
     def _get_connection_defaults(cls) -> dict[str, Any]:
         return {
@@ -1190,83 +1197,26 @@ class ClickHouseSystem(SystemUnderTest):
 
     @exclude_from_package
     def _setup_database_storage(self, workload: Workload) -> bool:
-        """
-        Override base class to setup ClickHouse storage on additional disk.
-
-        ClickHouse uses a subdirectory under /data for its data.
-        The base class mounts the disk/RAID at /data.
+        """Setup ClickHouse storage on additional disk.
 
         For multinode clusters, this runs on ALL nodes.
-
-        Returns:
-            True if successful, False otherwise
+        Subdirectory and ownership are handled via get_storage_config() hook.
         """
-        # For multinode, we need to setup storage on ALL nodes
+        # For multinode, setup storage on ALL nodes
         if self._cloud_instance_managers and len(self._cloud_instance_managers) > 1:
             self._log(
                 f"Setting up storage on all {len(self._cloud_instance_managers)} nodes..."
             )
             return self._setup_multinode_storage(workload)
 
-        # Single node setup
-        return self._setup_single_node_storage(workload)
-
-    @exclude_from_package
-    def _setup_single_node_storage(self, workload: Workload) -> bool:
-        """
-        Setup storage on a single node. Used by both single-node and multinode setups.
-        """
-        # Check if /data is already mounted
-        check_mount = self.execute_command("mount | grep '/data'", record=False)
-        if check_mount.get("success", False) and check_mount.get("stdout", "").strip():
-            self._log(
-                "    Storage already mounted at /data, creating ClickHouse subdirectory"
-            )
-            # Create clickhouse subdirectory
-            clickhouse_dir = "/data/clickhouse"
-            self.record_setup_command(
-                f"sudo mkdir -p {clickhouse_dir}",
-                "Create ClickHouse data directory under /data",
-                "storage_setup",
-            )
-            self.execute_command(
-                f"sudo mkdir -p {clickhouse_dir}", record=True, category="storage_setup"
-            )
-            self._set_ownership(clickhouse_dir, owner="clickhouse:clickhouse")
-            self.data_dir = Path(clickhouse_dir)
-            return True
-
-        # Use base class to mount disk/RAID at /data
-        if not super()._setup_database_storage(workload):
-            return False
-
-        # Create clickhouse subdirectory under /data
-        clickhouse_dir = "/data/clickhouse"
-        self.record_setup_command(
-            f"sudo mkdir -p {clickhouse_dir}",
-            "Create ClickHouse data directory under /data",
-            "storage_setup",
-        )
-        self.execute_command(
-            f"sudo mkdir -p {clickhouse_dir}", record=True, category="storage_setup"
-        )
-        self._set_ownership(clickhouse_dir, owner="clickhouse:clickhouse")
-
-        # Update data_dir to point to clickhouse subdirectory
-        self.data_dir = Path(clickhouse_dir)
-
-        self.record_setup_note(f"ClickHouse data directory: {clickhouse_dir}")
-        self._log(f"    ClickHouse data directory configured: {clickhouse_dir}")
-
-        return True
+        # Single node - use base class with hook
+        return super()._setup_database_storage(workload)
 
     @exclude_from_package
     def _setup_directory_storage(self, workload: Workload) -> bool:
-        """
-        Override to use clickhouse user ownership instead of ubuntu.
+        """Setup directory-based storage for ClickHouse.
 
-        Returns:
-            True if successful, False otherwise
+        Uses clickhouse user ownership via get_storage_config() hook.
         """
         # Use configured data_dir or default
         if not self.data_dir:
@@ -1425,25 +1375,43 @@ class ClickHouseSystem(SystemUnderTest):
     def load_data(self, table_name: str, data_path: Path, **kwargs: Any) -> bool:
         """Load data into ClickHouse table using native clickhouse-client for optimal performance."""
         schema_name = kwargs.get("schema", "default")
+        data_format = kwargs.get("format", "tbl")  # tbl (TPC-H pipe) or tsv or parquet
 
         try:
-            self._log(f"Loading {data_path} into {table_name}...")
-
-            # Use native clickhouse-client for bulk loading
-            # TPC-H .tbl files have trailing pipe delimiter - remove it with sed
-            # ClickHouse will handle date parsing natively (much faster than Python)
-            # Using FORMAT CSV with custom delimiter for pipe-delimited files
-
-            # Build the import command with authentication
-            # sed removes trailing pipe from each line, then pipe to clickhouse-client
-            import_cmd = (
-                f"sed 's/|$//' {data_path} | "
-                f"clickhouse-client "
-                f"--user={self.username} "
-                f"--password={self.password} "
-                f'--query="INSERT INTO {schema_name}.{table_name} FORMAT CSV" '
-                f"--format_csv_delimiter='|'"
+            self._log(
+                f"Loading {data_path} into {table_name} (format: {data_format})..."
             )
+
+            # Build import command based on format
+            if data_format == "tsv":
+                # TSV format (ClickBench) - use TabSeparated
+                import_cmd = (
+                    f"cat {data_path} | "
+                    f"clickhouse-client "
+                    f"--user={self.username} "
+                    f"--password={self.password} "
+                    f'--query="INSERT INTO {schema_name}.{table_name} FORMAT TabSeparated"'
+                )
+            elif data_format == "parquet":
+                # Parquet format - use native Parquet loading
+                import_cmd = (
+                    f"cat {data_path} | "
+                    f"clickhouse-client "
+                    f"--user={self.username} "
+                    f"--password={self.password} "
+                    f'--query="INSERT INTO {schema_name}.{table_name} FORMAT Parquet"'
+                )
+            else:
+                # TPC-H .tbl files have trailing pipe delimiter - remove it with sed
+                # Using FORMAT CSV with custom delimiter for pipe-delimited files
+                import_cmd = (
+                    f"sed 's/|$//' {data_path} | "
+                    f"clickhouse-client "
+                    f"--user={self.username} "
+                    f"--password={self.password} "
+                    f'--query="INSERT INTO {schema_name}.{table_name} FORMAT CSV" '
+                    f"--format_csv_delimiter='|'"
+                )
 
             # Execute the import
             result = self.execute_command(import_cmd, timeout=3600.0, record=False)
