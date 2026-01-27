@@ -230,8 +230,14 @@ class RemoteExecutor:
                 stream_callback=stream_remote_output,
             )
 
-            if load_result.get("success"):
-                # Collect load completion info
+            command_success = load_result.get("success")
+            returncode = load_result.get("returncode", -1)
+
+            # Check if command timed out
+            timed_out = returncode == -1 and not command_success
+
+            # Helper to collect load completion info
+            def collect_load_completion() -> bool:
                 remote_load_complete = f"/home/ubuntu/{project_id}/results/{project_id}/load_complete_{system_name}.json"
                 local_load_complete = (
                     self._runner.output_dir / f"load_complete_{system_name}.json"
@@ -245,6 +251,7 @@ class RemoteExecutor:
                         executor,
                         system_name,
                     )
+                    return True
                 else:
                     # Create local marker if remote collection failed
                     self._runner._save_load_complete(system_name)
@@ -253,8 +260,49 @@ class RemoteExecutor:
                         executor,
                         system_name,
                     )
+                    return True
 
+            if command_success:
+                collect_load_completion()
                 return True
+            elif timed_out:
+                # Command timed out, but load may have completed successfully
+                stdout = load_result.get("stdout", "")
+                load_completed = (
+                    "✓ Data loading completed" in stdout
+                    or "Load completion marker saved" in stdout
+                    or "✓ Load completion marker saved" in stdout
+                    or "✓ Workload preparation completed" in stdout
+                )
+
+                if load_completed:
+                    self._log_output(
+                        f"[yellow]⚠️ SSH command timed out after {timeout_hours:.1f}h, "
+                        f"but data loading appears to have completed[/yellow]",
+                        executor,
+                        system_name,
+                    )
+                    if collect_load_completion():
+                        self._log_output(
+                            f"[green]✅ Successfully recovered load status from {system_name} after timeout[/green]",
+                            executor,
+                            system_name,
+                        )
+                        return True
+                    else:
+                        self._log_output(
+                            f"[red]❌ Failed to collect load completion from {system_name} after timeout[/red]",
+                            executor,
+                            system_name,
+                        )
+                        return False
+                else:
+                    self._log_output(
+                        f"[red]❌ Data loading timed out on {system_name} after {timeout_hours:.1f}h[/red]",
+                        executor,
+                        system_name,
+                    )
+                    return False
             else:
                 self._log_output(
                     f"[red]Data loading failed on {system_name}[/red]",
