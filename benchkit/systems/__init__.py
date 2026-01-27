@@ -10,6 +10,7 @@ SYSTEM_IMPLEMENTATIONS = {
     "clickhouse": "ClickHouseSystem",
     "trino": "TrinoSystem",
     "starrocks": "StarrocksSystem",
+    "duckdb": "DuckdbSystem",
 }
 
 
@@ -42,6 +43,10 @@ def _lazy_import_system(kind: str) -> type[SystemUnderTest]:
         from .starrocks import StarrocksSystem
 
         return StarrocksSystem
+    if kind == "duckdb":
+        from .duckdb import DuckdbSystem
+
+        return DuckdbSystem
     raise ValueError(f"Unknown system kind: {kind}")
 
 
