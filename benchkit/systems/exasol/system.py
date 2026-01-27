@@ -910,7 +910,10 @@ echo "Symlink: %s -> $INSTANCE_STORE"
         return False
 
     def _get_connection(
-        self, compression: bool = True, skip_schema: bool = False
+        self,
+        compression: bool = True,
+        skip_schema: bool = False,
+        disable_query_cache: bool = True,
     ) -> Any:
         """Get a connection to Exasol database using pyexasol.
 
@@ -919,6 +922,9 @@ echo "Symlink: %s -> $INSTANCE_STORE"
             skip_schema: If True, don't include schema in connection params.
                         Use this when creating schemas to avoid chicken-and-egg
                         problem where we try to connect TO the schema we're creating.
+            disable_query_cache: If True, disable query result cache for accurate
+                        benchmarking. Exasol's query cache can return cached results
+                        instantly, making benchmark times invalid. Default True.
         """
         # Build extra kwargs for the connection
         extra_kwargs: dict[str, Any] = {"compression": compression}
@@ -931,12 +937,21 @@ echo "Symlink: %s -> $INSTANCE_STORE"
             if schema_to_use:
                 extra_kwargs["schema"] = schema_to_use
 
-        return self._connect_with_fingerprint_retry(
+        conn = self._connect_with_fingerprint_retry(
             dsn=self._build_dsn(self.host, self.port),
             user=self.username,
             password=self.password,
             **extra_kwargs,
         )
+
+        # Disable query cache for accurate benchmarking
+        # Exasol's query cache stores SELECT results and returns them instantly
+        # on subsequent identical queries, making benchmark times invalid.
+        # See: https://docs.exasol.com/db/latest/database_concepts/query_cache.htm
+        if disable_query_cache:
+            conn.execute("ALTER SESSION SET query_cache='off'")
+
+        return conn
 
     @exclude_from_package
     def _install_docker(self) -> bool:
