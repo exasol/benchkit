@@ -464,6 +464,7 @@ class WorkloadPackage:
         Instead of copying all system implementations, only copies:
         - base.py (always required)
         - System files for configured systems (e.g., exasol.py, clickhouse.py)
+        - System packages for package-based systems (e.g., exasol/)
         """
         src_dir = Path("benchkit/systems")
         dst_dir = self.package_dir / "benchkit" / "systems"
@@ -481,18 +482,25 @@ class WorkloadPackage:
         # Get configured system kinds
         configured_kinds = {s["kind"] for s in self.config.get("systems", [])}
 
-        # Copy only configured system files and their dependencies
+        # Copy only configured system files/packages and their dependencies
         for kind in configured_kinds:
             src_file = src_dir / f"{kind}.py"
-            if src_file.exists():
-                shutil.copy2(src_file, dst_dir / f"{kind}.py")
+            src_package = src_dir / kind
 
-            # Copy system-specific helper modules
-            if kind == "exasol":
-                # Exasol parallel loader for ClickBench workload
-                parallel_loader = src_dir / "exasol_parallel_loader.py"
-                if parallel_loader.exists():
-                    shutil.copy2(parallel_loader, dst_dir / "exasol_parallel_loader.py")
+            if src_file.exists():
+                # Single file system (e.g., clickhouse.py)
+                shutil.copy2(src_file, dst_dir / f"{kind}.py")
+            elif src_package.exists() and src_package.is_dir():
+                # Package-based system (e.g., exasol/)
+                # Copy all .py files from the package, excluding __pycache__
+                dst_package = dst_dir / kind
+                ensure_directory(dst_package)
+
+                for py_file in src_package.glob("*.py"):
+                    shutil.copy2(py_file, dst_package / py_file.name)
+
+                # Generate minimal __init__.py for the package (overwrite original)
+                self._generate_system_package_init(dst_package, kind)
 
         # Generate minimal __init__.py with only configured systems
         self._generate_systems_init(dst_dir, configured_kinds)
@@ -532,6 +540,30 @@ def create_system(config: dict) -> SystemUnderTest:
 __all__ = ["SystemUnderTest", "create_system", "SYSTEM_IMPLEMENTATIONS"]
 '''
         (dst_dir / "__init__.py").write_text(init_content)
+
+    def _generate_system_package_init(self, dst_package: Path, kind: str) -> None:
+        """Generate minimal __init__.py for a package-based system.
+
+        This replaces the original __init__.py to only export what's needed
+        for workload execution (just the main System class), avoiding imports
+        of infrastructure classes that may be minimized away.
+        """
+        from ..systems import SYSTEM_IMPLEMENTATIONS as canonical_systems
+
+        # Get class name from canonical mapping, fallback to convention
+        class_name = canonical_systems.get(kind, f"{kind.capitalize()}System")
+
+        # Find which module contains the main system class
+        # Convention: system.py contains the main System class
+        main_module = "system"
+
+        init_content = f'''"""Minimal {kind} system implementation for workload execution."""
+
+from .{main_module} import {class_name}
+
+__all__ = ["{class_name}"]
+'''
+        (dst_package / "__init__.py").write_text(init_content)
 
     def _copy_storage_module_if_needed(self) -> None:
         """Copy storage module if any configured system supports external tables.
