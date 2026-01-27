@@ -19,11 +19,14 @@ def _resolve_infrastructure_ips(
     config: dict[str, Any], output_dir: Path
 ) -> dict[str, Any]:
     """
-    Load IPs from Terraform state and inject into system configs.
+    Load IPs from Terraform state and/or managed state, inject into system configs.
 
     For AWS/cloud deployments, the config often uses environment variable placeholders
     like $EXASOL_PUBLIC_IP. These are set during `run` but not during `verify`.
     This function reads the actual IPs from Terraform state and injects them directly.
+
+    For managed deployments (like Exasol Personal Edition), connection info is stored
+    in benchkit_state.json files. This function also reads from those state files.
 
     Args:
         config: The benchmark configuration dictionary
@@ -34,74 +37,149 @@ def _resolve_infrastructure_ips(
     """
     import copy
 
-    from ..common.cli_helpers import get_first_cloud_provider, is_any_system_cloud_mode
+    from ..common.cli_helpers import (
+        get_first_cloud_provider,
+        is_any_system_cloud_mode,
+        is_any_system_managed_mode,
+        is_managed_system,
+    )
+    from ..infra.managed_state import load_managed_state
     from ..infra.manager import InfraManager
 
-    # Check if this is a cloud deployment
-    if not is_any_system_cloud_mode(config):
-        return config  # No infrastructure to resolve for local mode
+    # Deep copy config to avoid modifying original
+    resolved_config = copy.deepcopy(config)
+    project_id = config.get("project_id", "default")
+    resolved_any = False
 
-    # Check if terraform directory exists in results
-    terraform_dir = output_dir / "terraform"
-    if not terraform_dir.exists():
-        debug_print(f"No terraform directory found at {terraform_dir}")
-        return config
+    # Resolve cloud (terraform) IPs if applicable
+    if is_any_system_cloud_mode(config):
+        terraform_dir = output_dir / "terraform"
+        if terraform_dir.exists():
+            try:
+                provider = get_first_cloud_provider(config)
+                if provider:
+                    infra_manager = InfraManager(provider, config)
+                    # Override working directory to use results terraform state
+                    infra_manager.project_state_dir = terraform_dir
 
-    try:
-        provider = get_first_cloud_provider(config)
-        if not provider:
-            debug_print("Cloud mode detected but no provider found")
-            return config
-        infra_manager = InfraManager(provider, config)
+                    result = infra_manager._run_terraform_command("output", ["-json"])
+                    if result.success:
+                        outputs = result.outputs or {}
+                        public_ips = outputs.get("system_public_ips", {})
 
-        # Override working directory to use results terraform state
-        infra_manager.project_state_dir = terraform_dir
+                        if public_ips:
+                            # Inject IPs into system configs
+                            for system_config in resolved_config["systems"]:
+                                system_name = system_config["name"]
+                                if system_name in public_ips:
+                                    ips = public_ips[system_name]
+                                    # Use first IP for client connections
+                                    resolved_ip = (
+                                        ips[0] if isinstance(ips, list) else ips
+                                    )
 
-        result = infra_manager._run_terraform_command("output", ["-json"])
-        if not result.success:
-            debug_print(f"Failed to get terraform outputs: {result.error}")
-            return config
+                                    setup = system_config.setdefault("setup", {})
 
-        outputs = result.outputs or {}
-        public_ips = outputs.get("system_public_ips", {})
+                                    # Check if host contains unresolved env var or empty
+                                    current_host = setup.get("host", "")
+                                    if current_host.startswith("$") or not current_host:
+                                        setup["host"] = resolved_ip
+                                        debug_print(
+                                            f"Resolved {system_name} host to {resolved_ip}"
+                                        )
 
-        if not public_ips:
-            debug_print("No system_public_ips found in terraform outputs")
-            return config
+                                    # Same for host_external_addrs (used by Exasol)
+                                    current_external = setup.get(
+                                        "host_external_addrs", ""
+                                    )
+                                    if (
+                                        current_external.startswith("$")
+                                        or not current_external
+                                    ):
+                                        setup["host_external_addrs"] = resolved_ip
+                                        debug_print(
+                                            f"Resolved {system_name} host_external_addrs "
+                                            f"to {resolved_ip}"
+                                        )
 
-        # Deep copy config to avoid modifying original
-        resolved_config = copy.deepcopy(config)
+                            console.print(
+                                f"[dim]Resolved cloud IPs from {terraform_dir}[/dim]"
+                            )
+                            resolved_any = True
+                    else:
+                        debug_print(f"Failed to get terraform outputs: {result.error}")
+                else:
+                    debug_print("Cloud mode detected but no provider found")
+            except Exception as e:
+                debug_print(f"Failed to resolve cloud infrastructure IPs: {e}")
+        else:
+            debug_print(f"No terraform directory found at {terraform_dir}")
 
-        # Inject IPs into system configs
+    # Resolve managed system connection info (host, port, password) from deployment
+    if is_any_system_managed_mode(config):
+        from ..infra.self_managed import get_self_managed_deployment
+
         for system_config in resolved_config["systems"]:
             system_name = system_config["name"]
-            if system_name in public_ips:
-                ips = public_ips[system_name]
-                # Use first IP for client connections (distributed routing is internal)
-                resolved_ip = ips[0] if isinstance(ips, list) else ips
+            system_kind = system_config["kind"]
+            if not is_managed_system(config, system_name):
+                continue
 
-                setup = system_config.get("setup", {})
+            # Get deployment directory from state file
+            state = load_managed_state(project_id, system_name)
+            if not state:
+                debug_print(f"No managed state found for {system_name}")
+                continue
 
-                # Check if host contains an unresolved env var or is empty
-                current_host = setup.get("host", "")
-                if current_host.startswith("$") or not current_host:
-                    setup["host"] = resolved_ip
-                    debug_print(f"Resolved {system_name} host to {resolved_ip}")
+            deployment_dir = state.get("deployment_dir")
+            if not deployment_dir:
+                debug_print(f"No deployment_dir in state for {system_name}")
+                continue
 
-                # Same for host_external_addrs (used by Exasol)
-                current_external = setup.get("host_external_addrs", "")
-                if current_external.startswith("$") or not current_external:
-                    setup["host_external_addrs"] = resolved_ip
+            # Get full connection info from deployment (includes password from secrets)
+            deployment = get_self_managed_deployment(
+                system_kind, deployment_dir, output_callback=None
+            )
+            if not deployment:
+                debug_print(f"Could not create deployment handler for {system_name}")
+                continue
+
+            conn_info = deployment.get_connection_info()
+            if not conn_info:
+                debug_print(f"No connection info from deployment for {system_name}")
+                continue
+
+            setup = system_config.setdefault("setup", {})
+
+            # Inject host if not set or contains placeholder
+            current_host = setup.get("host", "")
+            if not current_host or current_host.startswith("$"):
+                if conn_info.host:
+                    setup["host"] = conn_info.host
                     debug_print(
-                        f"Resolved {system_name} host_external_addrs to {resolved_ip}"
+                        f"Resolved managed {system_name} host to {conn_info.host}"
                     )
+                    resolved_any = True
 
-        console.print(f"[dim]Resolved infrastructure IPs from {terraform_dir}[/dim]")
-        return resolved_config
+            # Inject port if available and not already set
+            if conn_info.port and "port" not in setup:
+                setup["port"] = conn_info.port
+                debug_print(f"Resolved managed {system_name} port to {conn_info.port}")
 
-    except Exception as e:
-        debug_print(f"Failed to resolve infrastructure IPs: {e}")
-        return config  # Fall back to original config
+            # Inject password if available and not already set
+            # This is critical for managed systems like Exasol PE where password
+            # is stored in a secrets file, not in the state file
+            if conn_info.password and "password" not in setup:
+                setup["password"] = conn_info.password
+                debug_print(f"Resolved managed {system_name} password from secrets")
+
+        if resolved_any:
+            console.print("[dim]Resolved managed system connection info[/dim]")
+
+    if not resolved_any:
+        debug_print("No infrastructure IPs resolved (local mode or no state found)")
+
+    return resolved_config
 
 
 class QueryVerifier:
@@ -355,8 +433,19 @@ class QueryVerifier:
         )
         return True
 
-    def compare_results(self, system_name: str) -> dict[str, Any]:
-        """Compare system results with expected verify data."""
+    def compare_results(
+        self, system_name: str, system_kind: str | None = None
+    ) -> dict[str, Any]:
+        """Compare system results with expected verify data.
+
+        Args:
+            system_name: Name of the system being verified
+            system_kind: Kind of system (e.g., 'exasol', 'clickhouse') for
+                        loading system-specific reference data when available
+
+        Returns:
+            Dictionary with comparison results per query
+        """
         console.print(f"\n[blue]Comparing results for {system_name}...[/blue]")
 
         system_verify_dir = self.output_dir / system_name / "verify"
@@ -371,7 +460,22 @@ class QueryVerifier:
             # Convert query name to lowercase and strip leading zeros (Q01 -> q1)
             query_filename = query_name.lower().replace("q0", "q") + ".parquet"
 
-            expected_file = self.verify_data_dir / query_filename
+            # Check for system-specific reference data first, then fall back to generic
+            # Priority: verify/sf{N}/{system_kind}/ -> verify/sf{N}/
+            expected_file = None
+            if system_kind:
+                system_specific_file = (
+                    self.verify_data_dir / system_kind / query_filename
+                )
+                if system_specific_file.exists():
+                    expected_file = system_specific_file
+                    debug_print(
+                        f"Using system-specific reference for {query_name}: {system_specific_file}"
+                    )
+
+            if expected_file is None:
+                expected_file = self.verify_data_dir / query_filename
+
             actual_file = system_verify_dir / query_filename
 
             if not expected_file.exists():
@@ -461,6 +565,24 @@ class QueryVerifier:
                                 df[col] = df[col].str.strip()
                             except AttributeError:
                                 pass  # Not a string column
+
+        # Normalize empty strings and NULLs for consistent comparison
+        # Exasol treats empty strings as NULL, so we need to make them equivalent
+        for df in [expected, actual]:
+            for col in df.columns:
+                if df[col].dtype == "object":
+                    # Replace empty strings with None for consistent NULL handling
+                    df[col] = df[col].replace("", None)
+
+        # Normalize timezone-aware timestamps to UTC for consistent comparison
+        for df in [expected, actual]:
+            for col in df.columns:
+                if pd.api.types.is_datetime64_any_dtype(df[col]):
+                    # If timezone-aware, convert to UTC then remove timezone
+                    if df[col].dt.tz is not None:
+                        df[col] = df[col].dt.tz_convert("UTC").dt.tz_localize(None)
+                    # If timezone-naive, assume UTC
+                    debug_print(f"{query_name} - Normalized datetime column '{col}'")
 
         # Round numeric columns to match the smallest decimal precision between expected and actual
         # This handles cases where one system returns full precision and another rounds
@@ -620,18 +742,33 @@ def verify_results(
             return False
 
     all_passed = True
+    executed_systems: set[str] = set()
 
     # Execute queries and save results for each system
     for system_config in systems_to_verify:
         if not verifier.execute_queries_and_save(system_config):
             all_passed = False
             continue
+        executed_systems.add(system_config["name"])
 
-    # Compare results for each system
+    # Compare results only for systems that executed successfully
     comparison_summary = []
     for system_config in systems_to_verify:
         system_name = system_config["name"]
-        comparison = verifier.compare_results(system_name)
+        system_kind = system_config.get("kind")
+        if system_name not in executed_systems:
+            # Skip comparison for systems that failed execution
+            comparison_summary.append(
+                {
+                    "system": system_name,
+                    "queries": {},
+                    "all_passed": False,
+                    "skipped": True,
+                    "reason": "Query execution failed",
+                }
+            )
+            continue
+        comparison = verifier.compare_results(system_name, system_kind=system_kind)
         comparison_summary.append(comparison)
 
         if not comparison["all_passed"]:
@@ -641,6 +778,12 @@ def verify_results(
     console.print("\n[bold]Verification Summary:[/bold]")
     for summary in comparison_summary:
         system_name = summary["system"]
+        if summary.get("skipped"):
+            console.print(
+                f"  {system_name}: [yellow]SKIPPED[/yellow] ({summary.get('reason', 'Unknown')})"
+            )
+            continue
+
         status = (
             "[green]PASSED[/green]" if summary["all_passed"] else "[red]FAILED[/red]"
         )
