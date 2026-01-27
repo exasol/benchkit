@@ -168,6 +168,10 @@ class QueryVerifier:
         # Create workload instance
         workload = create_workload(self.workload_config)
 
+        # Set the active schema for query execution
+        schema_name = workload.get_schema_name()
+        system.set_active_schema(schema_name)
+
         # Create output directory for this system's verify results
         system_verify_dir = self.output_dir / system_name / "verify"
         system_verify_dir.mkdir(parents=True, exist_ok=True)
@@ -179,8 +183,8 @@ class QueryVerifier:
             console.print(f"[red]System {system_name} is not healthy[/red]")
             return False
 
-        # Get queries for this system
-        queries = workload.get_queries(system)
+        # Get queries for this system (using verify variants for deterministic ORDER BY)
+        queries = workload.get_queries(system, use_verify_variants=True)
 
         # Execute each query and save results
         for query_name in self.queries_to_verify:
@@ -244,6 +248,111 @@ class QueryVerifier:
             console.print(f"  [green]✓ {query_name} saved to {output_file}[/green]")
             debug_print(f"Result shape: {df.shape}")
 
+        return True
+
+    def generate_reference_data(self, system_config: dict[str, Any]) -> bool:
+        """
+        Generate reference verification data from a trusted system.
+
+        Executes all queries on the specified system and saves results as
+        parquet files to workloads/{workload}/verify/sf{scale_factor}/.
+        These files serve as the expected results for future verifications.
+
+        Args:
+            system_config: Configuration for the system to use as reference
+
+        Returns:
+            True if all queries executed successfully, False otherwise
+        """
+        system_name = system_config["name"]
+        console.print(f"\n[blue]Generating reference data from {system_name}...[/blue]")
+
+        # Create system instance
+        system = create_system(system_config)
+
+        # Create workload instance
+        workload = create_workload(self.workload_config)
+
+        # Set the active schema for query execution
+        schema_name = workload.get_schema_name()
+        system.set_active_schema(schema_name)
+
+        # Create the reference data directory
+        self.verify_data_dir.mkdir(parents=True, exist_ok=True)
+
+        debug_print(f"Reference data directory: {self.verify_data_dir}")
+
+        # Check if system is healthy
+        if not system.is_healthy(quiet=True):
+            console.print(f"[red]System {system_name} is not healthy[/red]")
+            return False
+
+        # Get queries for this system (using verify variants for deterministic ORDER BY)
+        queries = workload.get_queries(system, use_verify_variants=True)
+
+        generated_count = 0
+
+        # Execute each query and save results
+        for query_name in self.queries_to_verify:
+            if query_name not in queries:
+                console.print(
+                    f"[yellow]Query {query_name} not found in workload[/yellow]"
+                )
+                continue
+
+            query_sql = queries[query_name]
+
+            # Format query with schema name
+            schema_name = workload.get_schema_name()
+            formatted_sql = query_sql.format(schema=schema_name)
+
+            console.print(f"  Executing {query_name}...")
+            debug_print(f"Query SQL: {formatted_sql[:200]}...")
+
+            # Execute query with data return enabled
+            result = system.execute_query(
+                formatted_sql, query_name=query_name, return_data=True
+            )
+
+            if not result.get("success"):
+                console.print(
+                    f"[red]  Failed to execute {query_name}: {result.get('error')}[/red]"
+                )
+                return False
+
+            # Get result data
+            result_data = result.get("data")
+
+            if result_data is None:
+                console.print(f"[yellow]  No data returned for {query_name}[/yellow]")
+                continue
+
+            # Convert to DataFrame
+            if isinstance(result_data, pd.DataFrame):
+                df = result_data
+            else:
+                df = pd.DataFrame(result_data)
+
+            # Normalize column names to lowercase for consistent comparison
+            df.columns = [col.lower() for col in df.columns]
+
+            # Convert query name to lowercase for filename (q1, q3, etc.)
+            # Strip leading zeros from query numbers (Q01 -> q1)
+            query_filename = query_name.lower().replace("q0", "q") + ".parquet"
+            output_file = self.verify_data_dir / query_filename
+
+            # Save as parquet
+            table = pa.Table.from_pandas(df)
+            pq.write_table(table, output_file)
+
+            console.print(
+                f"  [green]✓ {query_name} ({len(df)} rows) -> {query_filename}[/green]"
+            )
+            generated_count += 1
+
+        console.print(
+            f"\n[green]Generated {generated_count} reference files in {self.verify_data_dir}[/green]"
+        )
         return True
 
     def compare_results(self, system_name: str) -> dict[str, Any]:
@@ -455,18 +564,23 @@ class QueryVerifier:
 
 
 def verify_results(
-    config: dict[str, Any], output_dir: Path, systems: list[str] | None = None
+    config: dict[str, Any],
+    output_dir: Path,
+    systems: list[str] | None = None,
+    generate_from: str | None = None,
 ) -> bool:
     """
-    Verify query results against expected data.
+    Verify query results against expected data, or generate reference data.
 
     Args:
         config: Benchmark configuration
         output_dir: Directory to save verification results
         systems: Optional list of system names to verify (default: all)
+        generate_from: If provided, generate reference data from this system
+                      instead of verifying. The system name must exist in config.
 
     Returns:
-        True if all verifications passed, False otherwise
+        True if all verifications passed (or generation succeeded), False otherwise
     """
     # Resolve infrastructure IPs from Terraform state for cloud deployments
     # This handles cases where config uses $VARIABLE placeholders that aren't set
@@ -474,7 +588,26 @@ def verify_results(
 
     verifier = QueryVerifier(resolved_config, output_dir)
 
-    # Check if verify data is available for this scale factor
+    # Handle reference data generation mode
+    if generate_from:
+        # Find the system to generate from
+        source_system = None
+        for system_config in resolved_config["systems"]:
+            if system_config["name"] == generate_from:
+                source_system = system_config
+                break
+
+        if not source_system:
+            available = [s["name"] for s in resolved_config["systems"]]
+            console.print(
+                f"[red]System '{generate_from}' not found in config. "
+                f"Available: {available}[/red]"
+            )
+            return False
+
+        return verifier.generate_reference_data(source_system)
+
+    # Normal verification mode - check if verify data exists
     if not verifier.verify_scale_factor_available():
         return False
 

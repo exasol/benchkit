@@ -223,11 +223,6 @@ def load(
         system_names = [s.strip() for s in systems.split(",")]
         cfg["systems"] = [s for s in cfg["systems"] if s["name"] in system_names]
 
-    console.print(f"[blue]Loading data for project:[/] {cfg['project_id']}")
-    console.print(f"[dim]Systems: {[s['name'] for s in cfg['systems']]}[/]")
-    console.print(
-        f"[dim]Workload: {cfg['workload']['name']} (SF={cfg['workload']['scale_factor']})[/]"
-    )
     if local:
         console.print("[cyan]Mode: Local-to-remote (connecting to remote DBs)[/]")
 
@@ -1719,11 +1714,31 @@ def verify(
     systems: str | None = typer.Option(
         None, "--systems", help="Comma-separated list of systems to verify"
     ),
+    generate: str | None = typer.Option(
+        None,
+        "--generate",
+        "-g",
+        help="Generate reference data from specified system instead of verifying",
+    ),
     debug: bool = typer.Option(
         False, "--debug", help="Enable debug output for detailed execution tracing"
     ),
 ) -> None:
-    """Verify query results against expected data."""
+    """Verify query results against expected data.
+
+    By default, verifies all systems in the config against reference data.
+    Use --generate to create reference data from a trusted system.
+
+    Examples:
+        # Verify all systems
+        benchkit verify -c config.yaml
+
+        # Verify specific system
+        benchkit verify -c config.yaml --systems exasol
+
+        # Generate reference data from a system
+        benchkit verify -c config.yaml --generate clickhouse
+    """
 
     # Set global debug state
     set_debug(debug)
@@ -1732,6 +1747,25 @@ def verify(
     outdir = Path("results") / cfg["project_id"]
     outdir.mkdir(parents=True, exist_ok=True)
 
+    # Handle reference data generation mode
+    if generate:
+        console.print(
+            f"[blue]Generating reference data for project:[/] {cfg['project_id']}"
+        )
+        console.print(f"[blue]Source system:[/] {generate}")
+
+        from ..verify import verify_results
+
+        success = verify_results(cfg, outdir, generate_from=generate)
+
+        if success:
+            console.print("[green]✓ Reference data generated successfully[/green]")
+        else:
+            console.print("[red]✗ Failed to generate reference data[/red]")
+            raise typer.Exit(1)
+        return
+
+    # Normal verification mode
     # Filter systems if --systems parameter is provided
     if systems:
         requested_systems = [s.strip() for s in systems.split(",")]
