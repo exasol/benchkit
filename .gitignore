@@ -118,6 +118,7 @@ bandit-report.json
 .tox/
 .pytest_cache/
 tests/output/
+scripts/
 
 # Documentation build
 docs/_build/
