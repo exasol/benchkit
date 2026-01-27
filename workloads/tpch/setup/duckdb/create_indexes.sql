@@ -1,0 +1,12 @@
+-- DuckDB TPC-H Index Creation
+-- DuckDB automatically creates implicit indexes via ART (Adaptive Radix Tree)
+-- for primary key-like columns. Explicit indexes are rarely needed.
+--
+-- DuckDB uses zonemap indexes (min/max values per row group) automatically
+-- for efficient predicate pushdown on columnar data.
+--
+-- This file is intentionally minimal - DuckDB's query optimizer typically
+-- performs well without explicit secondary indexes.
+
+-- No explicit indexes needed for typical TPC-H workload
+-- DuckDB's columnar format and automatic statistics provide good performance
