@@ -37,7 +37,9 @@ class SystemConfig(BaseModel):
     @classmethod
     def validate_kind(cls, v: str) -> str:
         """Ensure system kind is supported."""
-        valid_kinds = {"exasol", "clickhouse", "trino", "starrocks"}
+        from benchkit.systems import SYSTEM_IMPLEMENTATIONS
+
+        valid_kinds = SYSTEM_IMPLEMENTATIONS.keys()
         if v not in valid_kinds:
             raise ValueError(
                 f"Unknown system kind '{v}'. Supported: {', '.join(sorted(valid_kinds))}"
@@ -101,7 +103,7 @@ class WorkloadConfig(BaseModel):
     @classmethod
     def validate_data_format(cls, v: str) -> str:
         """Ensure data format is valid."""
-        valid_formats = {"csv", "parquet"}
+        valid_formats = {"csv", "parquet", "tsv"}
         if v not in valid_formats:
             raise ValueError(
                 f"Unknown data_format '{v}'. Supported: {', '.join(sorted(valid_formats))}"
@@ -249,15 +251,15 @@ class BenchmarkConfig(BaseModel):
                     f"System '{system_config.name}': node_count must be a positive integer (got {node_count})"
                 )
 
+            # Get system class for validation
+            system_class = get_system_class(system_config.kind)
+            if system_class is None:
+                raise ValueError(
+                    f"System '{system_config.name}': Unknown system kind '{system_config.kind}'"
+                )
+
             # Check if system supports multinode when node_count > 1
             if node_count > 1:
-                system_class = get_system_class(system_config.kind)
-
-                if system_class is None:
-                    raise ValueError(
-                        f"System '{system_config.name}': Unknown system kind '{system_config.kind}'"
-                    )
-
                 if not getattr(system_class, "SUPPORTS_MULTINODE", False):
                     raise ValueError(
                         f"System '{system_config.name}' (kind: {system_config.kind}) does not support multinode clusters. "
@@ -287,39 +289,10 @@ class BenchmarkConfig(BaseModel):
                                 f"Valid IP variables: {'; '.join(valid_vars)}"
                             )
 
-            # Validate method-specific required fields
-            method = system_config.setup.get("method", "")
-            kind = system_config.kind
-
-            if kind == "exasol" and method == "installer":
-                required_fields = [
-                    "c4_version",
-                    "image_password",
-                    "db_password",
-                ]
-                missing = [f for f in required_fields if not system_config.setup.get(f)]
-                if missing:
-                    raise ValueError(
-                        f"System '{system_config.name}': Exasol installer method requires: "
-                        f"{', '.join(missing)}"
-                    )
-
-                # Validate db_mem_size if provided (must be integer, at least 4GB per node)
-                db_mem_size = system_config.setup.get("db_mem_size")
-                if db_mem_size is not None:
-                    if not isinstance(db_mem_size, int):
-                        raise ValueError(
-                            f"System '{system_config.name}': db_mem_size must be an integer "
-                            f"(in MB), got {type(db_mem_size).__name__}"
-                        )
-                    min_mem_per_node = 4000  # 4GB in MB
-                    min_total_mem = node_count * min_mem_per_node
-                    if db_mem_size < min_total_mem:
-                        raise ValueError(
-                            f"System '{system_config.name}': db_mem_size must be at least "
-                            f"{min_mem_per_node}MB per node. With {node_count} node(s), "
-                            f"minimum is {min_total_mem}MB (got {db_mem_size}MB)"
-                        )
+            # Delegate system-specific validation to the system class
+            system_class.validate_setup(
+                system_config.setup, system_config.name, node_count
+            )
 
         return v
 
