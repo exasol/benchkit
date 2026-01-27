@@ -1,0 +1,149 @@
+# Series 5: Stress Test - Maximum Nodes + Streams
+# Purpose: Validate combined scaling behavior with maximum nodes and concurrency
+# Configuration: 16 nodes, SF100, 16 streams
+# Systems: Exasol, ClickHouse, Trino, StarRocks (4 cluster-capable systems)
+# Total RAM: 16 × 32GB = 512GB cluster memory
+project_id: "ext_scalability_stress_nodes_streams"
+title: "Extended Scalability - Stress Test (Max Nodes + Streams)"
+author: "Benchmark Team"
+
+execution:
+  parallel: true
+  max_workers: 4
+
+env:
+  mode: "aws"
+  region: "eu-west-1"
+  allow_external_database_access: true
+  instances:
+    exasol:
+      instance_type: "r6id.xlarge"  # 4 vCPUs, 32GB RAM per node
+      disk:
+        type: "local"
+      label: "ext-scale-exa-stress-str"
+    clickhouse:
+      instance_type: "r6id.xlarge"  # 4 vCPUs, 32GB RAM per node
+      disk:
+        type: "local"
+      label: "ext-scale-ch-stress-str"
+    trino:
+      instance_type: "r6id.xlarge"  # 4 vCPUs, 32GB RAM per node
+      disk:
+        type: "local"
+      label: "ext-scale-trino-stress-str"
+    starrocks:
+      instance_type: "r6id.xlarge"  # 4 vCPUs, 32GB RAM per node
+      disk:
+        type: "local"
+      label: "ext-scale-sr-stress-str"
+  os_image: "ubuntu-22.04"
+  ssh_key_name: "ok-work3"
+  ssh_private_key_path: "~/.ssh/ok-work3.pem"
+
+systems:
+  # Exasol - 16-node cluster (512GB total), SF100, 16 streams
+  - name: "exasol"
+    kind: "exasol"
+    version: "2025.1.8"
+    setup:
+      method: "installer"
+      node_count: 16
+      use_additional_disk: true
+      c4_version: "4.28.5"
+      host_addrs: "$EXASOL_PRIVATE_IP"
+      host_external_addrs: "$EXASOL_PUBLIC_IP"
+      image_password: "exasol123"
+      db_password: "exasol456"
+      admin_password: "exasol789"
+      license_file: "configs/exasol.license"
+      db_mem_size: 384000  # 24GB × 16 nodes = 384GB cluster memory (~75%)
+      extra:
+        optimizer_mode: "analytical"
+        db_params:
+          - "-writeTouchInit=1"
+          - "-cacheMonitorLimit=0"
+          - "-maxOverallSlbUsageRatio=0.95"
+          - "-useQueryCache=0"
+          - "-query_log_timeout=0"
+          - "-joinOrderMethod=0"
+          - "-etlCheckCertsDefault=0"
+
+  # ClickHouse - 16-node sharded cluster (512GB total), SF100, 16 streams
+  - name: "clickhouse"
+    kind: "clickhouse"
+    version: "25.10.2.65"
+    setup:
+      method: "native"
+      node_count: 16
+      use_additional_disk: true
+      data_dir: "/data/clickhouse"
+      host: "$CLICKHOUSE_PUBLIC_IP"
+      port: 8123
+      username: "default"
+      password: "clickhouse123"
+      extra:
+        memory_limit: "24g"  # Per-node limit
+        max_threads: "4"
+        # 384GB total * 0.8 / 16 streams / 16 nodes = 1.2GB per query per node
+        max_memory_usage: "1200000000"
+        max_bytes_before_external_group_by: "600000000"
+        max_bytes_before_external_sort: "600000000"
+        join_algorithm: "grace_hash"
+        max_bytes_in_join: "300000000"
+
+  # Trino - 16-node cluster (512GB total), SF100, 16 streams
+  - name: "trino"
+    kind: "trino"
+    version: "479"
+    setup:
+      method: "native"
+      node_count: 16
+      use_additional_disk: true
+      host: "$TRINO_PUBLIC_IP"
+      port: 8080
+      username: "admin"
+      catalog: "hive"
+      schema: "tpch_views"
+      storage:
+        type: "s3"
+        bucket: "benchkit-ext-scalability-trino-eu-west-1"
+        region: "eu-west-1"
+      extra:
+        query_max_memory: "384GB"        # Total across cluster (~75%)
+        query_max_memory_per_node: "24GB"
+
+  # StarRocks - 16-node cluster (512GB total), SF100, 16 streams
+  - name: "starrocks"
+    kind: "starrocks"
+    version: "4.0.4"
+    setup:
+      method: "native"
+      node_count: 16
+      use_additional_disk: true
+      host: "$STARROCKS_PUBLIC_IP"
+      port: 9030
+      username: "root"
+      password: ""
+      extra:
+        bucket_count: 64  # 4 buckets per node for even distribution
+        replication_num: 1
+
+workload:
+  name: "tpch"
+  scale_factor: 100
+  runs_per_query: 5
+  warmup_runs: 1
+  data_format: "csv"
+  generator: "dbgen"
+  system_variants:
+    clickhouse: "tuned"
+  multiuser:
+    enabled: true
+    num_streams: 16
+    randomize: true
+    random_seed: 42
+
+report:
+  show_boxplots: true
+  show_bar_chart: true
+  show_heatmap: true

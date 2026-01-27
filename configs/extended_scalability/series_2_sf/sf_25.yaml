@@ -1,0 +1,163 @@
+# Series 2: Scale Factor Scaling - SF25
+# Purpose: Measure data scalability on single node with smallest dataset
+# Variable: SF (25)
+# Fixed: Nodes=1, Streams=4
+# Systems: All 5 (Exasol, ClickHouse, Trino, StarRocks, DuckDB)
+project_id: "ext_scalability_sf_25"
+title: "Extended Scalability - Scale Factor 25 (Single Node)"
+author: "Benchmark Team"
+
+execution:
+  parallel: true
+  max_workers: 5
+
+env:
+  mode: "aws"
+  region: "eu-west-1"
+  allow_external_database_access: true
+  instances:
+    exasol:
+      instance_type: "r6id.xlarge"  # 4 vCPUs, 32GB RAM
+      disk:
+        type: "local"
+      label: "ext-scale-exa-sf25"
+    clickhouse:
+      instance_type: "r6id.xlarge"  # 4 vCPUs, 32GB RAM
+      disk:
+        type: "local"
+      label: "ext-scale-ch-sf25"
+    trino:
+      instance_type: "r6id.xlarge"  # 4 vCPUs, 32GB RAM
+      disk:
+        type: "local"
+      label: "ext-scale-trino-sf25"
+    starrocks:
+      instance_type: "r6id.xlarge"  # 4 vCPUs, 32GB RAM
+      disk:
+        type: "local"
+      label: "ext-scale-sr-sf25"
+    duckdb:
+      instance_type: "r6id.xlarge"  # 4 vCPUs, 32GB RAM
+      disk:
+        type: "local"
+      label: "ext-scale-duck-sf25"
+  os_image: "ubuntu-22.04"
+  ssh_key_name: "ok-work3"
+  ssh_private_key_path: "~/.ssh/ok-work3.pem"
+
+systems:
+  # Exasol - single node, 32GB instance
+  - name: "exasol"
+    kind: "exasol"
+    version: "2025.1.8"
+    setup:
+      method: "installer"
+      node_count: 1
+      use_additional_disk: true
+      c4_version: "4.28.5"
+      host_addrs: "$EXASOL_PRIVATE_IP"
+      host_external_addrs: "$EXASOL_PUBLIC_IP"
+      image_password: "exasol123"
+      db_password: "exasol456"
+      admin_password: "exasol789"
+      license_file: "configs/exasol.license"
+      db_mem_size: 24000  # ~75% of 32GB
+      extra:
+        optimizer_mode: "analytical"
+        db_params:
+          - "-writeTouchInit=1"
+          - "-cacheMonitorLimit=0"
+          - "-maxOverallSlbUsageRatio=0.95"
+          - "-useQueryCache=0"
+          - "-query_log_timeout=0"
+          - "-joinOrderMethod=0"
+          - "-etlCheckCertsDefault=0"
+
+  # ClickHouse - single node, 32GB instance
+  - name: "clickhouse"
+    kind: "clickhouse"
+    version: "25.10.2.65"
+    setup:
+      method: "native"
+      node_count: 1
+      use_additional_disk: true
+      data_dir: "/data/clickhouse"
+      host: "$CLICKHOUSE_PUBLIC_IP"
+      port: 8123
+      username: "default"
+      password: "clickhouse123"
+      extra:
+        memory_limit: "24g"
+        max_threads: "4"
+        # 24GB * 0.8 / 4 streams = 4.8GB per query
+        max_memory_usage: "4800000000"
+        max_bytes_before_external_group_by: "2400000000"
+        max_bytes_before_external_sort: "2400000000"
+        join_algorithm: "grace_hash"
+        max_bytes_in_join: "1200000000"
+
+  # Trino - single node (no S3 needed for single node)
+  - name: "trino"
+    kind: "trino"
+    version: "479"
+    setup:
+      method: "native"
+      node_count: 1
+      use_additional_disk: true
+      host: "$TRINO_PUBLIC_IP"
+      port: 8080
+      username: "admin"
+      catalog: "hive"
+      schema: "tpch_views"
+      extra:
+        query_max_memory: "24GB"
+        query_max_memory_per_node: "24GB"
+
+  # StarRocks - single node
+  - name: "starrocks"
+    kind: "starrocks"
+    version: "4.0.4"
+    setup:
+      method: "native"
+      node_count: 1
+      use_additional_disk: true
+      host: "$STARROCKS_PUBLIC_IP"
+      port: 9030
+      username: "root"
+      password: ""
+      extra:
+        bucket_count: 4
+        replication_num: 1
+
+  # DuckDB - embedded single node
+  - name: "duckdb"
+    kind: "duckdb"
+    version: "1.4.4"
+    setup:
+      method: "native"
+      use_additional_disk: true
+      data_dir: "/data/duckdb"
+      database_path: "/data/duckdb/benchmark.duckdb"
+      extra:
+        memory_limit: "24GB"  # ~75% of 32GB
+        threads: 4
+
+workload:
+  name: "tpch"
+  scale_factor: 25
+  runs_per_query: 5
+  warmup_runs: 1
+  data_format: "csv"
+  generator: "dbgen"
+  system_variants:
+    clickhouse: "tuned"
+  multiuser:
+    enabled: true
+    num_streams: 4
+    randomize: true
+    random_seed: 42
+
+report:
+  show_boxplots: true
+  show_bar_chart: true
+  show_heatmap: true
