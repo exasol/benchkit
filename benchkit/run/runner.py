@@ -1589,30 +1589,17 @@ class BenchmarkRunner:
         """
         Calculate appropriate timeout for workload execution based on scale factor.
 
-        Returns timeout in seconds. Can be overridden via config.
+        Uses centralized TimeoutCalculator for consistent timeout calculations
+        across the framework. Supports:
+        - Logarithmic scaling based on scale factor
+        - Config override via execution_timeout
 
-        Default timeouts based on scale factor:
-        - SF <= 10: 3600s (1 hour)
-        - SF 30: 7200s (2 hours)
-        - SF 100: 14400s (4 hours)
-        - SF 300+: 21600s (6 hours)
+        Returns timeout in seconds.
         """
-        # Check if timeout explicitly configured
-        workload_config = self.config.get("workload", {})
-        if "execution_timeout" in workload_config:
-            return int(workload_config["execution_timeout"])
+        from .timeout import TimeoutCalculator
 
-        # Calculate based on scale factor
-        scale_factor = workload_config.get("scale_factor", 1)
-
-        if scale_factor <= 10:
-            return 3600  # 1 hour
-        elif scale_factor <= 30:
-            return 7200  # 2 hours
-        elif scale_factor <= 100:
-            return 14400  # 4 hours
-        else:
-            return 21600  # 6 hours
+        calculator = TimeoutCalculator(self.config)
+        return calculator.get_query_execution_timeout()
 
     def _create_package(self) -> Path | None:
         """Create a package containing workload execution components."""

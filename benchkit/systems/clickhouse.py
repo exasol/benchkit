@@ -28,6 +28,8 @@ class ClickHouseSystem(SystemUnderTest):
 
     # ClickHouse supports multinode clusters via sharding
     SUPPORTS_MULTINODE = True
+    # Baseline loading speed
+    LOAD_TIMEOUT_MULTIPLIER = 1.0
 
     @classmethod
     def get_python_dependencies(cls) -> list[str]:
@@ -1413,8 +1415,10 @@ class ClickHouseSystem(SystemUnderTest):
                     f"--format_csv_delimiter='|'"
                 )
 
-            # Execute the import
-            result = self.execute_command(import_cmd, timeout=3600.0, record=False)
+            # Execute the import with calculated timeout
+            result = self.execute_command(
+                import_cmd, timeout=self._get_data_loading_timeout(), record=False
+            )
 
             if not result.get("success", False):
                 self._log(
@@ -1509,8 +1513,10 @@ class ClickHouseSystem(SystemUnderTest):
                     f"--query='{import_query}'"
                 )
 
-                # Execute the import
-                result = self.execute_command(import_cmd, timeout=3600.0, record=False)
+                # Execute the import with calculated timeout
+                result = self.execute_command(
+                    import_cmd, timeout=self._get_data_loading_timeout(), record=False
+                )
 
                 if not result.get("success", False):
                     self._log(
@@ -1694,7 +1700,9 @@ class ClickHouseSystem(SystemUnderTest):
                     f"--query='{query}' --format=TabSeparated"
                 )
 
-            result = self.execute_command(cmd, timeout=3600.0)
+            result = self.execute_command(
+                cmd, timeout=self._get_query_execution_timeout()
+            )
 
             if result["success"]:
                 rows_returned = self._count_result_rows(result["stdout"])

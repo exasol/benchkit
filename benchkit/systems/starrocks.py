@@ -49,6 +49,8 @@ class StarrocksSystem(SystemUnderTest):
     SUPPORTS_MULTINODE = True
     # StarRocks uses HTTP Stream Load for data ingestion
     SUPPORTS_STREAMLOAD = True
+    # Stream Load is slightly slower than direct inserts
+    LOAD_TIMEOUT_MULTIPLIER = 1.2
 
     # StarRocks ports
     FE_MYSQL_PORT = 9030  # MySQL protocol (queries)
@@ -212,6 +214,8 @@ class StarrocksSystem(SystemUnderTest):
         if pymysql is None:
             raise ImportError("pymysql is required for StarRocks connections")
 
+        # Use centralized timeout calculator for query operations
+        query_timeout = int(self._get_query_execution_timeout())
         return pymysql.connect(
             host=self.host,
             port=self.port,
@@ -219,8 +223,8 @@ class StarrocksSystem(SystemUnderTest):
             password=self.password,
             database=self.database if self.database else None,
             connect_timeout=30,
-            read_timeout=3600,
-            write_timeout=3600,
+            read_timeout=query_timeout,
+            write_timeout=query_timeout,
         )
 
     @exclude_from_package
@@ -783,7 +787,9 @@ parallel_fragment_exec_instance_num = 16
                 f"http://{load_host}:{self.http_port}/api/{schema_name}/{table_name}/_stream_load"
             )
 
-            result = self.execute_command(curl_cmd, timeout=3600.0, record=False)
+            result = self.execute_command(
+                curl_cmd, timeout=self._get_data_loading_timeout(), record=False
+            )
 
             if not result.get("success", False):
                 self._log(f"Stream Load failed: {result.get('stderr', '')}")

@@ -29,6 +29,8 @@ class ExasolSystem(SystemUnderTest):
     SUPPORTS_MULTINODE = True
     # streaming import implemented using pyexasol
     SUPPORTS_STREAMLOAD = True
+    # Efficient parallel loading - slightly faster than baseline
+    LOAD_TIMEOUT_MULTIPLIER = 0.8
 
     @classmethod
     def get_python_dependencies(cls) -> list[str]:

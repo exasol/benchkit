@@ -35,6 +35,9 @@ class SystemUnderTest(ABC):
     # Systems with external tables read data directly from storage (S3, local files)
     # instead of loading data through INSERT statements
     SUPPORTS_EXTERNAL_TABLES: bool = False
+    # Timeout multiplier for data loading operations (relative to baseline)
+    # Systems that load faster should have values < 1.0, slower systems > 1.0
+    LOAD_TIMEOUT_MULTIPLIER: float = 1.0
 
     def __init__(
         self,
@@ -148,6 +151,38 @@ class SystemUnderTest(ABC):
         Default implementation returns ("/data/{kind}", "ubuntu:ubuntu")
         """
         return f"/data/{self.kind}", "ubuntu:ubuntu"
+
+    def _get_data_loading_timeout(self) -> float:
+        """Get timeout for data loading operations using centralized calculator.
+
+        Uses TimeoutCalculator to compute appropriate timeout based on:
+        - Scale factor from workload config
+        - System-specific LOAD_TIMEOUT_MULTIPLIER
+
+        Returns:
+            Timeout in seconds as float
+        """
+        from ..run.timeout import OperationType, TimeoutCalculator
+
+        config = {"workload": self.workload_config}
+        calculator = TimeoutCalculator(config)
+        return float(calculator.get_timeout(OperationType.DATA_LOADING, self.kind))
+
+    def _get_query_execution_timeout(self) -> float:
+        """Get timeout for query execution operations using centralized calculator.
+
+        Uses TimeoutCalculator to compute appropriate timeout based on:
+        - Scale factor from workload config
+        - Config overrides (execution_timeout)
+
+        Returns:
+            Timeout in seconds as float
+        """
+        from ..run.timeout import OperationType, TimeoutCalculator
+
+        config = {"workload": self.workload_config}
+        calculator = TimeoutCalculator(config)
+        return float(calculator.get_timeout(OperationType.QUERY_EXECUTION))
 
     @exclude_from_package
     def get_install_marker_path(self) -> str | None:

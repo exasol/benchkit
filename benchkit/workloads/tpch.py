@@ -115,7 +115,12 @@ class TPCH(Workload):
                     "using tpchgen-cli..."
                 )
 
-            result = safe_command(" ".join(cmd), timeout=3600)  # 1 hour timeout
+            # Use centralized timeout calculator for data generation
+            from benchkit.run.timeout import TimeoutCalculator
+
+            calculator = TimeoutCalculator({"workload": self.config})
+            timeout = calculator.get_data_generation_timeout()
+            result = safe_command(" ".join(cmd), timeout=timeout)
 
             if not result["success"]:
                 print(f"tpchgen-cli failed: {result.get('stderr', 'Unknown error')}")
