@@ -523,25 +523,23 @@ def create_summary_table_html(
     )
 
 
-def create_query_type_performance_table(df: pd.DataFrame) -> pd.DataFrame:
+def create_query_type_performance_table(
+    df: pd.DataFrame,
+    query_categories: dict[str, list[str]] | None = None,
+) -> pd.DataFrame:
     """
-    Create aggregated performance table by TPC-H query category.
+    Create aggregated performance table by query category.
 
     Args:
         df: DataFrame with benchmark results
+        query_categories: Dict mapping category names to query lists.
+                         If None or empty, returns empty DataFrame.
 
     Returns:
         DataFrame with performance stats by query type and system
     """
-    if df.empty:
+    if df.empty or not query_categories:
         return pd.DataFrame()
-
-    # TPC-H query categorization
-    query_categories = {
-        "Aggregation": ["Q01", "Q06", "Q12", "Q14", "Q15", "Q19", "Q20"],
-        "Join-Heavy": ["Q02", "Q05", "Q08", "Q09", "Q10", "Q11", "Q21", "Q22"],
-        "Complex Analytical": ["Q03", "Q04", "Q07", "Q13", "Q16", "Q17", "Q18"],
-    }
 
     # Add query type column
     def get_query_type(query: str) -> str:
@@ -575,8 +573,8 @@ def create_query_type_performance_table(df: pd.DataFrame) -> pd.DataFrame:
     if len(systems) > 1:
         pivot_table["Winner"] = pivot_table[systems].idxmin(axis=1)
 
-    # Order query types consistently
-    type_order = ["Aggregation", "Join-Heavy", "Complex Analytical", "Other"]
+    # Order query types consistently (preserving insertion order from categories)
+    type_order = list(query_categories.keys()) + ["Other"]
     pivot_table["sort_key"] = pivot_table["query_type"].apply(
         lambda x: type_order.index(x) if x in type_order else len(type_order)
     )
@@ -588,17 +586,22 @@ def create_query_type_performance_table(df: pd.DataFrame) -> pd.DataFrame:
     return pivot_table
 
 
-def create_query_type_performance_table_html(df: pd.DataFrame) -> str:
+def create_query_type_performance_table_html(
+    df: pd.DataFrame,
+    query_categories: dict[str, list[str]] | None = None,
+) -> str:
     """
     Create HTML table showing performance by query type with color coding.
 
     Args:
         df: DataFrame with benchmark results
+        query_categories: Dict mapping category names to query lists.
+                         If None or empty, returns placeholder message.
 
     Returns:
         HTML table string with performance by query type
     """
-    perf_df = create_query_type_performance_table(df)
+    perf_df = create_query_type_performance_table(df, query_categories)
 
     if perf_df.empty:
         return "<p><em>No query type performance data available</em></p>"

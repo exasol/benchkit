@@ -108,6 +108,25 @@ class ReportRenderer:
             return str(systems[0]["name"])
         return None
 
+    def _get_workload_query_categories(self) -> dict[str, list[str]]:
+        """Get query categories from the workload for report tables.
+
+        Returns:
+            Dictionary mapping category names to lists of query names,
+            or empty dict if workload doesn't define categories.
+        """
+        from ..workloads import create_workload
+
+        workload_config = self.config.get("workload", {})
+        if not workload_config.get("name"):
+            return {}
+
+        try:
+            workload = create_workload(workload_config)
+            return workload.get_query_categories()
+        except Exception:
+            return {}
+
     def render_report(self) -> str:
         """Render the complete report from results and templates."""
         # Extract system names from config to filter results
@@ -618,7 +637,11 @@ class ReportRenderer:
         if not runs_df.empty:
             from .tables import create_query_type_performance_table
 
-            query_type_df = create_query_type_performance_table(runs_df)
+            # Get query categories from workload
+            query_categories = self._get_workload_query_categories()
+            query_type_df = create_query_type_performance_table(
+                runs_df, query_categories=query_categories
+            )
             if not query_type_df.empty:
                 tables["query_type_performance"] = format_table_markdown(query_type_df)
 
@@ -647,8 +670,10 @@ class ReportRenderer:
         if not runs_df.empty:
             from .tables import create_query_type_performance_table_html
 
+            # Get query categories from workload
+            query_categories = self._get_workload_query_categories()
             tables["query_type_performance"] = create_query_type_performance_table_html(
-                runs_df
+                runs_df, query_categories=query_categories
             )
 
         # Ranking table

@@ -24,6 +24,10 @@ class TPCH(Workload):
         """Return Python packages required for TPC-H workload."""
         return ["tpchgen-cli>=0.2.0"]  # For TPC-H data generation
 
+    def get_required_package_files(self) -> list[str]:
+        """Return additional files needed for TPC-H packaging."""
+        return ["common/dbgen.py"]  # TPC-H data generation helpers
+
     def __init__(self, config: dict[str, Any]):
         super().__init__(config)
         assert self.generator in ["dbgen", "dbgen-pipe"]
@@ -469,6 +473,19 @@ class TPCH(Workload):
                 "Queries involve multi-table joins, aggregations, and subqueries",
                 "Simulates real-world business intelligence workloads",
             ],
+        }
+
+    def get_query_categories(self) -> dict[str, list[str]]:
+        """TPC-H query categories based on query characteristics.
+
+        - Aggregation: Simple aggregation queries
+        - Join-Heavy: Queries with multiple complex joins
+        - Complex Analytical: Subqueries, correlated queries, complex analytics
+        """
+        return {
+            "Aggregation": ["Q01", "Q06", "Q12", "Q14", "Q15", "Q19", "Q20"],
+            "Join-Heavy": ["Q02", "Q05", "Q08", "Q09", "Q10", "Q11", "Q21", "Q22"],
+            "Complex Analytical": ["Q03", "Q04", "Q07", "Q13", "Q16", "Q17", "Q18"],
         }
 
     def get_table_names(self) -> list[str]:

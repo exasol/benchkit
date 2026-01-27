@@ -819,6 +819,18 @@ class Workload(ABC):
             "full": f"This benchmark uses the {self.name.upper()} workload at scale factor {self.scale_factor}.",
         }
 
+    def get_query_categories(self) -> dict[str, list[str]]:
+        """Return query categories for performance grouping in reports.
+
+        Override in subclasses to provide meaningful query groupings.
+        Keys are category names, values are lists of query names.
+
+        Returns:
+            Dictionary mapping category names to lists of query names.
+            Empty dict means no categorization (all queries shown individually).
+        """
+        return {}
+
     def get_table_info(self) -> dict[str, dict[str, Any]]:
         """
         Return table metadata (names, columns, descriptions).
