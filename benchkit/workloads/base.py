@@ -115,15 +115,16 @@ class Workload(ABC):
 
         # First, create the schema using the system's method
         if hasattr(system, "create_schema"):
-            print(f"Creating schema '{schema}'...")
             if not system.create_schema(schema):
-                print(f"Failed to create schema '{schema}'")
+                print(f"        Failed to create schema '{schema}'")
                 return False
-            print(f"✓ Schema '{schema}' created successfully")
+            print(f"        ✓ Schema '{schema}' ready")
 
         # Then create the tables using the templated script
-        print(f"Creating tables for {self.display_name()}")
-        return self.execute_setup_script(system, "create_tables.sql")
+        if not self.execute_setup_script(system, "create_tables.sql"):
+            return False
+        print("        ✓ Tables created")
+        return True
 
     @abstractmethod
     def load_data(self, system: SystemUnderTest) -> bool:
@@ -217,12 +218,121 @@ class Workload(ABC):
             for table in self.get_table_names()
         }
 
-    def get_queries(self, system: SystemUnderTest | None = None) -> dict[str, str]:
+    # -------------------------------------------------------------------------
+    # Data Loading Interface Methods
+    # -------------------------------------------------------------------------
+
+    def get_data_format_spec(self) -> dict[str, Any]:
+        """Return data format specification for loading.
+
+        Systems use this to understand how to parse and load workload data.
+        Override in subclasses that have specific format requirements.
+
+        Returns:
+            Dictionary with format specification:
+            - format: Data format (csv, tsv, parquet, tbl)
+            - delimiter: Field delimiter character (for delimited formats)
+            - has_header: Whether data files have headers
+            - compression: Compression type (gzip, none)
+        """
+        return {
+            "format": self.data_format,
+            "delimiter": "|" if self.data_format == "tbl" else ",",
+            "has_header": False,
+            "compression": "none",
+        }
+
+    def get_timestamp_columns(self) -> set[str]:
+        """Return column names that contain Unix timestamp values.
+
+        Systems use this for automatic timestamp conversion during data loading.
+        Override in subclasses with timestamp columns.
+
+        Returns:
+            Set of column names that are Unix timestamps (seconds since epoch)
+        """
+        return set()
+
+    def get_date_columns(self) -> set[str]:
+        """Return column names that contain date values as days since epoch.
+
+        Systems use this for automatic date conversion during data loading.
+        Override in subclasses with date columns stored as integers.
+
+        Returns:
+            Set of column names that are dates (days since 1970-01-01)
+        """
+        return set()
+
+    def get_expected_row_counts(self) -> dict[str, int]:
+        """Return expected row counts per table for validation.
+
+        Systems use this to verify data loading succeeded.
+        Override in subclasses with known row counts.
+
+        Returns:
+            Dictionary mapping table names to expected row counts
+        """
+        return {}
+
+    def get_table_columns(self, table_name: str) -> list[str]:
+        """Get column names for a specific table.
+
+        Override in subclasses with table schemas.
+
+        Args:
+            table_name: Name of the table
+
+        Returns:
+            List of column names in order
+        """
+        return []
+
+    def get_required_package_files(self) -> list[str]:
+        """Return additional files needed for packaging.
+
+        Override in subclasses that need extra files beyond the workload module.
+
+        Returns:
+            List of relative file paths to include in packages
+        """
+        return []
+
+    def supports_parallel_loading(self) -> bool:
+        """Return whether this workload supports parallel data loading.
+
+        Some workloads (like ClickBench) have pre-partitioned data that
+        can be loaded in parallel for better performance.
+
+        Returns:
+            True if parallel loading is supported
+        """
+        return False
+
+    def get_parallel_load_config(self) -> dict[str, Any]:
+        """Return configuration for parallel data loading.
+
+        Only called if supports_parallel_loading() returns True.
+        Override in subclasses that support parallel loading.
+
+        Returns:
+            Dictionary with parallel loading configuration:
+            - num_partitions: Number of data partitions
+            - partition_url_pattern: URL pattern with {} for partition number
+            - default_workers: Default number of parallel workers
+        """
+        return {}
+
+    def get_queries(
+        self, system: SystemUnderTest | None = None, use_verify_variants: bool = False
+    ) -> dict[str, str]:
         """
         Get the benchmark queries.
 
         Args:
             system: Optional system under test for query template resolution
+            use_verify_variants: If True, prefer verification variants that add
+                                 deterministic ORDER BY clauses for result comparison
 
         Returns:
             Dictionary mapping query names to SQL text
@@ -244,7 +354,9 @@ class Workload(ABC):
 
         queries = {}
         for query_name in self.get_included_queries():
-            queries[query_name] = self._get_query_sql(query_name, target_system)
+            queries[query_name] = self._get_query_sql(
+                query_name, target_system, use_verify_variants
+            )
 
         return queries
 
@@ -909,24 +1021,47 @@ class Workload(ABC):
         # Otherwise use global variant
         return str(self.variant)
 
-    def _get_query_sql(self, query_name: str, system: SystemUnderTest) -> str:
+    def _get_query_sql(
+        self,
+        query_name: str,
+        system: SystemUnderTest,
+        use_verify_variants: bool = False,
+    ) -> str:
         """
-        Get SQL text for a specific TPC-H query with variant and templates resolved.
+        Get SQL text for a specific query with variant and templates resolved.
 
-        Priority order for loading queries:
-        1. variants/{variant}/{system_kind}/{query_name}.sql (system-specific variant)
-        2. variants/{variant}/{query_name}.sql (generic variant)
-        3. {query_name}.sql (default/official with inline conditionals)
+        Priority order for loading queries (when use_verify_variants=True):
+        1. variants/verify/{system_kind}/{query_name}.sql (system-specific verify)
+        2. variants/verify/{query_name}.sql (generic verify)
+        3. variants/{variant}/{system_kind}/{query_name}.sql (system-specific)
+        4. variants/{variant}/{query_name}.sql (generic variant)
+        5. {query_name}.sql (default/official with inline conditionals)
+
+        When use_verify_variants=False, steps 1-2 are skipped.
         """
         try:
             variant = self._get_query_variant_for_system(system)
 
             # Build priority-ordered list of query paths
-            query_paths = [
-                f"variants/{variant}/{system.kind}/{query_name}.sql",
-                f"variants/{variant}/{query_name}.sql",
-                f"{query_name}.sql",
-            ]
+            query_paths: list[str] = []
+
+            # Prepend verify variant paths when requested
+            if use_verify_variants:
+                query_paths.extend(
+                    [
+                        f"variants/verify/{system.kind}/{query_name}.sql",
+                        f"variants/verify/{query_name}.sql",
+                    ]
+                )
+
+            # Standard variant paths
+            query_paths.extend(
+                [
+                    f"variants/{variant}/{system.kind}/{query_name}.sql",
+                    f"variants/{variant}/{query_name}.sql",
+                    f"{query_name}.sql",
+                ]
+            )
 
             template = None
 
