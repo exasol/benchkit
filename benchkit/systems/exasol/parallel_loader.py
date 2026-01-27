@@ -204,11 +204,7 @@ def load_partitions_parallel(
 
     import pyexasol  # type: ignore[import-untyped]
 
-    print(
-        f"Starting parallel load with {num_workers} workers "
-        f"for {num_partitions} partitions..."
-    )
-    print("Each worker downloads and loads ~1M rows per partition")
+    print(f"        ({num_workers} parallel workers)")
 
     # Phase 1: Parallel load into staging tables
     completed = 0
@@ -231,19 +227,18 @@ def load_partitions_parallel(
         for future in as_completed(futures):
             partition_id, success, message = future.result()
             completed += 1
-            status = "✓" if success else "✗"
-            print(
-                f"[{completed:3d}/{num_partitions}] Partition {partition_id:02d}: {status} {message}"
-            )
             if not success:
                 failed.append(partition_id)
+            # Print progress every 10 partitions
+            if completed % 10 == 0 or completed == num_partitions:
+                print(f"        [{completed:3d}/{num_partitions}] loaded...")
 
     if failed:
-        print(f"Failed partitions: {failed}")
+        print(f"        Failed partitions: {failed}")
         return False
 
     # Phase 2: Merge all staging tables into target (sequential)
-    print("\nMerging partitions into target table...")
+    print("        Merging partitions...")
     conn_params_with_ssl = conn_params.copy()
     conn_params_with_ssl["websocket_sslopt"] = {"cert_reqs": ssl.CERT_NONE}
     conn = pyexasol.connect(**conn_params_with_ssl)
@@ -256,11 +251,9 @@ def load_partitions_parallel(
         )
         conn.execute(transform_sql)
         conn.execute(f"DROP TABLE {staging_table}")
-        if (i + 1) % 10 == 0:
-            print(f"  Merged {i + 1}/{num_partitions} partitions")
 
     total_rows = conn.execute(f"SELECT COUNT(*) FROM {target_table}").fetchone()[0]
-    print(f"Total rows loaded: {total_rows:,}")
+    print(f"        ✓ {total_rows:,} rows loaded")
     conn.close()
 
     return True

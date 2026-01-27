@@ -261,9 +261,6 @@ class ExasolDataLoader:
         effective_timestamp_cols = timestamp_cols or set()
         effective_date_cols = date_cols or set()
 
-        self._log(f"Starting parallel parquet load into {schema}.{table_name}")
-        self._log(f"Using {num_workers} parallel workers for 100 partitions")
-
         return load_partitions_parallel(
             conn_params=conn_params,
             schema=schema,

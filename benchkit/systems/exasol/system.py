@@ -1111,7 +1111,6 @@ echo "Symlink: %s -> $INSTANCE_STORE"
             if self.schema and schema_name.upper() == self.schema.upper():
                 self._schema_created = True
 
-            self._log(f"✓ Schema '{schema_name}' created successfully")
             return True
 
         except Exception as e:

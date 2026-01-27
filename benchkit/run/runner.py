@@ -988,12 +988,10 @@ class BenchmarkRunner:
             if not system.wait_for_health():
                 return False, {"error": "health_check_failed"}
 
-        console.print("  Preparing workload...")
         if not workload.prepare(system):
             return False, {"error": "workload_preparation_failed"}
 
         prep_timings = getattr(workload, "preparation_timings", {})
-        console.print(f"  [green]✓ Data loaded for {system_name}[/green]")
 
         return True, {
             "data_generation_s": prep_timings.get("data_generation_s", 0.0),
