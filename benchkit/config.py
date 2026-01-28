@@ -136,6 +136,9 @@ class EnvironmentConfig(BaseModel):
 
     mode: str = "local"  # local, aws, gcp, azure
     region: str | None = None
+    availability_zone_index: int = (
+        0  # Index of AZ to use (0, 1, 2) - useful when specific AZ lacks capacity
+    )
 
     # Direct instance config (simplified format - when environment serves one system)
     instance_type: str | None = None

@@ -856,9 +856,16 @@ node.data-dir=/var/trino/data"""
         hw_specs = self._detect_hardware_specs()
         total_mem_gb = hw_specs["total_memory_bytes"] / (1024**3)
 
-        # Calculate memory settings
+        # Calculate JVM heap size (must match jvm.config)
+        heap_size_gb = int(total_mem_gb * 0.8)
+
+        # Trino requires ~30% headroom for internal operations
+        # Safe max query memory per node = 70% of heap
+        max_safe_query_memory_per_node_gb = int(heap_size_gb * 0.7)
+
+        # Calculate default memory settings
         query_max_memory_gb = int(total_mem_gb * 0.8)
-        query_max_memory_per_node_gb = int(total_mem_gb * 0.7)
+        query_max_memory_per_node_gb = max_safe_query_memory_per_node_gb
 
         # Allow user overrides from extra config
         extra_config = self.setup_config.get("extra", {})
@@ -867,9 +874,19 @@ node.data-dir=/var/trino/data"""
                 extra_config["query_max_memory"]
             )
         if "query_max_memory_per_node" in extra_config:
-            query_max_memory_per_node_gb = self._parse_memory_to_gb(
+            requested_per_node = self._parse_memory_to_gb(
                 extra_config["query_max_memory_per_node"]
             )
+            # Validate and cap to safe maximum
+            if requested_per_node > max_safe_query_memory_per_node_gb:
+                print(
+                    f"⚠ Warning: query_max_memory_per_node={requested_per_node}GB exceeds "
+                    f"safe maximum ({max_safe_query_memory_per_node_gb}GB for {heap_size_gb}GB heap). "
+                    f"Capping to {max_safe_query_memory_per_node_gb}GB."
+                )
+                query_max_memory_per_node_gb = max_safe_query_memory_per_node_gb
+            else:
+                query_max_memory_per_node_gb = requested_per_node
 
         if is_coordinator:
             config = f"""coordinator=true

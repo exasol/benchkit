@@ -304,38 +304,70 @@ def run(
     runner = BenchmarkRunner(cfg, outdir)
 
     if full:
-        # Run all phases: probe -> setup -> load -> run -> report
+        # Run all phases: [infra] -> probe -> setup -> load -> run -> report
         console.print("[bold blue]Running full benchmark workflow[/bold blue]")
         console.print()
 
-        # Phase 0: Probe
-        console.print("[bold]Phase 0: System Probe[/bold]")
+        # Import helpers for detecting cloud/managed modes
+        from ..common.cli_helpers import (
+            is_any_system_cloud_mode,
+            is_any_system_managed_mode,
+        )
+
+        has_cloud = is_any_system_cloud_mode(cfg)
+        has_managed = is_any_system_managed_mode(cfg)
+
+        # Phase 0: Infrastructure Provisioning (cloud + managed)
+        # This must happen BEFORE probe so terraform/managed state exists
+        if has_cloud or has_managed:
+            console.print("[bold]Phase 0: Infrastructure Provisioning[/bold]")
+
+            # Cloud systems: Terraform provisioning
+            if has_cloud:
+                console.print("[blue]Provisioning cloud infrastructure...[/]")
+                if not runner.ensure_cloud_infrastructure():
+                    console.print("[red]✗ Cloud infrastructure provisioning failed[/]")
+                    raise typer.Exit(1)
+                console.print("[green]✓ Cloud infrastructure ready[/]")
+
+            # Managed systems: Self-managed deployments (like Exasol PE)
+            if has_managed:
+                console.print("[blue]Deploying managed systems...[/]")
+                if not _apply_managed_systems(cfg):
+                    console.print("[red]✗ Managed systems deployment failed[/]")
+                    raise typer.Exit(1)
+                console.print("[green]✓ Managed systems ready[/]")
+
+            console.print()
+
+        # Phase 1: Probe (now infrastructure exists for both cloud + managed)
+        console.print("[bold]Phase 1: System Probe[/bold]")
         run_probe_for_full(cfg, outdir)
         console.print()
 
-        # Phase 1: Setup
-        console.print("[bold]Phase 1: Setup[/bold]")
+        # Phase 2: Setup (infra already provisioned, just install/configure DB)
+        console.print("[bold]Phase 2: Setup[/bold]")
         if not runner.run_setup():
             console.print("[red]✗ Setup phase failed[/]")
             raise typer.Exit(1)
         console.print()
 
-        # Phase 2: Load
-        console.print("[bold]Phase 2: Load[/bold]")
+        # Phase 3: Load
+        console.print("[bold]Phase 3: Load[/bold]")
         if not runner.run_load(local=local):
             console.print("[red]✗ Load phase failed[/]")
             raise typer.Exit(1)
         console.print()
 
-        # Phase 3: Queries
-        console.print("[bold]Phase 3: Query Execution[/bold]")
+        # Phase 4: Queries
+        console.print("[bold]Phase 4: Query Execution[/bold]")
         if not runner.run_queries(force=force, local=local):
             console.print("[red]✗ Query execution failed[/]")
             raise typer.Exit(1)
 
-        # Phase 4: Report
+        # Phase 5: Report
         console.print()
-        console.print("[bold]Phase 4: Report Generation[/bold]")
+        console.print("[bold]Phase 5: Report Generation[/bold]")
         run_report_for_full(cfg, _collect_report_files)
     else:
         # Run queries only (strict mode - check prerequisites)

@@ -38,6 +38,11 @@ class SystemUnderTest(ABC):
     # Timeout multiplier for data loading operations (relative to baseline)
     # Systems that load faster should have values < 1.0, slower systems > 1.0
     LOAD_TIMEOUT_MULTIPLIER: float = 1.0
+    # Systems that manage their own storage (e.g., Exasol with raw disk partitions)
+    # should set this to True. When True, setup_storage() delegates to the system's
+    # _setup_database_storage() instead of using StorageManager's generic implementation.
+    # This is necessary for systems that need raw disk access rather than mounted filesystems.
+    MANAGES_OWN_STORAGE: bool = False
 
     def __init__(
         self,
@@ -1216,9 +1221,22 @@ class SystemUnderTest(ABC):
     def setup_storage(self, workload: "Workload") -> bool:
         """Setup storage based on configuration.
 
-        This is the main entry point for storage setup. Uses StorageManager
-        and calls get_storage_config() hook for system-specific configuration.
+        This is the main entry point for storage setup.
+
+        For systems with MANAGES_OWN_STORAGE=True (e.g., Exasol), delegates
+        directly to _setup_database_storage() which handles custom storage
+        requirements like raw disk partitions.
+
+        For other systems, uses StorageManager with get_storage_config() hook
+        for system-specific configuration.
         """
+        # Check if system manages its own storage (e.g., Exasol with raw disk)
+        if self.MANAGES_OWN_STORAGE and self.setup_config.get(
+            "use_additional_disk", False
+        ):
+            self._log(f"{self.name} manages its own storage, using custom setup")
+            return self._setup_database_storage(workload)
+
         return self.storage_manager.setup_storage(workload)
 
     @exclude_from_package

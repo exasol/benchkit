@@ -366,7 +366,7 @@ class WorkloadPackage:
         self._copy_storage_module_if_needed()
 
     def _copy_run_module(self) -> None:
-        """Copy minimal run module with only parsers.py."""
+        """Copy minimal run module with essential files."""
         src_dir = Path("benchkit/run")
         dst_dir = self.package_dir / "benchkit" / "run"
 
@@ -375,10 +375,12 @@ class WorkloadPackage:
 
         ensure_directory(dst_dir)
 
-        # Copy only parsers.py
-        src_file = src_dir / "parsers.py"
-        if src_file.exists():
-            shutil.copy2(src_file, dst_dir / "parsers.py")
+        # Copy essential run module files
+        essential_files = ["parsers.py", "timeout.py"]
+        for filename in essential_files:
+            src_file = src_dir / filename
+            if src_file.exists():
+                shutil.copy2(src_file, dst_dir / filename)
 
         # Create minimal __init__.py
         init_file = dst_dir / "__init__.py"

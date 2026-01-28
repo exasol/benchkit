@@ -1092,9 +1092,10 @@ class BenchmarkRunner:
         # Cloud mode requires infrastructure provisioning and storage preparation
         # Skip for managed_remote - infrastructure is already set up via 'infra apply'
         if context.is_remote and context.mode != "managed_remote":
-            # Setup cloud infrastructure first
-            if not self._setup_cloud_infrastructure():
-                return False
+            # Setup cloud infrastructure first (skip if already done by ensure_cloud_infrastructure)
+            if not self._cloud_instance_managers:
+                if not self._setup_cloud_infrastructure():
+                    return False
             context.cloud_managers = self._cloud_instance_managers
 
             # Prepare storage (partition disks) before system installation
@@ -1392,6 +1393,33 @@ class BenchmarkRunner:
     def _setup_cloud_infrastructure(self) -> bool:
         """Setup cloud infrastructure connection and managers."""
         return _setup_cloud_infra(self)
+
+    @exclude_from_package
+    def ensure_cloud_infrastructure(self) -> bool:
+        """
+        Ensure cloud infrastructure is provisioned.
+
+        This can be called before other phases to ensure instances exist.
+        Safe to call multiple times - will not re-provision if already done.
+
+        Note: This only handles cloud (terraform) infrastructure.
+        Managed systems are handled separately via _apply_managed_systems().
+
+        Returns:
+            True if infrastructure is ready, False on failure
+        """
+        context = self._create_execution_context()
+
+        # Only cloud mode needs terraform provisioning
+        # managed_remote handles its own infra via _apply_managed_systems()
+        if not context.is_remote or context.mode == "managed_remote":
+            return True
+
+        # Check if already provisioned
+        if self._cloud_instance_managers:
+            return True
+
+        return self._setup_cloud_infrastructure()
 
     def _prepare_storage_phase(self) -> bool:
         """Phase 0.5: Prepare storage (partition disks) before system installation."""

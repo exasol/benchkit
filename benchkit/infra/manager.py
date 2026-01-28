@@ -434,10 +434,19 @@ class InfraManager:
                     region = env_cfg.get("region", "us-east-1")
                     break
 
+        # Get availability zone index (useful when specific AZ lacks capacity)
+        availability_zone_index = env_config.get("availability_zone_index", 0)
+        if not env_config and environments:
+            for env_cfg in environments.values():
+                if env_cfg.get("mode") in ["aws", "gcp", "azure"]:
+                    availability_zone_index = env_cfg.get("availability_zone_index", 0)
+                    break
+
         # Common variables
         tf_vars = {
             "region": region,
             "project_id": self.config.get("project_id", "benchmark"),
+            "availability_zone_index": availability_zone_index,
         }
 
         # Collect all required ports from the systems used in the benchmark
