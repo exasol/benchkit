@@ -18,22 +18,22 @@ env:
   allow_external_database_access: true
   instances:
     exasol:
-      instance_type: "m5d.large"  # 2 vCPUs, 8GB RAM per node (64GB total ~28% over SF50)
+      instance_type: "m6id.large"  # 2 vCPUs, 8GB RAM per node (64GB total ~28% over SF50)
       disk:
         type: "local"
       label: "ext-scale-exa-n8"
     clickhouse:
-      instance_type: "m5d.large"  # 2 vCPUs, 8GB RAM per node (64GB total ~28% over SF50)
+      instance_type: "m6id.large"  # 2 vCPUs, 8GB RAM per node (64GB total ~28% over SF50)
       disk:
         type: "local"
       label: "ext-scale-ch-n8"
     trino:
-      instance_type: "m5d.large"  # 2 vCPUs, 8GB RAM per node (64GB total ~28% over SF50)
+      instance_type: "m6id.large"  # 2 vCPUs, 8GB RAM per node (64GB total ~28% over SF50)
       disk:
         type: "local"
       label: "ext-scale-trino-n8"
     starrocks:
-      instance_type: "m5d.large"  # 2 vCPUs, 8GB RAM per node (64GB total ~28% over SF50)
+      instance_type: "m6id.large"  # 2 vCPUs, 8GB RAM per node (64GB total ~28% over SF50)
       disk:
         type: "local"
       label: "ext-scale-sr-n8"
@@ -45,7 +45,7 @@ systems:
   # Exasol - 8-node cluster (256GB total)
   - name: "exasol"
     kind: "exasol"
-    version: "2025.1.8"
+    version: "2025.2.0"
     setup:
       method: "installer"
       node_count: 8
@@ -85,12 +85,12 @@ systems:
       extra:
         memory_limit: "6g"  # Per-node limit (~75% of 8GB)
         max_threads: "2"
-        # 48GB total * 0.8 / 4 streams / 8 nodes = 1.2GB per query per node
-        max_memory_usage: "1200000000"
-        max_bytes_before_external_group_by: "600000000"
-        max_bytes_before_external_sort: "600000000"
+        # 8GB/node, 4 streams: allow 3GB/query/node, grace_hash spills to disk
+        max_memory_usage: "3000000000"
+        max_bytes_before_external_group_by: "1000000000"
+        max_bytes_before_external_sort: "1000000000"
         join_algorithm: "grace_hash"
-        max_bytes_in_join: "300000000"
+        max_bytes_in_join: "2000000000"
 
   # Trino - 8-node cluster (1 coordinator + 7 workers, 256GB total)
   - name: "trino"
@@ -110,8 +110,9 @@ systems:
         bucket: "benchkit-ext-scalability-trino-eu-west-1"
         region: "eu-west-1"
       extra:
-        query_max_memory: "48GB"        # Total across cluster (~75% of 64GB)
-        query_max_memory_per_node: "6GB"
+        # Per-node: 8GB RAM, heap=6.4GB, safe query memory = 6.4*0.7 = 4.5GB
+        query_max_memory: "36GB"        # Total across cluster (4.5GB × 8 nodes)
+        query_max_memory_per_node: "4GB"
 
   # StarRocks - 8-node cluster (1 FE + 7 BE, 256GB total)
   - name: "starrocks"

@@ -45,7 +45,7 @@ systems:
   # Exasol - 4-node cluster (256GB total), 8 streams
   - name: "exasol"
     kind: "exasol"
-    version: "2025.1.8"
+    version: "2025.2.0"
     setup:
       method: "installer"
       node_count: 4
@@ -83,14 +83,14 @@ systems:
       username: "default"
       password: "clickhouse123"
       extra:
-        memory_limit: "48g"  # Per-node limit
+        memory_limit: "48g"  # Per-node limit (r6id.2xlarge 64GB/node)
         max_threads: "8"
-        # 192GB total * 0.8 / 8 streams / 4 nodes = 4.8GB per query per node
-        max_memory_usage: "4800000000"
-        max_bytes_before_external_group_by: "2400000000"
-        max_bytes_before_external_sort: "2400000000"
+        # 4-node cluster (64GB/node), 8 streams: 7GB/query/node, grace_hash spills
+        max_memory_usage: "7000000000"
+        max_bytes_before_external_group_by: "2500000000"
+        max_bytes_before_external_sort: "2500000000"
         join_algorithm: "grace_hash"
-        max_bytes_in_join: "1200000000"
+        max_bytes_in_join: "5000000000"
 
   # Trino - 4-node cluster (256GB total), 8 streams
   - name: "trino"

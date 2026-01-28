@@ -49,7 +49,7 @@ systems:
   # Exasol - single node, 1 stream (~25GB per stream)
   - name: "exasol"
     kind: "exasol"
-    version: "2025.1.8"
+    version: "2025.2.0"
     setup:
       method: "installer"
       node_count: 1
@@ -89,12 +89,12 @@ systems:
       extra:
         memory_limit: "24g"
         max_threads: "4"
-        # 24GB * 0.8 / 1 stream = 19.2GB per query
-        max_memory_usage: "19200000000"
-        max_bytes_before_external_group_by: "9600000000"
-        max_bytes_before_external_sort: "9600000000"
+        # 32GB instance, 1 stream: allow 20GB/query, grace_hash spills to disk
+        max_memory_usage: "20000000000"
+        max_bytes_before_external_group_by: "10000000000"
+        max_bytes_before_external_sort: "10000000000"
         join_algorithm: "grace_hash"
-        max_bytes_in_join: "4800000000"
+        max_bytes_in_join: "15000000000"
 
   # Trino - single node, 1 stream (no S3 needed)
   - name: "trino"

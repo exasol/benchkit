@@ -18,22 +18,22 @@ env:
   allow_external_database_access: true
   instances:
     exasol:
-      instance_type: "r5d.large"  # 2 vCPUs, 16GB RAM per node (64GB total)
+      instance_type: "r6id.large"  # 2 vCPUs, 16GB RAM per node (64GB total)
       disk:
         type: "local"
       label: "ext-scale-exa-cs1"
     clickhouse:
-      instance_type: "r5d.large"  # 2 vCPUs, 16GB RAM per node (64GB total)
+      instance_type: "r6id.large"  # 2 vCPUs, 16GB RAM per node (64GB total)
       disk:
         type: "local"
       label: "ext-scale-ch-cs1"
     trino:
-      instance_type: "r5d.large"  # 2 vCPUs, 16GB RAM per node (64GB total)
+      instance_type: "r6id.large"  # 2 vCPUs, 16GB RAM per node (64GB total)
       disk:
         type: "local"
       label: "ext-scale-trino-cs1"
     starrocks:
-      instance_type: "r5d.large"  # 2 vCPUs, 16GB RAM per node (64GB total)
+      instance_type: "r6id.large"  # 2 vCPUs, 16GB RAM per node (64GB total)
       disk:
         type: "local"
       label: "ext-scale-sr-cs1"
@@ -45,7 +45,7 @@ systems:
   # Exasol - 4-node cluster (128GB total), 1 stream
   - name: "exasol"
     kind: "exasol"
-    version: "2025.1.8"
+    version: "2025.2.0"
     setup:
       method: "installer"
       node_count: 4
@@ -83,14 +83,14 @@ systems:
       username: "default"
       password: "clickhouse123"
       extra:
-        memory_limit: "24g"  # Per-node limit
+        memory_limit: "24g"  # Per-node limit (r6id.large 16GB/node)
         max_threads: "4"
-        # 96GB total * 0.8 / 1 stream / 4 nodes = 19.2GB per query per node
-        max_memory_usage: "19200000000"
-        max_bytes_before_external_group_by: "9600000000"
-        max_bytes_before_external_sort: "9600000000"
+        # 4-node cluster (16GB/node), 1 stream: 12GB/query/node, grace_hash spills
+        max_memory_usage: "12000000000"
+        max_bytes_before_external_group_by: "5000000000"
+        max_bytes_before_external_sort: "5000000000"
         join_algorithm: "grace_hash"
-        max_bytes_in_join: "4800000000"
+        max_bytes_in_join: "8000000000"
 
   # Trino - 4-node cluster (128GB total), 1 stream
   - name: "trino"

@@ -101,8 +101,8 @@ NC='\033[0m' # No Color
 # AWS Instance Pricing (eu-west-1, on-demand, USD/hour)
 # https://aws.amazon.com/ec2/pricing/on-demand/
 declare -A INSTANCE_PRICING=(
-    ["m5d.large"]="0.113"
-    ["r5d.large"]="0.144"
+    ["m6id.large"]="0.132"
+    ["r6id.large"]="0.168"
     ["r6id.xlarge"]="0.378"
     ["r6id.2xlarge"]="0.756"
     ["r6id.4xlarge"]="1.512"
@@ -261,6 +261,7 @@ show_experiment_plan() {
     log_section "Extended Scalability Experiment Plan"
 
     local total_experiments=0
+    local enabled_experiments=0
     local completed_experiments=0
     local pending_experiments=0
 
@@ -270,8 +271,20 @@ show_experiment_plan() {
         local num_systems="${SERIES_SYSTEMS[$series]}"
         local configs=($(get_series_configs $series))
         local num_configs=${#configs[@]}
+        local is_enabled="${SERIES_ENABLED[$series]}"
 
-        echo -e "${MAGENTA}${BOLD}Series ${series}: ${series_name}${NC} (${num_systems} systems, ${num_configs} configs)"
+        # Show enabled/disabled status
+        local enabled_marker=""
+        local series_color="$MAGENTA"
+        if [[ "$is_enabled" == "1" ]]; then
+            enabled_marker="${GREEN}[ENABLED]${NC}"
+            ((enabled_experiments += num_configs))
+        else
+            enabled_marker="${YELLOW}[DISABLED]${NC}"
+            series_color="$YELLOW"
+        fi
+
+        echo -e "${series_color}${BOLD}Series ${series}: ${series_name}${NC} ${enabled_marker} (${num_systems} systems, ${num_configs} configs)"
         echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
 
         for config in "${configs[@]}"; do
@@ -332,14 +345,18 @@ show_experiment_plan() {
         echo ""
     done
 
-    # Calculate total cost estimate
+    # Calculate cost estimates (enabled vs all)
     local grand_total_cost=0
     local grand_total_hours=0
     local grand_max_instances=0
+    local enabled_total_cost=0
+    local enabled_total_hours=0
+    local enabled_max_instances=0
 
     for series in 1 2 3 4 5; do
         local configs=($(get_series_configs $series))
         local series_max_instances=0
+        local is_enabled="${SERIES_ENABLED[$series]}"
 
         for config in "${configs[@]}"; do
             local experiment_id=$(get_experiment_id $series $config)
@@ -353,6 +370,15 @@ show_experiment_plan() {
             if [[ $instance_count -gt $series_max_instances ]]; then
                 series_max_instances=$instance_count
             fi
+
+            # Track enabled series separately
+            if [[ "$is_enabled" == "1" ]]; then
+                enabled_total_cost=$(echo "scale=2; $enabled_total_cost + $total_cost" | bc)
+                enabled_total_hours=$((enabled_total_hours + runtime))
+                if [[ $instance_count -gt $enabled_max_instances ]]; then
+                    enabled_max_instances=$instance_count
+                fi
+            fi
         done
 
         if [[ $series_max_instances -gt $grand_max_instances ]]; then
@@ -364,28 +390,36 @@ show_experiment_plan() {
     echo -e "${BOLD}Summary${NC}"
     echo "─────────────────────────────────────────────────────────────"
     echo "  Total configs: $(count_total_experiments)"
-    echo "  Total experiments: ${total_experiments}"
+    echo "  Enabled configs: ${enabled_experiments}"
     echo "  Completed: ${completed_experiments}"
     echo "  Pending: ${pending_experiments}"
     echo ""
 
-    # Cost summary
+    # Cost summary - show enabled vs all
     echo -e "${BOLD}Cost Estimate${NC}"
     echo "─────────────────────────────────────────────────────────────"
-    echo "  Max concurrent instances: ${grand_max_instances}"
-    echo "  Total estimated runtime:  ~${grand_total_hours}h"
-    echo -e "  Total estimated cost:     ${GREEN}\$$(printf '%.2f' $grand_total_cost)${NC} (on-demand pricing)"
+    echo -e "  ${GREEN}${BOLD}ENABLED SERIES:${NC} ~${enabled_total_hours}h runtime | ${GREEN}\$$(printf '%.2f' $enabled_total_cost)${NC} estimated cost"
+    echo -e "  ${YELLOW}ALL SERIES:${NC}     ~${grand_total_hours}h runtime | \$$(printf '%.2f' $grand_total_cost) estimated cost"
     echo ""
     echo "  Per-series breakdown:"
     for series in 1 2 3 4 5; do
         local configs=($(get_series_configs $series))
         local series_cost=0
+        local is_enabled="${SERIES_ENABLED[$series]}"
+        local status_indicator=""
         for config in "${configs[@]}"; do
             local cost=$(get_experiment_total_cost $series $config)
             series_cost=$(echo "scale=2; $series_cost + $cost" | bc)
         done
-        printf "    Series %d: %-30s \$%7.2f\n" "$series" "${SERIES_NAMES[$series]}" "$series_cost"
+        if [[ "$is_enabled" == "1" ]]; then
+            status_indicator="${GREEN}✓${NC}"
+        else
+            status_indicator="${YELLOW}○${NC}"
+        fi
+        printf "    ${status_indicator} Series %d: %-30s \$%7.2f\n" "$series" "${SERIES_NAMES[$series]}" "$series_cost"
     done
+    echo ""
+    echo -e "  ${GREEN}✓${NC} = enabled, ${YELLOW}○${NC} = disabled (use --enable N to enable)"
     echo ""
 
     # Instance count warning
@@ -408,9 +442,9 @@ get_experiment_description() {
             local nodes="${config#nodes_}"
             case "$nodes" in
                 1)  echo "Single-node baseline | ${num_systems} DBs, SF50, 4 streams, r6id.2xlarge (64GB)" ;;
-                4)  echo "4-node cluster | ${num_systems} DBs, SF50, 4 streams, r5d.large×4 (64GB)" ;;
-                8)  echo "8-node cluster | ${num_systems} DBs, SF50, 4 streams, m5d.large×8 (64GB)" ;;
-                16) echo "16-node cluster | ${num_systems} DBs, SF50, 4 streams, m5d.large×16 (128GB)" ;;
+                4)  echo "4-node cluster | ${num_systems} DBs, SF50, 4 streams, r6id.large×4 (64GB)" ;;
+                8)  echo "8-node cluster | ${num_systems} DBs, SF50, 4 streams, m6id.large×8 (64GB)" ;;
+                16) echo "16-node cluster | ${num_systems} DBs, SF50, 4 streams, m6id.large×16 (128GB)" ;;
             esac
             ;;
         2)
@@ -429,7 +463,7 @@ get_experiment_description() {
             local stream_word="streams"
             [[ "$streams" == "1" ]] && stream_word="stream"
             case "$streams" in
-                1)  instance="r5d.large×4 (64GB)" ;;
+                1)  instance="r6id.large×4 (64GB)" ;;
                 4)  instance="r6id.xlarge×4 (128GB)" ;;
                 8)  instance="r6id.2xlarge×4 (256GB)" ;;
                 16) instance="r6id.4xlarge×4 (512GB)" ;;
@@ -469,9 +503,9 @@ get_experiment_instances() {
             local nodes="${config#nodes_}"
             case "$nodes" in
                 1)  echo "r6id.2xlarge $((num_systems * 1))" ;;
-                4)  echo "r5d.large $((num_systems * nodes))" ;;
-                8)  echo "m5d.large $((num_systems * nodes))" ;;
-                16) echo "m5d.large $((num_systems * nodes))" ;;
+                4)  echo "r6id.large $((num_systems * nodes))" ;;
+                8)  echo "m6id.large $((num_systems * nodes))" ;;
+                16) echo "m6id.large $((num_systems * nodes))" ;;
             esac
             ;;
         2)
@@ -486,7 +520,7 @@ get_experiment_instances() {
             local streams="${config#streams_}"
             local nodes=4
             case "$streams" in
-                1)  echo "r5d.large $((num_systems * nodes))" ;;
+                1)  echo "r6id.large $((num_systems * nodes))" ;;
                 4)  echo "r6id.xlarge $((num_systems * nodes))" ;;
                 8)  echo "r6id.2xlarge $((num_systems * nodes))" ;;
                 16) echo "r6id.4xlarge $((num_systems * nodes))" ;;
@@ -638,8 +672,8 @@ list_experiments() {
     echo "  SF  = TPC-H Scale Factor in GB"
     echo ""
     echo -e "${BOLD}Instance Pricing (eu-west-1, on-demand):${NC}"
-    echo "  m5d.large    = \$0.113/hr (2 vCPU, 8GB RAM, NVMe SSD)"
-    echo "  r5d.large    = \$0.144/hr (2 vCPU, 16GB RAM, NVMe SSD)"
+    echo "  m6id.large    = \$0.132/hr (2 vCPU, 8GB RAM, NVMe SSD)"
+    echo "  r6id.large    = \$0.168/hr (2 vCPU, 16GB RAM, NVMe SSD)"
     echo "  r6id.xlarge  = \$0.378/hr (4 vCPU, 32GB RAM, NVMe SSD)"
     echo "  r6id.2xlarge = \$0.756/hr (8 vCPU, 64GB RAM, NVMe SSD)"
     echo "  r6id.4xlarge = \$1.512/hr (16 vCPU, 128GB RAM, NVMe SSD)"
