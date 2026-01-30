@@ -262,6 +262,33 @@ configs/extended_scalability/
 ./configs/extended_scalability/run_all.sh --experiment s1_nodes_4
 ```
 
+### Sequential System Execution
+
+By default, all systems in a config run simultaneously. For large clusters (e.g., 16-node configs), this requires 64+ instances which may exceed cloud quotas.
+
+The `--systems` option enables sequential execution where each system is provisioned, benchmarked, and destroyed before the next:
+
+```bash
+# Run all systems one at a time (reduces resource pressure)
+./configs/extended_scalability/run_all.sh --systems sequential --experiment s1_nodes_16
+
+# Run only specific systems sequentially
+./configs/extended_scalability/run_all.sh --systems exasol,clickhouse --series 1
+
+# Run entire series with sequential system execution
+./configs/extended_scalability/run_all.sh --systems sequential --series 1
+
+# Resume sequential run (tracks per-system state)
+./configs/extended_scalability/run_all.sh --resume --systems sequential --series 1
+```
+
+**Benefits**:
+- **Reduced resource pressure**: Deploy 1 system instead of 4-5 simultaneously
+- **Lower instance requirements**: 16 instances max (16-node single system) vs 64 (16-node × 4 systems)
+- **Better availability**: Easier to get cloud capacity for fewer instances
+- **Incremental progress**: Completed systems are preserved if later systems fail
+- **Resume granularity**: Can resume at per-system level
+
 ---
 
 ## Verification Plan
