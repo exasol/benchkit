@@ -268,7 +268,7 @@ class InfraManager:
 
         This enables per-project isolation of Terraform state, allowing
         multiple benchmarks to run in parallel without conflicts.
-        Only copies if files don't exist (idempotent).
+        Files are updated if the source is newer than the destination.
         """
         import shutil
 
@@ -282,8 +282,10 @@ class InfraManager:
             source = self.tf_source_dir / tf_file
             dest = self.project_state_dir / tf_file
 
-            if source.exists() and not dest.exists():
-                shutil.copy2(source, dest)
+            if source.exists():
+                # Copy if destination doesn't exist or source is newer
+                if not dest.exists() or source.stat().st_mtime > dest.stat().st_mtime:
+                    shutil.copy2(source, dest)
 
     def _run_terraform_command_raw(
         self, command: str, args: list[Any] | None = None
