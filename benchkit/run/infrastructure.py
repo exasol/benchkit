@@ -28,8 +28,22 @@ class InfrastructureHelper:
         """
         self._runner = runner
 
+    def _log_output(
+        self,
+        message: str,
+        executor: Any = None,
+        system_name: str | None = None,
+    ) -> None:
+        """Route output through runner's log output."""
+        self._runner._log_output(message, executor, system_name)
+
     @exclude_from_package
-    def check_system_state(self, system: Any, instance_manager: Any) -> str:
+    def check_system_state(
+        self,
+        system: Any,
+        instance_manager: Any,
+        executor: Any = None,
+    ) -> str:
         """
         Enhanced system state detection with comprehensive checks.
 
@@ -75,8 +89,10 @@ class InfrastructureHelper:
                             missing_markers.append(idx)
 
                     if missing_markers:
-                        console.print(
-                            f"🔍 {system_name}: Missing installation markers on node(s): {missing_markers}"
+                        self._log_output(
+                            f"🔍 {system_name}: Missing installation markers on node(s): {missing_markers}",
+                            executor,
+                            system_name,
                         )
                         return "NEEDS_INSTALLATION"
                 else:
@@ -95,8 +111,10 @@ class InfrastructureHelper:
                         marker_result.get("success")
                         and "marker_found" in marker_result.get("stdout", "")
                     ):
-                        console.print(
-                            f"🔍 {system_name}: No installation marker ({marker_file})"
+                        self._log_output(
+                            f"🔍 {system_name}: No installation marker ({marker_file})",
+                            executor,
+                            system_name,
                         )
                         return "NEEDS_INSTALLATION"
 
