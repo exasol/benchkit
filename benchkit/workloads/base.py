@@ -534,17 +534,20 @@ class Workload(ABC):
         measured_results = []
         warmup_results = []
 
+        # Use system's log method for output (routes through file logger)
+        log = getattr(system, "_log", print)
+
         for query_name in query_names:
             if query_name not in all_queries:
-                print(f"Warning: Query {query_name} not found in workload")
+                log(f"Warning: Query {query_name} not found in workload")
                 continue
 
             query_sql = all_queries[query_name]
-            print(f"Running {query_name}...")
+            log(f"Running {query_name}...")
 
             # Warmup runs (sequential)
             for warmup in range(warmup_runs):
-                print(f"  Warmup {warmup + 1}/{warmup_runs}")
+                log(f"  Warmup {warmup + 1}/{warmup_runs}")
                 result = self.run_query(
                     system, f"{query_name}_warmup_{warmup + 1}", query_sql
                 )
@@ -562,7 +565,7 @@ class Workload(ABC):
 
             # Measured runs (sequential)
             for run in range(runs_per_query):
-                print(f"  Run {run + 1}/{runs_per_query}")
+                log(f"  Run {run + 1}/{runs_per_query}")
                 result = self.run_query(system, query_name, query_sql)
                 result.update(
                     {
@@ -606,21 +609,24 @@ class Workload(ABC):
         all_queries = self.get_queries(system)
         warmup_results = []
 
-        print(f"Running multiuser workload with {num_streams} concurrent streams")
-        print(f"Randomize: {randomize}, Seed: {random_seed}")
+        # Use system's log method for output (routes through file logger)
+        log = getattr(system, "_log", print)
+
+        log(f"Running multiuser workload with {num_streams} concurrent streams")
+        log(f"Randomize: {randomize}, Seed: {random_seed}")
 
         # Phase 1: Warmup runs (sequential, single connection)
-        print("\nPhase 1: Warmup runs (sequential)")
+        log("Phase 1: Warmup runs (sequential)")
         for query_name in query_names:
             if query_name not in all_queries:
-                print(f"Warning: Query {query_name} not found in workload")
+                log(f"Warning: Query {query_name} not found in workload")
                 continue
 
             query_sql = all_queries[query_name]
-            print(f"Running {query_name} warmup...")
+            log(f"Running {query_name} warmup...")
 
             for warmup in range(warmup_runs):
-                print(f"  Warmup {warmup + 1}/{warmup_runs}")
+                log(f"  Warmup {warmup + 1}/{warmup_runs}")
                 result = self.run_query(
                     system, f"{query_name}_warmup_{warmup + 1}", query_sql
                 )
@@ -637,7 +643,7 @@ class Workload(ABC):
                 warmup_results.append(result)
 
         # Phase 2: Measured runs (multiuser with concurrent streams)
-        print(f"\nPhase 2: Measured runs ({num_streams} concurrent streams)")
+        log(f"Phase 2: Measured runs ({num_streams} concurrent streams)")
 
         # Build list of all query executions: [(query_name, run_number), ...]
         query_executions = []
@@ -648,7 +654,7 @@ class Workload(ABC):
                 query_executions.append((query_name, run))
 
         total_executions = len(query_executions)
-        print(
+        log(
             f"Total query executions: {total_executions} "
             f"({len(query_names)} queries × {runs_per_query} runs)"
         )
@@ -657,9 +663,9 @@ class Workload(ABC):
         if randomize:
             rng = random.Random(random_seed)
             rng.shuffle(query_executions)
-            print(f"Query execution order randomized (seed: {random_seed})")
+            log(f"Query execution order randomized (seed: {random_seed})")
         else:
-            print("Query execution order: round-robin")
+            log("Query execution order: round-robin")
 
         # Distribute query executions across streams
         stream_assignments: list[list[tuple[str, int]]] = [
@@ -671,7 +677,7 @@ class Workload(ABC):
 
         # Print distribution
         for stream_id, assignments in enumerate(stream_assignments):
-            print(f"  Stream {stream_id}: {len(assignments)} queries")
+            log(f"  Stream {stream_id}: {len(assignments)} queries")
 
         # Execute queries concurrently using ThreadPoolExecutor
         measured_results = []
@@ -700,11 +706,11 @@ class Workload(ABC):
             for future in as_completed(futures):
                 try:
                     stream_id, queries_executed = future.result()
-                    print(f"  Stream {stream_id} completed: {queries_executed} queries")
+                    log(f"  Stream {stream_id} completed: {queries_executed} queries")
                 except Exception as e:
-                    print(f"  Stream execution failed: {e}")
+                    log(f"  Stream execution failed: {e}")
 
-        print(f"\nCompleted: {len(measured_results)} total query executions")
+        log(f"Completed: {len(measured_results)} total query executions")
 
         return {"measured": measured_results, "warmup": warmup_results}
 
