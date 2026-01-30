@@ -525,10 +525,6 @@ class StarrocksSystem(SystemUnderTest):
                 self._external_host = self._cloud_instance_manager.public_ip
                 self.host = "localhost"
 
-            # Mark installed
-            self.mark_installed(record=False)
-            self._log("✓ StarRocks installation completed successfully")
-
             return True
 
         except Exception as e:
@@ -707,9 +703,10 @@ spill_mode = auto
         # Step 4: Start BEs on all nodes (node 0's BE is already running, followers need to start)
         self._log("Starting BEs on all nodes...")
         for idx, mgr in enumerate(self._cloud_instance_managers):
-            # Check if BE process is actually running (use specific binary path)
+            # Check if BE process is actually running
+            # Use pidof for exact binary match to avoid pgrep -f matching the SSH command itself
             check_result = mgr.run_remote_command(
-                f"pgrep -f '{self.be_dir}/lib/starrocks_be' > /dev/null 2>&1 && echo 'running' || echo 'stopped'",
+                "pidof -s starrocks_be > /dev/null 2>&1 && echo 'running' || echo 'stopped'",
                 timeout=10,
             )
             if check_result.get("stdout", "").strip() == "running":
