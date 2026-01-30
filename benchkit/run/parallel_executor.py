@@ -129,10 +129,6 @@ class ParallelExecutor:
             monitor = TailMonitor(self._log_paths, self._console)
             monitor.start()
 
-        # Print phase header
-        self._print_line("")
-        self._print_line(f"== {phase_name} ==")
-
         future_to_name = {}
 
         try:
@@ -275,31 +271,21 @@ class ParallelExecutor:
             logger.close()
 
     def _record_line(self, name: str, message: str) -> None:
-        """Record a line to the task's file logger."""
+        """Record a line to the task's file logger.
+
+        TailMonitor handles displaying the output from log files with proper
+        prefixes, so we only write to the file logger here.
+        """
         clean = message.rstrip("\n\r")
 
-        # Write to file logger if available
+        # Write to file logger - TailMonitor will display it
         logger = self._file_loggers.get(name)
         if logger:
             logger.write(clean)
 
-        # Also print to console with task tag for real-time feedback
-        # Check if message is already tagged to avoid double-tagging
-        expected_prefix = f"[{name}]"
-        if clean and clean.startswith(expected_prefix):
-            # Message already has the correct tag
-            line = clean
-        elif clean:
-            # Add tag prefix
-            line = f"{expected_prefix} {clean}"
-        else:
-            line = expected_prefix
-
-        self._print_line(line)
-
     def _print_summary(self, phase_name: str) -> None:
         """Print execution summary."""
-        self._print_line(f"== {phase_name} Summary ==")
+        self._print_line(f"{phase_name} Summary:")
         for name in sorted(self.status.keys()):
             status = self.status[name]
             finish = self.finish_times.get(name, time.time())
