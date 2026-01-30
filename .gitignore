@@ -78,6 +78,7 @@ posts/
 credentials.json
 config.local.yaml
 configs/*.license
+configs/*.exasol_license
 
 # Database files
 *.db
