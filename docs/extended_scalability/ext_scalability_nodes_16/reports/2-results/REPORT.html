@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Extended Scalability - Node Scaling (16 Nodes) - Detailed Query Results">
+    <title>Extended Scalability - Node Scaling (16 Nodes) | Detailed Query Results</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-badge">📊 Detailed Query Results</div>
+            <h1>Extended Scalability - Node Scaling (16 Nodes)</h1>
+            <div class="metadata">
+                <span class="meta-item">
+                    <strong>Author:</strong> Benchmark Team
+                </span>
+                <span class="meta-item">
+                    <strong>Date:</strong> 2026-01-30 07:54:22
+                </span>
+                <span class="meta-item">
+                    <strong>Environment:</strong>
+                    <span class="badge badge-cloud">AWS</span>
+                    eu-west-1
+                </span>
+            </div>
+        </header>
+
+        <!-- Overview -->
+        <section class="section">
+            <h2>Overview</h2>
+            <p>This report presents the complete query-by-query performance results for <strong>1 database systems</strong> tested using the TPC-H benchmark at scale factor 50.</p>
+        </section>
+
+        <!-- Systems Under Test -->
+        <section class="section">
+            <h2>Systems Under Test</h2>
+
+            <div class="systems-grid">
+                <div class="system-card">
+                    <h3>Starrocks 4.0.4</h3>
+
+
+                    <div class="system-specs">
+                        <h4>Environment & Hardware</h4>
+                        <ul>
+                            <li><strong>Cloud:</strong> AWS eu-west-1</li>
+                            <li><strong>Instance:</strong> m6id.large</li>
+                            <li><strong>Cluster:</strong> 16-node cluster</li>
+                            <li><strong>CPU:</strong> Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz (2 vCPUs per node, 32 total vCPUs)</li>
+                            <li><strong>Memory:</strong> 7.6GB RAM per node (121.6GB total RAM)</li>
+                        </ul>
+
+                        <h4>Software</h4>
+                        <ul>
+                            <li><strong>Database:</strong> starrocks 4.0.4</li>
+                            <li><strong>Deployment:</strong> 16-node cluster</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Performance Summary -->
+        <section class="section">
+            <h2>Performance Summary</h2>
+
+
+            <h3>Performance Visualizations</h3>
+            <div class="chart-container">
+                <iframe src="attachments/figures/system_performance_overview.html" width="100%" height="550" frameborder="0"></iframe>
+            </div>
+            <div class="chart-container">
+                <iframe src="attachments/figures/performance_heatmap.html" width="100%" height="550" frameborder="0"></iframe>
+            </div>
+        </section>
+
+        <!-- Detailed Analysis -->
+        <section class="section">
+            <h2>Detailed Analysis</h2>
+
+            <h3>Performance by Query Type</h3>
+            <p>The benchmark results reveal distinct performance characteristics across different query categories:</p>
+
+            <ul>
+                <li><strong>Aggregation queries</strong> (<a href="#" class="query-link" data-query="Q01">Q01</a>, <a href="#" class="query-link" data-query="Q06">Q06</a>, <a href="#" class="query-link" data-query="Q12">Q12</a>, <a href="#" class="query-link" data-query="Q14">Q14</a>, <a href="#" class="query-link" data-query="Q15">Q15</a>, <a href="#" class="query-link" data-query="Q19">Q19</a>, <a href="#" class="query-link" data-query="Q20">Q20</a>): Test data reduction and grouping operations</li>
+                <li><strong>Join-heavy queries</strong> (<a href="#" class="query-link" data-query="Q02">Q02</a>, <a href="#" class="query-link" data-query="Q05">Q05</a>, <a href="#" class="query-link" data-query="Q08">Q08</a>, <a href="#" class="query-link" data-query="Q09">Q09</a>, <a href="#" class="query-link" data-query="Q10">Q10</a>, <a href="#" class="query-link" data-query="Q11">Q11</a>, <a href="#" class="query-link" data-query="Q21">Q21</a>, <a href="#" class="query-link" data-query="Q22">Q22</a>): Evaluate multi-table join performance</li>
+                <li><strong>Complex analytical queries</strong> (<a href="#" class="query-link" data-query="Q03">Q03</a>, <a href="#" class="query-link" data-query="Q04">Q04</a>, <a href="#" class="query-link" data-query="Q07">Q07</a>, <a href="#" class="query-link" data-query="Q13">Q13</a>, <a href="#" class="query-link" data-query="Q16">Q16</a>, <a href="#" class="query-link" data-query="Q17">Q17</a>, <a href="#" class="query-link" data-query="Q18">Q18</a>): Combine multiple operations</li>
+            </ul>
+
+            <p>The following table shows the median performance for each query category across all systems:</p>
+            <table  class="query-type-table">
+<thead><tr>
+<th>Query Type</th>
+<th>starrocks</th>
+</tr></thead>
+<tbody>
+<tr >
+<td>Aggregation</td>
+<td class="perf-excellent">14,283.20</td>
+</tr>
+<tr >
+<td>Join-Heavy</td>
+<td class="perf-good">25,643.80</td>
+</tr>
+<tr >
+<td>Complex Analytical</td>
+<td class="perf-poor">30,634.70</td>
+</tr>
+</tbody>
+</table>
+
+            <h3>Query-by-Query Results</h3>
+            <p>The following table shows the median execution time for each query across all systems:</p>
+            
+
+            <h3>Detailed Statistics</h3>
+            <p>The complete performance statistics for all queries and systems:</p>
+            <table  class="summary-table">
+<thead><tr>
+<th>query</th>
+<th>system</th>
+<th>warmup</th>
+<th>runs</th>
+<th>median_ms</th>
+<th>mean_ms</th>
+<th>std_ms</th>
+<th>min_ms</th>
+<th>max_ms</th>
+</tr></thead>
+<tbody>
+<tr data-query-start="true" data-query-group="odd" data-query="Q01" data-system="starrocks">
+<td>Q01</td>
+<td>starrocks</td>
+<td class="perf-poor">28,922.30</td>
+<td>5</td>
+<td class="perf-poor">93,324.20</td>
+<td class="perf-poor">89,538.40</td>
+<td class="perf-poor">32,584.30</td>
+<td class="perf-poor">41,538.00</td>
+<td class="perf-poor">130,209.10</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q02" data-system="starrocks">
+<td>Q02</td>
+<td>starrocks</td>
+<td class="perf-excellent">1,676.50</td>
+<td>5</td>
+<td class="perf-excellent">5,576.90</td>
+<td class="perf-excellent">5,223.70</td>
+<td class="perf-excellent">1,194.70</td>
+<td class="perf-excellent">3,178.20</td>
+<td class="perf-excellent">6,217.10</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q03" data-system="starrocks">
+<td>Q03</td>
+<td>starrocks</td>
+<td class="perf-average">13,159.50</td>
+<td>5</td>
+<td class="perf-poor">42,771.40</td>
+<td class="perf-poor">41,197.90</td>
+<td class="perf-poor">21,289.60</td>
+<td class="perf-average">10,537.50</td>
+<td class="perf-poor">63,069.90</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q04" data-system="starrocks">
+<td>Q04</td>
+<td>starrocks</td>
+<td class="perf-good">9,556.90</td>
+<td>5</td>
+<td class="perf-poor">180,539.90</td>
+<td class="perf-poor">182,930.60</td>
+<td class="perf-poor">84,545.20</td>
+<td class="perf-poor">56,998.70</td>
+<td class="perf-poor">288,260.10</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q05" data-system="starrocks">
+<td>Q05</td>
+<td>starrocks</td>
+<td class="perf-average">12,695.30</td>
+<td>5</td>
+<td class="perf-average">31,086.30</td>
+<td class="perf-average">30,126.30</td>
+<td class="perf-good">5,070.30</td>
+<td class="perf-poor">23,217.60</td>
+<td class="perf-average">36,707.40</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q06" data-system="starrocks">
+<td>Q06</td>
+<td>starrocks</td>
+<td class="perf-good">9,586.10</td>
+<td>5</td>
+<td class="perf-excellent">6,325.30</td>
+<td class="perf-excellent">8,272.20</td>
+<td class="perf-good">4,479.80</td>
+<td class="perf-excellent">4,345.90</td>
+<td class="perf-excellent">14,374.90</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q07" data-system="starrocks">
+<td>Q07</td>
+<td>starrocks</td>
+<td class="perf-average">14,260.00</td>
+<td>5</td>
+<td class="perf-average">27,499.60</td>
+<td class="perf-average">25,228.30</td>
+<td class="perf-average">5,810.30</td>
+<td class="perf-average">14,912.60</td>
+<td class="perf-average">28,732.90</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q08" data-system="starrocks">
+<td>Q08</td>
+<td>starrocks</td>
+<td class="perf-poor">17,412.90</td>
+<td>5</td>
+<td class="perf-average">26,885.70</td>
+<td class="perf-average">28,178.90</td>
+<td class="perf-excellent">3,578.40</td>
+<td class="perf-poor">25,370.90</td>
+<td class="perf-average">34,215.30</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q09" data-system="starrocks">
+<td>Q09</td>
+<td>starrocks</td>
+<td class="perf-poor">23,054.60</td>
+<td>5</td>
+<td class="perf-poor">54,534.40</td>
+<td class="perf-poor">46,461.60</td>
+<td class="perf-poor">21,026.00</td>
+<td class="perf-good">10,147.00</td>
+<td class="perf-poor">62,800.30</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q10" data-system="starrocks">
+<td>Q10</td>
+<td>starrocks</td>
+<td class="perf-poor">17,247.30</td>
+<td>5</td>
+<td class="perf-average">35,246.40</td>
+<td class="perf-average">25,986.30</td>
+<td class="perf-poor">17,404.80</td>
+<td class="perf-excellent">3,296.50</td>
+<td class="perf-average">41,668.80</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q11" data-system="starrocks">
+<td>Q11</td>
+<td>starrocks</td>
+<td class="perf-excellent">1,177.10</td>
+<td>5</td>
+<td class="perf-excellent">4,699.50</td>
+<td class="perf-excellent">6,058.00</td>
+<td class="perf-excellent">3,569.90</td>
+<td class="perf-excellent">2,891.50</td>
+<td class="perf-excellent">11,109.80</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q12" data-system="starrocks">
+<td>Q12</td>
+<td>starrocks</td>
+<td class="perf-average">11,165.60</td>
+<td>5</td>
+<td class="perf-good">14,283.20</td>
+<td class="perf-good">17,015.60</td>
+<td class="perf-good">4,541.80</td>
+<td class="perf-average">13,287.20</td>
+<td class="perf-good">23,849.10</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q13" data-system="starrocks">
+<td>Q13</td>
+<td>starrocks</td>
+<td class="perf-average">12,410.80</td>
+<td>5</td>
+<td class="perf-average">41,439.80</td>
+<td class="perf-average">38,055.50</td>
+<td class="perf-average">12,133.10</td>
+<td class="perf-average">21,465.50</td>
+<td class="perf-average">52,514.30</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q14" data-system="starrocks">
+<td>Q14</td>
+<td>starrocks</td>
+<td class="perf-good">5,583.30</td>
+<td>5</td>
+<td class="perf-good">20,392.10</td>
+<td class="perf-good">17,697.90</td>
+<td class="perf-average">6,186.60</td>
+<td class="perf-average">10,672.60</td>
+<td class="perf-good">23,667.70</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q15" data-system="starrocks">
+<td>Q15</td>
+<td>starrocks</td>
+<td class="perf-excellent">4,371.80</td>
+<td>5</td>
+<td class="perf-excellent">10,965.80</td>
+<td class="perf-excellent">11,553.20</td>
+<td class="perf-excellent">4,062.80</td>
+<td class="perf-excellent">6,790.00</td>
+<td class="perf-good">17,554.40</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q16" data-system="starrocks">
+<td>Q16</td>
+<td>starrocks</td>
+<td class="perf-excellent">2,646.60</td>
+<td>5</td>
+<td class="perf-excellent">9,401.50</td>
+<td class="perf-excellent">10,396.20</td>
+<td class="perf-excellent">2,705.80</td>
+<td class="perf-good">7,168.30</td>
+<td class="perf-excellent">13,834.70</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q17" data-system="starrocks">
+<td>Q17</td>
+<td>starrocks</td>
+<td class="perf-excellent">5,310.60</td>
+<td>5</td>
+<td class="perf-good">13,330.60</td>
+<td class="perf-good">14,583.90</td>
+<td class="perf-good">4,364.80</td>
+<td class="perf-good">10,000.10</td>
+<td class="perf-good">20,422.70</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q18" data-system="starrocks">
+<td>Q18</td>
+<td>starrocks</td>
+<td class="perf-poor">16,704.50</td>
+<td>5</td>
+<td class="perf-poor">59,338.10</td>
+<td class="perf-poor">60,055.00</td>
+<td class="perf-average">7,879.30</td>
+<td class="perf-poor">47,911.40</td>
+<td class="perf-poor">68,720.60</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q19" data-system="starrocks">
+<td>Q19</td>
+<td>starrocks</td>
+<td class="perf-good">5,779.30</td>
+<td>5</td>
+<td class="perf-good">16,715.80</td>
+<td class="perf-good">13,407.20</td>
+<td class="perf-average">5,698.90</td>
+<td class="perf-good">6,959.10</td>
+<td class="perf-good">18,935.50</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q20" data-system="starrocks">
+<td>Q20</td>
+<td>starrocks</td>
+<td class="perf-good">5,642.20</td>
+<td>5</td>
+<td class="perf-good">13,134.40</td>
+<td class="perf-good">12,904.30</td>
+<td class="perf-excellent">2,130.10</td>
+<td class="perf-good">9,386.20</td>
+<td class="perf-excellent">14,819.80</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q21" data-system="starrocks">
+<td>Q21</td>
+<td>starrocks</td>
+<td class="perf-poor">33,198.70</td>
+<td>5</td>
+<td class="perf-poor">111,600.80</td>
+<td class="perf-poor">100,554.70</td>
+<td class="perf-poor">27,723.20</td>
+<td class="perf-poor">52,584.50</td>
+<td class="perf-poor">118,930.10</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q22" data-system="starrocks">
+<td>Q22</td>
+<td>starrocks</td>
+<td class="perf-excellent">2,272.70</td>
+<td>5</td>
+<td class="perf-excellent">4,829.10</td>
+<td class="perf-excellent">6,689.00</td>
+<td class="perf-good">4,150.50</td>
+<td class="perf-excellent">2,938.80</td>
+<td class="perf-excellent">13,368.80</td>
+</tr>
+</tbody>
+</table>
+
+            <h3>System Rankings</h3>
+
+            <h3>Per-Stream Performance Analysis</h3>
+            <div class="notice notice-info">
+                <p>This benchmark was executed using <strong>4 concurrent streams</strong> to simulate multi-user workload. The following tables show how queries were distributed and performed across each stream for each system:</p>
+            </div>
+
+            <h4>Clickhouse - Stream Performance</h4>
+            <div class="comparison-table">
+                <table class="styled-table">
+                    <thead>
+                        <tr>
+                            <th>Stream ID</th>
+                            <th>Queries Executed</th>
+                            <th>Avg Runtime (ms)</th>
+                            <th>Median Runtime (ms)</th>
+                            <th>Min Runtime (ms)</th>
+                            <th>Max Runtime (ms)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>0</strong></td>
+                            <td>28</td>
+                            <td>32984.3</td>
+                            <td>9873.4</td>
+                            <td>168.0</td>
+                            <td>214392.5</td>
+                        </tr>
+                        <tr>
+                            <td><strong>1</strong></td>
+                            <td>28</td>
+                            <td>26711.4</td>
+                            <td>6966.0</td>
+                            <td>217.4</td>
+                            <td>458250.6</td>
+                        </tr>
+                        <tr>
+                            <td><strong>2</strong></td>
+                            <td>27</td>
+                            <td>27689.8</td>
+                            <td>13203.3</td>
+                            <td>10.6</td>
+                            <td>215496.3</td>
+                        </tr>
+                        <tr>
+                            <td><strong>3</strong></td>
+                            <td>27</td>
+                            <td>38078.5</td>
+                            <td>8072.7</td>
+                            <td>175.6</td>
+                            <td>447849.1</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="key-findings">
+                <h5>Stream Performance Analysis for Clickhouse</h5>
+                <ul>
+                    <li><strong>Best stream median:</strong> 6966.0ms</li>
+                    <li><strong>Worst stream median:</strong> 13203.3ms</li>
+                    <li><strong>Performance variance:</strong> 89.5% difference between fastest and slowest streams</li>
+                </ul>
+                <p>This demonstrates Clickhouse's ability to handle concurrent query loads with <strong>varying</strong> performance across streams.</p>
+            </div>
+            <h4>Exasol - Stream Performance</h4>
+            <div class="comparison-table">
+                <table class="styled-table">
+                    <thead>
+                        <tr>
+                            <th>Stream ID</th>
+                            <th>Queries Executed</th>
+                            <th>Avg Runtime (ms)</th>
+                            <th>Median Runtime (ms)</th>
+                            <th>Min Runtime (ms)</th>
+                            <th>Max Runtime (ms)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>0</strong></td>
+                            <td>28</td>
+                            <td>1993.8</td>
+                            <td>1045.9</td>
+                            <td>48.6</td>
+                            <td>8401.3</td>
+                        </tr>
+                        <tr>
+                            <td><strong>1</strong></td>
+                            <td>28</td>
+                            <td>1672.4</td>
+                            <td>934.1</td>
+                            <td>240.2</td>
+                            <td>14486.5</td>
+                        </tr>
+                        <tr>
+                            <td><strong>2</strong></td>
+                            <td>27</td>
+                            <td>1938.9</td>
+                            <td>1229.5</td>
+                            <td>149.2</td>
+                            <td>11668.6</td>
+                        </tr>
+                        <tr>
+                            <td><strong>3</strong></td>
+                            <td>27</td>
+                            <td>1715.9</td>
+                            <td>1290.8</td>
+                            <td>280.3</td>
+                            <td>11912.3</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="key-findings">
+                <h5>Stream Performance Analysis for Exasol</h5>
+                <ul>
+                    <li><strong>Best stream median:</strong> 934.1ms</li>
+                    <li><strong>Worst stream median:</strong> 1290.8ms</li>
+                    <li><strong>Performance variance:</strong> 38.2% difference between fastest and slowest streams</li>
+                </ul>
+                <p>This demonstrates Exasol's ability to handle concurrent query loads with <strong>varying</strong> performance across streams.</p>
+            </div>
+            <h4>Starrocks - Stream Performance</h4>
+            <div class="comparison-table">
+                <table class="styled-table">
+                    <thead>
+                        <tr>
+                            <th>Stream ID</th>
+                            <th>Queries Executed</th>
+                            <th>Avg Runtime (ms)</th>
+                            <th>Median Runtime (ms)</th>
+                            <th>Min Runtime (ms)</th>
+                            <th>Max Runtime (ms)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>0</strong></td>
+                            <td>28</td>
+                            <td>36524.5</td>
+                            <td>28116.2</td>
+                            <td>4829.1</td>
+                            <td>118930.1</td>
+                        </tr>
+                        <tr>
+                            <td><strong>1</strong></td>
+                            <td>28</td>
+                            <td>34008.8</td>
+                            <td>19050.2</td>
+                            <td>2938.8</td>
+                            <td>220583.7</td>
+                        </tr>
+                        <tr>
+                            <td><strong>2</strong></td>
+                            <td>27</td>
+                            <td>36270.9</td>
+                            <td>16901.7</td>
+                            <td>3201.7</td>
+                            <td>168270.6</td>
+                        </tr>
+                        <tr>
+                            <td><strong>3</strong></td>
+                            <td>27</td>
+                            <td>37271.3</td>
+                            <td>14334.8</td>
+                            <td>2891.5</td>
+                            <td>288260.1</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="key-findings">
+                <h5>Stream Performance Analysis for Starrocks</h5>
+                <ul>
+                    <li><strong>Best stream median:</strong> 14334.8ms</li>
+                    <li><strong>Worst stream median:</strong> 28116.2ms</li>
+                    <li><strong>Performance variance:</strong> 96.1% difference between fastest and slowest streams</li>
+                </ul>
+                <p>This demonstrates Starrocks's ability to handle concurrent query loads with <strong>varying</strong> performance across streams.</p>
+            </div>
+            <h4>Trino - Stream Performance</h4>
+            <div class="comparison-table">
+                <table class="styled-table">
+                    <thead>
+                        <tr>
+                            <th>Stream ID</th>
+                            <th>Queries Executed</th>
+                            <th>Avg Runtime (ms)</th>
+                            <th>Median Runtime (ms)</th>
+                            <th>Min Runtime (ms)</th>
+                            <th>Max Runtime (ms)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>0</strong></td>
+                            <td>28</td>
+                            <td>29502.4</td>
+                            <td>28602.1</td>
+                            <td>11119.9</td>
+                            <td>54847.1</td>
+                        </tr>
+                        <tr>
+                            <td><strong>1</strong></td>
+                            <td>28</td>
+                            <td>29280.2</td>
+                            <td>27957.3</td>
+                            <td>9418.0</td>
+                            <td>51289.0</td>
+                        </tr>
+                        <tr>
+                            <td><strong>2</strong></td>
+                            <td>27</td>
+                            <td>30322.0</td>
+                            <td>27358.6</td>
+                            <td>13449.1</td>
+                            <td>59625.1</td>
+                        </tr>
+                        <tr>
+                            <td><strong>3</strong></td>
+                            <td>27</td>
+                            <td>30622.2</td>
+                            <td>32598.2</td>
+                            <td>6890.0</td>
+                            <td>58648.6</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="key-findings">
+                <h5>Stream Performance Analysis for Trino</h5>
+                <ul>
+                    <li><strong>Best stream median:</strong> 27358.6ms</li>
+                    <li><strong>Worst stream median:</strong> 32598.2ms</li>
+                    <li><strong>Performance variance:</strong> 19.2% difference between fastest and slowest streams</li>
+                </ul>
+                <p>This demonstrates Trino's ability to handle concurrent query loads with <strong>consistent</strong> performance across streams.</p>
+            </div>
+
+            <div class="notice notice-info">
+                <h5>Query Distribution Method</h5>
+                <p>Query distribution was <strong>randomized</strong> (seed: 42) for realistic concurrent user simulation</p>
+            </div>
+        </section>
+
+        <!-- Methodology -->
+        <section class="section">
+            <h2>Benchmark Methodology</h2>
+
+            <div class="methodology-grid">
+                <div class="method-card">
+                    <h3>Workload Configuration</h3>
+                    <p><strong>TPC-H Benchmark:</strong></p>
+                    <ul>
+                        <li><strong>Scale Factor:</strong> 50</li>
+                        <li><strong>Data Format:</strong> CSV</li>
+                        <li><strong>Data Generator:</strong> dbgen</li>
+                    </ul>
+                </div>
+
+                <div class="method-card">
+                    <h3>Execution Parameters</h3>
+                    <ul>
+                        <li><strong>Warmup Runs:</strong> 1</li>
+                        <li><strong>Measured Runs:</strong> 5</li>
+                        <li><strong>Execution Mode:</strong> Multiuser (4 concurrent streams)</li>
+                        <li><strong>Query Distribution:</strong> Randomized (seed: 42)</li>
+                        <li><strong>Metric Reported:</strong> Median execution time</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="notice notice-info">
+                <h4>Performance Measurement</h4>
+                <p>All queries were executed with the same data and parameters across all systems. The median execution time from 5 runs is reported for each query to minimize the impact of system variance and outliers.</p>
+            </div>
+        </section>
+
+        <!-- Conclusion -->
+        <section class="section">
+            <h2>Conclusion</h2>
+
+            <p>This benchmark provides a detailed, query-level comparison of 1 database systems on analytical workloads. The results demonstrate the performance characteristics and trade-offs of each system when processing TPC-H queries.</p>
+
+        </section>
+    </div>
+
+    <!-- Query Modal -->
+    <div id="queryModal" class="query-modal">
+        <div class="query-modal-content">
+            <div class="query-modal-header">
+                <h3 id="modalTitle">Query Details</h3>
+                <button class="query-modal-close" onclick="closeQueryModal()">&times;</button>
+            </div>
+            <div id="modalBody">
+                <pre><code id="queryCode" class="language-sql"></code></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- Syntax Highlighting -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+
+    <script>
+        // Query data embedded from workload
+        const queryData = {
+            "Q01": {
+                "starrocks": "attachments/queries/starrocks/Q01.sql"            },            "Q02": {
+                "starrocks": "attachments/queries/starrocks/Q02.sql"            },            "Q03": {
+                "starrocks": "attachments/queries/starrocks/Q03.sql"            },            "Q04": {
+                "starrocks": "attachments/queries/starrocks/Q04.sql"            },            "Q05": {
+                "starrocks": "attachments/queries/starrocks/Q05.sql"            },            "Q06": {
+                "starrocks": "attachments/queries/starrocks/Q06.sql"            },            "Q07": {
+                "starrocks": "attachments/queries/starrocks/Q07.sql"            },            "Q08": {
+                "starrocks": "attachments/queries/starrocks/Q08.sql"            },            "Q09": {
+                "starrocks": "attachments/queries/starrocks/Q09.sql"            },            "Q10": {
+                "starrocks": "attachments/queries/starrocks/Q10.sql"            },            "Q11": {
+                "starrocks": "attachments/queries/starrocks/Q11.sql"            },            "Q12": {
+                "starrocks": "attachments/queries/starrocks/Q12.sql"            },            "Q13": {
+                "starrocks": "attachments/queries/starrocks/Q13.sql"            },            "Q14": {
+                "starrocks": "attachments/queries/starrocks/Q14.sql"            },            "Q15": {
+                "starrocks": "attachments/queries/starrocks/Q15.sql"            },            "Q16": {
+                "starrocks": "attachments/queries/starrocks/Q16.sql"            },            "Q17": {
+                "starrocks": "attachments/queries/starrocks/Q17.sql"            },            "Q18": {
+                "starrocks": "attachments/queries/starrocks/Q18.sql"            },            "Q19": {
+                "starrocks": "attachments/queries/starrocks/Q19.sql"            },            "Q20": {
+                "starrocks": "attachments/queries/starrocks/Q20.sql"            },            "Q21": {
+                "starrocks": "attachments/queries/starrocks/Q21.sql"            },            "Q22": {
+                "starrocks": "attachments/queries/starrocks/Q22.sql"            }        };
+
+        // Add click handlers to summary table rows
+        document.addEventListener('DOMContentLoaded', function() {
+            const summaryTable = document.querySelector('.summary-table');
+            if (summaryTable) {
+                const rows = summaryTable.querySelectorAll('tbody tr[data-query]');
+                rows.forEach(row => {
+                    row.addEventListener('click', function() {
+                        const query = this.dataset.query;
+                        const system = this.dataset.system;
+                        showQueryModal(query, system);
+                    });
+                });
+            }
+        });
+
+        // Add click handlers to query links
+        document.addEventListener('DOMContentLoaded', function() {
+            const queryLinks = document.querySelectorAll('.query-link');
+            queryLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const query = this.dataset.query;
+                    // Default to first system if not specified
+                    const system = this.dataset.system || Object.keys(queryData[query] || {})[0];
+                    showQueryModal(query, system);
+                });
+            });
+        });
+
+        function showQueryModal(query, system) {
+            const modal = document.getElementById('queryModal');
+            const title = document.getElementById('modalTitle');
+            const code = document.getElementById('queryCode');
+
+            title.textContent = `${query} - ${system}`;
+
+            // Load query from file
+            if (queryData[query] && queryData[query][system]) {
+                fetch(queryData[query][system])
+                    .then(response => response.text())
+                    .then(sql => {
+                        code.textContent = sql;
+                        Prism.highlightElement(code);
+                        modal.classList.add('active');
+                    })
+                    .catch(error => {
+                        code.textContent = `Error loading query: ${error}`;
+                        modal.classList.add('active');
+                    });
+            } else {
+                code.textContent = `Query ${query} not found for system ${system}`;
+                modal.classList.add('active');
+            }
+        }
+
+        function closeQueryModal() {
+            const modal = document.getElementById('queryModal');
+            modal.classList.remove('active');
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('queryModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeQueryModal();
+            }
+        });
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeQueryModal();
+            }
+        });
+
+        // Auto-resize iframes to match content height
+        function resizeIframe(iframe) {
+            try {
+                const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                if (iframeDoc && iframeDoc.body) {
+                    // Get the full height of the iframe content
+                    const height = iframeDoc.body.scrollHeight;
+                    // Set iframe height to match content (add small padding)
+                    iframe.style.height = (height + 20) + 'px';
+                }
+            } catch (e) {
+                // Cross-origin or access issues - keep default height
+                console.warn('Could not resize iframe:', e);
+            }
+        }
+
+        // Resize all iframes on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            const iframes = document.querySelectorAll('iframe');
+            iframes.forEach(function(iframe) {
+                // Resize on load
+                iframe.addEventListener('load', function() {
+                    resizeIframe(iframe);
+                });
+                // Also try to resize immediately in case already loaded
+                if (iframe.contentDocument && iframe.contentDocument.readyState === 'complete') {
+                    resizeIframe(iframe);
+                }
+            });
+        });
+    </script>
+</body>
+</html>

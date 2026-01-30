@@ -1,0 +1,9 @@
+{
+  "system_name": "exasol",
+  "connection_info": {
+    "public_ip": "52.31.27.107",
+    "private_ip": "10.0.1.145"
+  },
+  "installation_s": 533.0589567550924,
+  "timestamp": "2026-01-30T02:48:24.628106"
+}

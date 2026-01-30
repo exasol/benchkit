@@ -1,0 +1,9 @@
+{
+  "system_name": "starrocks",
+  "connection_info": {
+    "public_ip": "52.17.71.113",
+    "private_ip": "10.0.1.64"
+  },
+  "installation_s": 82.00931836792734,
+  "timestamp": "2026-01-29T19:45:36.770537"
+}
