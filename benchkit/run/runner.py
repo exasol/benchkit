@@ -202,19 +202,13 @@ class BenchmarkRunner:
             message: Message to log
             executor: ParallelExecutor instance (if in parallel mode)
             system_name: System name (if in parallel mode)
+
+        Note: Rich markup is now stripped by FileLogger, so no manual
+        stripping is needed here.
         """
         if executor and system_name:
-            # Parallel mode - add to executor buffer
-            # Strip Rich markup for cleaner buffer output
-            clean_message = message.replace("[dim]", "").replace("[/dim]", "")
-            clean_message = clean_message.replace("[green]", "").replace("[/green]", "")
-            clean_message = clean_message.replace("[red]", "").replace("[/red]", "")
-            clean_message = clean_message.replace("[yellow]", "").replace(
-                "[/yellow]", ""
-            )
-            clean_message = clean_message.replace("[bold]", "").replace("[/bold]", "")
-            clean_message = clean_message.replace("[blue]", "").replace("[/blue]", "")
-            executor.add_output(system_name, clean_message)
+            # Parallel mode - add to executor (FileLogger handles markup stripping)
+            executor.add_output(system_name, message)
         else:
             # Sequential mode - print to console
             console.print(message)
@@ -662,59 +656,54 @@ class BenchmarkRunner:
         context: ExecutionContext | None = None,
     ) -> dict[str, TaskResult]:
         """
-        Execute tasks, using parallel execution when max_workers > 1.
+        Execute tasks with file-based logging.
+
+        Always uses ParallelExecutor for consistent logging behavior.
+        When max_workers=1, tasks run sequentially but still get logged.
 
         Args:
             tasks: Dictionary mapping system names to task callables
             phase_name: Name of the phase (for logging)
-            max_workers: Maximum concurrent workers
+            max_workers: Maximum concurrent workers (1 = sequential)
             context: Execution context (used to pass executor reference for output callbacks)
 
         Returns:
             Dictionary mapping system names to TaskResults
         """
-        if max_workers > 1 and len(tasks) > 1:
-            # Parallel execution
-            executor = ParallelExecutor(max_workers=max_workers)
+        # Always use executor for consistent file-based logging
+        # ThreadPoolExecutor(max_workers=1) runs tasks sequentially
+        executor = ParallelExecutor(max_workers=max(1, max_workers))
 
-            # Store executor in context so task closures can access it for output callbacks
-            # This enables thread-safe output tagging by allowing systems to use
-            # executor.create_output_callback() instead of relying on redirect_stdout
-            if context is not None:
-                context.executor = executor
+        # Store executor in context so task closures can access it for output callbacks
+        # This enables thread-safe output tagging by allowing systems to use
+        # executor.create_output_callback() instead of relying on redirect_stdout
+        if context is not None:
+            context.executor = executor
 
-            # Wrap tasks to return TaskResult-compatible format
-            wrapped_tasks: dict[str, Callable[[], Any]] = {}
-            for name, task_fn in tasks.items():
-                wrapped_tasks[name] = task_fn
+        # Wrap tasks to return TaskResult-compatible format
+        wrapped_tasks: dict[str, Callable[[], Any]] = {}
+        for name, task_fn in tasks.items():
+            wrapped_tasks[name] = task_fn
 
-            raw_results = executor.execute_parallel(
-                wrapped_tasks, phase_name, log_dir=self.parallel_log_dir
-            )
+        raw_results = executor.execute_parallel(
+            wrapped_tasks, phase_name, log_dir=self.parallel_log_dir
+        )
 
-            # Convert to TaskResult
-            results: dict[str, TaskResult] = {}
-            for name, result in raw_results.items():
-                if isinstance(result, TaskResult):
-                    results[name] = result
-                elif isinstance(result, tuple) and len(result) >= 1:
-                    results[name] = TaskResult(
-                        success=bool(result[0]),
-                        data=result[1] if len(result) > 1 else None,
-                    )
-                elif result is None:
-                    results[name] = TaskResult(
-                        success=False, error="Task returned None"
-                    )
-                else:
-                    results[name] = TaskResult(success=bool(result), data=result)
-            return results
-        else:
-            # Sequential execution
-            results = {}
-            for name, task_fn in tasks.items():
-                results[name] = task_fn()
-            return results
+        # Convert to TaskResult
+        results: dict[str, TaskResult] = {}
+        for name, result in raw_results.items():
+            if isinstance(result, TaskResult):
+                results[name] = result
+            elif isinstance(result, tuple) and len(result) >= 1:
+                results[name] = TaskResult(
+                    success=bool(result[0]),
+                    data=result[1] if len(result) > 1 else None,
+                )
+            elif result is None:
+                results[name] = TaskResult(success=False, error="Task returned None")
+            else:
+                results[name] = TaskResult(success=bool(result), data=result)
+        return results
 
     @exclude_from_package
     def _get_system_for_context(

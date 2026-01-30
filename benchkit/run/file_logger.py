@@ -1,11 +1,12 @@
 """File-based logging with real-time writing."""
 
-import re
 import threading
 from collections.abc import Callable
 from io import TextIOWrapper
 from pathlib import Path
 from typing import Any
+
+from benchkit.common.markup import strip_markup
 
 
 class FileLogger:
@@ -35,20 +36,8 @@ class FileLogger:
         """
         with self._lock:
             if self._file:
-                clean = self._strip_markup(message.rstrip("\n"))
+                clean = strip_markup(message.rstrip("\n"))
                 self._file.write(clean + "\n")
-
-    def _strip_markup(self, text: str) -> str:
-        """Remove Rich markup tags from text.
-
-        Args:
-            text: Text possibly containing Rich markup like [bold], [red], etc.
-
-        Returns:
-            Clean text without markup tags
-        """
-        # Match Rich markup patterns: [tag], [/tag], [tag attr], etc.
-        return re.sub(r"\[/?[a-zA-Z_ ]+\]", "", text)
 
     def close(self) -> None:
         """Close the log file."""
