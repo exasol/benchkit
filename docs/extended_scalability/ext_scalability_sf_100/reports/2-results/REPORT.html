@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Extended Scalability - Scale Factor 100 (Single Node) - Detailed Query Results">
+    <title>Extended Scalability - Scale Factor 100 (Single Node) | Detailed Query Results</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-badge">📊 Detailed Query Results</div>
+            <h1>Extended Scalability - Scale Factor 100 (Single Node)</h1>
+            <div class="metadata">
+                <span class="meta-item">
+                    <strong>Author:</strong> Benchmark Team
+                </span>
+                <span class="meta-item">
+                    <strong>Date:</strong> 2026-01-30 02:11:12
+                </span>
+                <span class="meta-item">
+                    <strong>Environment:</strong>
+                    <span class="badge badge-cloud">AWS</span>
+                    eu-west-1
+                </span>
+            </div>
+        </header>
+
+        <!-- Overview -->
+        <section class="section">
+            <h2>Overview</h2>
+            <p>This report presents the complete query-by-query performance results for <strong>1 database systems</strong> tested using the TPC-H benchmark at scale factor 100.</p>
+        </section>
+
+        <!-- Systems Under Test -->
+        <section class="section">
+            <h2>Systems Under Test</h2>
+
+            <div class="systems-grid">
+                <div class="system-card">
+                    <h3>Duckdb 1.4.4</h3>
+
+
+                    <div class="system-specs">
+                        <h4>Environment & Hardware</h4>
+                        <ul>
+                            <li><strong>Cloud:</strong> AWS eu-west-1</li>
+                            <li><strong>Instance:</strong> r6id.4xlarge</li>
+                            <li><strong>CPU:</strong> Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz (16 vCPUs)</li>
+                            <li><strong>Memory:</strong> 123.8GB RAM</li>
+                        </ul>
+
+                        <h4>Software</h4>
+                        <ul>
+                            <li><strong>Database:</strong> duckdb 1.4.4</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Performance Summary -->
+        <section class="section">
+            <h2>Performance Summary</h2>
+
+
+            <h3>Performance Visualizations</h3>
+            <div class="chart-container">
+                <iframe src="attachments/figures/system_performance_overview.html" width="100%" height="550" frameborder="0"></iframe>
+            </div>
+            <div class="chart-container">
+                <iframe src="attachments/figures/performance_heatmap.html" width="100%" height="550" frameborder="0"></iframe>
+            </div>
+        </section>
+
+        <!-- Detailed Analysis -->
+        <section class="section">
+            <h2>Detailed Analysis</h2>
+
+            <h3>Performance by Query Type</h3>
+            <p>The benchmark results reveal distinct performance characteristics across different query categories:</p>
+
+            <ul>
+                <li><strong>Aggregation queries</strong> (<a href="#" class="query-link" data-query="Q01">Q01</a>, <a href="#" class="query-link" data-query="Q06">Q06</a>, <a href="#" class="query-link" data-query="Q12">Q12</a>, <a href="#" class="query-link" data-query="Q14">Q14</a>, <a href="#" class="query-link" data-query="Q15">Q15</a>, <a href="#" class="query-link" data-query="Q19">Q19</a>, <a href="#" class="query-link" data-query="Q20">Q20</a>): Test data reduction and grouping operations</li>
+                <li><strong>Join-heavy queries</strong> (<a href="#" class="query-link" data-query="Q02">Q02</a>, <a href="#" class="query-link" data-query="Q05">Q05</a>, <a href="#" class="query-link" data-query="Q08">Q08</a>, <a href="#" class="query-link" data-query="Q09">Q09</a>, <a href="#" class="query-link" data-query="Q10">Q10</a>, <a href="#" class="query-link" data-query="Q11">Q11</a>, <a href="#" class="query-link" data-query="Q21">Q21</a>, <a href="#" class="query-link" data-query="Q22">Q22</a>): Evaluate multi-table join performance</li>
+                <li><strong>Complex analytical queries</strong> (<a href="#" class="query-link" data-query="Q03">Q03</a>, <a href="#" class="query-link" data-query="Q04">Q04</a>, <a href="#" class="query-link" data-query="Q07">Q07</a>, <a href="#" class="query-link" data-query="Q13">Q13</a>, <a href="#" class="query-link" data-query="Q16">Q16</a>, <a href="#" class="query-link" data-query="Q17">Q17</a>, <a href="#" class="query-link" data-query="Q18">Q18</a>): Combine multiple operations</li>
+            </ul>
+
+            <p>The following table shows the median performance for each query category across all systems:</p>
+            <table  class="query-type-table">
+<thead><tr>
+<th>Query Type</th>
+<th>duckdb</th>
+</tr></thead>
+<tbody>
+<tr >
+<td>Aggregation</td>
+<td class="perf-good">7,309.60</td>
+</tr>
+<tr >
+<td>Join-Heavy</td>
+<td class="perf-excellent">6,981.80</td>
+</tr>
+<tr >
+<td>Complex Analytical</td>
+<td class="perf-poor">7,507.10</td>
+</tr>
+</tbody>
+</table>
+
+            <h3>Query-by-Query Results</h3>
+            <p>The following table shows the median execution time for each query across all systems:</p>
+            
+
+            <h3>Detailed Statistics</h3>
+            <p>The complete performance statistics for all queries and systems:</p>
+            <table  class="summary-table">
+<thead><tr>
+<th>query</th>
+<th>system</th>
+<th>warmup</th>
+<th>runs</th>
+<th>median_ms</th>
+<th>mean_ms</th>
+<th>std_ms</th>
+<th>min_ms</th>
+<th>max_ms</th>
+</tr></thead>
+<tbody>
+<tr data-query-start="true" data-query-group="odd" data-query="Q01" data-system="duckdb">
+<td>Q01</td>
+<td>duckdb</td>
+<td class="perf-poor">2,243.80</td>
+<td>5</td>
+<td class="perf-good">5,802.60</td>
+<td class="perf-good">6,219.20</td>
+<td class="perf-excellent">1,774.20</td>
+<td class="perf-average">4,213.10</td>
+<td class="perf-excellent">9,070.60</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q02" data-system="duckdb">
+<td>Q02</td>
+<td>duckdb</td>
+<td class="perf-excellent">482.80</td>
+<td>5</td>
+<td class="perf-excellent">4,427.70</td>
+<td class="perf-excellent">5,842.40</td>
+<td class="perf-good">2,677.00</td>
+<td class="perf-excellent">3,283.40</td>
+<td class="perf-good">9,844.70</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q03" data-system="duckdb">
+<td>Q03</td>
+<td>duckdb</td>
+<td class="perf-good">1,522.40</td>
+<td>5</td>
+<td class="perf-excellent">4,197.10</td>
+<td class="perf-excellent">6,130.80</td>
+<td class="perf-poor">4,000.20</td>
+<td class="perf-good">3,716.00</td>
+<td class="perf-average">13,185.60</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q04" data-system="duckdb">
+<td>Q04</td>
+<td>duckdb</td>
+<td class="perf-good">1,441.00</td>
+<td>5</td>
+<td class="perf-poor">8,975.00</td>
+<td class="perf-poor">9,902.90</td>
+<td class="perf-average">2,740.50</td>
+<td class="perf-poor">7,507.10</td>
+<td class="perf-poor">14,075.00</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q05" data-system="duckdb">
+<td>Q05</td>
+<td>duckdb</td>
+<td class="perf-average">1,656.40</td>
+<td>5</td>
+<td class="perf-good">5,722.80</td>
+<td class="perf-excellent">5,745.10</td>
+<td class="perf-excellent">1,276.00</td>
+<td class="perf-average">4,203.20</td>
+<td class="perf-excellent">7,695.30</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q06" data-system="duckdb">
+<td>Q06</td>
+<td>duckdb</td>
+<td class="perf-excellent">407.80</td>
+<td>5</td>
+<td class="perf-excellent">3,811.40</td>
+<td class="perf-excellent">3,712.70</td>
+<td class="perf-excellent">686.80</td>
+<td class="perf-excellent">2,884.80</td>
+<td class="perf-excellent">4,434.60</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q07" data-system="duckdb">
+<td>Q07</td>
+<td>duckdb</td>
+<td class="perf-good">1,432.50</td>
+<td>5</td>
+<td class="perf-excellent">5,240.90</td>
+<td class="perf-good">6,560.90</td>
+<td class="perf-poor">4,191.60</td>
+<td class="perf-good">3,795.30</td>
+<td class="perf-average">13,945.10</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q08" data-system="duckdb">
+<td>Q08</td>
+<td>duckdb</td>
+<td class="perf-average">1,533.10</td>
+<td>5</td>
+<td class="perf-good">5,874.50</td>
+<td class="perf-good">6,133.30</td>
+<td class="perf-excellent">993.30</td>
+<td class="perf-poor">4,998.50</td>
+<td class="perf-excellent">7,680.00</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q09" data-system="duckdb">
+<td>Q09</td>
+<td>duckdb</td>
+<td class="perf-poor">4,415.40</td>
+<td>5</td>
+<td class="perf-poor">9,672.90</td>
+<td class="perf-poor">10,265.10</td>
+<td class="perf-excellent">1,994.40</td>
+<td class="perf-poor">8,581.30</td>
+<td class="perf-average">13,651.80</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q10" data-system="duckdb">
+<td>Q10</td>
+<td>duckdb</td>
+<td class="perf-poor">2,282.80</td>
+<td>5</td>
+<td class="perf-good">6,134.80</td>
+<td class="perf-average">7,577.50</td>
+<td class="perf-poor">5,214.50</td>
+<td class="perf-excellent">2,260.30</td>
+<td class="perf-poor">16,221.00</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q11" data-system="duckdb">
+<td>Q11</td>
+<td>duckdb</td>
+<td class="perf-excellent">199.80</td>
+<td>5</td>
+<td class="perf-good">6,548.20</td>
+<td class="perf-excellent">5,828.40</td>
+<td class="perf-good">2,061.80</td>
+<td class="perf-excellent">3,485.40</td>
+<td class="perf-excellent">7,835.50</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q12" data-system="duckdb">
+<td>Q12</td>
+<td>duckdb</td>
+<td class="perf-average">1,597.20</td>
+<td>5</td>
+<td class="perf-poor">10,867.00</td>
+<td class="perf-poor">11,004.80</td>
+<td class="perf-average">2,938.30</td>
+<td class="perf-poor">8,429.60</td>
+<td class="perf-poor">15,834.00</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q13" data-system="duckdb">
+<td>Q13</td>
+<td>duckdb</td>
+<td class="perf-poor">4,050.60</td>
+<td>5</td>
+<td class="perf-average">7,737.30</td>
+<td class="perf-average">7,998.10</td>
+<td class="perf-good">2,682.90</td>
+<td class="perf-good">3,989.70</td>
+<td class="perf-good">10,999.60</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q14" data-system="duckdb">
+<td>Q14</td>
+<td>duckdb</td>
+<td class="perf-good">1,118.70</td>
+<td>5</td>
+<td class="perf-average">7,752.90</td>
+<td class="perf-poor">8,597.60</td>
+<td class="perf-poor">4,072.80</td>
+<td class="perf-average">4,589.80</td>
+<td class="perf-average">13,840.80</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q15" data-system="duckdb">
+<td>Q15</td>
+<td>duckdb</td>
+<td class="perf-excellent">933.30</td>
+<td>5</td>
+<td class="perf-average">7,389.60</td>
+<td class="perf-average">7,409.20</td>
+<td class="perf-good">2,545.40</td>
+<td class="perf-good">3,493.90</td>
+<td class="perf-good">10,530.60</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q16" data-system="duckdb">
+<td>Q16</td>
+<td>duckdb</td>
+<td class="perf-excellent">736.30</td>
+<td>5</td>
+<td class="perf-excellent">4,709.50</td>
+<td class="perf-excellent">5,359.30</td>
+<td class="perf-excellent">2,040.00</td>
+<td class="perf-excellent">2,740.40</td>
+<td class="perf-excellent">8,065.80</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q17" data-system="duckdb">
+<td>Q17</td>
+<td>duckdb</td>
+<td class="perf-average">1,710.80</td>
+<td>5</td>
+<td class="perf-average">7,590.90</td>
+<td class="perf-good">6,881.60</td>
+<td class="perf-poor">3,879.90</td>
+<td class="perf-excellent">1,663.70</td>
+<td class="perf-good">11,262.30</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q18" data-system="duckdb">
+<td>Q18</td>
+<td>duckdb</td>
+<td class="perf-poor">3,441.90</td>
+<td>5</td>
+<td class="perf-poor">8,621.90</td>
+<td class="perf-poor">9,828.70</td>
+<td class="perf-average">3,064.80</td>
+<td class="perf-poor">6,888.70</td>
+<td class="perf-poor">14,543.80</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q19" data-system="duckdb">
+<td>Q19</td>
+<td>duckdb</td>
+<td class="perf-average">1,585.80</td>
+<td>5</td>
+<td class="perf-poor">8,010.30</td>
+<td class="perf-average">8,327.30</td>
+<td class="perf-average">3,203.40</td>
+<td class="perf-average">4,268.50</td>
+<td class="perf-average">13,217.90</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q20" data-system="duckdb">
+<td>Q20</td>
+<td>duckdb</td>
+<td class="perf-good">1,469.00</td>
+<td>5</td>
+<td class="perf-excellent">4,227.00</td>
+<td class="perf-good">6,628.40</td>
+<td class="perf-poor">5,225.50</td>
+<td class="perf-good">3,666.00</td>
+<td class="perf-poor">15,861.50</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q21" data-system="duckdb">
+<td>Q21</td>
+<td>duckdb</td>
+<td class="perf-poor">7,709.60</td>
+<td>5</td>
+<td class="perf-poor">11,782.40</td>
+<td class="perf-poor">12,885.40</td>
+<td class="perf-good">2,614.90</td>
+<td class="perf-poor">10,274.40</td>
+<td class="perf-poor">15,838.80</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q22" data-system="duckdb">
+<td>Q22</td>
+<td>duckdb</td>
+<td class="perf-excellent">794.20</td>
+<td>5</td>
+<td class="perf-average">6,704.30</td>
+<td class="perf-average">7,408.80</td>
+<td class="perf-average">3,573.80</td>
+<td class="perf-average">4,065.90</td>
+<td class="perf-good">11,937.60</td>
+</tr>
+</tbody>
+</table>
+
+            <h3>System Rankings</h3>
+
+            <h3>Per-Stream Performance Analysis</h3>
+            <div class="notice notice-info">
+                <p>This benchmark was executed using <strong>4 concurrent streams</strong> to simulate multi-user workload. The following tables show how queries were distributed and performed across each stream for each system:</p>
+            </div>
+
+            <h4>Clickhouse - Stream Performance</h4>
+            <div class="comparison-table">
+                <table class="styled-table">
+                    <thead>
+                        <tr>
+                            <th>Stream ID</th>
+                            <th>Queries Executed</th>
+                            <th>Avg Runtime (ms)</th>
+                            <th>Median Runtime (ms)</th>
+                            <th>Min Runtime (ms)</th>
+                            <th>Max Runtime (ms)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>0</strong></td>
+                            <td>28</td>
+                            <td>19205.7</td>
+                            <td>18657.2</td>
+                            <td>1573.5</td>
+                            <td>38914.3</td>
+                        </tr>
+                        <tr>
+                            <td><strong>1</strong></td>
+                            <td>28</td>
+                            <td>18430.5</td>
+                            <td>14896.3</td>
+                            <td>1701.5</td>
+                            <td>42235.0</td>
+                        </tr>
+                        <tr>
+                            <td><strong>2</strong></td>
+                            <td>27</td>
+                            <td>18262.8</td>
+                            <td>18423.4</td>
+                            <td>1791.3</td>
+                            <td>35869.8</td>
+                        </tr>
+                        <tr>
+                            <td><strong>3</strong></td>
+                            <td>27</td>
+                            <td>17533.0</td>
+                            <td>14279.8</td>
+                            <td>2876.4</td>
+                            <td>66562.7</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="key-findings">
+                <h5>Stream Performance Analysis for Clickhouse</h5>
+                <ul>
+                    <li><strong>Best stream median:</strong> 14279.8ms</li>
+                    <li><strong>Worst stream median:</strong> 18657.2ms</li>
+                    <li><strong>Performance variance:</strong> 30.7% difference between fastest and slowest streams</li>
+                </ul>
+                <p>This demonstrates Clickhouse's ability to handle concurrent query loads with <strong>varying</strong> performance across streams.</p>
+            </div>
+            <h4>Duckdb - Stream Performance</h4>
+            <div class="comparison-table">
+                <table class="styled-table">
+                    <thead>
+                        <tr>
+                            <th>Stream ID</th>
+                            <th>Queries Executed</th>
+                            <th>Avg Runtime (ms)</th>
+                            <th>Median Runtime (ms)</th>
+                            <th>Min Runtime (ms)</th>
+                            <th>Max Runtime (ms)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>0</strong></td>
+                            <td>28</td>
+                            <td>7318.8</td>
+                            <td>6620.9</td>
+                            <td>2260.3</td>
+                            <td>15838.8</td>
+                        </tr>
+                        <tr>
+                            <td><strong>1</strong></td>
+                            <td>28</td>
+                            <td>7553.6</td>
+                            <td>7073.9</td>
+                            <td>1663.7</td>
+                            <td>14075.0</td>
+                        </tr>
+                        <tr>
+                            <td><strong>2</strong></td>
+                            <td>27</td>
+                            <td>7647.0</td>
+                            <td>7610.7</td>
+                            <td>2884.8</td>
+                            <td>16221.0</td>
+                        </tr>
+                        <tr>
+                            <td><strong>3</strong></td>
+                            <td>27</td>
+                            <td>7716.4</td>
+                            <td>7493.2</td>
+                            <td>2740.4</td>
+                            <td>15834.0</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="key-findings">
+                <h5>Stream Performance Analysis for Duckdb</h5>
+                <ul>
+                    <li><strong>Best stream median:</strong> 6620.9ms</li>
+                    <li><strong>Worst stream median:</strong> 7610.7ms</li>
+                    <li><strong>Performance variance:</strong> 15.0% difference between fastest and slowest streams</li>
+                </ul>
+                <p>This demonstrates Duckdb's ability to handle concurrent query loads with <strong>consistent</strong> performance across streams.</p>
+            </div>
+            <h4>Exasol - Stream Performance</h4>
+            <div class="comparison-table">
+                <table class="styled-table">
+                    <thead>
+                        <tr>
+                            <th>Stream ID</th>
+                            <th>Queries Executed</th>
+                            <th>Avg Runtime (ms)</th>
+                            <th>Median Runtime (ms)</th>
+                            <th>Min Runtime (ms)</th>
+                            <th>Max Runtime (ms)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>0</strong></td>
+                            <td>28</td>
+                            <td>1925.9</td>
+                            <td>1906.4</td>
+                            <td>141.0</td>
+                            <td>4935.9</td>
+                        </tr>
+                        <tr>
+                            <td><strong>1</strong></td>
+                            <td>28</td>
+                            <td>1400.8</td>
+                            <td>578.2</td>
+                            <td>65.1</td>
+                            <td>8280.5</td>
+                        </tr>
+                        <tr>
+                            <td><strong>2</strong></td>
+                            <td>27</td>
+                            <td>1896.2</td>
+                            <td>703.5</td>
+                            <td>81.7</td>
+                            <td>7775.1</td>
+                        </tr>
+                        <tr>
+                            <td><strong>3</strong></td>
+                            <td>27</td>
+                            <td>1531.5</td>
+                            <td>598.5</td>
+                            <td>76.3</td>
+                            <td>7793.2</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="key-findings">
+                <h5>Stream Performance Analysis for Exasol</h5>
+                <ul>
+                    <li><strong>Best stream median:</strong> 578.2ms</li>
+                    <li><strong>Worst stream median:</strong> 1906.4ms</li>
+                    <li><strong>Performance variance:</strong> 229.7% difference between fastest and slowest streams</li>
+                </ul>
+                <p>This demonstrates Exasol's ability to handle concurrent query loads with <strong>varying</strong> performance across streams.</p>
+            </div>
+            <h4>Starrocks - Stream Performance</h4>
+            <div class="comparison-table">
+                <table class="styled-table">
+                    <thead>
+                        <tr>
+                            <th>Stream ID</th>
+                            <th>Queries Executed</th>
+                            <th>Avg Runtime (ms)</th>
+                            <th>Median Runtime (ms)</th>
+                            <th>Min Runtime (ms)</th>
+                            <th>Max Runtime (ms)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>0</strong></td>
+                            <td>28</td>
+                            <td>9179.5</td>
+                            <td>4583.9</td>
+                            <td>521.2</td>
+                            <td>64083.4</td>
+                        </tr>
+                        <tr>
+                            <td><strong>1</strong></td>
+                            <td>28</td>
+                            <td>7983.0</td>
+                            <td>3692.5</td>
+                            <td>444.3</td>
+                            <td>47798.4</td>
+                        </tr>
+                        <tr>
+                            <td><strong>2</strong></td>
+                            <td>27</td>
+                            <td>8241.4</td>
+                            <td>3848.8</td>
+                            <td>534.9</td>
+                            <td>47266.5</td>
+                        </tr>
+                        <tr>
+                            <td><strong>3</strong></td>
+                            <td>27</td>
+                            <td>8414.6</td>
+                            <td>4533.0</td>
+                            <td>777.7</td>
+                            <td>48821.1</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="key-findings">
+                <h5>Stream Performance Analysis for Starrocks</h5>
+                <ul>
+                    <li><strong>Best stream median:</strong> 3692.5ms</li>
+                    <li><strong>Worst stream median:</strong> 4583.9ms</li>
+                    <li><strong>Performance variance:</strong> 24.1% difference between fastest and slowest streams</li>
+                </ul>
+                <p>This demonstrates Starrocks's ability to handle concurrent query loads with <strong>varying</strong> performance across streams.</p>
+            </div>
+            <h4>Trino - Stream Performance</h4>
+            <div class="comparison-table">
+                <table class="styled-table">
+                    <thead>
+                        <tr>
+                            <th>Stream ID</th>
+                            <th>Queries Executed</th>
+                            <th>Avg Runtime (ms)</th>
+                            <th>Median Runtime (ms)</th>
+                            <th>Min Runtime (ms)</th>
+                            <th>Max Runtime (ms)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>0</strong></td>
+                            <td>28</td>
+                            <td>48854.2</td>
+                            <td>33448.2</td>
+                            <td>2665.8</td>
+                            <td>183198.1</td>
+                        </tr>
+                        <tr>
+                            <td><strong>1</strong></td>
+                            <td>28</td>
+                            <td>34820.8</td>
+                            <td>29135.8</td>
+                            <td>3928.0</td>
+                            <td>129125.0</td>
+                        </tr>
+                        <tr>
+                            <td><strong>2</strong></td>
+                            <td>27</td>
+                            <td>47904.6</td>
+                            <td>28911.4</td>
+                            <td>2879.7</td>
+                            <td>218968.8</td>
+                        </tr>
+                        <tr>
+                            <td><strong>3</strong></td>
+                            <td>27</td>
+                            <td>39042.5</td>
+                            <td>30552.2</td>
+                            <td>4938.7</td>
+                            <td>152280.1</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="key-findings">
+                <h5>Stream Performance Analysis for Trino</h5>
+                <ul>
+                    <li><strong>Best stream median:</strong> 28911.4ms</li>
+                    <li><strong>Worst stream median:</strong> 33448.2ms</li>
+                    <li><strong>Performance variance:</strong> 15.7% difference between fastest and slowest streams</li>
+                </ul>
+                <p>This demonstrates Trino's ability to handle concurrent query loads with <strong>consistent</strong> performance across streams.</p>
+            </div>
+
+            <div class="notice notice-info">
+                <h5>Query Distribution Method</h5>
+                <p>Query distribution was <strong>randomized</strong> (seed: 42) for realistic concurrent user simulation</p>
+            </div>
+        </section>
+
+        <!-- Methodology -->
+        <section class="section">
+            <h2>Benchmark Methodology</h2>
+
+            <div class="methodology-grid">
+                <div class="method-card">
+                    <h3>Workload Configuration</h3>
+                    <p><strong>TPC-H Benchmark:</strong></p>
+                    <ul>
+                        <li><strong>Scale Factor:</strong> 100</li>
+                        <li><strong>Data Format:</strong> CSV</li>
+                        <li><strong>Data Generator:</strong> dbgen</li>
+                    </ul>
+                </div>
+
+                <div class="method-card">
+                    <h3>Execution Parameters</h3>
+                    <ul>
+                        <li><strong>Warmup Runs:</strong> 1</li>
+                        <li><strong>Measured Runs:</strong> 5</li>
+                        <li><strong>Execution Mode:</strong> Multiuser (4 concurrent streams)</li>
+                        <li><strong>Query Distribution:</strong> Randomized (seed: 42)</li>
+                        <li><strong>Metric Reported:</strong> Median execution time</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="notice notice-info">
+                <h4>Performance Measurement</h4>
+                <p>All queries were executed with the same data and parameters across all systems. The median execution time from 5 runs is reported for each query to minimize the impact of system variance and outliers.</p>
+            </div>
+        </section>
+
+        <!-- Conclusion -->
+        <section class="section">
+            <h2>Conclusion</h2>
+
+            <p>This benchmark provides a detailed, query-level comparison of 1 database systems on analytical workloads. The results demonstrate the performance characteristics and trade-offs of each system when processing TPC-H queries.</p>
+
+        </section>
+    </div>
+
+    <!-- Query Modal -->
+    <div id="queryModal" class="query-modal">
+        <div class="query-modal-content">
+            <div class="query-modal-header">
+                <h3 id="modalTitle">Query Details</h3>
+                <button class="query-modal-close" onclick="closeQueryModal()">&times;</button>
+            </div>
+            <div id="modalBody">
+                <pre><code id="queryCode" class="language-sql"></code></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- Syntax Highlighting -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+
+    <script>
+        // Query data embedded from workload
+        const queryData = {
+            "Q01": {
+                "duckdb": "attachments/queries/duckdb/Q01.sql"            },            "Q02": {
+                "duckdb": "attachments/queries/duckdb/Q02.sql"            },            "Q03": {
+                "duckdb": "attachments/queries/duckdb/Q03.sql"            },            "Q04": {
+                "duckdb": "attachments/queries/duckdb/Q04.sql"            },            "Q05": {
+                "duckdb": "attachments/queries/duckdb/Q05.sql"            },            "Q06": {
+                "duckdb": "attachments/queries/duckdb/Q06.sql"            },            "Q07": {
+                "duckdb": "attachments/queries/duckdb/Q07.sql"            },            "Q08": {
+                "duckdb": "attachments/queries/duckdb/Q08.sql"            },            "Q09": {
+                "duckdb": "attachments/queries/duckdb/Q09.sql"            },            "Q10": {
+                "duckdb": "attachments/queries/duckdb/Q10.sql"            },            "Q11": {
+                "duckdb": "attachments/queries/duckdb/Q11.sql"            },            "Q12": {
+                "duckdb": "attachments/queries/duckdb/Q12.sql"            },            "Q13": {
+                "duckdb": "attachments/queries/duckdb/Q13.sql"            },            "Q14": {
+                "duckdb": "attachments/queries/duckdb/Q14.sql"            },            "Q15": {
+                "duckdb": "attachments/queries/duckdb/Q15.sql"            },            "Q16": {
+                "duckdb": "attachments/queries/duckdb/Q16.sql"            },            "Q17": {
+                "duckdb": "attachments/queries/duckdb/Q17.sql"            },            "Q18": {
+                "duckdb": "attachments/queries/duckdb/Q18.sql"            },            "Q19": {
+                "duckdb": "attachments/queries/duckdb/Q19.sql"            },            "Q20": {
+                "duckdb": "attachments/queries/duckdb/Q20.sql"            },            "Q21": {
+                "duckdb": "attachments/queries/duckdb/Q21.sql"            },            "Q22": {
+                "duckdb": "attachments/queries/duckdb/Q22.sql"            }        };
+
+        // Add click handlers to summary table rows
+        document.addEventListener('DOMContentLoaded', function() {
+            const summaryTable = document.querySelector('.summary-table');
+            if (summaryTable) {
+                const rows = summaryTable.querySelectorAll('tbody tr[data-query]');
+                rows.forEach(row => {
+                    row.addEventListener('click', function() {
+                        const query = this.dataset.query;
+                        const system = this.dataset.system;
+                        showQueryModal(query, system);
+                    });
+                });
+            }
+        });
+
+        // Add click handlers to query links
+        document.addEventListener('DOMContentLoaded', function() {
+            const queryLinks = document.querySelectorAll('.query-link');
+            queryLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const query = this.dataset.query;
+                    // Default to first system if not specified
+                    const system = this.dataset.system || Object.keys(queryData[query] || {})[0];
+                    showQueryModal(query, system);
+                });
+            });
+        });
+
+        function showQueryModal(query, system) {
+            const modal = document.getElementById('queryModal');
+            const title = document.getElementById('modalTitle');
+            const code = document.getElementById('queryCode');
+
+            title.textContent = `${query} - ${system}`;
+
+            // Load query from file
+            if (queryData[query] && queryData[query][system]) {
+                fetch(queryData[query][system])
+                    .then(response => response.text())
+                    .then(sql => {
+                        code.textContent = sql;
+                        Prism.highlightElement(code);
+                        modal.classList.add('active');
+                    })
+                    .catch(error => {
+                        code.textContent = `Error loading query: ${error}`;
+                        modal.classList.add('active');
+                    });
+            } else {
+                code.textContent = `Query ${query} not found for system ${system}`;
+                modal.classList.add('active');
+            }
+        }
+
+        function closeQueryModal() {
+            const modal = document.getElementById('queryModal');
+            modal.classList.remove('active');
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('queryModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeQueryModal();
+            }
+        });
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeQueryModal();
+            }
+        });
+
+        // Auto-resize iframes to match content height
+        function resizeIframe(iframe) {
+            try {
+                const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                if (iframeDoc && iframeDoc.body) {
+                    // Get the full height of the iframe content
+                    const height = iframeDoc.body.scrollHeight;
+                    // Set iframe height to match content (add small padding)
+                    iframe.style.height = (height + 20) + 'px';
+                }
+            } catch (e) {
+                // Cross-origin or access issues - keep default height
+                console.warn('Could not resize iframe:', e);
+            }
+        }
+
+        // Resize all iframes on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            const iframes = document.querySelectorAll('iframe');
+            iframes.forEach(function(iframe) {
+                // Resize on load
+                iframe.addEventListener('load', function() {
+                    resizeIframe(iframe);
+                });
+                // Also try to resize immediately in case already loaded
+                if (iframe.contentDocument && iframe.contentDocument.readyState === 'complete') {
+                    resizeIframe(iframe);
+                }
+            });
+        });
+    </script>
+</body>
+</html>

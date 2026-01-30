@@ -1,0 +1,9 @@
+{
+  "system_name": "duckdb",
+  "connection_info": {
+    "public_ip": "108.130.162.106",
+    "private_ip": "10.0.1.38"
+  },
+  "installation_s": 4.235877152066678,
+  "timestamp": "2026-01-30T02:03:10.831781"
+}

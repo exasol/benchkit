@@ -1,0 +1,150 @@
+# Series 3: Stream Scaling (Cluster) - 8 Streams
+# Purpose: Measure cluster performance with higher concurrency
+# Variable: Streams (8)
+# Fixed: Nodes=4, SF=50
+# Systems: Exasol, ClickHouse, Trino, StarRocks (4 cluster-capable systems)
+# Note: Instance size increased to maintain ~25GB memory per stream
+project_id: "ext_scalability_cluster_streams_8"
+title: "Extended Scalability - Cluster Stream Scaling (8 Streams)"
+author: "Benchmark Team"
+
+execution:
+  parallel: true
+  max_workers: 4
+
+env:
+  mode: "aws"
+  region: "eu-west-1"
+  allow_external_database_access: true
+  instances:
+    exasol:
+      instance_type: "r6id.2xlarge"  # 8 vCPUs, 64GB RAM per node (256GB total)
+      disk:
+        type: "local"
+      label: "ext-scale-exa-cs8"
+    clickhouse:
+      instance_type: "r6id.2xlarge"  # 8 vCPUs, 64GB RAM per node (256GB total)
+      disk:
+        type: "local"
+      label: "ext-scale-ch-cs8"
+    trino:
+      instance_type: "r6id.2xlarge"  # 8 vCPUs, 64GB RAM per node (256GB total)
+      disk:
+        type: "local"
+      label: "ext-scale-trino-cs8"
+    starrocks:
+      instance_type: "r6id.2xlarge"  # 8 vCPUs, 64GB RAM per node (256GB total)
+      disk:
+        type: "local"
+      label: "ext-scale-sr-cs8"
+  os_image: "ubuntu-22.04"
+  ssh_key_name: "ok-work3"
+  ssh_private_key_path: "~/.ssh/ok-work3.pem"
+
+systems:
+  # Exasol - 4-node cluster (256GB total), 8 streams
+  - name: "exasol"
+    kind: "exasol"
+    version: "2025.2.0"
+    setup:
+      method: "installer"
+      node_count: 4
+      use_additional_disk: true
+      c4_version: "4.28.5"
+      host_addrs: "$EXASOL_PRIVATE_IP"
+      host_external_addrs: "$EXASOL_PUBLIC_IP"
+      image_password: "exasol123"
+      db_password: "exasol456"
+      admin_password: "exasol789"
+      license_file: "configs/exasol.license"
+      db_mem_size: 192000  # 48GB × 4 nodes = 192GB cluster memory (~75%)
+      extra:
+        optimizer_mode: "analytical"
+        db_params:
+          - "-writeTouchInit=1"
+          - "-cacheMonitorLimit=0"
+          - "-maxOverallSlbUsageRatio=0.95"
+          - "-useQueryCache=0"
+          - "-query_log_timeout=0"
+          - "-joinOrderMethod=0"
+          - "-etlCheckCertsDefault=0"
+
+  # ClickHouse - 4-node sharded cluster (256GB total), 8 streams
+  - name: "clickhouse"
+    kind: "clickhouse"
+    version: "25.10.2.65"
+    setup:
+      method: "native"
+      node_count: 4
+      use_additional_disk: true
+      data_dir: "/data/clickhouse"
+      host: "$CLICKHOUSE_PUBLIC_IP"
+      port: 8123
+      username: "default"
+      password: "clickhouse123"
+      extra:
+        memory_limit: "48g"  # Per-node limit (r6id.2xlarge 64GB/node)
+        max_threads: "8"
+        # 4-node cluster (64GB/node), 8 streams: 7GB/query/node, grace_hash spills
+        max_memory_usage: "7000000000"
+        max_bytes_before_external_group_by: "2500000000"
+        max_bytes_before_external_sort: "2500000000"
+        join_algorithm: "grace_hash"
+        max_bytes_in_join: "5000000000"
+
+  # Trino - 4-node cluster (256GB total), 8 streams
+  - name: "trino"
+    kind: "trino"
+    version: "479"
+    setup:
+      method: "native"
+      node_count: 4
+      use_additional_disk: true
+      host: "$TRINO_PUBLIC_IP"
+      port: 8080
+      username: "admin"
+      catalog: "hive"
+      schema: "tpch_views"
+      storage:
+        type: "s3"
+        bucket: "benchkit-ext-scalability-trino-eu-west-1"
+        region: "eu-west-1"
+      extra:
+        query_max_memory: "192GB"        # Total across cluster (~75%)
+        query_max_memory_per_node: "48GB"
+
+  # StarRocks - 4-node cluster (256GB total), 8 streams
+  - name: "starrocks"
+    kind: "starrocks"
+    version: "4.0.4"
+    setup:
+      method: "native"
+      node_count: 4
+      use_additional_disk: true
+      host: "$STARROCKS_PUBLIC_IP"
+      port: 9030
+      username: "root"
+      password: ""
+      extra:
+        bucket_count: 16  # 4 buckets per node
+        replication_num: 1
+
+workload:
+  name: "tpch"
+  scale_factor: 50
+  runs_per_query: 5
+  warmup_runs: 1
+  data_format: "csv"
+  generator: "dbgen"
+  system_variants:
+    clickhouse: "tuned"
+  multiuser:
+    enabled: true
+    num_streams: 8
+    randomize: true
+    random_seed: 42
+
+report:
+  show_boxplots: true
+  show_bar_chart: true
+  show_heatmap: true

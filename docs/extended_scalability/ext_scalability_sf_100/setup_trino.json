@@ -1,0 +1,208 @@
+{
+  "system_name": "trino",
+  "system_kind": "trino",
+  "system_version": "479",
+  "commands": {
+    "storage_setup": [
+      {
+        "command": "sudo mkfs.ext4 -F /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS652F0614FCC8AAE6C",
+        "success": true,
+        "description": "Format /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS652F0614FCC8AAE6C with ext4 filesystem",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mkfs.ext4 -F /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS652F0614FCC8AAE6C",
+        "success": true,
+        "description": "Execute sudo command on remote system",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mkdir -p /data",
+        "success": true,
+        "description": "Create mount point /data",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mkdir -p /data",
+        "success": true,
+        "description": "Execute sudo command on remote system",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS652F0614FCC8AAE6C /data",
+        "success": true,
+        "description": "Mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS652F0614FCC8AAE6C to /data",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS652F0614FCC8AAE6C /data",
+        "success": true,
+        "description": "Execute sudo command on remote system",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo chown -R ubuntu:ubuntu /data",
+        "success": true,
+        "description": "Set ownership of /data to ubuntu:ubuntu",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo chown -R ubuntu:ubuntu /data",
+        "success": true,
+        "description": "Execute sudo command on remote system",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mkdir -p /data/trino",
+        "success": true,
+        "description": "Create trino data directory",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mkdir -p /data/trino",
+        "success": true,
+        "description": "Execute sudo command on remote system",
+        "category": "storage_setup"
+      }
+    ],
+    "prerequisites": [
+      {
+        "command": "wget -qO - https://packages.adoptium.net/artifactory/api/gpg/key/public | sudo gpg --dearmor -o /usr/share/keyrings/adoptium.gpg 2>/dev/null || true\necho \"deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb $(lsb_release -sc) main\" | sudo tee /etc/apt/sources.list.d/adoptium.list",
+        "success": true,
+        "description": "Add Eclipse Temurin (Adoptium) repository for Java 22",
+        "category": "prerequisites"
+      },
+      {
+        "command": "sudo apt-get update && sudo apt-get install -y temurin-25-jdk",
+        "success": true,
+        "description": "Install Java 25 (required by Trino 479+)",
+        "category": "prerequisites"
+      },
+      {
+        "command": "sudo apt-get install -y python-is-python3",
+        "success": true,
+        "description": "Install python symlink (required by Trino launcher)",
+        "category": "prerequisites"
+      }
+    ],
+    "installation": [
+      {
+        "command": "wget https://github.com/trinodb/trino/releases/download/479/trino-server-479.tar.gz -O /tmp/trino-server.tar.gz",
+        "success": true,
+        "description": "Download Trino server version 479",
+        "category": "installation"
+      },
+      {
+        "command": "sudo tar -xzf /tmp/trino-server.tar.gz -C /opt/",
+        "success": true,
+        "description": "Extract Trino server to /opt",
+        "category": "installation"
+      },
+      {
+        "command": "sudo ln -sf /opt/trino-server-479 /opt/trino-server",
+        "success": true,
+        "description": "Create symlink /opt/trino-server",
+        "category": "installation"
+      },
+      {
+        "command": "sudo mkdir -p /var/trino/data /etc/trino /var/log/trino",
+        "success": true,
+        "description": "Create Trino directories",
+        "category": "installation"
+      },
+      {
+        "command": "sudo ln -sf /etc/trino /opt/trino-server/etc",
+        "success": true,
+        "description": "Create etc symlink for Trino launcher",
+        "category": "installation"
+      }
+    ],
+    "user_setup": [
+      {
+        "command": "sudo useradd -r -s /bin/false trino",
+        "success": true,
+        "description": "Create Trino system user",
+        "category": "user_setup"
+      }
+    ],
+    "configuration": [
+      {
+        "command": "sudo tee /etc/trino/node.properties > /dev/null << 'EOF'\nnode.environment=production\nnode.id=61de262a-f3ba-4df3-8ae5-b3f1b9958716\nnode.data-dir=/var/trino/data\nEOF",
+        "success": true,
+        "description": "Configure Trino node properties",
+        "category": "configuration"
+      },
+      {
+        "command": "sudo tee /etc/trino/jvm.config > /dev/null << 'EOF'\n-server\n-Xmx99G\n-Xms99G\n-XX:+UseG1GC\n-XX:G1HeapRegionSize=32M\n-XX:+ExplicitGCInvokesConcurrent\n-XX:+HeapDumpOnOutOfMemoryError\n-XX:+ExitOnOutOfMemoryError\n-XX:ReservedCodeCacheSize=512M\n-Djdk.attach.allowAttachSelf=true\n-Djdk.nio.maxCachedBufferSize=2000000\nEOF",
+        "success": true,
+        "description": "Configure JVM with 99G heap (80% of 123.8G total RAM)",
+        "category": "configuration"
+      },
+      {
+        "command": "sudo tee /etc/trino/config.properties > /dev/null << 'EOF'\ncoordinator=true\nnode-scheduler.include-coordinator=true\nhttp-server.http.port=8080\ndiscovery.uri=http://localhost:8080\nquery.max-memory=96GB\nquery.max-memory-per-node=69GB\nEOF",
+        "success": true,
+        "description": "Configure Trino as coordinator",
+        "category": "configuration"
+      },
+      {
+        "command": "sudo tee /etc/trino/catalog/memory.properties > /dev/null << 'EOF'\nconnector.name=memory\nEOF",
+        "success": true,
+        "description": "Configure memory connector catalog for temporary tables",
+        "category": "configuration"
+      },
+      {
+        "command": "sudo tee /etc/trino/catalog/hive.properties > /dev/null << 'EOF'\nconnector.name=hive\nhive.metastore=file\nhive.metastore.catalog.dir=local:///data/trino/hive-warehouse\nfs.native-local.enabled=true\nlocal.location=/\nEOF",
+        "success": true,
+        "description": "Configure Hive connector with file-based metastore at /data/trino/hive-warehouse",
+        "category": "configuration"
+      },
+      {
+        "command": "sudo tee /etc/systemd/system/trino.service > /dev/null << 'EOF'\n[Unit]\nDescription=Trino Server\nAfter=network.target\n\n[Service]\nType=forking\nUser=trino\nGroup=trino\nExecStart=/opt/trino-server/bin/launcher start\nExecStop=/opt/trino-server/bin/launcher stop\nRestart=on-failure\nRestartSec=10\n\n[Install]\nWantedBy=multi-user.target\nEOF",
+        "success": true,
+        "description": "Create Trino systemd service",
+        "category": "configuration"
+      }
+    ],
+    "service_management": [
+      {
+        "command": "sudo systemctl daemon-reload",
+        "success": true,
+        "description": "Reload systemd daemon",
+        "category": "service_management"
+      },
+      {
+        "command": "sudo systemctl start trino",
+        "success": true,
+        "description": "Start Trino server service",
+        "category": "service_management"
+      },
+      {
+        "command": "sudo systemctl enable trino",
+        "success": true,
+        "description": "Enable Trino server to start on boot",
+        "category": "service_management"
+      }
+    ]
+  },
+  "installation_notes": [
+    "Storage device /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS652F0614FCC8AAE6C mounted at /data",
+    "trino data directory: /data/trino",
+    "Installing Trino single-node (coordinator only)",
+    "Waiting for Trino to be ready for connections...",
+    "\u2713 Trino is ready and accepting connections"
+  ],
+  "config_parameters": {
+    "node_count": 1,
+    "use_additional_disk": true,
+    "host": "<PUBLIC_IP>",
+    "port": 8080,
+    "username": "admin",
+    "catalog": "hive",
+    "schema": "tpch_views",
+    "extra": {
+      "query_max_memory": "96GB",
+      "query_max_memory_per_node": "71GB"
+    }
+  },
+  "data_directory": "/data/trino"
+}
