@@ -404,7 +404,7 @@ class BenchmarkRunner:
         return PhaseConfig(
             name="setup",
             header_emoji="🏗️",
-            header_text="Phase 1: System Setup",
+            header_text="Phase 2: System Setup",
             prerequisite_phase=None,
             completion_check=self._is_setup_complete,
             completion_save=lambda name, data: self._save_setup_complete(
@@ -421,7 +421,7 @@ class BenchmarkRunner:
         return PhaseConfig(
             name="load",
             header_emoji="📦",
-            header_text="Phase 2: Data Loading",
+            header_text="Phase 3: Data Loading",
             prerequisite_phase="setup",
             completion_check=self._is_load_complete,
             completion_save=lambda name, data: self._save_load_complete(
@@ -441,7 +441,7 @@ class BenchmarkRunner:
         return PhaseConfig(
             name="queries",
             header_emoji="🚀",
-            header_text="Phase 3: Query Execution",
+            header_text="Phase 4: Query Execution",
             prerequisite_phase="load",
             completion_check=lambda _: False,  # Queries can always be re-run
             completion_save=lambda _name, _data: None,  # No completion marker for queries
@@ -614,15 +614,22 @@ class BenchmarkRunner:
             def make_task(cfg: dict[str, Any], name: str) -> Callable[[], TaskResult]:
                 def task() -> TaskResult:
                     try:
-                        console.print(f"\n🔧 Processing [bold]{name}[/bold]...")
+                        self._log_output(
+                            f"🔧 Processing {name}...", context.executor, name
+                        )
 
                         # Get system for this execution context
                         system = self._get_system_for_context(cfg, context)
                         instance_mgr = context.get_instance_manager(name)
 
-                        # Execute phase operation
+                        # Execute phase operation (pass executor for parallel output)
                         success, data = phase.operation(
-                            system, cfg, instance_mgr, package_path, workload
+                            system,
+                            cfg,
+                            instance_mgr,
+                            package_path,
+                            workload,
+                            context.executor,
                         )
 
                         # Save completion marker on success
@@ -634,11 +641,19 @@ class BenchmarkRunner:
                         return TaskResult(success=success, data=data)
 
                     except Exception as e:
-                        console.print(f"[red]{name} {phase.name} failed: {e}[/red]")
+                        self._log_output(
+                            f"[red]{name} {phase.name} failed: {e}[/red]",
+                            context.executor,
+                            name,
+                        )
                         if is_debug_enabled():
                             import traceback
 
-                            console.print(f"[dim]{traceback.format_exc()}[/dim]")
+                            self._log_output(
+                                f"[dim]{traceback.format_exc()}[/dim]",
+                                context.executor,
+                                name,
+                            )
                         return TaskResult(success=False, error=str(e))
 
                 return task
@@ -797,6 +812,7 @@ class BenchmarkRunner:
         instance_manager: Any,
         package_path: Path | None,  # unused for setup
         workload: "Workload",  # unused for setup
+        executor: "ParallelExecutor | None" = None,  # for parallel output routing
     ) -> tuple[bool, dict[str, Any]]:
         """
         Execute setup operation for a single system.
@@ -915,43 +931,49 @@ class BenchmarkRunner:
         # Cloud/remote mode - use state machine
         # If force is requested, bypass state check and delete remote markers
         if force_reinstall:
-            console.print(
-                f"[yellow]Force reinstall requested for {system_name} - deleting remote markers[/yellow]"
+            self._log_output(
+                f"Force reinstall requested for {system_name} - deleting remote markers",
+                executor,
+                system_name,
             )
             self._delete_remote_marker(system, instance_manager)
             state = "NEEDS_INSTALLATION"
         else:
-            state = self._check_system_state(system, instance_manager)
-        console.print(f"📊 System state: [blue]{state}[/blue]")
+            state = self._check_system_state(system, instance_manager, executor)
+        self._log_output(f"📊 System state: {state}", executor, system_name)
 
         if state == "NEEDS_INSTALLATION":
-            console.print(f"🚀 Installing {system_name}...")
+            self._log_output(f"🚀 Installing {system_name}...", executor, system_name)
             with Timer(f"Installation for {system_name}") as timer:
                 if not self._install_system_remotely(
-                    system, instance_manager, system_name=system_name
+                    system, instance_manager, executor, system_name=system_name
                 ):
                     return False, {"error": "installation_failed"}
             timings["installation_s"] = timer.elapsed
             self._save_installation_timing(system_name, timer.elapsed)
-            console.print(
-                f"[dim]✓ Installation completed in {timer.elapsed:.2f}s[/dim]"
+            self._log_output(
+                f"✓ Installation completed in {timer.elapsed:.2f}s",
+                executor,
+                system_name,
             )
 
             setup_summary = system.get_setup_summary()
             self._save_setup_summary(system_name, setup_summary)
 
         elif state in ["NEEDS_SERVICE_RESTART", "NEEDS_DB_RESTART"]:
-            console.print(f"🔄 Restarting {system_name}...")
+            self._log_output(f"🔄 Restarting {system_name}...", executor, system_name)
             self._load_setup_summary_to_system(system, system_name)
 
             with Timer(f"Restart for {system_name}") as timer:
                 if not self._restart_system_remotely(
-                    system, instance_manager, system_name=system_name
+                    system, instance_manager, executor, system_name=system_name
                 ):
                     return False, {"error": "restart_failed"}
             timings["restart_s"] = timer.elapsed
             timings["installation_s"] = self._load_installation_timing(system_name)
-            console.print(f"[dim]✓ Restart completed in {timer.elapsed:.2f}s[/dim]")
+            self._log_output(
+                f"✓ Restart completed in {timer.elapsed:.2f}s", executor, system_name
+            )
 
             setup_summary = system.get_setup_summary()
             if setup_summary.get("commands"):
@@ -961,11 +983,15 @@ class BenchmarkRunner:
             timings["installation_s"] = self._load_installation_timing(system_name)
             self._load_setup_summary_to_system(system, system_name)
             if timings["installation_s"] > 0:
-                console.print(
-                    f"[green]✅ {system_name} already ready (installed in {timings['installation_s']:.2f}s)[/green]"
+                self._log_output(
+                    f"✅ {system_name} already ready (installed in {timings['installation_s']:.2f}s)",
+                    executor,
+                    system_name,
                 )
             else:
-                console.print(f"[green]✅ {system_name} already ready[/green]")
+                self._log_output(
+                    f"✅ {system_name} already ready", executor, system_name
+                )
 
         # Build connection info
         connection_info = self._build_connection_info(instance_manager)
@@ -978,6 +1004,7 @@ class BenchmarkRunner:
         instance_manager: Any,
         package_path: Path | None,
         workload: "Workload",
+        executor: "ParallelExecutor | None" = None,  # for parallel output routing
     ) -> tuple[bool, dict[str, Any]]:
         """
         Execute load operation for a single system.
@@ -999,13 +1026,13 @@ class BenchmarkRunner:
         # Cloud mode - deploy package and run remotely
         if package_path and instance_manager:
             success = self._execute_load_remotely(
-                system_config, instance_manager, package_path
+                system_config, instance_manager, package_path, executor
             )
             return success, {}
 
         # Local/local-to-remote mode - run directly
         if not system.is_healthy():
-            console.print(f"  Starting {system_name}...")
+            self._log_output(f"Starting {system_name}...", executor, system_name)
             if not system.start():
                 return False, {"error": "start_failed"}
             if not system.wait_for_health():
@@ -1029,6 +1056,7 @@ class BenchmarkRunner:
         instance_manager: Any,
         package_path: Path | None,
         workload: "Workload",
+        executor: "ParallelExecutor | None" = None,  # for parallel output routing
     ) -> tuple[bool, list[dict[str, Any]]]:
         """
         Execute query operation for a single system.
@@ -1050,19 +1078,19 @@ class BenchmarkRunner:
         # Cloud mode - deploy package and run remotely
         if package_path and instance_manager:
             results = self._execute_workload_remotely(
-                system_config, instance_manager, package_path
+                system_config, instance_manager, package_path, executor
             )
             return bool(results), results or []
 
         # Local/local-to-remote mode - run directly
         if not system.is_healthy():
-            console.print(f"  Starting {system_name}...")
+            self._log_output(f"Starting {system_name}...", executor, system_name)
             if not system.start():
                 return False, []
             if not system.wait_for_health():
                 return False, []
 
-        console.print("  Executing queries...")
+        self._log_output("Executing queries...", executor, system_name)
         measured, warmup = self._execute_queries(system, workload)
 
         # Store warmup results for later aggregation
@@ -1071,7 +1099,9 @@ class BenchmarkRunner:
                 self._all_warmup_results = []
             self._all_warmup_results.extend(warmup)
 
-        console.print(f"  [green]✓ Queries completed for {system_name}[/green]")
+        self._log_output(
+            f"✓ Queries completed for {system_name}", executor, system_name
+        )
         return bool(measured), measured
 
     @exclude_from_package
@@ -1129,7 +1159,7 @@ class BenchmarkRunner:
 
     def run_setup(self, force: bool = False) -> bool:
         """
-        Phase 1: Setup infrastructure and install database systems.
+        Phase 2: Setup infrastructure and install database systems.
 
         This phase handles:
         - Cloud infrastructure provisioning (if cloud mode)
@@ -1177,7 +1207,7 @@ class BenchmarkRunner:
 
     def run_load(self, force: bool = False, local: bool = False) -> bool:
         """
-        Phase 2: Generate data, create schema, and load data into databases.
+        Phase 3: Generate data, create schema, and load data into databases.
 
         This phase handles:
         - Data generation (TPC-H data files)
@@ -1280,7 +1310,7 @@ class BenchmarkRunner:
 
     def run_queries(self, force: bool = False, local: bool = False) -> bool:
         """
-        Phase 3: Execute benchmark queries only.
+        Phase 4: Execute benchmark queries only.
 
         This phase handles:
         - Warmup query execution
@@ -1380,13 +1410,12 @@ class BenchmarkRunner:
                 system_name,
             )
 
-            # Create streaming callback for remote output with local tagging
+            # Create streaming callback for remote output
             def stream_remote_output(line: str, stream_name: str) -> None:
-                # Add system tag prefix for parallel output identification
-                tagged_line = f"[{system_name}] {line}"
+                # TailMonitor adds the [system_name] prefix, so we only mark stderr
                 if stream_name == "stderr":
-                    tagged_line = f"[{system_name}] [stderr] {line}"
-                self._log_output(tagged_line, executor, system_name)
+                    line = f"[stderr] {line}"
+                self._log_output(line, executor, system_name)
 
             load_result = primary_manager.run_remote_command(
                 f"cd /home/ubuntu/{project_id} && ./load_data.sh {system_name}",
@@ -1438,17 +1467,17 @@ class BenchmarkRunner:
         """Run the complete benchmark with all three phases."""
         console.print(f"[bold blue]Starting benchmark: {self.project_id}[/bold blue]")
 
-        # Phase 1: Setup
+        # Phase 2: Setup
         if not self.run_setup():
             console.print("[red]❌ Setup phase failed[/red]")
             return False
 
-        # Phase 2: Load data
+        # Phase 3: Load data
         if not self.run_load():
             console.print("[red]❌ Load phase failed[/red]")
             return False
 
-        # Phase 3: Execute queries
+        # Phase 4: Execute queries
         if not self.run_queries():
             console.print("[red]❌ Query execution failed[/red]")
             return False
@@ -1633,9 +1662,11 @@ class BenchmarkRunner:
         """Create summary statistics from results."""
         return self._results_manager.create_summary_stats(df, warmup_df, config)
 
-    def _check_system_state(self, system: Any, instance_manager: Any) -> str:
+    def _check_system_state(
+        self, system: Any, instance_manager: Any, executor: Any = None
+    ) -> str:
         """Enhanced system state detection with comprehensive checks."""
-        return self._infra_helper.check_system_state(system, instance_manager)
+        return self._infra_helper.check_system_state(system, instance_manager, executor)
 
     def _install_system_remotely(
         self,
