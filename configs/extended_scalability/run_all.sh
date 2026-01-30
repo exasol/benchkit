@@ -88,6 +88,11 @@ INFRA_TIMEOUT=3600       # 60 minutes for infrastructure (larger clusters)
 BENCHMARK_TIMEOUT=14400  # 4 hours for benchmark run (SF100 + multinode)
 DESTROY_TIMEOUT=900      # 15 minutes for cleanup
 
+# Sequential systems execution mode
+# "" = all at once (default), "sequential" = one by one, "sys1,sys2" = specific systems
+SYSTEMS_MODE=""
+CURRENT_SYSTEM=""  # Track current system for cleanup on interrupt
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -202,7 +207,9 @@ save_state() {
 get_experiment_status() {
     local experiment="$1"
     if [[ -f "${STATE_FILE}" ]]; then
-        grep "^${experiment}|" "${STATE_FILE}" | tail -1 | cut -d'|' -f2
+        # Match only experiment-level states (3 fields: experiment|status|timestamp)
+        # Excludes system-level states (4 fields: experiment|system|status|timestamp)
+        grep "^${experiment}|[^|]*|[^|]*$" "${STATE_FILE}" | tail -1 | cut -d'|' -f2
     fi
 }
 
@@ -212,9 +219,137 @@ is_experiment_completed() {
     [[ "$status" == "completed" ]]
 }
 
+# Per-system state management (for sequential mode)
+# Format: experiment|system|status|timestamp
+save_system_state() {
+    local experiment="$1"
+    local system="$2"
+    local status="$3"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    ensure_dir "$(dirname "${STATE_FILE}")"
+    echo "${experiment}|${system}|${status}|${timestamp}" >> "${STATE_FILE}"
+}
+
+get_system_status() {
+    local experiment="$1"
+    local system="$2"
+    if [[ -f "${STATE_FILE}" ]]; then
+        grep "^${experiment}|${system}|" "${STATE_FILE}" | tail -1 | cut -d'|' -f3
+    fi
+}
+
+is_system_completed() {
+    local experiment="$1"
+    local system="$2"
+    local status=$(get_system_status "$experiment" "$system")
+    [[ "$status" == "completed" ]]
+}
+
 reset_state() {
     log INFO "Resetting experiment state..."
     rm -f "${STATE_FILE}"
+}
+
+# =============================================================================
+# System Extraction from Config
+# =============================================================================
+
+# Extract system names from YAML config file
+get_systems_from_config() {
+    local config="$1"
+    python3 -c "
+import yaml
+import sys
+try:
+    with open('$config', 'r') as f:
+        cfg = yaml.safe_load(f)
+        systems = cfg.get('systems', [])
+        print(' '.join(s['name'] for s in systems))
+except Exception as e:
+    print('', file=sys.stderr)
+    sys.exit(1)
+"
+}
+
+# Extract project_id from YAML config file
+get_project_id_from_config() {
+    local config="$1"
+    python3 -c "
+import yaml
+import sys
+try:
+    with open('$config', 'r') as f:
+        cfg = yaml.safe_load(f)
+        print(cfg.get('project_id', ''))
+except Exception as e:
+    print('', file=sys.stderr)
+    sys.exit(1)
+"
+}
+
+# Clear setup and load markers for a system to force reinstallation
+# This is necessary when infrastructure is recreated - old markers would
+# cause setup/load to be skipped on new instances
+clear_system_markers() {
+    local config="$1"
+    local system="$2"
+    local project_id=$(get_project_id_from_config "$config")
+
+    if [[ -z "$project_id" ]]; then
+        log WARN "Could not extract project_id from config, skipping marker cleanup"
+        return 1
+    fi
+
+    local results_dir="${RESULTS_DIR}/${project_id}"
+    local setup_marker="${results_dir}/setup_complete_${system}.json"
+    local load_marker="${results_dir}/load_complete_${system}.json"
+
+    local cleared=0
+    if [[ -f "$setup_marker" ]]; then
+        rm -f "$setup_marker"
+        log INFO "[${system}] Cleared stale setup marker"
+        cleared=1
+    fi
+    if [[ -f "$load_marker" ]]; then
+        rm -f "$load_marker"
+        log INFO "[${system}] Cleared stale load marker"
+        cleared=1
+    fi
+
+    if [[ $cleared -eq 0 ]]; then
+        log DEBUG "[${system}] No stale markers to clear"
+    fi
+
+    return 0
+}
+
+# Clear all setup and load markers for all systems in a config
+# Used in parallel mode where all systems run at once
+clear_all_markers() {
+    local config="$1"
+    local project_id=$(get_project_id_from_config "$config")
+
+    if [[ -z "$project_id" ]]; then
+        log WARN "Could not extract project_id from config, skipping marker cleanup"
+        return 1
+    fi
+
+    local results_dir="${RESULTS_DIR}/${project_id}"
+    local cleared=0
+
+    # Clear all setup and load markers
+    for marker in "${results_dir}"/setup_complete_*.json "${results_dir}"/load_complete_*.json; do
+        if [[ -f "$marker" ]]; then
+            rm -f "$marker"
+            cleared=1
+        fi
+    done
+
+    if [[ $cleared -eq 1 ]]; then
+        log INFO "Cleared stale markers in ${results_dir}"
+    fi
+
+    return 0
 }
 
 # =============================================================================
@@ -302,6 +437,11 @@ show_experiment_plan() {
                     ;;
                 started|running)
                     status_icon="[RUNNING]"
+                    status_color="$YELLOW"
+                    ((pending_experiments++))
+                    ;;
+                partial_failure)
+                    status_icon="[PARTIAL]"
                     status_color="$YELLOW"
                     ((pending_experiments++))
                     ;;
@@ -621,11 +761,12 @@ list_experiments() {
             [[ -z "$status" ]] && status="pending"
 
             case "$status" in
-                completed)    status_icon="DONE"; status_color="$GREEN" ;;
-                started)      status_icon="RUNNING"; status_color="$YELLOW" ;;
-                *_failed)     status_icon="FAILED"; status_color="$RED" ;;
-                interrupted)  status_icon="STOPPED"; status_color="$YELLOW" ;;
-                *)            status_icon="PENDING"; status_color="$CYAN" ;;
+                completed)       status_icon="DONE"; status_color="$GREEN" ;;
+                started)         status_icon="RUNNING"; status_color="$YELLOW" ;;
+                partial_failure) status_icon="PARTIAL"; status_color="$YELLOW" ;;
+                *_failed)        status_icon="FAILED"; status_color="$RED" ;;
+                interrupted)     status_icon="STOPPED"; status_color="$YELLOW" ;;
+                *)               status_icon="PENDING"; status_color="$CYAN" ;;
             esac
 
             if [[ ! -f "$config_path" ]]; then
@@ -636,7 +777,7 @@ list_experiments() {
             # Format cost info
             local cost_info="${instance_count}× ${instance_type} | \$${cost_per_hour}/hr × ${runtime}h = \$${total_cost}"
 
-            printf "  ${status_color}%-8s${NC} %-20s %s\n" "[$status_icon]" "$experiment_id" "$description"
+            printf "  ${status_color}%-9s${NC} %-20s %s\n" "[$status_icon]" "$experiment_id" "$description"
             printf "           ${YELLOW}%-21s %s${NC}\n" "" "$cost_info"
         done
 
@@ -689,27 +830,35 @@ list_experiments() {
 destroy_infrastructure() {
     local config="$1"
     local experiment="$2"
+    local system="$3"  # Optional: specific system to destroy
     local log_file="${LOG_DIR}/${experiment}_destroy.log"
+    local systems_arg=""
 
-    log INFO "Destroying infrastructure for ${experiment}..."
+    if [[ -n "$system" ]]; then
+        log INFO "Destroying infrastructure for ${experiment} [${system}]..."
+        systems_arg="--systems $system"
+        log_file="${LOG_DIR}/${experiment}_${system}_destroy.log"
+    else
+        log INFO "Destroying infrastructure for ${experiment}..."
+    fi
 
     if $DRY_RUN; then
-        log INFO "[DRY-RUN] Would destroy infrastructure"
+        log INFO "[DRY-RUN] Would destroy infrastructure${system:+ for $system}"
         return 0
     fi
 
-    timeout "${DESTROY_TIMEOUT}" python -m benchkit infra destroy -c "$config" \
+    timeout "${DESTROY_TIMEOUT}" python -m benchkit infra destroy -c "$config" $systems_arg \
         >> "$log_file" 2>&1
     local exit_code=$?
 
     if [[ $exit_code -eq 0 ]]; then
-        log INFO "Infrastructure destroyed successfully"
+        log INFO "Infrastructure destroyed successfully${system:+ for $system}"
         return 0
     elif [[ $exit_code -eq 124 ]]; then
-        log WARN "Infrastructure destroy timed out after ${DESTROY_TIMEOUT}s"
+        log WARN "Infrastructure destroy timed out after ${DESTROY_TIMEOUT}s${system:+ for $system}"
         return 1
     else
-        log WARN "Infrastructure destroy failed (exit code: $exit_code)"
+        log WARN "Infrastructure destroy failed (exit code: $exit_code)${system:+ for $system}"
         return 1
     fi
 }
@@ -717,12 +866,13 @@ destroy_infrastructure() {
 force_cleanup() {
     local config="$1"
     local experiment="$2"
+    local system="$3"  # Optional: specific system to cleanup
 
-    log WARN "Attempting force cleanup for ${experiment}..."
+    log WARN "Attempting force cleanup for ${experiment}${system:+ [$system]}..."
 
     for attempt in 1 2 3; do
         log INFO "Cleanup attempt ${attempt}/3..."
-        if destroy_infrastructure "$config" "$experiment"; then
+        if destroy_infrastructure "$config" "$experiment" "$system"; then
             return 0
         fi
         sleep 10
@@ -767,6 +917,23 @@ validate_config() {
 run_experiment() {
     local series="$1"
     local config_name="$2"
+
+    # Dispatch based on systems mode
+    if [[ -n "$SYSTEMS_MODE" ]]; then
+        # Sequential mode: run systems one at a time
+        run_experiment_sequential "$series" "$config_name"
+        return $?
+    fi
+
+    # Default mode: run all systems at once
+    run_experiment_all_at_once "$series" "$config_name"
+    return $?
+}
+
+# Original experiment execution (all systems at once)
+run_experiment_all_at_once() {
+    local series="$1"
+    local config_name="$2"
     local experiment_id=$(get_experiment_id $series $config_name)
     local config=$(get_config_path $series $config_name)
     local log_file="${LOG_DIR}/${experiment_id}.log"
@@ -775,11 +942,13 @@ run_experiment() {
     log_section "Running Experiment: ${experiment_id}"
     log INFO "Series: ${SERIES_NAMES[$series]}"
     log INFO "Config: ${config}"
+    log INFO "Mode: All systems at once"
 
     # Check if already completed (resume mode)
+    # Return code 2 = skipped (don't wait before next experiment)
     if $RESUME && is_experiment_completed "$experiment_id"; then
         log INFO "Experiment ${experiment_id} already completed, skipping..."
-        return 0
+        return 2
     fi
 
     # Validate config
@@ -797,6 +966,10 @@ run_experiment() {
     save_state "$experiment_id" "started"
     CURRENT_EXPERIMENT="$experiment_id"
     CLEANUP_NEEDED=true
+
+    # Clear stale markers from previous runs to force fresh setup/load
+    # This prevents "setup already complete" on new infrastructure
+    clear_all_markers "$config"
 
     # Create log file
     ensure_dir "$(dirname "$log_file")"
@@ -830,7 +1003,8 @@ run_experiment() {
     echo "" >> "$log_file"
     echo "=== Benchmark Execution ===" >> "$log_file"
 
-    timeout "${BENCHMARK_TIMEOUT}" python -m benchkit run --full -c "$config" \
+    # --force ensures data is reloaded and results are appended even if they exist
+    timeout "${BENCHMARK_TIMEOUT}" python -m benchkit run --full --force -c "$config" \
         >> "$log_file" 2>&1
     local bench_exit=$?
 
@@ -866,17 +1040,222 @@ run_experiment() {
 cleanup_experiment() {
     local config="$1"
     local experiment="$2"
+    local system="$3"  # Optional: specific system to cleanup
 
     if $NO_CLEANUP; then
         log WARN "Skipping cleanup (--no-cleanup flag set)"
         return 0
     fi
 
-    if ! destroy_infrastructure "$config" "$experiment"; then
-        force_cleanup "$config" "$experiment"
+    if ! destroy_infrastructure "$config" "$experiment" "$system"; then
+        force_cleanup "$config" "$experiment" "$system"
     fi
 
     CLEANUP_NEEDED=false
+    CURRENT_SYSTEM=""
+}
+
+# =============================================================================
+# Single-System Execution (for sequential mode)
+# =============================================================================
+
+run_single_system() {
+    local series="$1"
+    local config_name="$2"
+    local system="$3"
+    local experiment_id=$(get_experiment_id $series $config_name)
+    local config=$(get_config_path $series $config_name)
+    local log_file="${LOG_DIR}/${experiment_id}_${system}.log"
+    local start_time=$(date +%s)
+
+    log INFO "[${system}] Starting single-system benchmark..."
+
+    # Check if already completed (resume mode)
+    # Return code 2 = skipped (don't wait before next system)
+    if $RESUME && is_system_completed "$experiment_id" "$system"; then
+        log INFO "[${system}] Already completed, skipping..."
+        return 2
+    fi
+
+    if $DRY_RUN; then
+        log INFO "[DRY-RUN] Would run ${experiment_id} for system: ${system}"
+        return 0
+    fi
+
+    # Mark as started
+    save_system_state "$experiment_id" "$system" "started"
+    CURRENT_EXPERIMENT="$experiment_id"
+    CURRENT_SYSTEM="$system"
+    CLEANUP_NEEDED=true
+
+    # Clear stale markers from previous runs to force fresh setup/load
+    # This prevents "setup already complete" on new infrastructure
+    clear_system_markers "$config" "$system"
+
+    # Create log file
+    ensure_dir "$(dirname "$log_file")"
+    echo "=== Experiment: ${experiment_id} [${system}] ===" > "$log_file"
+    echo "Started: $(date)" >> "$log_file"
+    echo "" >> "$log_file"
+
+    # Step 1: Provision infrastructure for ONE system
+    log INFO "[${system}] Step 1/3: Provisioning infrastructure..."
+    echo "=== Infrastructure Provisioning ===" >> "$log_file"
+
+    timeout "${INFRA_TIMEOUT}" python -m benchkit infra apply -c "$config" --systems "$system" \
+        >> "$log_file" 2>&1
+    local infra_exit=$?
+
+    if [[ $infra_exit -ne 0 ]]; then
+        if [[ $infra_exit -eq 124 ]]; then
+            log ERROR "[${system}] Infrastructure provisioning timed out after ${INFRA_TIMEOUT}s"
+            save_system_state "$experiment_id" "$system" "infra_timeout"
+        else
+            log ERROR "[${system}] Infrastructure provisioning failed (exit code: $infra_exit)"
+            save_system_state "$experiment_id" "$system" "infra_failed"
+        fi
+        cleanup_experiment "$config" "$experiment_id" "$system"
+        return 1
+    fi
+    log INFO "[${system}] Infrastructure provisioned successfully"
+
+    # Step 2: Run full benchmark for ONE system
+    log INFO "[${system}] Step 2/3: Running benchmark (setup + load + run)..."
+    echo "" >> "$log_file"
+    echo "=== Benchmark Execution ===" >> "$log_file"
+
+    # --force ensures results are appended even if runs.csv exists from previous system
+    timeout "${BENCHMARK_TIMEOUT}" python -m benchkit run --full --force -c "$config" --systems "$system" \
+        >> "$log_file" 2>&1
+    local bench_exit=$?
+
+    if [[ $bench_exit -ne 0 ]]; then
+        if [[ $bench_exit -eq 124 ]]; then
+            log ERROR "[${system}] Benchmark timed out after ${BENCHMARK_TIMEOUT}s"
+            save_system_state "$experiment_id" "$system" "benchmark_timeout"
+        else
+            log ERROR "[${system}] Benchmark failed (exit code: $bench_exit)"
+            save_system_state "$experiment_id" "$system" "benchmark_failed"
+        fi
+        cleanup_experiment "$config" "$experiment_id" "$system"
+        return 1
+    fi
+    log INFO "[${system}] Benchmark completed successfully"
+
+    # Step 3: Cleanup infrastructure for ONE system
+    log INFO "[${system}] Step 3/3: Cleaning up infrastructure..."
+    cleanup_experiment "$config" "$experiment_id" "$system"
+
+    # Calculate duration
+    local end_time=$(date +%s)
+    local duration=$((end_time - start_time))
+    local duration_min=$((duration / 60))
+
+    log INFO "[${system}] Completed in ${duration_min} minutes"
+    save_system_state "$experiment_id" "$system" "completed"
+    CLEANUP_NEEDED=false
+    CURRENT_SYSTEM=""
+
+    return 0
+}
+
+# =============================================================================
+# Sequential Experiment Execution (one system at a time)
+# =============================================================================
+
+run_experiment_sequential() {
+    local series="$1"
+    local config_name="$2"
+    local experiment_id=$(get_experiment_id $series $config_name)
+    local config=$(get_config_path $series $config_name)
+
+    log_section "Running Experiment (Sequential): ${experiment_id}"
+    log INFO "Series: ${SERIES_NAMES[$series]}"
+    log INFO "Config: ${config}"
+    log INFO "Mode: One system at a time"
+
+    # Validate config
+    if ! validate_config "$config" "$experiment_id"; then
+        save_state "$experiment_id" "config_error"
+        return 1
+    fi
+
+    # Get all systems from config
+    local all_systems=($(get_systems_from_config "$config"))
+    if [[ ${#all_systems[@]} -eq 0 ]]; then
+        log ERROR "No systems found in config: ${config}"
+        return 1
+    fi
+
+    # Determine which systems to run
+    local systems_to_run=()
+    if [[ "$SYSTEMS_MODE" == "sequential" ]]; then
+        systems_to_run=("${all_systems[@]}")
+    else
+        # Filter to specific systems (comma-separated)
+        IFS=',' read -ra requested_systems <<< "$SYSTEMS_MODE"
+        for requested in "${requested_systems[@]}"; do
+            for available in "${all_systems[@]}"; do
+                if [[ "$requested" == "$available" ]]; then
+                    systems_to_run+=("$requested")
+                    break
+                fi
+            done
+        done
+    fi
+
+    if [[ ${#systems_to_run[@]} -eq 0 ]]; then
+        log ERROR "No matching systems to run. Available: ${all_systems[*]}"
+        return 1
+    fi
+
+    log INFO "Systems to run sequentially: ${systems_to_run[*]}"
+    log INFO "Total: ${#systems_to_run[@]} systems"
+
+    # Mark experiment as started (for --list status display)
+    save_state "$experiment_id" "started"
+
+    # Run each system one at a time
+    local completed=0
+    local failed=0
+
+    for i in "${!systems_to_run[@]}"; do
+        local system="${systems_to_run[$i]}"
+        local num=$((i + 1))
+        local total=${#systems_to_run[@]}
+
+        log INFO "Progress: ${num}/${total} - Starting system: ${system}"
+
+        run_single_system "$series" "$config_name" "$system"
+        local result=$?
+
+        if [[ $result -eq 0 ]]; then
+            ((completed++))
+        elif [[ $result -eq 2 ]]; then
+            # System was skipped (already completed) - count as completed, no wait
+            ((completed++))
+            continue
+        else
+            ((failed++))
+        fi
+
+        # Brief pause between systems (except after the last one)
+        if [[ $num -lt $total ]] && ! $DRY_RUN; then
+            log INFO "Waiting 30 seconds before next system..."
+            sleep 30
+        fi
+    done
+
+    log INFO "Experiment ${experiment_id} sequential run complete: ${completed} systems succeeded, ${failed} failed"
+
+    # Mark entire experiment as completed only if all systems succeeded
+    if [[ $failed -eq 0 ]]; then
+        save_state "$experiment_id" "completed"
+        return 0
+    else
+        save_state "$experiment_id" "partial_failure"
+        return 1
+    fi
 }
 
 run_series() {
@@ -896,8 +1275,15 @@ run_series() {
 
         log INFO "Progress: ${num}/${num_configs} - Starting ${config}"
 
-        if run_experiment "$series" "$config"; then
+        run_experiment "$series" "$config"
+        local result=$?
+
+        if [[ $result -eq 0 ]]; then
             ((completed++))
+        elif [[ $result -eq 2 ]]; then
+            # Experiment was skipped (already completed) - count as completed, no wait
+            ((completed++))
+            continue
         else
             ((failed++))
         fi
@@ -924,8 +1310,6 @@ cleanup_on_exit() {
     log WARN "Received interrupt signal..."
 
     if $CLEANUP_NEEDED && [[ -n "$CURRENT_EXPERIMENT" ]]; then
-        log WARN "Cleaning up running experiment: ${CURRENT_EXPERIMENT}"
-
         # Find config for current experiment
         for series in 1 2 3 4 5; do
             local configs=($(get_series_configs $series))
@@ -933,9 +1317,21 @@ cleanup_on_exit() {
                 local exp_id=$(get_experiment_id $series $config)
                 if [[ "$exp_id" == "$CURRENT_EXPERIMENT" ]]; then
                     local config_path=$(get_config_path $series $config)
-                    save_state "$CURRENT_EXPERIMENT" "interrupted"
-                    if ! $DRY_RUN; then
-                        force_cleanup "$config_path" "$CURRENT_EXPERIMENT"
+
+                    if [[ -n "$CURRENT_SYSTEM" ]]; then
+                        # Sequential mode: cleanup single system
+                        log WARN "Cleaning up running system: ${CURRENT_SYSTEM} (experiment: ${CURRENT_EXPERIMENT})"
+                        save_system_state "$CURRENT_EXPERIMENT" "$CURRENT_SYSTEM" "interrupted"
+                        if ! $DRY_RUN; then
+                            force_cleanup "$config_path" "$CURRENT_EXPERIMENT" "$CURRENT_SYSTEM"
+                        fi
+                    else
+                        # Parallel mode: cleanup entire experiment
+                        log WARN "Cleaning up running experiment: ${CURRENT_EXPERIMENT}"
+                        save_state "$CURRENT_EXPERIMENT" "interrupted"
+                        if ! $DRY_RUN; then
+                            force_cleanup "$config_path" "$CURRENT_EXPERIMENT"
+                        fi
                     fi
                     break 2
                 fi
@@ -971,6 +1367,7 @@ EOF
         local configs=($(get_series_configs $series))
         local total=${#configs[@]}
         local completed=0
+        local partial=0
         local failed=0
 
         for config in "${configs[@]}"; do
@@ -978,11 +1375,13 @@ EOF
             local status=$(get_experiment_status "$exp_id")
             case "$status" in
                 completed) ((completed++)) ;;
+                partial_failure) ((partial++)) ;;
                 *_failed|failed) ((failed++)) ;;
             esac
         done
 
         local status_text="${completed}/${total} completed"
+        [[ $partial -gt 0 ]] && status_text="${status_text}, ${partial} partial"
         [[ $failed -gt 0 ]] && status_text="${status_text}, ${failed} failed"
 
         echo "| ${series} | ${SERIES_NAMES[$series]} | ${total} | ${status_text} |" >> "$summary_file"
@@ -1039,6 +1438,9 @@ Options:
   --all             Enable all series (overrides defaults)
   --resume          Skip already completed experiments
   --experiment X    Run single experiment by ID (e.g., s1_nodes_4)
+  --systems MODE    Execute systems sequentially instead of all at once:
+                      "sequential"     - Run all systems one by one
+                      "sys1,sys2,..."  - Run only specified systems sequentially
   --no-cleanup      Don't destroy infrastructure after each run
   --parallel N      Run N experiments concurrently (default: 1)
   --reset           Reset experiment state
@@ -1078,6 +1480,15 @@ Examples:
 
   # Debug: run without cleanup
   ./configs/extended_scalability/run_all.sh --experiment s1_nodes_1 --no-cleanup
+
+  # Sequential mode: run systems one at a time (reduces cloud resource pressure)
+  ./configs/extended_scalability/run_all.sh --systems sequential --experiment s1_nodes_16
+
+  # Run only specific systems sequentially
+  ./configs/extended_scalability/run_all.sh --systems exasol,clickhouse --series 2
+
+  # Resume sequential run after interruption (picks up per-system state)
+  ./configs/extended_scalability/run_all.sh --resume --systems sequential --series 1
 
 EOF
 }
@@ -1128,6 +1539,13 @@ parse_args() {
                 SINGLE_EXPERIMENT="$2"
                 shift 2
                 ;;
+            --systems)
+                SYSTEMS_MODE="$2"
+                if [[ -z "$SYSTEMS_MODE" ]]; then
+                    die "Missing value for --systems. Use 'sequential' or comma-separated system names."
+                fi
+                shift 2
+                ;;
             --parallel)
                 PARALLEL_COUNT="$2"
                 shift 2
@@ -1165,6 +1583,11 @@ main() {
     log INFO "Dry run: ${DRY_RUN}"
     log INFO "Resume mode: ${RESUME}"
     log INFO "No cleanup: ${NO_CLEANUP}"
+    if [[ -n "$SYSTEMS_MODE" ]]; then
+        log INFO "Systems mode: ${SYSTEMS_MODE} (sequential execution)"
+    else
+        log INFO "Systems mode: all at once (default)"
+    fi
 
     # Verify we're in the right directory
     if [[ ! -f "${REPO_ROOT}/pyproject.toml" ]]; then
