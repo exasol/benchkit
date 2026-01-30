@@ -408,10 +408,6 @@ class TrinoSystem(SystemUnderTest):
             else:
                 self.host = "localhost"
 
-            # Mark installed
-            self.mark_installed(record=False)
-            print("✓ Trino installation completed successfully")
-
             return True
 
         except Exception as e:
@@ -520,9 +516,6 @@ class TrinoSystem(SystemUnderTest):
         self.record_setup_note(
             f"✓ Trino cluster ready with {len(self._cloud_instance_managers)} nodes"
         )
-
-        # Mark installed
-        self.mark_installed(record=False)
 
         return True
 

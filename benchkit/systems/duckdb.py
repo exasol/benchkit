@@ -203,9 +203,7 @@ class DuckdbSystem(SystemUnderTest):
         self.record_setup_note(f"DuckDB {duckdb.__version__} ready")
         self.record_setup_note(f"Database path: {self.database_path}")
 
-        # Mark as installed
         self._is_running = True
-        self.mark_installed(record=False)
 
         return True
 
@@ -261,9 +259,7 @@ class DuckdbSystem(SystemUnderTest):
         self.record_setup_note(version_output)
         self.record_setup_note(f"Database path: {self.database_path}")
 
-        # Mark as installed
         self._is_running = True
-        self.mark_installed(record=False)
 
         return True
 
