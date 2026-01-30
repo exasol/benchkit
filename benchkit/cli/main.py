@@ -136,6 +136,9 @@ def setup(
     systems: str | None = typer.Option(
         None, "--systems", help="Comma-separated list of systems to setup"
     ),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Force reinstall even if already installed"
+    ),
     debug: bool = typer.Option(
         False, "--debug", help="Enable debug output for detailed command tracing"
     ),
@@ -166,7 +169,7 @@ def setup(
     console.print(f"[dim]Systems: {[s['name'] for s in cfg['systems']]}[/]")
 
     runner = BenchmarkRunner(cfg, outdir)
-    success = runner.run_setup()
+    success = runner.run_setup(force=force)
 
     if success:
         console.print("[green]✓ Setup phase completed successfully[/]")
@@ -304,71 +307,91 @@ def run(
     runner = BenchmarkRunner(cfg, outdir)
 
     if full:
-        # Run all phases: [infra] -> probe -> setup -> load -> run -> report
-        console.print("[bold blue]Running full benchmark workflow[/bold blue]")
-        console.print()
+        # Check if sequential mode is enabled
+        exec_config = cfg.get("execution", {})
 
-        # Import helpers for detecting cloud/managed modes
-        from ..common.cli_helpers import (
-            is_any_system_cloud_mode,
-            is_any_system_managed_mode,
-        )
+        if exec_config.get("sequential", False):
+            # Sequential mode: complete lifecycle per system
+            # Each system: provision → probe → setup → load → queries → destroy
+            console.print(
+                "[bold blue]Running sequential benchmark workflow[/bold blue]"
+            )
+            console.print("[dim]Each system: provision → benchmark → destroy[/dim]\n")
 
-        has_cloud = is_any_system_cloud_mode(cfg)
-        has_managed = is_any_system_managed_mode(cfg)
-
-        # Phase 0: Infrastructure Provisioning (cloud + managed)
-        # This must happen BEFORE probe so terraform/managed state exists
-        if has_cloud or has_managed:
-            console.print("[bold]Phase 0: Infrastructure Provisioning[/bold]")
-
-            # Cloud systems: Terraform provisioning
-            if has_cloud:
-                console.print("[blue]Provisioning cloud infrastructure...[/]")
-                if not runner.ensure_cloud_infrastructure():
-                    console.print("[red]✗ Cloud infrastructure provisioning failed[/]")
-                    raise typer.Exit(1)
-                console.print("[green]✓ Cloud infrastructure ready[/]")
-
-            # Managed systems: Self-managed deployments (like Exasol PE)
-            if has_managed:
-                console.print("[blue]Deploying managed systems...[/]")
-                if not _apply_managed_systems(cfg):
-                    console.print("[red]✗ Managed systems deployment failed[/]")
-                    raise typer.Exit(1)
-                console.print("[green]✓ Managed systems ready[/]")
-
+            if not runner.run_sequential(
+                run_probe_fn=run_probe_for_full,
+                run_report_fn=run_report_for_full,
+            ):
+                raise typer.Exit(1)
+        else:
+            # Standard mode: all infrastructure provisioned upfront
+            # Run all phases: [infra] -> probe -> setup -> load -> run -> report
+            console.print("[bold blue]Running full benchmark workflow[/bold blue]")
             console.print()
 
-        # Phase 1: Probe (now infrastructure exists for both cloud + managed)
-        console.print("[bold]Phase 1: System Probe[/bold]")
-        run_probe_for_full(cfg, outdir)
-        console.print()
+            # Import helpers for detecting cloud/managed modes
+            from ..common.cli_helpers import (
+                is_any_system_cloud_mode,
+                is_any_system_managed_mode,
+            )
 
-        # Phase 2: Setup (infra already provisioned, just install/configure DB)
-        console.print("[bold]Phase 2: Setup[/bold]")
-        if not runner.run_setup():
-            console.print("[red]✗ Setup phase failed[/]")
-            raise typer.Exit(1)
-        console.print()
+            has_cloud = is_any_system_cloud_mode(cfg)
+            has_managed = is_any_system_managed_mode(cfg)
 
-        # Phase 3: Load
-        console.print("[bold]Phase 3: Load[/bold]")
-        if not runner.run_load(local=local):
-            console.print("[red]✗ Load phase failed[/]")
-            raise typer.Exit(1)
-        console.print()
+            # Phase 0: Infrastructure Provisioning (cloud + managed)
+            # This must happen BEFORE probe so terraform/managed state exists
+            if has_cloud or has_managed:
+                console.print("[bold]Phase 0: Infrastructure Provisioning[/bold]")
 
-        # Phase 4: Queries
-        console.print("[bold]Phase 4: Query Execution[/bold]")
-        if not runner.run_queries(force=force, local=local):
-            console.print("[red]✗ Query execution failed[/]")
-            raise typer.Exit(1)
+                # Cloud systems: Terraform provisioning
+                if has_cloud:
+                    console.print("[blue]Provisioning cloud infrastructure...[/]")
+                    if not runner.ensure_cloud_infrastructure():
+                        console.print(
+                            "[red]✗ Cloud infrastructure provisioning failed[/]"
+                        )
+                        raise typer.Exit(1)
+                    console.print("[green]✓ Cloud infrastructure ready[/]")
 
-        # Phase 5: Report
-        console.print()
-        console.print("[bold]Phase 5: Report Generation[/bold]")
-        run_report_for_full(cfg, _collect_report_files)
+                # Managed systems: Self-managed deployments (like Exasol PE)
+                if has_managed:
+                    console.print("[blue]Deploying managed systems...[/]")
+                    if not _apply_managed_systems(cfg):
+                        console.print("[red]✗ Managed systems deployment failed[/]")
+                        raise typer.Exit(1)
+                    console.print("[green]✓ Managed systems ready[/]")
+
+                console.print()
+
+            # Phase 1: Probe (now infrastructure exists for both cloud + managed)
+            console.print("[bold]Phase 1: System Probe[/bold]")
+            run_probe_for_full(cfg, outdir)
+            console.print()
+
+            # Phase 2: Setup (infra already provisioned, just install/configure DB)
+            console.print("[bold]Phase 2: Setup[/bold]")
+            if not runner.run_setup():
+                console.print("[red]✗ Setup phase failed[/]")
+                raise typer.Exit(1)
+            console.print()
+
+            # Phase 3: Load
+            console.print("[bold]Phase 3: Load[/bold]")
+            if not runner.run_load(local=local):
+                console.print("[red]✗ Load phase failed[/]")
+                raise typer.Exit(1)
+            console.print()
+
+            # Phase 4: Queries
+            console.print("[bold]Phase 4: Query Execution[/bold]")
+            if not runner.run_queries(force=force, local=local):
+                console.print("[red]✗ Query execution failed[/]")
+                raise typer.Exit(1)
+
+            # Phase 5: Report
+            console.print()
+            console.print("[bold]Phase 5: Report Generation[/bold]")
+            run_report_for_full(cfg, _collect_report_files)
     else:
         # Run queries only (strict mode - check prerequisites)
         if not runner.run_queries(force=force, local=local):
@@ -565,6 +588,8 @@ def _dump_config_yaml(cfg: dict[str, Any], config_path: Path | str) -> None:
         # ExecutionConfig defaults
         "execution.parallel": False,
         "execution.max_workers": None,
+        "execution.sequential": False,
+        "execution.continue_on_failure": False,
         # BenchmarkConfig defaults
         "metrics": {},
     }
@@ -793,7 +818,7 @@ def _dump_config_yaml(cfg: dict[str, Any], config_path: Path | str) -> None:
 
     # === Execution Section ===
     print("# === Execution ===")
-    print("# Parallel execution settings")
+    print("# Execution mode settings")
     execution = cfg.get("execution", {})
     print("execution:")
 
@@ -808,6 +833,24 @@ def _dump_config_yaml(cfg: dict[str, Any], config_path: Path | str) -> None:
         print(f"  max_workers: {max_workers}")
     else:
         print("  # max_workers: null  # [DEFAULT] Uses number of systems")
+
+    sequential = execution.get("sequential", False)
+    sequential_comment = (
+        "[DEFAULT]" if is_default("execution.sequential", sequential) else ""
+    )
+    print(
+        f"  sequential: {format_value(sequential)}  # Per-system lifecycle mode {sequential_comment}".rstrip()
+    )
+
+    continue_on_failure = execution.get("continue_on_failure", False)
+    cof_comment = (
+        "[DEFAULT]"
+        if is_default("execution.continue_on_failure", continue_on_failure)
+        else ""
+    )
+    print(
+        f"  continue_on_failure: {format_value(continue_on_failure)}  # Continue if system fails {cof_comment}".rstrip()
+    )
     print()
 
     # === Report Section ===
