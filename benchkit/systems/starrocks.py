@@ -244,7 +244,13 @@ class StarrocksSystem(SystemUnderTest):
             self._cloud_instance_managers and len(self._cloud_instance_managers) > 1
         )
 
-        # Install on all nodes
+        # For multinode: download tarball in parallel on all nodes first
+        # This avoids sequential 3GB downloads (saves ~15min per node)
+        if is_multinode:
+            if not self._download_tarball_parallel():
+                return False
+
+        # Install on all nodes (will skip download if tarball already exists)
         if not self._install_on_all_nodes(self._install_native_on_node):
             return False
 
@@ -254,6 +260,68 @@ class StarrocksSystem(SystemUnderTest):
                 return False
 
         return True
+
+    @exclude_from_package
+    def _download_tarball_parallel(self) -> bool:
+        """Download StarRocks tarball on all nodes in parallel.
+
+        This optimization reduces download time from O(n * download_time) to
+        O(download_time), saving significant time for large clusters.
+        """
+        if not self._cloud_instance_managers:
+            return True
+
+        import concurrent.futures
+
+        download_url = f"https://releases.starrocks.io/starrocks/StarRocks-{self.version}-ubuntu-amd64.tar.gz"
+        tarball = f"/tmp/starrocks-{self.version}.tar.gz"
+        node_count = len(self._cloud_instance_managers)
+
+        self._log(
+            f"📦 Downloading StarRocks {self.version} on {node_count} nodes in parallel..."
+        )
+
+        def download_on_node(idx_mgr: tuple) -> tuple[int, bool, str]:
+            idx, mgr = idx_mgr
+            try:
+                # Check if already downloaded
+                check_result = mgr.run_remote_command(
+                    f"test -f {tarball} && echo exists", timeout=10
+                )
+                if "exists" in check_result.get("stdout", ""):
+                    return (idx, True, "already exists")
+
+                # Download
+                result = mgr.run_remote_command(
+                    f"wget -q -O {tarball} {download_url}",
+                    timeout=900,  # 15 minutes for ~3GB
+                )
+                if result.get("success", False):
+                    return (idx, True, "downloaded")
+                else:
+                    return (idx, False, result.get("stderr", "unknown error")[:100])
+            except Exception as e:
+                return (idx, False, str(e)[:100])
+
+        # Run downloads in parallel on all nodes
+        with concurrent.futures.ThreadPoolExecutor(max_workers=node_count) as executor:
+            futures = list(
+                executor.map(download_on_node, enumerate(self._cloud_instance_managers))
+            )
+
+        # Check results
+        all_success = True
+        for node_idx, success, msg in futures:
+            if success:
+                self._log(f"  ✓ Node {node_idx}: {msg}")
+            else:
+                self._log(f"  ✗ Node {node_idx}: failed - {msg}")
+                all_success = False
+
+        if all_success:
+            self._log(f"✅ Tarball ready on all {node_count} nodes")
+
+        return all_success
 
     def _is_follower_node(self) -> bool:
         """Check if current node is a follower (not the leader) in multinode setup."""
@@ -315,24 +383,37 @@ class StarrocksSystem(SystemUnderTest):
             )
             self._java_home = java_home
 
-            # Step 2: Download StarRocks
+            # Step 2: Download StarRocks (skip if already downloaded by parallel download)
             # StarRocks binary releases use format: StarRocks-{version}-{os}-amd64.tar.gz
             download_url = f"https://releases.starrocks.io/starrocks/StarRocks-{self.version}-ubuntu-amd64.tar.gz"
             tarball = f"/tmp/starrocks-{self.version}.tar.gz"
 
-            self._log(f"Downloading StarRocks {self.version}...")
-            self.record_setup_command(
-                f"wget -q -O {tarball} {download_url}",
-                f"Download StarRocks {self.version}",
-                "installation",
+            # Check if tarball already exists (from parallel download)
+            check_result = self.execute_command(
+                f"test -f {tarball} && echo exists", timeout=10.0
             )
-            result = self.execute_command(
-                f"wget -q -O {tarball} {download_url}",
-                timeout=600.0,
-            )
-            if not result.get("success", False):
-                self._log(f"Failed to download StarRocks: {result.get('stderr', '')}")
-                return False
+            tarball_exists = "exists" in check_result.get("stdout", "")
+
+            if tarball_exists:
+                self._log(
+                    f"StarRocks {self.version} tarball already downloaded, skipping..."
+                )
+            else:
+                self._log(f"Downloading StarRocks {self.version}...")
+                self.record_setup_command(
+                    f"wget -q -O {tarball} {download_url}",
+                    f"Download StarRocks {self.version}",
+                    "installation",
+                )
+                result = self.execute_command(
+                    f"wget -q -O {tarball} {download_url}",
+                    timeout=900.0,  # 15 minutes for ~3GB
+                )
+                if not result.get("success", False):
+                    self._log(
+                        f"Failed to download StarRocks: {result.get('stderr', '')}"
+                    )
+                    return False
 
             # Step 3: Extract and install
             self._log("Extracting StarRocks...")
@@ -444,10 +525,6 @@ class StarrocksSystem(SystemUnderTest):
                 self._external_host = self._cloud_instance_manager.public_ip
                 self.host = "localhost"
 
-            # Mark installed
-            self.mark_installed(record=False)
-            self._log("✓ StarRocks installation completed successfully")
-
             return True
 
         except Exception as e:
@@ -509,10 +586,14 @@ heartbeat_service_port = {self.BE_HEARTBEAT_PORT}
 brpc_port = {self.BE_BRPC_PORT}
 priority_networks = {priority_networks}
 storage_root_path = {storage_root}
-# Performance tuning
-mem_limit = 80%
+# Performance tuning - aggressive memory use with spill fallback
+mem_limit = 90%
 # Parallel execution
 parallel_fragment_exec_instance_num = 16
+# Spill-to-disk for memory-intensive queries (safety net)
+spill_local_storage_dir = {storage_root}/spill
+enable_spill = true
+spill_mode = auto
 """
         return config
 
@@ -622,9 +703,10 @@ parallel_fragment_exec_instance_num = 16
         # Step 4: Start BEs on all nodes (node 0's BE is already running, followers need to start)
         self._log("Starting BEs on all nodes...")
         for idx, mgr in enumerate(self._cloud_instance_managers):
-            # Check if BE process is actually running (use specific binary path)
+            # Check if BE process is actually running
+            # Use pidof for exact binary match to avoid pgrep -f matching the SSH command itself
             check_result = mgr.run_remote_command(
-                f"pgrep -f '{self.be_dir}/lib/starrocks_be' > /dev/null 2>&1 && echo 'running' || echo 'stopped'",
+                "pidof -s starrocks_be > /dev/null 2>&1 && echo 'running' || echo 'stopped'",
                 timeout=10,
             )
             if check_result.get("stdout", "").strip() == "running":

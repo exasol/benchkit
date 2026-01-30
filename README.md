@@ -45,7 +45,7 @@ $EDITOR .env
 $EDITOR configs/exa_vs_ch_1g.yaml
 
 # 4. Validate your configuration
-python scripts/check_aws_credentials.py --config configs/exa_vs_ch_1g.yaml
+benchkit check --config configs/exa_vs_ch_1g.yaml
 
 # 5. Run sample benchmark
 make all CFG=configs/exa_vs_ch_1g.yaml
@@ -59,7 +59,7 @@ make infra-destroy CFG=configs/exa_vs_ch_1g.yaml
 
 ## Usage
 
-The framework provides 10 commands for complete benchmark lifecycle management:
+The framework provides 13 commands for complete benchmark lifecycle management:
 
 ```bash
 # Manage infrastructure
@@ -74,7 +74,7 @@ benchkit run --config configs/my_benchmark.yaml [--systems exasol] [--queries Q0
 # Generate reports
 benchkit report --config configs/my_benchmark.yaml
 
-# Other commands: execute, status, package, verify, cleanup, combine
+# Other commands: check, setup, load, execute, status, package, verify, cleanup, combine
 ```
 
 > [!INFO]
@@ -119,26 +119,31 @@ benchmark configurations using supported modules.**
 
 ## Support Matrix
 
-### Setup / Installation
+### Systems
 
-| system     | local | aws | docker | gcp | azure |
-|------------|-------|-----|--------|-----|-------|
-| Exasol     | ✗     | ✓   | ✗      | ✗   | ✗     | 
-| ClickHouse | ✗     | ✓   | ✗      | ✗   | ✗     |
+| System     | AWS | Docker | Multinode | Stream Load |
+|------------|-----|--------|-----------|-------------|
+| Exasol     | ✓   | ✗      | ✓         | ✓           |
+| ClickHouse | ✓   | ✗      | ✓         | ✗           |
+| Trino      | ✓   | ✗      | ✓         | ✗           |
+| StarRocks  | ✓   | ✗      | ✓         | ✓           |
+| DuckDB     | N/A | N/A    | ✗         | ✓           |
 
 ### Workloads
 
 <!-- link definitions for table headers -->
 [estuary]: benchkit/workloads/estuary/README.md "Estuary Warehouse Report"
 
-| system     | tpch | [estuary]       |
-|------------|------|-----------------|
-| Exasol     | ✓    | ✓<sup>(1)</sup> |
-| ClickHouse | ✓    | ✗<sup>(1)</sup> |
+| Workload       | Exasol | ClickHouse | Trino | StarRocks | DuckDB |
+|----------------|--------|------------|-------|-----------|--------|
+| TPC-H          | ✓      | ✓          | ✓     | ✓         | ✓      |
+| ClickBench     | ✓      | ✓          | ✗     | ✗         | ✗      |
+| [Estuary]      | WIP    | ✗          | ✗     | ✗         | ✗      |
 
 Notes:
-
-1. Work in Progress
+- **Multinode**: Supports clustered deployments with multiple nodes
+- **Stream Load**: Supports parallel data loading via streaming protocols
+- **DuckDB**: Embedded database, runs locally without infrastructure
 
 
 ## Documentation

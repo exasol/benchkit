@@ -153,10 +153,6 @@ class ExasolNativeInstaller:
             if not self._post_deployment_config(remote_license_path):
                 return False
 
-            # Mark that system is installed
-            system.mark_installed(record=False)
-            self._log("✓ Exasol installation completed successfully")
-
             return True
 
         except Exception as e:

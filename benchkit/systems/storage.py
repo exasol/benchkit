@@ -547,10 +547,23 @@ class StorageManager:
 
         use_additional_disk = system.setup_config.get("use_additional_disk", False)
 
+        # Check for multinode cluster - need to setup storage on ALL nodes
+        is_multinode = (
+            hasattr(system, "_cloud_instance_managers")
+            and system._cloud_instance_managers
+            and len(system._cloud_instance_managers) > 1
+        )
+
         result = False
         if use_additional_disk:
             self._log(f"Setting up additional disk storage for {system.name}...")
-            result = self.setup_database_storage(workload)
+            if is_multinode:
+                self._log(
+                    f"Multinode cluster detected ({len(system._cloud_instance_managers)} nodes)"
+                )
+                result = self.setup_multinode_storage(workload)
+            else:
+                result = self.setup_database_storage(workload)
         else:
             self._log(f"Setting up directory-based storage for {system.name}...")
             result = self.setup_directory_storage(workload)

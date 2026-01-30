@@ -564,10 +564,6 @@ class ClickHouseSystem(SystemUnderTest):
                 else:
                     self.record_setup_note(f"  {key}: {value}")
 
-            # Mark that system is installed
-            self.mark_installed(record=False)
-            self._log("✓ ClickHouse installation completed successfully")
-
             return True
 
         except Exception as e:

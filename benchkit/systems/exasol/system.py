@@ -31,6 +31,12 @@ class ExasolSystem(SystemUnderTest):
     SUPPORTS_STREAMLOAD = True
     # Efficient parallel loading - slightly faster than baseline
     LOAD_TIMEOUT_MULTIPLIER = 0.8
+    # Exasol manages its own storage: requires raw disk partitions (not mounted filesystems)
+    # The disk is partitioned into: 1) ext4 for data generation, 2) raw for Exasol database
+    MANAGES_OWN_STORAGE = True
+
+    # Minimum disk space requirements (in GB)
+    MIN_EXASOL_PARTITION_GB = 10  # Minimum space for Exasol database partition
 
     @classmethod
     def get_python_dependencies(cls) -> list[str]:
@@ -44,6 +50,45 @@ class ExasolSystem(SystemUnderTest):
         Returns None for subdirectory to skip subdirectory creation.
         """
         return None, "root:root"
+
+    def _validate_disk_partitioning(
+        self,
+        disk_size_gb: int,
+        workload_needs_gb: int,
+        workload_display_name: str,
+    ) -> tuple[bool, str | None]:
+        """
+        Validate that disk is large enough for both workload data and Exasol partition.
+
+        Args:
+            disk_size_gb: Total disk size in GB
+            workload_needs_gb: Space needed for workload data generation in GB
+            workload_display_name: Human-readable workload name for error messages
+
+        Returns:
+            Tuple of (is_valid, error_message). error_message is None if valid.
+        """
+        total_required_gb = workload_needs_gb + self.MIN_EXASOL_PARTITION_GB
+
+        if disk_size_gb < total_required_gb:
+            if workload_needs_gb == 0:
+                # Streaming workload - all space goes to Exasol
+                return (
+                    False,
+                    f"Disk too small: {disk_size_gb}GB available, "
+                    f"but Exasol requires minimum {self.MIN_EXASOL_PARTITION_GB}GB",
+                )
+            else:
+                # Non-streaming workload - need space for both partitions
+                return (
+                    False,
+                    f"Disk too small for {workload_display_name}: "
+                    f"{disk_size_gb}GB available, but need {workload_needs_gb}GB for data generation "
+                    f"+ {self.MIN_EXASOL_PARTITION_GB}GB minimum for Exasol "
+                    f"(total: {total_required_gb}GB required)",
+                )
+
+        return True, None
 
     @classmethod
     def validate_setup(
@@ -493,14 +538,18 @@ class ExasolSystem(SystemUnderTest):
 
         # Step 4: Calculate partition sizes
         data_partition_gb = workload.estimate_filesystem_usage_gb(self)
-        exasol_partition_gb = disk_size_gb - data_partition_gb
 
-        if exasol_partition_gb < 10:
-            self._log(
-                f"Error: Not enough space for Exasol partition (would be {exasol_partition_gb}GB)"
-            )
-            self._log("Minimum 10GB required for Exasol")
+        # Validate disk is large enough before proceeding
+        is_valid, error_msg = self._validate_disk_partitioning(
+            disk_size_gb=disk_size_gb,
+            workload_needs_gb=data_partition_gb,
+            workload_display_name=workload.display_name(),
+        )
+        if not is_valid:
+            self._log(f"Error: {error_msg}")
             return None, None
+
+        exasol_partition_gb = disk_size_gb - data_partition_gb
 
         self._log("Partition plan:")
         self._log(

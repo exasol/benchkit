@@ -60,6 +60,16 @@ class WorkloadConfig(BaseModel):
     variant: str = "official"  # Query variant to use (official, tuned, custom, etc.)
     system_variants: dict[str, str] | None = None  # Per-system variant overrides
     multiuser: dict[str, Any] | None = None  # Multiuser execution configuration
+    load_workers: int | None = None  # Parallel data loading workers
+    data_loading_timeout: int | None = (
+        None  # Explicit timeout for data loading (seconds)
+    )
+    data_generation_timeout: int | None = (
+        None  # Explicit timeout for data generation (seconds)
+    )
+    execution_timeout: int | None = (
+        None  # Explicit timeout for query execution (seconds)
+    )
 
     @field_validator("name")
     @classmethod
@@ -136,6 +146,9 @@ class EnvironmentConfig(BaseModel):
 
     mode: str = "local"  # local, aws, gcp, azure
     region: str | None = None
+    availability_zone_index: int = (
+        0  # Index of AZ to use (0, 1, 2) - useful when specific AZ lacks capacity
+    )
 
     # Direct instance config (simplified format - when environment serves one system)
     instance_type: str | None = None
@@ -184,6 +197,24 @@ class ExecutionConfig(BaseModel):
     max_workers: int | None = (
         None  # Max concurrent systems (defaults to number of systems)
     )
+    sequential: bool = False  # Per-system infrastructure lifecycle mode
+    continue_on_failure: bool = False  # Continue with next system if one fails
+
+    @model_validator(mode="after")
+    def validate_parallel_max_workers(self) -> "ExecutionConfig":
+        """Ensure consistency between parallel flag and max_workers."""
+        if self.max_workers is not None:
+            if self.max_workers == 1 and self.parallel:
+                raise ValueError(
+                    "execution.parallel=true with max_workers=1 is contradictory. "
+                    "Set parallel=false for sequential execution."
+                )
+            if self.max_workers > 1 and not self.parallel:
+                raise ValueError(
+                    f"execution.max_workers={self.max_workers} requires parallel=true. "
+                    "Set parallel=true to enable concurrent execution."
+                )
+        return self
 
 
 class BenchmarkConfig(BaseModel):

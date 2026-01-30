@@ -90,12 +90,12 @@ class RemoteExecutor:
                 system_name,
             )
 
-            # Create streaming callback for remote output with local tagging
+            # Create streaming callback for remote output
+            # TailMonitor adds the [system_name] prefix, so we only mark stderr
             def stream_remote_output(line: str, stream_name: str) -> None:
-                tagged_line = f"[{system_name}] {line}"
                 if stream_name == "stderr":
-                    tagged_line = f"[{system_name}] [stderr] {line}"
-                self._log_output(tagged_line, executor, system_name)
+                    line = f"[stderr] {line}"
+                self._log_output(line, executor, system_name)
 
             workload_result = primary_manager.run_remote_command(
                 f"cd /home/ubuntu/{project_id} && ./run_queries.sh {system_name}",
@@ -205,8 +205,9 @@ class RemoteExecutor:
             if not self.deploy_package(primary_manager, package_path, project_id):
                 return False
 
-            # Calculate timeout based on scale factor
-            execution_timeout = self._runner._get_workload_execution_timeout()
+            # Calculate timeout based on scale factor and system type
+            system_kind = system_config.get("kind")
+            execution_timeout = self._runner._get_data_loading_timeout(system_kind)
             timeout_hours = execution_timeout / 3600
 
             # Execute load
@@ -216,12 +217,12 @@ class RemoteExecutor:
                 system_name,
             )
 
-            # Create streaming callback for remote output with local tagging
+            # Create streaming callback for remote output
+            # TailMonitor adds the [system_name] prefix, so we only mark stderr
             def stream_remote_output(line: str, stream_name: str) -> None:
-                tagged_line = f"[{system_name}] {line}"
                 if stream_name == "stderr":
-                    tagged_line = f"[{system_name}] [stderr] {line}"
-                self._log_output(tagged_line, executor, system_name)
+                    line = f"[stderr] {line}"
+                self._log_output(line, executor, system_name)
 
             load_result = primary_manager.run_remote_command(
                 f"cd /home/ubuntu/{project_id} && ./load_data.sh {system_name}",
@@ -492,49 +493,34 @@ class RemoteExecutor:
                 success: bool = system.install()
 
                 if success:
+                    self._log_output(
+                        f"✓ {system.kind.title()} installation completed successfully",
+                        executor,
+                        system_name,
+                    )
                     marker_path = system.get_install_marker_path()
                     if marker_path:
-                        # For multinode, create markers on ALL nodes
+                        # Create installation markers on ALL nodes
                         markers_created = 0
                         for idx, node_manager in enumerate(instance_manager):
-                            check_result = node_manager.run_remote_command(
-                                f"test -f {marker_path} && echo 'exists' || echo 'missing'",
+                            marker_result = node_manager.run_remote_command(
+                                f"touch {marker_path}",
                                 debug=False,
                             )
-
-                            if check_result.get(
-                                "success"
-                            ) and "missing" in check_result.get("stdout", ""):
-                                marker_result = node_manager.run_remote_command(
-                                    f"touch {marker_path}",
-                                    debug=False,
-                                )
-                                if marker_result.get("success"):
-                                    markers_created += 1
-                                    self._log_output(
-                                        f"✅ Node {idx}: Installation marker created: {marker_path}",
-                                        executor,
-                                        system_name,
-                                    )
-                                else:
-                                    self._log_output(
-                                        f"[yellow]⚠️ Node {idx}: Failed to create installation marker[/yellow]",
-                                        executor,
-                                        system_name,
-                                    )
-                            elif "exists" in check_result.get("stdout", ""):
+                            if marker_result.get("success"):
+                                markers_created += 1
+                            else:
                                 self._log_output(
-                                    f"✓ Node {idx}: Installation marker already exists",
+                                    f"[yellow]⚠️ Node {idx}: Failed to create installation marker[/yellow]",
                                     executor,
                                     system_name,
                                 )
 
-                        if markers_created > 0:
-                            self._log_output(
-                                f"✅ Created installation markers on {markers_created} node(s)",
-                                executor,
-                                system_name,
-                            )
+                        self._log_output(
+                            f"✅ Installation markers created on {markers_created}/{len(instance_manager)} node(s)",
+                            executor,
+                            system_name,
+                        )
 
                 return success
 
@@ -556,10 +542,10 @@ class RemoteExecutor:
                 self._log_output(f"[dim]$ {cmd}[/dim]", executor, system_name)
 
                 def tag_output(line: str, stream_name: str) -> None:
-                    tagged_line = f"[{system_name}] {line}"
+                    # TailMonitor adds the [system_name] prefix, so we only mark stderr
                     if stream_name == "stderr":
-                        tagged_line = f"[{system_name}] [stderr] {line}"
-                    self._log_output(tagged_line, executor, system_name)
+                        line = f"[stderr] {line}"
+                    self._log_output(line, executor, system_name)
 
                 result = primary_manager.run_remote_command(
                     cmd,
@@ -593,8 +579,13 @@ class RemoteExecutor:
                 success = system.install()
 
                 if success:
+                    self._log_output(
+                        f"✓ {system.kind.title()} installation completed successfully",
+                        executor,
+                        system_name,
+                    )
                     marker_path = system.get_install_marker_path()
-                    if marker_path and not system.has_install_marker():
+                    if marker_path:
                         if system.mark_installed(record=False):
                             self._log_output(
                                 f"✅ Installation marker created: {marker_path}",

@@ -153,7 +153,9 @@ class TimeoutCalculator:
         """
         config_key = self.CONFIG_KEYS.get(operation)
         if config_key and config_key in self.workload_config:
-            return int(self.workload_config[config_key])
+            value = self.workload_config[config_key]
+            if value is not None:
+                return int(value)
         return None
 
     def get_timeout(

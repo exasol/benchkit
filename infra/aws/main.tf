@@ -19,6 +19,12 @@ variable "region" {
   default     = "eu-central-1"
 }
 
+variable "availability_zone_index" {
+  description = "Index of availability zone to use (0, 1, 2, etc.) - useful when specific AZ lacks capacity"
+  type        = number
+  default     = 0
+}
+
 variable "project_id" {
   description = "Project identifier"
   type        = string
@@ -104,7 +110,7 @@ resource "aws_internet_gateway" "benchmark" {
 resource "aws_subnet" "benchmark" {
   vpc_id                  = aws_vpc.benchmark.id
   cidr_block              = "10.0.1.0/24"
-  availability_zone       = data.aws_availability_zones.available.names[0]
+  availability_zone       = data.aws_availability_zones.available.names[var.availability_zone_index]
   map_public_ip_on_launch = true
 
   tags = {
@@ -305,7 +311,7 @@ locals {
 resource "aws_ebs_volume" "system_data" {
   for_each = { for k, v in local.system_nodes_map : k => v if v.disk_type != "local" }
 
-  availability_zone = data.aws_availability_zones.available.names[0]
+  availability_zone = data.aws_availability_zones.available.names[var.availability_zone_index]
   # "ebs" is an alias for "gp3" - provides a simple configuration option
   type              = each.value.disk_type == "ebs" ? "gp3" : each.value.disk_type
   size              = each.value.disk_size
