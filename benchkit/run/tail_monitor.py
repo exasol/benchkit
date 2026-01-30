@@ -5,15 +5,12 @@ import time
 from pathlib import Path
 
 from rich.console import Console
-from rich.live import Live
-from rich.table import Table
 
 
 class TailMonitor:
-    """Monitor log files with Rich Live display.
+    """Monitor log files with simple tail-f style output.
 
-    Provides a real-time tail-f style view of multiple log files,
-    displaying the last N lines from each in a formatted table.
+    Prints new lines from log files as they appear, prefixed with system name.
     """
 
     LINES_PER_SYSTEM = 5
@@ -29,16 +26,13 @@ class TailMonitor:
         self.log_files = log_files
         self.console = console
         self._positions: dict[str, int] = {}
-        self._last_lines: dict[str, list[str]] = {}
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
-        self._live: Live | None = None
 
     def start(self) -> None:
         """Start the monitoring thread."""
         for name in self.log_files:
             self._positions[name] = 0
-            self._last_lines[name] = []
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
@@ -69,34 +63,15 @@ class TailMonitor:
         except OSError:
             return []
 
-    def _build_table(self) -> Table:
-        """Build a Rich table showing recent output from each system.
-
-        Returns:
-            Table with system names and their recent output
-        """
-        table = Table(title="System Progress", expand=True, show_edge=False)
-        table.add_column("System", style="cyan", width=15, no_wrap=True)
-        table.add_column("Recent Output", overflow="fold")
-
-        for name in sorted(self.log_files):
-            new_lines = self._read_new_lines(name)
-            self._last_lines[name].extend(new_lines)
-            # Keep only the last N lines
-            self._last_lines[name] = self._last_lines[name][-self.LINES_PER_SYSTEM :]
-            output = "\n".join(self._last_lines[name]) or "(waiting...)"
-            table.add_row(name, output)
-        return table
-
     def _run(self) -> None:
-        """Main monitoring loop."""
-        with Live(
-            self._build_table(),
-            console=self.console,
-            refresh_per_second=2,
-            transient=True,
-        ) as live:
-            self._live = live
-            while not self._stop.is_set():
-                live.update(self._build_table())
-                time.sleep(self.REFRESH_RATE)
+        """Main monitoring loop - prints lines as they appear."""
+        while not self._stop.is_set():
+            for name in self.log_files:
+                new_lines = self._read_new_lines(name)
+                if new_lines:
+                    # Limit to last N lines per cycle
+                    lines_to_print = new_lines[-self.LINES_PER_SYSTEM :]
+                    for line in lines_to_print:
+                        # Use markup=False to ensure prefix appears even in non-terminal output
+                        self.console.print(f"[{name}] {line}", markup=False)
+            time.sleep(self.REFRESH_RATE)
