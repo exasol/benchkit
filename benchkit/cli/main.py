@@ -386,14 +386,14 @@ def run(
 
             # Phase 2: Setup (infra already provisioned, just install/configure DB)
             console.print("[bold]Phase 2: Setup[/bold]")
-            if not runner.run_setup():
+            if not runner.run_setup(force=force):
                 console.print("[red]✗ Setup phase failed[/]")
                 raise typer.Exit(1)
             console.print()
 
             # Phase 3: Load
             console.print("[bold]Phase 3: Load[/bold]")
-            if not runner.run_load(local=local):
+            if not runner.run_load(force=force, local=local):
                 console.print("[red]✗ Load phase failed[/]")
                 raise typer.Exit(1)
             console.print()
