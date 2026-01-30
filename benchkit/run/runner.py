@@ -598,6 +598,22 @@ class BenchmarkRunner:
                 )
                 continue
 
+            # If force is set, delete local completion markers
+            if force and phase.name == "setup":
+                marker_path = self._get_setup_complete_path(system_name)
+                if marker_path.exists():
+                    marker_path.unlink()
+                    console.print(
+                        f"[dim]Deleted local setup marker: {marker_path}[/dim]"
+                    )
+            elif force and phase.name == "load":
+                marker_path = self._get_load_complete_path(system_name)
+                if marker_path.exists():
+                    marker_path.unlink()
+                    console.print(
+                        f"[dim]Deleted local load marker: {marker_path}[/dim]"
+                    )
+
             # Create task closure with captured variables
             def make_task(cfg: dict[str, Any], name: str) -> Callable[[], TaskResult]:
                 def task() -> TaskResult:
@@ -811,9 +827,12 @@ class BenchmarkRunner:
         system_name = system_config["name"]
         timings: dict[str, float] = {}
 
+        # Check if force reinstall is requested
+        force_reinstall = getattr(self, "_force_setup", False)
+
         # Local mode - simple install flow
         if instance_manager is None:
-            if system.is_already_installed():
+            if not force_reinstall and system.is_already_installed():
                 console.print(f"  [green]✓ {system_name} already installed[/green]")
                 return True, {
                     "status": "already_installed",
@@ -822,6 +841,11 @@ class BenchmarkRunner:
                         "port": system_config.get("setup", {}).get("port"),
                     },
                 }
+
+            if force_reinstall:
+                console.print(
+                    f"  [yellow]Force reinstall requested for {system_name}[/yellow]"
+                )
 
             console.print(f"  Installing {system_name}...")
             if not system.install():
@@ -898,7 +922,15 @@ class BenchmarkRunner:
             return True, {"timings": timings, "connection_info": connection_info}
 
         # Cloud/remote mode - use state machine
-        state = self._check_system_state(system, instance_manager)
+        # If force is requested, bypass state check and delete remote markers
+        if force_reinstall:
+            console.print(
+                f"[yellow]Force reinstall requested for {system_name} - deleting remote markers[/yellow]"
+            )
+            self._delete_remote_marker(system, instance_manager)
+            state = "NEEDS_INSTALLATION"
+        else:
+            state = self._check_system_state(system, instance_manager)
         console.print(f"📊 System state: [blue]{state}[/blue]")
 
         if state == "NEEDS_INSTALLATION":
@@ -1069,11 +1101,42 @@ class BenchmarkRunner:
                 "private_ip": instance_manager.private_ip,
             }
 
+    @exclude_from_package
+    def _delete_remote_marker(self, system: Any, instance_manager: Any) -> None:
+        """Delete remote installation marker for forced reinstall.
+
+        This ensures that when --force is used, the remote marker files
+        (e.g., ~/.exasol_installed) are removed so the installation
+        proceeds from scratch.
+
+        Args:
+            system: System instance (used to get marker path)
+            instance_manager: Cloud instance manager (or list for multinode)
+        """
+        marker_path = system.get_install_marker_path()
+        if not marker_path:
+            return
+
+        # Handle multinode - delete marker on all nodes
+        if isinstance(instance_manager, list):
+            for idx, mgr in enumerate(instance_manager):
+                result = mgr.run_remote_command(f"rm -f {marker_path}", debug=False)
+                if result.get("success"):
+                    console.print(
+                        f"  [dim]Deleted remote marker on node {idx}: {marker_path}[/dim]"
+                    )
+        else:
+            result = instance_manager.run_remote_command(
+                f"rm -f {marker_path}", debug=False
+            )
+            if result.get("success"):
+                console.print(f"  [dim]Deleted remote marker: {marker_path}[/dim]")
+
     # ========================================================================
     # Phase-Separated Benchmark Execution
     # ========================================================================
 
-    def run_setup(self) -> bool:
+    def run_setup(self, force: bool = False) -> bool:
         """
         Phase 1: Setup infrastructure and install database systems.
 
@@ -1082,10 +1145,17 @@ class BenchmarkRunner:
         - Storage preparation (disk partitioning, RAID setup)
         - Database system installation and configuration
 
+        Args:
+            force: If True, force reinstall even if already installed (bypasses
+                   both local and remote markers)
+
         Returns:
             True if setup completed successfully, False otherwise
         """
         console.print(f"[bold blue]Starting setup phase: {self.project_id}[/bold blue]")
+
+        # Store force flag for use in _setup_operation
+        self._force_setup = force
 
         context = self._create_execution_context()
 
@@ -1105,7 +1175,11 @@ class BenchmarkRunner:
 
         # Run setup phase using unified executor
         phase = self._setup_phase_config()
-        result = self._execute_phase(phase, context)
+        result = self._execute_phase(phase, context, force=force)
+
+        # Clean up force flag after phase completes
+        self._force_setup = False
+
         # Setup phase always returns bool (collects_results=False)
         assert isinstance(result, bool)
         return result
@@ -1303,9 +1377,10 @@ class BenchmarkRunner:
             ):
                 return False
 
-            # Calculate timeout based on scale factor
-            execution_timeout = self._get_workload_execution_timeout()
-            timeout_hours = execution_timeout / 3600
+            # Calculate timeout based on scale factor and system type
+            system_kind = system_config.get("kind")
+            loading_timeout = self._get_data_loading_timeout(system_kind)
+            timeout_hours = loading_timeout / 3600
 
             # Execute load
             self._log_output(
@@ -1324,7 +1399,7 @@ class BenchmarkRunner:
 
             load_result = primary_manager.run_remote_command(
                 f"cd /home/ubuntu/{project_id} && ./load_data.sh {system_name}",
-                timeout=execution_timeout,
+                timeout=loading_timeout,
                 debug=False,
                 stream_callback=stream_remote_output,
             )
@@ -1629,6 +1704,23 @@ class BenchmarkRunner:
         calculator = TimeoutCalculator(self.config)
         return calculator.get_query_execution_timeout()
 
+    def _get_data_loading_timeout(self, system_kind: str | None = None) -> int:
+        """
+        Calculate appropriate timeout for data loading based on scale factor.
+
+        Uses centralized TimeoutCalculator for consistent timeout calculations.
+        Supports system-specific multipliers (e.g., Exasol loads faster than baseline).
+
+        Args:
+            system_kind: System type (e.g., "exasol", "clickhouse") for multiplier
+
+        Returns timeout in seconds.
+        """
+        from .timeout import TimeoutCalculator
+
+        calculator = TimeoutCalculator(self.config)
+        return calculator.get_data_loading_timeout(system_kind)
+
     def _create_package(self) -> Path | None:
         """Create a package containing workload execution components."""
         try:
@@ -1670,6 +1762,291 @@ class BenchmarkRunner:
         return self._remote_executor.collect_results(
             instance_manager, project_id, system_name, executor
         )
+
+    # ========================================================================
+    # Sequential Per-System Lifecycle Execution
+    # ========================================================================
+
+    @exclude_from_package
+    def run_sequential(
+        self,
+        run_probe_fn: Callable[[dict[str, Any], Path], bool] | None = None,
+        run_report_fn: Callable[[dict[str, Any], Any], bool] | None = None,
+    ) -> bool:
+        """Run benchmark with per-system infrastructure lifecycle.
+
+        Each system goes through complete lifecycle:
+        1. Provision infrastructure (Terraform apply for single system)
+        2. Probe system information
+        3. Setup (install/configure database)
+        4. Load (generate and load data)
+        5. Query execution (run benchmark)
+        6. Destroy infrastructure (Terraform destroy)
+
+        Results are saved incrementally and aggregated at the end.
+
+        Args:
+            run_probe_fn: Optional callback for probe phase (from CLI)
+            run_report_fn: Optional callback for report phase (from CLI)
+
+        Returns:
+            True if all systems completed successfully
+        """
+        exec_config = self.config.get("execution", {})
+        continue_on_failure = exec_config.get("continue_on_failure", False)
+
+        all_results: list[dict[str, Any]] = []
+        all_warmup: list[dict[str, Any]] = []
+        failed_systems: list[str] = []
+
+        total = len(self.config["systems"])
+        original_config = self.config
+
+        for idx, system_config in enumerate(original_config["systems"], 1):
+            system_name = system_config["name"]
+
+            console.print(f"\n[bold blue]{'═'*60}[/bold blue]")
+            console.print(
+                f"[bold blue]  System {idx}/{total}: {system_name}[/bold blue]"
+            )
+            console.print(f"[bold blue]{'═'*60}[/bold blue]")
+
+            # Create single-system config for this iteration
+            self.config = _filter_config_to_system(original_config, system_name)
+            self._cloud_instance_managers = {}  # Reset for new system
+
+            try:
+                success = self._run_single_system_lifecycle(
+                    system_name, run_probe_fn, all_results, all_warmup
+                )
+
+                if not success:
+                    failed_systems.append(system_name)
+                    if not continue_on_failure:
+                        # Destroy infrastructure before exiting
+                        _destroy_infrastructure_for_system(original_config, system_name)
+                        break
+
+            except Exception as e:
+                console.print(f"[red]System {system_name} failed: {e}[/red]")
+                failed_systems.append(system_name)
+                if not continue_on_failure:
+                    # Destroy infrastructure before exiting
+                    _destroy_infrastructure_for_system(original_config, system_name)
+                    break
+            finally:
+                # ALWAYS destroy infrastructure (except on early exit which handles it above)
+                if system_name not in failed_systems or continue_on_failure:
+                    _destroy_infrastructure_for_system(original_config, system_name)
+
+        # Restore original config
+        self.config = original_config
+
+        # Aggregate and save results
+        if all_results:
+            self._save_aggregated_results(all_results, all_warmup)
+
+        # Run report if callback provided and we have results
+        if run_report_fn and all_results:
+            run_report_fn(original_config, lambda: [])
+
+        if failed_systems:
+            console.print(f"\n[red]Failed systems: {failed_systems}[/red]")
+            return False
+
+        console.print("\n[bold green]✓ Sequential benchmark completed![/bold green]")
+        return True
+
+    def _run_single_system_lifecycle(
+        self,
+        system_name: str,
+        run_probe_fn: Callable[[dict[str, Any], Path], bool] | None,
+        all_results: list[dict[str, Any]],
+        all_warmup: list[dict[str, Any]],
+    ) -> bool:
+        """Run complete benchmark lifecycle for a single system.
+
+        Reuses existing phase execution methods with single-system config.
+
+        Args:
+            system_name: Name of the system to benchmark
+            run_probe_fn: Optional callback for probe phase
+            all_results: List to accumulate measured results
+            all_warmup: List to accumulate warmup results
+
+        Returns:
+            True if all phases succeeded
+        """
+        from ..common.cli_helpers import is_any_system_cloud_mode
+
+        # Phase 0: Provision infrastructure
+        if is_any_system_cloud_mode(self.config):
+            console.print("\n[bold]Phase 0: Infrastructure Provisioning[/bold]")
+            if not self.ensure_cloud_infrastructure():
+                return False
+
+        # Phase 1: Probe
+        if run_probe_fn:
+            console.print("\n[bold]Phase 1: System Probe[/bold]")
+            run_probe_fn(self.config, self.output_dir)
+            # Rename to system-specific file
+            generic = self.output_dir / "system.json"
+            if generic.exists():
+                target = self.output_dir / f"system_{system_name}.json"
+                generic.rename(target)
+                console.print(f"[dim]Saved: {target}[/dim]")
+
+        # Phase 2: Setup (reuse existing)
+        console.print("\n[bold]Phase 2: Setup[/bold]")
+        if not self.run_setup():
+            return False
+
+        # Phase 3: Load (reuse existing)
+        console.print("\n[bold]Phase 3: Load[/bold]")
+        if not self.run_load():
+            return False
+
+        # Phase 4: Queries (reuse existing)
+        console.print("\n[bold]Phase 4: Query Execution[/bold]")
+
+        # Create workload for direct query execution
+        workload = create_workload(self.config["workload"])
+        context = self._create_execution_context()
+
+        # Run query phase using unified executor
+        phase = self._query_phase_config()
+        results = self._execute_phase(phase, context, force=False, workload=workload)
+
+        if isinstance(results, list) and results:
+            all_results.extend(results)
+            # Save incremental results
+            self._save_incremental_results(system_name, results)
+
+            # Collect warmup results
+            warmup = getattr(self, "_all_warmup_results", [])
+            if warmup:
+                all_warmup.extend(warmup)
+                self._all_warmup_results = []  # Reset for next system
+
+            return True
+
+        return False
+
+    def _save_incremental_results(
+        self, system_name: str, results: list[dict[str, Any]]
+    ) -> None:
+        """Save results incrementally for a single system."""
+        runs_file = self.output_dir / f"runs_{system_name}.csv"
+        df = pd.DataFrame(results)
+        df.to_csv(runs_file, index=False)
+        console.print(f"[green]✓ Saved: {runs_file}[/green]")
+
+    def _save_aggregated_results(
+        self, results: list[dict[str, Any]], warmup: list[dict[str, Any]]
+    ) -> None:
+        """Aggregate per-system results into final runs.csv."""
+        runs_file = self.output_dir / "runs.csv"
+        df = pd.DataFrame(results)
+        df.to_csv(runs_file, index=False)
+
+        if warmup:
+            warmup_file = self.output_dir / "warmup.csv"
+            pd.DataFrame(warmup).to_csv(warmup_file, index=False)
+
+        console.print(f"[green]✓ Aggregated results: {runs_file}[/green]")
+
+
+# =============================================================================
+# Helper Functions for Sequential Execution
+# =============================================================================
+
+
+def _filter_config_to_system(
+    config: dict[str, Any], system_name: str
+) -> dict[str, Any]:
+    """Create a config copy containing only the specified system.
+
+    This helper filters the config so Terraform only provisions one system's
+    infrastructure at a time, enabling per-system lifecycle management.
+
+    Args:
+        config: Full benchmark configuration
+        system_name: Name of system to isolate
+
+    Returns:
+        Config dict with only the specified system
+    """
+    import copy
+
+    filtered = copy.deepcopy(config)
+
+    # Filter systems list to just this system
+    filtered["systems"] = [s for s in config["systems"] if s["name"] == system_name]
+
+    # Filter env.instances (legacy format)
+    if filtered.get("env") and filtered["env"].get("instances"):
+        filtered["env"]["instances"] = {
+            k: v for k, v in filtered["env"]["instances"].items() if k == system_name
+        }
+
+    # Filter environments (new format) - keep only referenced environment
+    if filtered.get("environments"):
+        system_cfg = next(
+            (s for s in config["systems"] if s["name"] == system_name), None
+        )
+        if system_cfg:
+            env_name = system_cfg.get("environment", "default")
+            if env_name in filtered["environments"]:
+                filtered["environments"] = {
+                    env_name: filtered["environments"][env_name]
+                }
+
+    return filtered
+
+
+def _destroy_infrastructure_for_system(
+    config: dict[str, Any], system_name: str
+) -> bool:
+    """Destroy infrastructure for a single system.
+
+    Creates a filtered config and runs terraform destroy, which removes
+    resources for the specified system only.
+
+    Args:
+        config: Full benchmark configuration
+        system_name: Name of system to destroy infrastructure for
+
+    Returns:
+        True if destruction succeeded
+    """
+    from ..common.cli_helpers import get_first_cloud_provider
+    from ..infra.manager import InfraManager
+
+    filtered_config = _filter_config_to_system(config, system_name)
+    provider = get_first_cloud_provider(filtered_config)
+
+    if not provider:
+        return True  # Local mode, nothing to destroy
+
+    console.print(
+        f"[yellow]🗑️  Destroying {provider} infrastructure for {system_name}...[/yellow]"
+    )
+
+    try:
+        manager = InfraManager(provider, filtered_config)
+        result = manager.destroy()
+
+        if result.success:
+            console.print(
+                f"[green]✓ Infrastructure destroyed for {system_name}[/green]"
+            )
+            return True
+        else:
+            console.print(f"[red]⚠ Destroy failed: {result.error}[/red]")
+            return False
+    except Exception as e:
+        console.print(f"[red]⚠ Destroy exception: {e}[/red]")
+        return False
 
 
 def run_benchmark(config: dict[str, Any], output_dir: Path) -> bool:

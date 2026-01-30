@@ -205,8 +205,9 @@ class RemoteExecutor:
             if not self.deploy_package(primary_manager, package_path, project_id):
                 return False
 
-            # Calculate timeout based on scale factor
-            execution_timeout = self._runner._get_workload_execution_timeout()
+            # Calculate timeout based on scale factor and system type
+            system_kind = system_config.get("kind")
+            execution_timeout = self._runner._get_data_loading_timeout(system_kind)
             timeout_hours = execution_timeout / 3600
 
             # Execute load
