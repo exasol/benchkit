@@ -200,6 +200,22 @@ class ExecutionConfig(BaseModel):
     sequential: bool = False  # Per-system infrastructure lifecycle mode
     continue_on_failure: bool = False  # Continue with next system if one fails
 
+    @model_validator(mode="after")
+    def validate_parallel_max_workers(self) -> "ExecutionConfig":
+        """Ensure consistency between parallel flag and max_workers."""
+        if self.max_workers is not None:
+            if self.max_workers == 1 and self.parallel:
+                raise ValueError(
+                    "execution.parallel=true with max_workers=1 is contradictory. "
+                    "Set parallel=false for sequential execution."
+                )
+            if self.max_workers > 1 and not self.parallel:
+                raise ValueError(
+                    f"execution.max_workers={self.max_workers} requires parallel=true. "
+                    "Set parallel=true to enable concurrent execution."
+                )
+        return self
+
 
 class BenchmarkConfig(BaseModel):
     """Main benchmark configuration."""
