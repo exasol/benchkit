@@ -309,8 +309,24 @@ def run(
     if full:
         # Check if sequential mode is enabled
         exec_config = cfg.get("execution", {})
+        is_sequential = exec_config.get("sequential", False)
+        is_parallel = exec_config.get("parallel", False)
 
-        if exec_config.get("sequential", False):
+        if is_sequential and is_parallel:
+            # Parallel sequential mode: complete lifecycle per system, in parallel
+            # Each system runs independently: provision → benchmark → destroy
+            console.print(
+                "[bold blue]Running parallel sequential benchmark workflow[/bold blue]"
+            )
+            console.print("[dim]Each system runs full lifecycle in parallel[/dim]\n")
+
+            if not runner.run_parallel_sequential(
+                run_probe_fn=run_probe_for_full,
+                run_report_fn=run_report_for_full,
+            ):
+                raise typer.Exit(1)
+
+        elif is_sequential:
             # Sequential mode: complete lifecycle per system
             # Each system: provision → probe → setup → load → queries → destroy
             console.print(

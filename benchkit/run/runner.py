@@ -26,6 +26,8 @@ if TYPE_CHECKING:
     from benchkit.systems import SystemUnderTest
     from benchkit.workloads import Workload
 
+    from .file_logger import FileLogger
+
 
 console = Console()
 
@@ -1954,6 +1956,276 @@ class BenchmarkRunner:
             pd.DataFrame(warmup).to_csv(warmup_file, index=False)
 
         console.print(f"[green]✓ Aggregated results: {runs_file}[/green]")
+
+    # ========================================================================
+    # File-Based Logging and Parallel Sequential Execution
+    # ========================================================================
+
+    @exclude_from_package
+    def _setup_file_logging(
+        self, system_names: list[str], subdir: str = "run"
+    ) -> tuple[dict[str, "FileLogger"], dict[str, Path]]:
+        """Setup file loggers for systems.
+
+        Creates file loggers for each system, writing to individual log files
+        in the specified subdirectory.
+
+        Args:
+            system_names: List of system names to create loggers for
+            subdir: Subdirectory under logs/ for this phase
+
+        Returns:
+            Tuple of (loggers dict, log_files dict)
+        """
+        from .file_logger import FileLogger
+
+        log_dir = self.output_dir / "logs" / subdir
+        log_dir.mkdir(parents=True, exist_ok=True)
+
+        log_files = {name: log_dir / f"{name}.log" for name in system_names}
+        loggers: dict[str, FileLogger] = {}
+        for name, path in log_files.items():
+            logger = FileLogger(path)
+            logger.open()
+            loggers[name] = logger
+
+        return loggers, log_files
+
+    @exclude_from_package
+    def run_parallel_sequential(
+        self,
+        run_probe_fn: Callable[[dict[str, Any], Path], bool] | None = None,
+        run_report_fn: Callable[[dict[str, Any], Any], bool] | None = None,
+    ) -> bool:
+        """Run per-system lifecycles in parallel with file-based logging.
+
+        Each system runs through its complete lifecycle independently and
+        in parallel with other systems:
+        1. Provision infrastructure
+        2. Probe system information
+        3. Setup (install/configure database)
+        4. Load (generate and load data)
+        5. Query execution
+        6. Destroy infrastructure
+
+        Results are aggregated at the end.
+
+        Args:
+            run_probe_fn: Optional callback for probe phase
+            run_report_fn: Optional callback for report phase
+
+        Returns:
+            True if all systems completed successfully
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        from .tail_monitor import TailMonitor
+
+        exec_config = self.config.get("execution", {})
+        continue_on_failure = exec_config.get("continue_on_failure", False)
+        max_workers = exec_config.get("max_workers", len(self.config["systems"]))
+
+        system_names = [s["name"] for s in self.config["systems"]]
+        original_config = self.config
+
+        # Setup file-based logging
+        loggers, log_files = self._setup_file_logging(system_names, "lifecycle")
+
+        # Thread-safe result collection
+        results_lock = threading.Lock()
+        all_results: list[dict[str, Any]] = []
+        all_warmup: list[dict[str, Any]] = []
+
+        # Start tail monitor
+        monitor = TailMonitor(log_files, console)
+        monitor.start()
+
+        def run_system_lifecycle(system_name: str) -> bool:
+            """Run complete lifecycle for a single system with file logging."""
+            log = loggers[system_name].write
+
+            # Create single-system config
+            filtered_config = _filter_config_to_system(original_config, system_name)
+
+            # Create a new runner for this system
+            runner = BenchmarkRunner(filtered_config, self.output_dir)
+
+            # Capture system-local results
+            system_results: list[dict[str, Any]] = []
+            system_warmup: list[dict[str, Any]] = []
+
+            try:
+                log(f"{'='*60}")
+                log(f"Starting lifecycle: {system_name}")
+                log(f"{'='*60}")
+
+                success = runner._run_single_system_lifecycle_logged(
+                    system_name,
+                    run_probe_fn,
+                    system_results,
+                    system_warmup,
+                    log,
+                )
+
+                # Aggregate results
+                with results_lock:
+                    all_results.extend(system_results)
+                    all_warmup.extend(system_warmup)
+
+                status = "Completed" if success else "Failed"
+                log(f"{'='*60}")
+                log(f"{status}: {system_name}")
+                log(f"{'='*60}")
+                return success
+
+            except Exception as e:
+                log(f"Exception in {system_name}: {e}")
+                import traceback
+
+                log(traceback.format_exc())
+                return False
+            finally:
+                # Always destroy infrastructure
+                log(f"Destroying infrastructure for {system_name}...")
+                _destroy_infrastructure_for_system(original_config, system_name)
+                log("Infrastructure destroyed")
+
+        # Display header
+        console.print(
+            f"\n[bold blue]Parallel lifecycle: {len(system_names)} systems "
+            f"(max {max_workers} concurrent)[/bold blue]"
+        )
+        console.print(f"[dim]Logs: {self.output_dir / 'logs' / 'lifecycle'}[/dim]\n")
+
+        # Execute systems in parallel
+        success_map: dict[str, bool] = {}
+        try:
+            with ThreadPoolExecutor(max_workers=max_workers) as pool:
+                futures = {
+                    pool.submit(run_system_lifecycle, name): name
+                    for name in system_names
+                }
+                for future in as_completed(futures):
+                    name = futures[future]
+                    try:
+                        success_map[name] = future.result()
+                    except Exception as e:
+                        console.print(f"[red]Thread exception for {name}: {e}[/red]")
+                        success_map[name] = False
+        finally:
+            # Stop monitor and close loggers
+            monitor.stop()
+            for logger in loggers.values():
+                logger.close()
+
+        # Print final summary
+        console.print("\n[bold]Parallel Sequential Summary:[/bold]")
+        for name in sorted(success_map):
+            status = "✅" if success_map[name] else "❌"
+            console.print(f"  {status} {name}")
+
+        # Aggregate and save results
+        if all_results:
+            self._save_aggregated_results(all_results, all_warmup)
+
+        # Run report if callback provided and we have results
+        if run_report_fn and all_results:
+            run_report_fn(original_config, lambda: [])
+
+        failed = [n for n, s in success_map.items() if not s]
+        if failed:
+            console.print(f"\n[red]Failed systems: {failed}[/red]")
+            if not continue_on_failure:
+                return False
+
+        console.print("\n[bold green]✓ Parallel sequential completed![/bold green]")
+        return len(failed) == 0
+
+    def _run_single_system_lifecycle_logged(
+        self,
+        system_name: str,
+        run_probe_fn: Callable[[dict[str, Any], Path], bool] | None,
+        all_results: list[dict[str, Any]],
+        all_warmup: list[dict[str, Any]],
+        log: Callable[[str], None],
+    ) -> bool:
+        """Run complete benchmark lifecycle for a single system with logging.
+
+        Similar to _run_single_system_lifecycle but outputs to a log callback
+        instead of console for use in parallel execution.
+
+        Args:
+            system_name: Name of the system to benchmark
+            run_probe_fn: Optional callback for probe phase
+            all_results: List to accumulate measured results
+            all_warmup: List to accumulate warmup results
+            log: Callback to write log messages
+
+        Returns:
+            True if all phases succeeded
+        """
+        from ..common.cli_helpers import is_any_system_cloud_mode
+
+        # Phase 0: Provision infrastructure
+        if is_any_system_cloud_mode(self.config):
+            log("Phase 0: Infrastructure Provisioning")
+            if not self.ensure_cloud_infrastructure():
+                log("ERROR: Infrastructure provisioning failed")
+                return False
+            log("Infrastructure ready")
+
+        # Phase 1: Probe
+        if run_probe_fn:
+            log("Phase 1: System Probe")
+            run_probe_fn(self.config, self.output_dir)
+            # Rename to system-specific file
+            generic = self.output_dir / "system.json"
+            if generic.exists():
+                target = self.output_dir / f"system_{system_name}.json"
+                generic.rename(target)
+                log(f"Saved: {target}")
+
+        # Phase 2: Setup
+        log("Phase 2: Setup")
+        if not self.run_setup():
+            log("ERROR: Setup phase failed")
+            return False
+        log("Setup complete")
+
+        # Phase 3: Load
+        log("Phase 3: Load")
+        if not self.run_load():
+            log("ERROR: Load phase failed")
+            return False
+        log("Load complete")
+
+        # Phase 4: Queries
+        log("Phase 4: Query Execution")
+
+        # Create workload for direct query execution
+        workload = create_workload(self.config["workload"])
+        context = self._create_execution_context()
+
+        # Run query phase using unified executor
+        phase = self._query_phase_config()
+        results = self._execute_phase(phase, context, force=False, workload=workload)
+
+        if isinstance(results, list) and results:
+            all_results.extend(results)
+            # Save incremental results
+            self._save_incremental_results(system_name, results)
+            log(f"Queries complete: {len(results)} results")
+
+            # Collect warmup results
+            warmup = getattr(self, "_all_warmup_results", [])
+            if warmup:
+                all_warmup.extend(warmup)
+                self._all_warmup_results = []  # Reset for next system
+
+            return True
+
+        log("ERROR: No query results collected")
+        return False
 
 
 # =============================================================================
