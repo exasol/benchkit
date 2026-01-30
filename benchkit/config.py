@@ -60,6 +60,16 @@ class WorkloadConfig(BaseModel):
     variant: str = "official"  # Query variant to use (official, tuned, custom, etc.)
     system_variants: dict[str, str] | None = None  # Per-system variant overrides
     multiuser: dict[str, Any] | None = None  # Multiuser execution configuration
+    load_workers: int | None = None  # Parallel data loading workers
+    data_loading_timeout: int | None = (
+        None  # Explicit timeout for data loading (seconds)
+    )
+    data_generation_timeout: int | None = (
+        None  # Explicit timeout for data generation (seconds)
+    )
+    execution_timeout: int | None = (
+        None  # Explicit timeout for query execution (seconds)
+    )
 
     @field_validator("name")
     @classmethod
@@ -187,6 +197,8 @@ class ExecutionConfig(BaseModel):
     max_workers: int | None = (
         None  # Max concurrent systems (defaults to number of systems)
     )
+    sequential: bool = False  # Per-system infrastructure lifecycle mode
+    continue_on_failure: bool = False  # Continue with next system if one fails
 
 
 class BenchmarkConfig(BaseModel):
