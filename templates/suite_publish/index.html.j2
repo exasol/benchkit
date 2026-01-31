@@ -75,6 +75,18 @@
                 </div>
                 {% endif %}
 
+                <!-- Stream Count Filter -->
+                {% if data.filters.stream_counts | length > 1 %}
+                <div class="filter-group" data-dimension="streamCount">
+                    <label>Stream Count</label>
+                    <div class="filter-chips" id="stream-chips">
+                        {% for count in data.filters.stream_counts %}
+                        <button class="chip active" data-value="{{ count }}">{{ count }} stream{{ 's' if count > 1 else '' }}</button>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
                 <!-- Scale Factor Filter -->
                 {% if data.filters.scale_factors | length > 1 %}
                 <div class="filter-group" data-dimension="scaleFactor">
@@ -100,9 +112,9 @@
                 <!-- Scale Toggle -->
                 <div class="filter-group">
                     <label>Scale</label>
-                    <button class="scale-toggle" id="scale-toggle" data-log="false">
-                        <span class="scale-linear">Linear</span>
+                    <button class="scale-toggle" id="scale-toggle" data-log="true">
                         <span class="scale-log">Log</span>
+                        <span class="scale-linear">Linear</span>
                     </button>
                 </div>
             </div>
@@ -132,15 +144,34 @@
 
         <!-- Charts Section -->
         <section class="charts-section">
-            <!-- Primary Charts (full width) -->
-            <div class="chart-container full-width">
-                <div class="chart-header">
-                    <h3>Performance Scaling by Node Count</h3>
-                    <p class="chart-description">How performance scales with increasing cluster nodes</p>
+            <!-- Scaling Charts (3-column) -->
+            <div class="chart-row chart-row-3">
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3>Scaling by Node Count</h3>
+                        <p class="chart-description">Performance vs cluster nodes</p>
+                    </div>
+                    <div id="scaling-by-nodes" class="chart"></div>
                 </div>
-                <div id="scaling-chart" class="chart"></div>
+
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3>Scaling by Stream Count</h3>
+                        <p class="chart-description">Performance vs concurrent streams</p>
+                    </div>
+                    <div id="scaling-by-streams" class="chart"></div>
+                </div>
+
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3>Scaling by Scale Factor</h3>
+                        <p class="chart-description">Performance vs data size</p>
+                    </div>
+                    <div id="scaling-by-sf" class="chart"></div>
+                </div>
             </div>
 
+            <!-- Primary Charts (full width) -->
             <div class="chart-container full-width">
                 <div class="chart-header">
                     <h3>System Comparison Across Benchmarks</h3>
@@ -166,7 +197,7 @@
                 <div class="chart-container">
                     <div class="chart-header">
                         <h3>Scaling Efficiency</h3>
-                        <p class="chart-description">Speedup relative to single node (dashed = ideal linear)</p>
+                        <p class="chart-description">Time ratio vs baseline (1.0 = ideal, below = super scaling)</p>
                     </div>
                     <div id="efficiency-chart" class="chart"></div>
                 </div>
@@ -176,10 +207,10 @@
             <div class="chart-row">
                 <div class="chart-container">
                     <div class="chart-header">
-                        <h3>Query Runtime Distribution</h3>
-                        <p class="chart-description">Box plot showing runtime variance across queries</p>
+                        <h3>Query Performance by Query</h3>
+                        <p class="chart-description">Individual query runtimes (hover for details)</p>
                     </div>
-                    <div id="boxplot-chart" class="chart"></div>
+                    <div id="query-scatter-chart" class="chart"></div>
                 </div>
 
                 <div class="chart-container">

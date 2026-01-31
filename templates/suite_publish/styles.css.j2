@@ -354,8 +354,21 @@ body {
     gap: var(--spacing-lg);
 }
 
+.chart-row-3 {
+    grid-template-columns: repeat(3, 1fr);
+}
+
+@media (max-width: 1200px) {
+    .chart-row-3 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
 @media (max-width: 1024px) {
     .chart-row {
+        grid-template-columns: 1fr;
+    }
+    .chart-row-3 {
         grid-template-columns: 1fr;
     }
 }

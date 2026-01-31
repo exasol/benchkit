@@ -62,6 +62,7 @@ class BenchmarkDataEntry:
     workload: str  # "tpch" or "clickbench"
     scale_factor: int | float | None
     node_count: int
+    stream_count: int  # num_streams from workload config
     environment: str  # "aws", "local", etc.
     instance_type: str | None
     run_date: str | None
@@ -216,6 +217,13 @@ class SuitePublisher:
         workload_config = cfg.get("workload", {})
         workload_name = workload_config.get("name", "unknown")
         scale_factor = workload_config.get("scale_factor")
+        # num_streams can be at workload level or nested under multiuser
+        multiuser_config = workload_config.get("multiuser", {})
+        stream_count = (
+            multiuser_config.get("num_streams")
+            or workload_config.get("num_streams")
+            or 1
+        )
 
         # Extract environment info
         env_config = cfg.get("env", {})
@@ -323,6 +331,7 @@ class SuitePublisher:
             workload=workload_name,
             scale_factor=scale_factor,
             node_count=node_count,
+            stream_count=stream_count,
             environment=environment,
             instance_type=instance_type,
             run_date=run_date,
@@ -339,6 +348,7 @@ class SuitePublisher:
         workloads_set: set[str] = set()
         scale_factors_set: set[int | float] = set()
         node_counts_set: set[int] = set()
+        stream_counts_set: set[int] = set()
 
         for benchmark in benchmarks:
             series_set.add(benchmark.series_name)
@@ -346,6 +356,7 @@ class SuitePublisher:
             if benchmark.scale_factor is not None:
                 scale_factors_set.add(benchmark.scale_factor)
             node_counts_set.add(benchmark.node_count)
+            stream_counts_set.add(benchmark.stream_count)
             for system in benchmark.systems:
                 systems_set.add(system.name)
 
@@ -392,6 +403,7 @@ class SuitePublisher:
                     "workload": benchmark.workload,
                     "scale_factor": benchmark.scale_factor,
                     "node_count": benchmark.node_count,
+                    "stream_count": benchmark.stream_count,
                     "environment": benchmark.environment,
                     "instance_type": benchmark.instance_type,
                     "run_date": benchmark.run_date,
@@ -415,6 +427,7 @@ class SuitePublisher:
                 "workloads": sorted(workloads_set),
                 "scale_factors": sorted(scale_factors_set),
                 "node_counts": sorted(node_counts_set),
+                "stream_counts": sorted(stream_counts_set),
             },
             "benchmarks": benchmark_entries,
         }

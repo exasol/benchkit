@@ -85,21 +85,27 @@ def _normalize_multiuser(multiuser: dict[str, Any] | None) -> dict[str, Any] | N
 
 def validate_workloads_compatible(
     sources: list[SourceSpec],
+    strict: bool = True,
 ) -> dict[str, Any]:
     """Validate that all workloads are compatible for combining.
 
-    All workload fields must match exactly between sources.
-
     Args:
         sources: List of SourceSpec objects with configs already loaded.
+        strict: If True, all workload fields must match exactly.
+                If False, only workload name must match (relaxed mode for suites).
+                Non-matching fields will generate warnings.
 
     Returns:
-        The validated workload config (all identical).
+        The validated workload config (from first source).
 
     Raises:
-        WorkloadMismatchError: If any workload field doesn't match.
+        WorkloadMismatchError: If workload compatibility check fails.
         ValueError: If any source has no workload config.
     """
+    from rich.console import Console
+
+    console = Console()
+
     if not sources:
         raise ValueError("No sources provided")
 
@@ -115,8 +121,14 @@ def validate_workloads_compatible(
     reference_path = list(workloads.keys())[0]
     reference = workloads[reference_path]
 
-    # Check strict fields
-    for field in WORKLOAD_STRICT_FIELDS:
+    # In relaxed mode, only check workload name
+    fields_to_check = ["name"] if not strict else WORKLOAD_STRICT_FIELDS
+    fields_to_warn = (
+        [] if strict else [f for f in WORKLOAD_STRICT_FIELDS if f != "name"]
+    )
+
+    # Check required fields (error if mismatch)
+    for field in fields_to_check:
         ref_value = reference.get(field)
         for path, workload in workloads.items():
             if path == reference_path:
@@ -128,40 +140,85 @@ def validate_workloads_compatible(
                     values={reference_path: ref_value, path: value},
                 )
 
-    # Check queries (deep comparison with normalization)
-    ref_queries = _normalize_queries(reference.get("queries"))
-    for path, workload in workloads.items():
-        if path == reference_path:
-            continue
-        queries = _normalize_queries(workload.get("queries"))
-        if queries != ref_queries:
-            raise WorkloadMismatchError(
-                field="queries",
-                values={reference_path: ref_queries, path: queries},
+    # Check warning fields (warn if mismatch, don't error)
+    mismatches_warned: set[str] = set()
+    for field in fields_to_warn:
+        ref_value = reference.get(field)
+        for path, workload in workloads.items():
+            if path == reference_path:
+                continue
+            value = workload.get(field)
+            if value != ref_value and field not in mismatches_warned:
+                console.print(
+                    f"[yellow]Warning: '{field}' differs across configs "
+                    f"(e.g., {ref_value!r} vs {value!r})[/yellow]"
+                )
+                mismatches_warned.add(field)
+
+    if strict:
+        # Check queries (deep comparison with normalization)
+        ref_queries = _normalize_queries(reference.get("queries"))
+        for path, workload in workloads.items():
+            if path == reference_path:
+                continue
+            queries = _normalize_queries(workload.get("queries"))
+            if queries != ref_queries:
+                raise WorkloadMismatchError(
+                    field="queries",
+                    values={reference_path: ref_queries, path: queries},
+                )
+
+        # Check system_variants (can be None or dict)
+        ref_variants = reference.get("system_variants")
+        for path, workload in workloads.items():
+            if path == reference_path:
+                continue
+            variants = workload.get("system_variants")
+            if variants != ref_variants:
+                raise WorkloadMismatchError(
+                    field="system_variants",
+                    values={reference_path: ref_variants, path: variants},
+                )
+
+        # Check multiuser config
+        ref_multiuser = _normalize_multiuser(reference.get("multiuser"))
+        for path, workload in workloads.items():
+            if path == reference_path:
+                continue
+            multiuser = _normalize_multiuser(workload.get("multiuser"))
+            if multiuser != ref_multiuser:
+                raise WorkloadMismatchError(
+                    field="multiuser",
+                    values={reference_path: ref_multiuser, path: multiuser},
+                )
+    else:
+        # Warn about deep field differences in relaxed mode
+        ref_queries = _normalize_queries(reference.get("queries"))
+        queries_differ = False
+        for path, workload in workloads.items():
+            if path == reference_path:
+                continue
+            queries = _normalize_queries(workload.get("queries"))
+            if queries != ref_queries:
+                queries_differ = True
+                break
+        if queries_differ:
+            console.print(
+                "[yellow]Warning: 'queries' configuration differs across configs[/yellow]"
             )
 
-    # Check system_variants (can be None or dict)
-    ref_variants = reference.get("system_variants")
-    for path, workload in workloads.items():
-        if path == reference_path:
-            continue
-        variants = workload.get("system_variants")
-        if variants != ref_variants:
-            raise WorkloadMismatchError(
-                field="system_variants",
-                values={reference_path: ref_variants, path: variants},
-            )
-
-    # Check multiuser config
-    ref_multiuser = _normalize_multiuser(reference.get("multiuser"))
-    for path, workload in workloads.items():
-        if path == reference_path:
-            continue
-        multiuser = _normalize_multiuser(workload.get("multiuser"))
-        if multiuser != ref_multiuser:
-            raise WorkloadMismatchError(
-                field="multiuser",
-                values={reference_path: ref_multiuser, path: multiuser},
+        ref_multiuser = _normalize_multiuser(reference.get("multiuser"))
+        multiuser_differ = False
+        for path, workload in workloads.items():
+            if path == reference_path:
+                continue
+            multiuser = _normalize_multiuser(workload.get("multiuser"))
+            if multiuser != ref_multiuser:
+                multiuser_differ = True
+                break
+        if multiuser_differ:
+            console.print(
+                "[yellow]Warning: 'multiuser' configuration differs across configs[/yellow]"
             )
 
     return reference

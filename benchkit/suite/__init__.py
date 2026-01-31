@@ -1681,20 +1681,35 @@ class SuiteRunner:
 
         return summary
 
-    def generate_report(self, output_dir: Path | None = None) -> Path | None:
-        """Generate combined report for all completed benchmarks.
+    def generate_report(
+        self, output_dir: Path | None = None, combined: bool = False
+    ) -> Path | list[Path] | None:
+        """Generate reports for completed benchmarks.
 
         Args:
             output_dir: Optional output directory for reports
+            combined: If True, generate a single combined report for all benchmarks.
+                     If False (default), generate individual reports for each benchmark.
 
         Returns:
-            Path to generated report or None if no results
+            Path to generated report (combined mode), list of paths (individual mode),
+            or None if no results.
         """
-        from ..combine import BenchmarkCombiner
-        from ..combine.source_parser import SourceSpec, SystemSelection
         from ..report.render import render_report
 
         state = self.state_manager.load_state()
+        if not state:
+            # Auto-sync state from results directory
+            console.print(
+                "[dim]No state file found. Syncing from results directory...[/dim]"
+            )
+            sync_result = self.sync_state()
+            if sync_result["updated"] > 0:
+                console.print(
+                    f"[green]✓ Found {sync_result['updated']} benchmark(s) with results[/green]"
+                )
+            state = self.state_manager.load_state()
+
         if not state:
             console.print("[yellow]No runs recorded yet[/yellow]")
             return None
@@ -1707,6 +1722,77 @@ class SuiteRunner:
         if not completed_benchmarks:
             console.print("[yellow]No completed benchmarks to report[/yellow]")
             return None
+
+        if combined:
+            return self._generate_combined_report(completed_benchmarks)
+        else:
+            return self._generate_individual_reports(completed_benchmarks)
+
+    def _generate_individual_reports(
+        self, completed_benchmarks: list[BenchmarkState]
+    ) -> list[Path] | None:
+        """Generate individual reports for each completed benchmark.
+
+        Args:
+            completed_benchmarks: List of completed benchmark states.
+
+        Returns:
+            List of paths to generated reports, or None if no reports generated.
+        """
+        from ..report.render import render_report
+
+        generated_reports: list[Path] = []
+        failed_reports: list[str] = []
+
+        console.print(
+            f"[blue]Generating {len(completed_benchmarks)} individual reports...[/blue]"
+        )
+
+        for bench_state in completed_benchmarks:
+            config_path = Path(bench_state.config_path)
+            results_dir = Path("results") / bench_state.project_id
+
+            if not results_dir.exists():
+                console.print(
+                    f"[yellow]  Skipping {bench_state.project_id}: "
+                    f"results directory not found[/yellow]"
+                )
+                continue
+
+            try:
+                cfg = load_config(str(config_path))
+                report_path = render_report(cfg)
+                generated_reports.append(report_path)
+                console.print(f"[green]  ✓ {bench_state.project_id}[/green]")
+            except Exception as e:
+                failed_reports.append(f"{bench_state.project_id}: {e}")
+                console.print(f"[red]  ✗ {bench_state.project_id}: {e}[/red]")
+
+        if generated_reports:
+            console.print(
+                f"\n[green]✓ Generated {len(generated_reports)} report(s)[/green]"
+            )
+            if failed_reports:
+                console.print(f"[yellow]  ({len(failed_reports)} failed)[/yellow]")
+            return generated_reports
+
+        console.print("[yellow]No reports generated[/yellow]")
+        return None
+
+    def _generate_combined_report(
+        self, completed_benchmarks: list[BenchmarkState]
+    ) -> Path | None:
+        """Generate a single combined report for all benchmarks.
+
+        Args:
+            completed_benchmarks: List of completed benchmark states.
+
+        Returns:
+            Path to generated report or None if failed.
+        """
+        from ..combine import BenchmarkCombiner
+        from ..combine.source_parser import SourceSpec, SystemSelection
+        from ..report.render import render_report
 
         # Build source specs for combiner
         sources: list[SourceSpec] = []
@@ -1752,6 +1838,7 @@ class SuiteRunner:
                 output_project_id=output_project_id,
                 title=self.config.name,
                 author=self.config.author,
+                strict_workload=False,  # Relaxed mode: only require same workload name
             )
             combined_dir = combiner.combine(force=True)
 

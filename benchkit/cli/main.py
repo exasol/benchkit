@@ -2279,11 +2279,17 @@ def suite_report(
     output: Path | None = typer.Option(
         None, "--output", "-o", help="Output directory for reports"
     ),
+    combined: bool = typer.Option(
+        False,
+        "--combined",
+        "-c",
+        help="Generate a single combined report instead of individual reports",
+    ),
 ) -> None:
-    """Generate combined report from all completed benchmarks.
+    """Generate reports for all completed benchmarks.
 
-    Merges results from all completed benchmarks in the suite and
-    generates a unified report.
+    By default, generates individual reports for each completed benchmark.
+    Use --combined to merge all results into a single unified report.
     """
     from ..suite import SuiteRunner, load_suite_config
 
@@ -2295,7 +2301,7 @@ def suite_report(
     try:
         config = load_suite_config(suite_yaml)
         runner = SuiteRunner(path, config)
-        result = runner.generate_report(output)
+        result = runner.generate_report(output, combined=combined)
         if not result:
             raise typer.Exit(1)
     except Exception as e:
