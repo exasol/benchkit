@@ -818,9 +818,17 @@ class PreflightChecker:
     def _get_mode(self) -> str:
         """Get deployment mode.
 
-        Returns first cloud provider mode if any system uses cloud,
-        otherwise returns 'local'.
+        Checks explicit mode in env config first, then falls back to
+        checking cloud providers from systems configuration.
+        Returns 'local' if no cloud mode is configured.
         """
+        # First check explicit mode in env config
+        env_config = self._get_env_config()
+        explicit_mode = env_config.get("mode")
+        if explicit_mode and explicit_mode != "local":
+            return explicit_mode
+
+        # Fall back to checking cloud providers from systems
         from .common.cli_helpers import get_first_cloud_provider
 
         provider = get_first_cloud_provider(self.config)

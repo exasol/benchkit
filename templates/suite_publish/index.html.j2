@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="{{ theme }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="{{ title }} - Benchmark Suite Results Dashboard">
+    <title>{{ title }} | Benchmark Dashboard</title>
+    <link rel="stylesheet" href="assets/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+</head>
+<body>
+    <div class="dashboard">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="header-title">
+                    <h1>{{ title }}</h1>
+                    {% if data.meta.suite_description %}
+                    <p class="header-description">{{ data.meta.suite_description }}</p>
+                    {% endif %}
+                </div>
+                <div class="header-meta">
+                    <span class="meta-badge">
+                        <strong>{{ data.meta.total_benchmarks }}</strong> benchmarks
+                    </span>
+                    <span class="meta-badge">
+                        v{{ data.meta.suite_version }}
+                    </span>
+                    <span class="meta-badge meta-date">
+                        Generated: <time datetime="{{ data.meta.generated_at }}">{{ data.meta.generated_at[:10] }}</time>
+                    </span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Filters Section -->
+        <section class="filters-section">
+            <div class="filters-header">
+                <h2>Filters</h2>
+                <button class="btn btn-outline" id="reset-filters">Reset All</button>
+            </div>
+            <div class="filters-grid">
+                <!-- Series Filter -->
+                <div class="filter-group" data-dimension="series">
+                    <label>Series</label>
+                    <div class="filter-chips" id="series-chips">
+                        {% for series in data.filters.series %}
+                        <button class="chip active" data-value="{{ series }}">{{ series }}</button>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Systems Filter -->
+                <div class="filter-group" data-dimension="systems">
+                    <label>Systems</label>
+                    <div class="filter-chips" id="systems-chips">
+                        {% for system in data.filters.systems %}
+                        <button class="chip active" data-value="{{ system }}">{{ system }}</button>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Node Count Filter -->
+                {% if data.filters.node_counts | length > 1 %}
+                <div class="filter-group" data-dimension="nodeCount">
+                    <label>Node Count</label>
+                    <div class="filter-chips" id="node-chips">
+                        {% for count in data.filters.node_counts %}
+                        <button class="chip active" data-value="{{ count }}">{{ count }} node{{ 's' if count > 1 else '' }}</button>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Scale Factor Filter -->
+                {% if data.filters.scale_factors | length > 1 %}
+                <div class="filter-group" data-dimension="scaleFactor">
+                    <label>Scale Factor</label>
+                    <div class="filter-chips" id="sf-chips">
+                        {% for sf in data.filters.scale_factors %}
+                        <button class="chip active" data-value="{{ sf }}">SF{{ sf }}</button>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Metric Selector -->
+                <div class="filter-group" data-dimension="metric">
+                    <label>Metric</label>
+                    <div class="metric-toggles" id="metric-toggles">
+                        <button class="toggle active" data-metric="median">Median</button>
+                        <button class="toggle" data-metric="avg">Average</button>
+                        <button class="toggle" data-metric="total">Total</button>
+                    </div>
+                </div>
+
+                <!-- Scale Toggle -->
+                <div class="filter-group">
+                    <label>Scale</label>
+                    <button class="scale-toggle" id="scale-toggle" data-log="false">
+                        <span class="scale-linear">Linear</span>
+                        <span class="scale-log">Log</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Stats Cards -->
+        <section class="stats-section">
+            <div class="stats-cards">
+                <div class="stat-card">
+                    <span class="stat-value" id="stat-benchmarks">{{ data.meta.total_benchmarks }}</span>
+                    <span class="stat-label">Benchmarks</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-value" id="stat-queries">-</span>
+                    <span class="stat-label">Query Executions</span>
+                </div>
+                <div class="stat-card stat-winner">
+                    <span class="stat-value" id="stat-fastest">-</span>
+                    <span class="stat-label">Fastest Overall</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-value" id="stat-speedup">-</span>
+                    <span class="stat-label">Max Speedup</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Charts Section -->
+        <section class="charts-section">
+            <!-- Primary Charts (full width) -->
+            <div class="chart-container full-width">
+                <div class="chart-header">
+                    <h3>Performance Scaling by Node Count</h3>
+                    <p class="chart-description">How performance scales with increasing cluster nodes</p>
+                </div>
+                <div id="scaling-chart" class="chart"></div>
+            </div>
+
+            <div class="chart-container full-width">
+                <div class="chart-header">
+                    <h3>System Comparison Across Benchmarks</h3>
+                    <p class="chart-description">Runtime comparison for each benchmark configuration</p>
+                </div>
+                <div id="comparison-chart" class="chart"></div>
+            </div>
+
+            <!-- Secondary Charts (2-column) -->
+            <div class="chart-row">
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3>Performance Heatmap</h3>
+                        <p class="chart-description">Query performance matrix (green=fast, red=slow)</p>
+                    </div>
+                    <div id="heatmap-chart" class="chart"></div>
+                    <div class="heatmap-controls">
+                        <label>Benchmark:</label>
+                        <select id="heatmap-benchmark-select"></select>
+                    </div>
+                </div>
+
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3>Scaling Efficiency</h3>
+                        <p class="chart-description">Speedup relative to single node (dashed = ideal linear)</p>
+                    </div>
+                    <div id="efficiency-chart" class="chart"></div>
+                </div>
+            </div>
+
+            <!-- Tertiary Charts -->
+            <div class="chart-row">
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3>Query Runtime Distribution</h3>
+                        <p class="chart-description">Box plot showing runtime variance across queries</p>
+                    </div>
+                    <div id="boxplot-chart" class="chart"></div>
+                </div>
+
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3>Total Runtime by Series</h3>
+                        <p class="chart-description">Time breakdown per benchmark series</p>
+                    </div>
+                    <div id="stacked-chart" class="chart"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Benchmark Table -->
+        <section class="table-section">
+            <div class="table-header">
+                <h2>Benchmark Results</h2>
+                <span class="table-count" id="table-count">Showing all benchmarks</span>
+            </div>
+            <div class="table-wrapper">
+                <table class="benchmark-table" id="benchmark-table">
+                    <thead>
+                        <tr>
+                            <th>Benchmark</th>
+                            <th>Series</th>
+                            <th>Nodes</th>
+                            <th>Scale Factor</th>
+                            <th>Systems</th>
+                            <th>Winner</th>
+                            <th>Speedup</th>
+                            {% if include_reports %}
+                            <th>Report</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody id="benchmark-tbody">
+                        <!-- Populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Generated by <a href="https://github.com/exasol/benchkit" target="_blank">BenchKit</a></p>
+            <p class="footer-date">{{ data.meta.generated_at }}</p>
+        </footer>
+    </div>
+
+    <!-- Embedded Data -->
+    <script type="application/json" id="benchmark-data">
+    {{ data_json | safe }}
+    </script>
+
+    <script src="assets/app.js"></script>
+</body>
+</html>

@@ -2341,6 +2341,79 @@ def suite_reset(
         raise typer.Exit(1) from e
 
 
+@suite_app.command("sync")
+def suite_sync(
+    path: Path = typer.Argument(..., help="Path to suite directory"),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Show what would change without writing"
+    ),
+    force: bool = typer.Option(
+        False, "--force", help="Overwrite existing state entirely"
+    ),
+    verbose: bool = typer.Option(
+        False, "-v", "--verbose", help="Show detailed changes"
+    ),
+) -> None:
+    """Synchronize suite state with actual results.
+
+    Scans the results/ directory and updates .benchkit/state.json
+    to reflect which benchmarks have actually been completed.
+
+    Useful when:
+    - Benchmarks were run outside the suite runner
+    - State file was deleted or corrupted
+    - Results were copied from another machine
+    """
+    from ..suite import SuiteRunner, load_suite_config
+
+    suite_yaml = path / "suite.yaml"
+    if not suite_yaml.exists():
+        console.print(f"[red]Error: {suite_yaml} not found[/red]")
+        raise typer.Exit(1)
+
+    try:
+        config = load_suite_config(suite_yaml)
+        runner = SuiteRunner(path, config)
+
+        if dry_run:
+            console.print("[yellow]Dry run - no changes will be made[/yellow]")
+
+        summary = runner.sync_state(dry_run=dry_run, force=force)
+
+        # Display results
+        console.print()
+        if verbose and summary["details"]:
+            from rich.table import Table
+
+            table = Table(title="State Changes")
+            table.add_column("Benchmark")
+            table.add_column("Old Status")
+            table.add_column("New Status")
+
+            for detail in summary["details"]:
+                old = detail["old_status"] or "[dim]none[/dim]"
+                new = detail["new_status"]
+                color = "green" if new == "completed" else "yellow"
+                table.add_row(detail["benchmark_id"], old, f"[{color}]{new}[/{color}]")
+
+            console.print(table)
+            console.print()
+
+        # Summary line
+        console.print(
+            f"[bold]Summary:[/bold] {summary['updated']} updated, "
+            f"{summary['unchanged']} unchanged"
+        )
+
+        if not dry_run and summary["updated"] > 0:
+            state_file = path / ".benchkit" / "state.json"
+            console.print(f"[green]✓ State file updated: {state_file}[/green]")
+
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1) from e
+
+
 @suite_app.command("init")
 def suite_init(
     path: Path = typer.Argument(..., help="Directory to create suite in"),
@@ -2444,6 +2517,52 @@ def suite_validate(
         console.print(
             f"[green]✓ Suite valid: {valid_configs}/{total_configs} configs[/green]"
         )
+
+
+@suite_app.command("publish")
+def suite_publish(
+    path: Path = typer.Argument(..., help="Path to suite directory"),
+    output: Path | None = typer.Option(
+        None, "-o", "--output", help="Output directory for the website"
+    ),
+    title: str | None = typer.Option(
+        None, "--title", help="Custom site title (default: suite name)"
+    ),
+    base_url: str = typer.Option("./", "--base-url", help="Base URL for assets"),
+    include_reports: bool = typer.Option(
+        True, "--include-reports/--no-reports", help="Copy individual benchmark reports"
+    ),
+    theme: str = typer.Option("auto", "--theme", help="Theme: light, dark, auto"),
+) -> None:
+    """Generate a static benchmark comparison website from suite results.
+
+    Creates an interactive dashboard with visualizations for comparing
+    benchmark results across all benchmarks in the suite.
+
+    Example:
+        benchkit suite publish ./my-suite/
+        benchkit suite publish ./my-suite/ -o docs/dashboard/
+    """
+    from ..suite.publisher import publish_suite
+
+    suite_yaml = path / "suite.yaml"
+    if not suite_yaml.exists():
+        console.print(f"[red]Suite configuration not found: {suite_yaml}[/red]")
+        raise typer.Exit(1)
+
+    try:
+        index_path = publish_suite(
+            suite_path=path,
+            output_dir=output,
+            title=title,
+            base_url=base_url,
+            include_reports=include_reports,
+            theme=theme,
+        )
+        console.print(f"\n[bold green]✓ Dashboard published: {index_path}[/bold green]")
+    except Exception as e:
+        console.print(f"[red]Publishing failed: {e}[/red]")
+        raise typer.Exit(1) from e
 
 
 if __name__ == "__main__":

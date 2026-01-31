@@ -34,8 +34,8 @@ from pydantic import BaseModel, field_validator
 from rich.console import Console
 from rich.table import Table
 
-from .config import load_config
-from .run.runner import BenchmarkRunner
+from ..config import load_config
+from ..run.runner import BenchmarkRunner
 
 console = Console()
 
@@ -952,7 +952,7 @@ class SuiteRunner:
 
             # Run full benchmark workflow
             # This handles: infrastructure -> setup -> load -> run
-            from .common.cli_helpers import (
+            from ..common.cli_helpers import (
                 is_any_system_cloud_mode,
                 is_any_system_managed_mode,
             )
@@ -982,7 +982,7 @@ class SuiteRunner:
             # Cleanup if requested
             if not no_cleanup and self.config.infrastructure.cleanup_after_each:
                 if has_cloud:
-                    from .infra.manager import InfraManager
+                    from ..infra.manager import InfraManager
 
                     # Get provider from config
                     env = cfg.get("env") or {}
@@ -1122,6 +1122,7 @@ class SuiteRunner:
             # Create table for this series
             table = Table(show_header=True, header_style="bold")
             table.add_column("Config", style="cyan", no_wrap=True)
+            table.add_column("State", justify="center")
             table.add_column("Setup", justify="center")
             table.add_column("Load", justify="center")
             table.add_column("Run", justify="center")
@@ -1130,10 +1131,27 @@ class SuiteRunner:
             for config_path in configs:
                 total_configs += 1
                 config_name = config_path.stem
+                benchmark_id = self.get_benchmark_id(series_name, config_path)
+
+                # Get recorded state from state file
+                state_cell = "[dim]-[/dim]"
+                if state and benchmark_id in state.benchmarks:
+                    bench_state = state.benchmarks[benchmark_id]
+                    if bench_state.status == "completed":
+                        state_cell = "[green]✓[/green]"
+                    elif bench_state.status == "failed":
+                        state_cell = "[red]✗[/red]"
+                    elif bench_state.status == "skipped":
+                        state_cell = "[dim]skip[/dim]"
+                    elif bench_state.status == "running":
+                        state_cell = "[yellow]▶[/yellow]"
+                    else:
+                        state_cell = "[dim]○[/dim]"
 
                 if is_disabled:
                     table.add_row(
                         config_name,
+                        state_cell,
                         "[dim]-[/dim]",
                         "[dim]-[/dim]",
                         "[dim]-[/dim]",
@@ -1144,17 +1162,30 @@ class SuiteRunner:
                 # Get actual status from results directory
                 status_info = self._get_benchmark_status(config_path, verbose)
 
-                if status_info["all_complete"]:
+                # Check if runs.csv exists (benchmark ran to completion)
+                try:
+                    cfg = load_config(str(config_path))
+                    project_id = cfg.get("project_id", config_path.stem)
+                except Exception:
+                    project_id = config_path.stem
+                results_dir = Path("results") / project_id
+                has_run_results = (results_dir / "runs.csv").exists()
+
+                if has_run_results:
+                    # Benchmark completed its run (even if some queries failed)
                     total_completed += 1
                 elif status_info["has_any_progress"]:
+                    # Has results dir but no runs.csv - in progress
                     total_partial += 1
                 else:
+                    # No results at all
                     total_pending += 1
 
                 total_failed_queries += status_info.get("failed_queries", 0)
 
                 table.add_row(
                     config_name,
+                    state_cell,
                     status_info["setup_cell"],
                     status_info["load_cell"],
                     status_info["run_cell"],
@@ -1166,6 +1197,7 @@ class SuiteRunner:
                     for sys_detail in status_info["system_details"]:
                         table.add_row(
                             f"  └─ {sys_detail['name']}",
+                            "",
                             sys_detail["setup"],
                             sys_detail["load"],
                             sys_detail["run"],
@@ -1176,9 +1208,9 @@ class SuiteRunner:
 
         # Summary
         console.print()
-        summary_parts = [f"{total_completed}/{total_configs} completed"]
+        summary_parts = [f"{total_completed}/{total_configs} ran"]
         if total_partial > 0:
-            summary_parts.append(f"{total_partial} partial")
+            summary_parts.append(f"{total_partial} in progress")
         if total_pending > 0:
             summary_parts.append(f"{total_pending} pending")
         if total_failed_queries > 0:
@@ -1187,6 +1219,36 @@ class SuiteRunner:
             )
 
         console.print(f"[bold]Summary:[/bold] {' | '.join(summary_parts)}")
+
+        # Show state file summary if it exists
+        if state:
+            state_completed = sum(
+                1 for b in state.benchmarks.values() if b.status == "completed"
+            )
+            state_failed = sum(
+                1 for b in state.benchmarks.values() if b.status == "failed"
+            )
+            state_pending = sum(
+                1 for b in state.benchmarks.values() if b.status == "pending"
+            )
+            state_skipped = sum(
+                1 for b in state.benchmarks.values() if b.status == "skipped"
+            )
+            state_parts = []
+            if state_completed > 0:
+                state_parts.append(f"[green]{state_completed} completed[/green]")
+            if state_failed > 0:
+                state_parts.append(f"[red]{state_failed} failed[/red]")
+            if state_pending > 0:
+                state_parts.append(f"{state_pending} pending")
+            if state_skipped > 0:
+                state_parts.append(f"[dim]{state_skipped} skipped[/dim]")
+            if state_parts:
+                console.print(f"[bold]State file:[/bold] {' | '.join(state_parts)}")
+        else:
+            console.print(
+                "[dim]State file: not found (run 'suite sync' to create)[/dim]"
+            )
 
     def _get_benchmark_status(
         self, config_path: Path, verbose: bool = False
@@ -1490,6 +1552,135 @@ class SuiteRunner:
         self.state_manager.clear_state()
         console.print("[green]Suite state reset[/green]")
 
+    def sync_state(self, dry_run: bool = False, force: bool = False) -> dict[str, Any]:
+        """Synchronize state with actual results in results/ directory.
+
+        Scans discovered benchmark configs, checks their result directories,
+        and updates the state file to reflect actual completion status.
+
+        Args:
+            dry_run: If True, don't write state file, just return what would change
+            force: If True, replace state entirely; if False, merge with existing
+
+        Returns:
+            Dict with sync summary: {updated: int, unchanged: int, details: [...]}
+        """
+        discovered = self.discover_configs(include_disabled=True)
+        existing_state = None if force else self.state_manager.load_state()
+
+        # Create new state or use existing
+        if existing_state:
+            state = existing_state
+        else:
+            state = SuiteState(
+                suite_name=self.config.name,
+                suite_version=self.config.version,
+                status="pending",
+            )
+
+        summary: dict[str, Any] = {
+            "updated": 0,
+            "unchanged": 0,
+            "details": [],
+        }
+
+        for series_name, configs in discovered.items():
+            # Check if series is disabled
+            series_config = self.config.series.get(series_name)
+            is_disabled = series_config and not series_config.enabled
+
+            for config_path in configs:
+                benchmark_id = self.get_benchmark_id(series_name, config_path)
+
+                # Get project_id from config
+                try:
+                    cfg = load_config(str(config_path))
+                    project_id = cfg.get("project_id", config_path.stem)
+                except Exception:
+                    project_id = config_path.stem
+
+                # Determine new state based on actual results
+                # - skipped: series is disabled
+                # - completed: runs.csv exists (run phase happened, regardless of failures)
+                # - pending: no runs.csv yet (not started or in progress)
+                new_status: Literal[
+                    "pending",
+                    "running",
+                    "completed",
+                    "failed",
+                    "skipped",
+                    "interrupted",
+                ]
+                if is_disabled:
+                    # Series is disabled - mark as skipped
+                    new_status = "skipped"
+                else:
+                    # Check if runs.csv exists (indicates run phase completed)
+                    results_dir = Path("results") / project_id
+                    runs_csv = results_dir / "runs.csv"
+                    has_run_results = runs_csv.exists()
+
+                    # Get actual status from results directory
+                    actual_status = self._get_benchmark_status(config_path)
+
+                    if has_run_results:
+                        # Run phase completed (even if some queries failed)
+                        new_status = "completed"
+                    elif actual_status["has_any_progress"]:
+                        # Has results dir but no runs.csv - setup/load in progress
+                        new_status = "pending"
+                    else:
+                        # No results at all
+                        new_status = "pending"
+
+                # Check if update needed
+                current_state = state.benchmarks.get(benchmark_id)
+                current_status = current_state.status if current_state else None
+
+                if current_status == new_status:
+                    summary["unchanged"] += 1
+                else:
+                    summary["updated"] += 1
+                    summary["details"].append(
+                        {
+                            "benchmark_id": benchmark_id,
+                            "old_status": current_status,
+                            "new_status": new_status,
+                        }
+                    )
+
+                # Update or create benchmark state
+                completed_at = None
+                if new_status == "completed":
+                    completed_at = time.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+                state.benchmarks[benchmark_id] = BenchmarkState(
+                    benchmark_id=benchmark_id,
+                    config_path=str(config_path),
+                    project_id=project_id,
+                    status=new_status,
+                    completed_at=completed_at,
+                )
+
+        if not dry_run:
+            # Determine overall suite status
+            all_completed = all(
+                b.status == "completed" for b in state.benchmarks.values()
+            )
+            any_failed = any(b.status == "failed" for b in state.benchmarks.values())
+
+            if all_completed and state.benchmarks:
+                state.status = "completed"
+            elif any_failed:
+                state.status = "failed"
+            else:
+                state.status = "pending"
+
+            state.updated_at = time.strftime("%Y-%m-%dT%H:%M:%SZ")
+            self.state_manager.save_state(state)
+
+        return summary
+
     def generate_report(self, output_dir: Path | None = None) -> Path | None:
         """Generate combined report for all completed benchmarks.
 
@@ -1499,9 +1690,9 @@ class SuiteRunner:
         Returns:
             Path to generated report or None if no results
         """
-        from .combine import BenchmarkCombiner
-        from .combine.source_parser import SourceSpec, SystemSelection
-        from .report.render import render_report
+        from ..combine import BenchmarkCombiner
+        from ..combine.source_parser import SourceSpec, SystemSelection
+        from ..report.render import render_report
 
         state = self.state_manager.load_state()
         if not state:

@@ -1,0 +1,818 @@
+/**
+ * Benchmark Dashboard Application
+ * Interactive visualization for suite benchmark results
+ */
+
+class BenchmarkDashboard {
+    constructor(data) {
+        this.data = data;
+        this.charts = {};
+
+        // System color mapping (consistent across charts)
+        this.systemColors = {};
+        const colorPalette = [
+            '#2E86AB', '#E63946', '#6A994E', '#F4A261',
+            '#9B5DE5', '#00BBF9', '#00F5D4', '#FEE440'
+        ];
+        data.filters.systems.forEach((system, i) => {
+            this.systemColors[system] = colorPalette[i % colorPalette.length];
+        });
+
+        // Filter state
+        this.filters = {
+            series: new Set(data.filters.series),
+            systems: new Set(data.filters.systems),
+            nodeCount: new Set(data.filters.node_counts),
+            scaleFactor: new Set(data.filters.scale_factors),
+        };
+
+        // Display settings
+        this.metric = 'median';  // 'median', 'avg', 'total'
+        this.logScale = false;
+
+        this.init();
+    }
+
+    init() {
+        this.parseHashState();
+        this.bindEvents();
+        this.renderAllCharts();
+        this.renderTable();
+        this.updateStats();
+    }
+
+    // ==================== Event Binding ====================
+
+    bindEvents() {
+        // Filter chips
+        document.querySelectorAll('.chip').forEach(chip => {
+            chip.addEventListener('click', (e) => {
+                const dimension = e.target.closest('.filter-group').dataset.dimension;
+                const value = e.target.dataset.value;
+                this.toggleFilter(dimension, value);
+                e.target.classList.toggle('active');
+            });
+        });
+
+        // Metric toggles
+        document.querySelectorAll('.toggle[data-metric]').forEach(toggle => {
+            toggle.addEventListener('click', (e) => {
+                document.querySelectorAll('.toggle[data-metric]').forEach(t => t.classList.remove('active'));
+                e.target.classList.add('active');
+                this.metric = e.target.dataset.metric;
+                this.updateHashState();
+                this.renderAllCharts();
+                this.updateStats();
+            });
+        });
+
+        // Scale toggle
+        const scaleToggle = document.getElementById('scale-toggle');
+        if (scaleToggle) {
+            scaleToggle.addEventListener('click', () => {
+                this.logScale = !this.logScale;
+                scaleToggle.dataset.log = this.logScale.toString();
+                this.updateHashState();
+                this.renderAllCharts();
+            });
+        }
+
+        // Reset filters
+        const resetBtn = document.getElementById('reset-filters');
+        if (resetBtn) {
+            resetBtn.addEventListener('click', () => this.resetFilters());
+        }
+
+        // Heatmap benchmark selector
+        const heatmapSelect = document.getElementById('heatmap-benchmark-select');
+        if (heatmapSelect) {
+            heatmapSelect.addEventListener('change', () => {
+                this.renderHeatmap();
+            });
+        }
+
+        // Handle hash changes
+        window.addEventListener('hashchange', () => {
+            this.parseHashState();
+            this.syncFilterUI();
+            this.renderAllCharts();
+            this.renderTable();
+            this.updateStats();
+        });
+    }
+
+    // ==================== Filter Management ====================
+
+    toggleFilter(dimension, value) {
+        const filterSet = this.filters[dimension];
+        if (!filterSet) return;
+
+        // Parse value to correct type
+        let parsedValue = value;
+        if (dimension === 'nodeCount' || dimension === 'scaleFactor') {
+            parsedValue = parseFloat(value);
+        }
+
+        if (filterSet.has(parsedValue)) {
+            filterSet.delete(parsedValue);
+        } else {
+            filterSet.add(parsedValue);
+        }
+
+        this.updateHashState();
+        this.renderAllCharts();
+        this.renderTable();
+        this.updateStats();
+    }
+
+    resetFilters() {
+        this.filters = {
+            series: new Set(this.data.filters.series),
+            systems: new Set(this.data.filters.systems),
+            nodeCount: new Set(this.data.filters.node_counts),
+            scaleFactor: new Set(this.data.filters.scale_factors),
+        };
+        this.metric = 'median';
+        this.logScale = false;
+
+        this.syncFilterUI();
+        window.location.hash = '';
+        this.renderAllCharts();
+        this.renderTable();
+        this.updateStats();
+    }
+
+    syncFilterUI() {
+        // Sync chips
+        document.querySelectorAll('.chip').forEach(chip => {
+            const dimension = chip.closest('.filter-group')?.dataset.dimension;
+            let value = chip.dataset.value;
+
+            if (dimension === 'nodeCount' || dimension === 'scaleFactor') {
+                value = parseFloat(value);
+            }
+
+            const isActive = this.filters[dimension]?.has(value);
+            chip.classList.toggle('active', isActive);
+        });
+
+        // Sync metric toggles
+        document.querySelectorAll('.toggle[data-metric]').forEach(toggle => {
+            toggle.classList.toggle('active', toggle.dataset.metric === this.metric);
+        });
+
+        // Sync scale toggle
+        const scaleToggle = document.getElementById('scale-toggle');
+        if (scaleToggle) {
+            scaleToggle.dataset.log = this.logScale.toString();
+        }
+    }
+
+    getFilteredBenchmarks() {
+        return this.data.benchmarks.filter(b => {
+            if (!this.filters.series.has(b.series)) return false;
+            if (this.filters.nodeCount.size > 0 && !this.filters.nodeCount.has(b.node_count)) return false;
+            if (this.filters.scaleFactor.size > 0 && b.scale_factor !== null && !this.filters.scaleFactor.has(b.scale_factor)) return false;
+            return true;
+        });
+    }
+
+    // ==================== URL State ====================
+
+    parseHashState() {
+        const hash = window.location.hash.slice(1);
+        if (!hash) return;
+
+        const params = new URLSearchParams(hash);
+
+        if (params.has('metric')) {
+            this.metric = params.get('metric');
+        }
+
+        if (params.has('log')) {
+            this.logScale = params.get('log') === '1';
+        }
+
+        if (params.has('series')) {
+            this.filters.series = new Set(params.get('series').split(','));
+        }
+
+        if (params.has('systems')) {
+            this.filters.systems = new Set(params.get('systems').split(','));
+        }
+
+        if (params.has('nodes')) {
+            this.filters.nodeCount = new Set(params.get('nodes').split(',').map(Number));
+        }
+
+        if (params.has('sf')) {
+            this.filters.scaleFactor = new Set(params.get('sf').split(',').map(Number));
+        }
+    }
+
+    updateHashState() {
+        const params = new URLSearchParams();
+
+        params.set('metric', this.metric);
+        params.set('log', this.logScale ? '1' : '0');
+
+        if (this.filters.series.size < this.data.filters.series.length) {
+            params.set('series', Array.from(this.filters.series).join(','));
+        }
+
+        if (this.filters.systems.size < this.data.filters.systems.length) {
+            params.set('systems', Array.from(this.filters.systems).join(','));
+        }
+
+        if (this.filters.nodeCount.size < this.data.filters.node_counts.length) {
+            params.set('nodes', Array.from(this.filters.nodeCount).join(','));
+        }
+
+        if (this.filters.scaleFactor.size < this.data.filters.scale_factors.length) {
+            params.set('sf', Array.from(this.filters.scaleFactor).join(','));
+        }
+
+        window.location.hash = params.toString();
+    }
+
+    // ==================== Chart Rendering ====================
+
+    renderAllCharts() {
+        const filtered = this.getFilteredBenchmarks();
+
+        this.renderScalingChart(filtered);
+        this.renderComparisonChart(filtered);
+        this.populateHeatmapSelect(filtered);
+        this.renderHeatmap();
+        this.renderEfficiencyChart(filtered);
+        this.renderBoxplot(filtered);
+        this.renderStackedChart(filtered);
+    }
+
+    getSystemMetric(benchmark, systemName) {
+        const system = benchmark.systems.find(s => s.name === systemName);
+        if (!system) return null;
+
+        switch (this.metric) {
+            case 'avg': return system.avg_ms;
+            case 'total': return system.total_ms;
+            default: return system.median_ms;
+        }
+    }
+
+    getMetricLabel() {
+        switch (this.metric) {
+            case 'avg': return 'Average';
+            case 'total': return 'Total';
+            default: return 'Median';
+        }
+    }
+
+    renderScalingChart(benchmarks) {
+        const container = document.getElementById('scaling-chart');
+        if (!container) return;
+
+        // Group by node count
+        const nodeGroups = {};
+        benchmarks.forEach(b => {
+            if (!nodeGroups[b.node_count]) {
+                nodeGroups[b.node_count] = {};
+            }
+            b.systems.forEach(s => {
+                if (!this.filters.systems.has(s.name)) return;
+                if (!nodeGroups[b.node_count][s.name]) {
+                    nodeGroups[b.node_count][s.name] = [];
+                }
+                const value = this.getSystemMetric(b, s.name);
+                if (value !== null) {
+                    nodeGroups[b.node_count][s.name].push(value);
+                }
+            });
+        });
+
+        // Calculate averages
+        const nodeCounts = Object.keys(nodeGroups).map(Number).sort((a, b) => a - b);
+        const traces = [];
+
+        this.filters.systems.forEach(systemName => {
+            const y = nodeCounts.map(nc => {
+                const values = nodeGroups[nc]?.[systemName] || [];
+                if (values.length === 0) return null;
+                return values.reduce((a, b) => a + b, 0) / values.length;
+            });
+
+            if (y.some(v => v !== null)) {
+                traces.push({
+                    x: nodeCounts.map(n => n.toString()),
+                    y: y,
+                    name: systemName,
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    marker: { size: 10, color: this.systemColors[systemName] },
+                    line: { width: 2, color: this.systemColors[systemName] },
+                    connectgaps: true,
+                });
+            }
+        });
+
+        if (traces.length === 0) {
+            container.innerHTML = '<div class="no-data"><div class="no-data-icon">📊</div>No data available</div>';
+            return;
+        }
+
+        const layout = {
+            xaxis: {
+                title: 'Node Count',
+                type: 'category',
+            },
+            yaxis: {
+                title: `${this.getMetricLabel()} Runtime (ms)`,
+                type: this.logScale ? 'log' : 'linear',
+            },
+            legend: { orientation: 'h', y: -0.2 },
+            margin: { t: 20, r: 20, b: 80, l: 80 },
+            hovermode: 'closest',
+        };
+
+        Plotly.react(container, traces, layout, { responsive: true });
+    }
+
+    renderComparisonChart(benchmarks) {
+        const container = document.getElementById('comparison-chart');
+        if (!container) return;
+
+        if (benchmarks.length === 0) {
+            container.innerHTML = '<div class="no-data"><div class="no-data-icon">📊</div>No data available</div>';
+            return;
+        }
+
+        const benchmarkIds = benchmarks.map(b => b.id);
+        const traces = [];
+
+        this.filters.systems.forEach(systemName => {
+            const y = benchmarks.map(b => this.getSystemMetric(b, systemName) || 0);
+
+            traces.push({
+                x: benchmarkIds,
+                y: y,
+                name: systemName,
+                type: 'bar',
+                marker: { color: this.systemColors[systemName] },
+            });
+        });
+
+        const layout = {
+            xaxis: {
+                title: 'Benchmark',
+                tickangle: -45,
+            },
+            yaxis: {
+                title: `${this.getMetricLabel()} Runtime (ms)`,
+                type: this.logScale ? 'log' : 'linear',
+            },
+            barmode: 'group',
+            legend: { orientation: 'h', y: -0.3 },
+            margin: { t: 20, r: 20, b: 120, l: 80 },
+        };
+
+        Plotly.react(container, traces, layout, { responsive: true });
+    }
+
+    populateHeatmapSelect(benchmarks) {
+        const select = document.getElementById('heatmap-benchmark-select');
+        if (!select) return;
+
+        const currentValue = select.value;
+        select.innerHTML = '';
+
+        benchmarks.forEach(b => {
+            const option = document.createElement('option');
+            option.value = b.id;
+            option.textContent = b.id;
+            select.appendChild(option);
+        });
+
+        // Restore selection if still valid
+        if (benchmarks.some(b => b.id === currentValue)) {
+            select.value = currentValue;
+        }
+    }
+
+    renderHeatmap() {
+        const container = document.getElementById('heatmap-chart');
+        const select = document.getElementById('heatmap-benchmark-select');
+        if (!container || !select) return;
+
+        const benchmarkId = select.value;
+        const benchmark = this.data.benchmarks.find(b => b.id === benchmarkId);
+
+        if (!benchmark || Object.keys(benchmark.queries).length === 0) {
+            container.innerHTML = '<div class="no-data"><div class="no-data-icon">🔥</div>No query data</div>';
+            return;
+        }
+
+        const queries = Object.keys(benchmark.queries).sort();
+        const systems = Array.from(this.filters.systems).filter(s =>
+            benchmark.systems.some(bs => bs.name === s)
+        );
+
+        // Build heatmap data
+        const z = [];
+        const text = [];
+
+        systems.forEach(sys => {
+            const row = [];
+            const textRow = [];
+            queries.forEach(q => {
+                const stats = benchmark.queries[q]?.[sys];
+                if (stats) {
+                    row.push(stats.median);
+                    textRow.push(`${q}: ${stats.median.toFixed(1)}ms`);
+                } else {
+                    row.push(null);
+                    textRow.push('N/A');
+                }
+            });
+            z.push(row);
+            text.push(textRow);
+        });
+
+        const trace = {
+            x: queries,
+            y: systems,
+            z: z,
+            text: text,
+            type: 'heatmap',
+            colorscale: 'RdYlGn_r',
+            hovertemplate: '%{text}<extra></extra>',
+        };
+
+        const layout = {
+            margin: { t: 20, r: 20, b: 80, l: 100 },
+            xaxis: { tickangle: -45 },
+        };
+
+        Plotly.react(container, [trace], layout, { responsive: true });
+    }
+
+    renderEfficiencyChart(benchmarks) {
+        const container = document.getElementById('efficiency-chart');
+        if (!container) return;
+
+        // Group by node count and calculate speedup vs single node
+        const singleNodeData = {};
+        benchmarks.filter(b => b.node_count === 1).forEach(b => {
+            b.systems.forEach(s => {
+                if (!this.filters.systems.has(s.name)) return;
+                if (!singleNodeData[s.name]) {
+                    singleNodeData[s.name] = [];
+                }
+                const value = this.getSystemMetric(b, s.name);
+                if (value !== null) {
+                    singleNodeData[s.name].push(value);
+                }
+            });
+        });
+
+        // Calculate baseline (average of single-node runs)
+        const baselines = {};
+        Object.entries(singleNodeData).forEach(([sys, values]) => {
+            if (values.length > 0) {
+                baselines[sys] = values.reduce((a, b) => a + b, 0) / values.length;
+            }
+        });
+
+        // Group multi-node data
+        const nodeGroups = {};
+        benchmarks.forEach(b => {
+            if (!nodeGroups[b.node_count]) {
+                nodeGroups[b.node_count] = {};
+            }
+            b.systems.forEach(s => {
+                if (!this.filters.systems.has(s.name)) return;
+                if (!nodeGroups[b.node_count][s.name]) {
+                    nodeGroups[b.node_count][s.name] = [];
+                }
+                const value = this.getSystemMetric(b, s.name);
+                if (value !== null) {
+                    nodeGroups[b.node_count][s.name].push(value);
+                }
+            });
+        });
+
+        const nodeCounts = Object.keys(nodeGroups).map(Number).sort((a, b) => a - b);
+        const traces = [];
+
+        // Ideal scaling line
+        traces.push({
+            x: nodeCounts.map(n => n.toString()),
+            y: nodeCounts,
+            name: 'Ideal Linear',
+            type: 'scatter',
+            mode: 'lines',
+            line: { dash: 'dash', color: '#999', width: 2 },
+        });
+
+        // Actual speedup per system
+        Object.entries(baselines).forEach(([sys, baseline]) => {
+            const speedups = nodeCounts.map(nc => {
+                const values = nodeGroups[nc]?.[sys] || [];
+                if (values.length === 0) return null;
+                const avg = values.reduce((a, b) => a + b, 0) / values.length;
+                return baseline / avg;
+            });
+
+            if (speedups.some(v => v !== null)) {
+                traces.push({
+                    x: nodeCounts.map(n => n.toString()),
+                    y: speedups,
+                    name: sys,
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    marker: { size: 8, color: this.systemColors[sys] },
+                    line: { width: 2, color: this.systemColors[sys] },
+                    connectgaps: true,
+                });
+            }
+        });
+
+        if (traces.length <= 1) {
+            container.innerHTML = '<div class="no-data"><div class="no-data-icon">📈</div>Need single-node baseline</div>';
+            return;
+        }
+
+        const layout = {
+            xaxis: { title: 'Node Count', type: 'category' },
+            yaxis: { title: 'Speedup Factor' },
+            legend: { orientation: 'h', y: -0.2 },
+            margin: { t: 20, r: 20, b: 80, l: 60 },
+        };
+
+        Plotly.react(container, traces, layout, { responsive: true });
+    }
+
+    renderBoxplot(benchmarks) {
+        const container = document.getElementById('boxplot-chart');
+        if (!container) return;
+
+        if (benchmarks.length === 0) {
+            container.innerHTML = '<div class="no-data"><div class="no-data-icon">📦</div>No data available</div>';
+            return;
+        }
+
+        const traces = [];
+
+        this.filters.systems.forEach(systemName => {
+            // Collect all query runtimes across benchmarks
+            const runtimes = [];
+            benchmarks.forEach(b => {
+                Object.values(b.queries).forEach(systemData => {
+                    const stats = systemData[systemName];
+                    if (stats) {
+                        runtimes.push(stats.median);
+                    }
+                });
+            });
+
+            if (runtimes.length > 0) {
+                traces.push({
+                    y: runtimes,
+                    name: systemName,
+                    type: 'box',
+                    marker: { color: this.systemColors[systemName] },
+                    boxpoints: 'outliers',
+                });
+            }
+        });
+
+        const layout = {
+            yaxis: {
+                title: 'Query Runtime (ms)',
+                type: this.logScale ? 'log' : 'linear',
+            },
+            legend: { orientation: 'h', y: -0.15 },
+            margin: { t: 20, r: 20, b: 60, l: 80 },
+        };
+
+        Plotly.react(container, traces, layout, { responsive: true });
+    }
+
+    renderStackedChart(benchmarks) {
+        const container = document.getElementById('stacked-chart');
+        if (!container) return;
+
+        // Group by series
+        const seriesData = {};
+        benchmarks.forEach(b => {
+            if (!seriesData[b.series]) {
+                seriesData[b.series] = {};
+            }
+            b.systems.forEach(s => {
+                if (!this.filters.systems.has(s.name)) return;
+                if (!seriesData[b.series][s.name]) {
+                    seriesData[b.series][s.name] = 0;
+                }
+                seriesData[b.series][s.name] += s.total_ms;
+            });
+        });
+
+        const series = Object.keys(seriesData);
+        const traces = [];
+
+        this.filters.systems.forEach(systemName => {
+            const y = series.map(s => seriesData[s]?.[systemName] || 0);
+
+            if (y.some(v => v > 0)) {
+                traces.push({
+                    x: Array.from(this.filters.systems),
+                    y: series.map(s => seriesData[s]?.[systemName] || 0),
+                    name: series[0], // TODO: Fix this for proper stacking
+                    type: 'bar',
+                });
+            }
+        });
+
+        // Rebuild traces correctly for stacking by series
+        const correctTraces = [];
+        series.forEach(seriesName => {
+            const y = [];
+            this.filters.systems.forEach(sys => {
+                y.push(seriesData[seriesName]?.[sys] || 0);
+            });
+
+            correctTraces.push({
+                x: Array.from(this.filters.systems),
+                y: y,
+                name: seriesName,
+                type: 'bar',
+            });
+        });
+
+        const layout = {
+            barmode: 'stack',
+            xaxis: { title: 'System' },
+            yaxis: { title: 'Total Runtime (ms)' },
+            legend: { orientation: 'h', y: -0.2 },
+            margin: { t: 20, r: 20, b: 80, l: 80 },
+        };
+
+        Plotly.react(container, correctTraces, layout, { responsive: true });
+    }
+
+    // ==================== Table Rendering ====================
+
+    renderTable() {
+        const tbody = document.getElementById('benchmark-tbody');
+        const countSpan = document.getElementById('table-count');
+        if (!tbody) return;
+
+        const benchmarks = this.getFilteredBenchmarks();
+
+        if (countSpan) {
+            countSpan.textContent = `Showing ${benchmarks.length} of ${this.data.benchmarks.length} benchmarks`;
+        }
+
+        tbody.innerHTML = '';
+
+        benchmarks.forEach(b => {
+            const tr = document.createElement('tr');
+
+            // Benchmark name
+            tr.innerHTML += `<td class="benchmark-name">${b.config}</td>`;
+
+            // Series
+            tr.innerHTML += `<td>${b.series}</td>`;
+
+            // Nodes
+            tr.innerHTML += `<td>${b.node_count}</td>`;
+
+            // Scale Factor
+            tr.innerHTML += `<td>${b.scale_factor !== null ? 'SF' + b.scale_factor : '-'}</td>`;
+
+            // Systems
+            const systemBadges = b.systems
+                .filter(s => this.filters.systems.has(s.name))
+                .map(s => `<span class="system-badge">${s.name}</span>`)
+                .join('');
+            tr.innerHTML += `<td class="systems-list">${systemBadges}</td>`;
+
+            // Winner & Speedup
+            const filteredSystems = b.systems.filter(s => this.filters.systems.has(s.name));
+            if (filteredSystems.length > 0) {
+                const sorted = [...filteredSystems].sort((a, b) => a.median_ms - b.median_ms);
+                const winner = sorted[0];
+                const slowest = sorted[sorted.length - 1];
+                const speedup = slowest.median_ms / winner.median_ms;
+
+                tr.innerHTML += `<td><span class="winner-badge">${winner.name}</span></td>`;
+
+                let speedupClass = 'fast';
+                if (speedup < 1.5) speedupClass = 'fast';
+                else if (speedup < 3) speedupClass = 'medium';
+                else speedupClass = 'slow';
+
+                tr.innerHTML += `<td><span class="speedup-value ${speedupClass}">${speedup.toFixed(1)}x</span></td>`;
+            } else {
+                tr.innerHTML += '<td>-</td><td>-</td>';
+            }
+
+            // Report link
+            {% if include_reports %}
+            if (b.report_url) {
+                tr.innerHTML += `<td><a href="${b.report_url}" class="report-link" target="_blank">View</a></td>`;
+            } else {
+                tr.innerHTML += '<td>-</td>';
+            }
+            {% endif %}
+
+            tbody.appendChild(tr);
+        });
+    }
+
+    // ==================== Stats Update ====================
+
+    updateStats() {
+        const benchmarks = this.getFilteredBenchmarks();
+
+        // Total benchmarks
+        const statBenchmarks = document.getElementById('stat-benchmarks');
+        if (statBenchmarks) {
+            statBenchmarks.textContent = benchmarks.length;
+        }
+
+        // Total query executions
+        const statQueries = document.getElementById('stat-queries');
+        if (statQueries) {
+            let totalQueries = 0;
+            benchmarks.forEach(b => {
+                b.systems.forEach(s => {
+                    if (this.filters.systems.has(s.name)) {
+                        totalQueries += s.query_count;
+                    }
+                });
+            });
+            statQueries.textContent = totalQueries.toLocaleString();
+        }
+
+        // Fastest system overall
+        const statFastest = document.getElementById('stat-fastest');
+        if (statFastest) {
+            const systemTotals = {};
+            benchmarks.forEach(b => {
+                b.systems.forEach(s => {
+                    if (!this.filters.systems.has(s.name)) return;
+                    if (!systemTotals[s.name]) {
+                        systemTotals[s.name] = { total: 0, count: 0 };
+                    }
+                    systemTotals[s.name].total += s.median_ms;
+                    systemTotals[s.name].count += 1;
+                });
+            });
+
+            let fastest = null;
+            let fastestAvg = Infinity;
+            Object.entries(systemTotals).forEach(([name, data]) => {
+                const avg = data.total / data.count;
+                if (avg < fastestAvg) {
+                    fastestAvg = avg;
+                    fastest = name;
+                }
+            });
+
+            statFastest.textContent = fastest || '-';
+        }
+
+        // Max speedup
+        const statSpeedup = document.getElementById('stat-speedup');
+        if (statSpeedup) {
+            let maxSpeedup = 1;
+            benchmarks.forEach(b => {
+                const filteredSystems = b.systems.filter(s => this.filters.systems.has(s.name));
+                if (filteredSystems.length >= 2) {
+                    const sorted = [...filteredSystems].sort((a, b) => a.median_ms - b.median_ms);
+                    const speedup = sorted[sorted.length - 1].median_ms / sorted[0].median_ms;
+                    if (speedup > maxSpeedup) {
+                        maxSpeedup = speedup;
+                    }
+                }
+            });
+            statSpeedup.textContent = maxSpeedup > 1 ? `${maxSpeedup.toFixed(1)}x` : '-';
+        }
+    }
+}
+
+// Initialize on DOM ready
+document.addEventListener('DOMContentLoaded', () => {
+    const dataEl = document.getElementById('benchmark-data');
+    if (!dataEl) {
+        console.error('Benchmark data not found');
+        return;
+    }
+
+    try {
+        const data = JSON.parse(dataEl.textContent);
+        window.dashboard = new BenchmarkDashboard(data);
+    } catch (e) {
+        console.error('Failed to parse benchmark data:', e);
+    }
+});
