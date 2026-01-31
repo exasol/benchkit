@@ -403,6 +403,27 @@ class SuiteRunner:
         """
         return f"{series_name}/{config_path.stem}"
 
+    def get_config_path(self, series_name: str, config_name: str) -> Path | None:
+        """Get the config file path from series and config names.
+
+        Args:
+            series_name: Name of the series (e.g., "series_1_nodes")
+            config_name: Name of the config file without extension (e.g., "nodes_1")
+
+        Returns:
+            Path to the config file, or None if not found
+        """
+        # Try series subdirectory first
+        series_dir = self.suite_path / "series"
+        if not series_dir.exists():
+            series_dir = self.suite_path
+
+        config_path = series_dir / series_name / f"{config_name}.yaml"
+        if config_path.exists():
+            return config_path
+
+        return None
+
     def run(
         self,
         series: str | None = None,

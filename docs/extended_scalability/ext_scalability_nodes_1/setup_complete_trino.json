@@ -1,9 +1,0 @@
-{
-  "system_name": "trino",
-  "connection_info": {
-    "public_ip": "52.19.65.22",
-    "private_ip": "10.0.1.56"
-  },
-  "installation_s": 66.46203010005411,
-  "timestamp": "2026-01-28T21:15:06.188681"
-}

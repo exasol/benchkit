@@ -1,5 +1,6 @@
 """Command line interface for the benchmark framework."""
 
+import copy
 from pathlib import Path
 from typing import Any
 
@@ -284,6 +285,10 @@ def run(
     set_debug(debug)
 
     cfg = load_config(config)
+    # Save original config before CLI overrides for report generation
+    # Reports should reflect all data in runs.csv, not just filtered systems
+    original_cfg = copy.deepcopy(cfg)
+
     outdir = Path("results") / cfg["project_id"]
     outdir.mkdir(parents=True, exist_ok=True)
 
@@ -407,7 +412,8 @@ def run(
             # Phase 5: Report
             console.print()
             console.print("[bold]Phase 5: Report Generation[/bold]")
-            run_report_for_full(cfg, _collect_report_files)
+            # Use original config so report includes all systems from runs.csv
+            run_report_for_full(original_cfg, _collect_report_files)
     else:
         # Run queries only (strict mode - check prerequisites)
         if not runner.run_queries(force=force, local=local):
@@ -2539,6 +2545,11 @@ def suite_publish(
         True, "--include-reports/--no-reports", help="Copy individual benchmark reports"
     ),
     theme: str = typer.Option("auto", "--theme", help="Theme: light, dark, auto"),
+    regenerate_stale: bool = typer.Option(
+        False,
+        "--regenerate-stale",
+        help="Regenerate reports that are older than their data",
+    ),
 ) -> None:
     """Generate a static benchmark comparison website from suite results.
 
@@ -2564,6 +2575,7 @@ def suite_publish(
             base_url=base_url,
             include_reports=include_reports,
             theme=theme,
+            regenerate_stale=regenerate_stale,
         )
         console.print(f"\n[bold green]✓ Dashboard published: {index_path}[/bold green]")
     except Exception as e:

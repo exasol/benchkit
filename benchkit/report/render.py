@@ -972,7 +972,16 @@ class ReportRenderer:
                 for k, v in filtered["summary"]["per_system"].items()
                 if k in system_names
             }
-            filtered["summary"]["systems"] = system_names
+            # Derive systems from filtered data, not from config
+            # This ensures reports reflect actual data in runs.csv
+            if "runs_df" in filtered and not filtered["runs_df"].empty:
+                filtered["summary"]["systems"] = (
+                    filtered["runs_df"]["system"].unique().tolist()
+                )
+            else:
+                filtered["summary"]["systems"] = list(
+                    filtered["summary"]["per_system"].keys()
+                )
 
         return filtered
 

@@ -85,6 +85,7 @@ class SuitePublisher:
         base_url: str = "./",
         include_reports: bool = True,
         theme: str = "auto",
+        regenerate_stale: bool = False,
     ):
         """Initialize the publisher.
 
@@ -96,6 +97,7 @@ class SuitePublisher:
             base_url: Base URL for assets
             include_reports: Whether to copy individual benchmark reports
             theme: Theme (light, dark, auto)
+            regenerate_stale: Whether to regenerate reports older than their data
         """
         self.suite_path = suite_path
         self.config = config
@@ -104,6 +106,7 @@ class SuitePublisher:
         self.base_url = base_url
         self.include_reports = include_reports
         self.theme = theme
+        self.regenerate_stale = regenerate_stale
 
         self.state_manager = SuiteStateManager(suite_path)
         self.runner = SuiteRunner(suite_path, config)
@@ -133,6 +136,12 @@ class SuitePublisher:
             return self.output_dir / "index.html"
 
         console.print(f"  Found {len(benchmarks)} benchmarks")
+
+        # Regenerate stale reports if requested
+        if self.regenerate_stale:
+            regenerated = self._regenerate_stale_reports(benchmarks)
+            if regenerated > 0:
+                console.print(f"  Regenerated {regenerated} stale reports")
 
         # Build site data structure
         site_data = self._build_site_data(benchmarks)
@@ -530,6 +539,70 @@ class SuitePublisher:
             seconds = (ms % 60000) / 1000
             return f"{minutes}m {seconds:.1f}s"
 
+    def _is_report_stale(self, project_id: str) -> bool:
+        """Check if a benchmark's report is older than its data.
+
+        A report is considered stale if runs.csv has been modified more
+        recently than REPORT.html, indicating the data has changed since
+        the report was generated.
+
+        Args:
+            project_id: The project ID to check
+
+        Returns:
+            True if the report is stale or missing, False otherwise
+        """
+        results_dir = Path("results") / project_id
+        runs_csv = results_dir / "runs.csv"
+        report_html = results_dir / "reports" / "3-full" / "REPORT.html"
+
+        # No report exists - it's stale
+        if not report_html.exists():
+            return True
+
+        # No data exists - report is not stale (nothing to regenerate from)
+        if not runs_csv.exists():
+            return False
+
+        # Compare modification times
+        return runs_csv.stat().st_mtime > report_html.stat().st_mtime
+
+    def _regenerate_stale_reports(self, benchmarks: list[BenchmarkDataEntry]) -> int:
+        """Regenerate reports that are older than their data.
+
+        Args:
+            benchmarks: List of benchmark entries to check
+
+        Returns:
+            Number of reports regenerated
+        """
+        from ..report.render import render_report
+
+        regenerated = 0
+        for benchmark in benchmarks:
+            if self._is_report_stale(benchmark.project_id):
+                # Find the config path for this benchmark
+                config_path = self.runner.get_config_path(
+                    benchmark.series_name, benchmark.config_name
+                )
+
+                if config_path and config_path.exists():
+                    console.print(
+                        f"  [blue]Regenerating stale report: "
+                        f"{benchmark.benchmark_id}[/blue]"
+                    )
+                    try:
+                        cfg = load_config(str(config_path))
+                        render_report(cfg)
+                        regenerated += 1
+                    except Exception as e:
+                        console.print(
+                            f"  [yellow]Warning: Could not regenerate "
+                            f"{benchmark.benchmark_id}: {e}[/yellow]"
+                        )
+
+        return regenerated
+
 
 def publish_suite(
     suite_path: Path,
@@ -538,6 +611,7 @@ def publish_suite(
     base_url: str = "./",
     include_reports: bool = True,
     theme: str = "auto",
+    regenerate_stale: bool = False,
 ) -> Path:
     """Main entry point for publishing a suite.
 
@@ -548,6 +622,7 @@ def publish_suite(
         base_url: Base URL for assets
         include_reports: Whether to copy individual reports
         theme: Theme (light, dark, auto)
+        regenerate_stale: Whether to regenerate reports older than their data
 
     Returns:
         Path to generated index.html
@@ -568,6 +643,7 @@ def publish_suite(
         base_url=base_url,
         include_reports=include_reports,
         theme=theme,
+        regenerate_stale=regenerate_stale,
     )
 
     return publisher.publish()
