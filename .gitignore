@@ -51,6 +51,7 @@ results/
 docs/*/reports/*/workload-package
 packages/
 !posts/.gitkeep
+.benchkit/
 
 # Terraform state (large files, not needed for reports)
 **/terraform/

@@ -31,6 +31,7 @@ class BenchmarkCombiner:
         output_project_id: str,
         title: str | None = None,
         author: str | None = None,
+        strict_workload: bool = True,
     ):
         """Initialize the combiner.
 
@@ -39,11 +40,14 @@ class BenchmarkCombiner:
             output_project_id: Project ID for the combined output.
             title: Optional title for the combined benchmark.
             author: Optional author for the combined benchmark.
+            strict_workload: If True, all workload fields must match exactly.
+                If False, only workload name must match (warns about differences).
         """
         self.sources = sources
         self.output_project_id = output_project_id
         self.title = title
         self.author = author
+        self.strict_workload = strict_workload
         self.output_dir = Path("results") / output_project_id
 
         # Will be populated during combine
@@ -73,7 +77,9 @@ class BenchmarkCombiner:
 
         # 3. Validate workloads match
         console.print("[blue]Validating workload compatibility...[/]")
-        self._workload = validate_workloads_compatible(self.sources)
+        self._workload = validate_workloads_compatible(
+            self.sources, strict=self.strict_workload
+        )
 
         # 4. Validate no name conflicts
         console.print("[blue]Checking for system name conflicts...[/]")

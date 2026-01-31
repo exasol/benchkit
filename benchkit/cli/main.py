@@ -1,5 +1,6 @@
 """Command line interface for the benchmark framework."""
 
+import copy
 from pathlib import Path
 from typing import Any
 
@@ -284,6 +285,10 @@ def run(
     set_debug(debug)
 
     cfg = load_config(config)
+    # Save original config before CLI overrides for report generation
+    # Reports should reflect all data in runs.csv, not just filtered systems
+    original_cfg = copy.deepcopy(cfg)
+
     outdir = Path("results") / cfg["project_id"]
     outdir.mkdir(parents=True, exist_ok=True)
 
@@ -407,7 +412,8 @@ def run(
             # Phase 5: Report
             console.print()
             console.print("[bold]Phase 5: Report Generation[/bold]")
-            run_report_for_full(cfg, _collect_report_files)
+            # Use original config so report includes all systems from runs.csv
+            run_report_for_full(original_cfg, _collect_report_files)
     else:
         # Run queries only (strict mode - check prerequisites)
         if not runner.run_queries(force=force, local=local):
@@ -2083,6 +2089,498 @@ def combine(
 
             console.print(traceback.format_exc())
         raise typer.Exit(code=1) from e
+
+
+# =============================================================================
+# Suite Commands
+# =============================================================================
+
+suite_app = typer.Typer(
+    name="suite",
+    help="Manage benchmark suites (collections of benchmarks)",
+    no_args_is_help=True,
+)
+app.add_typer(suite_app)
+
+
+@suite_app.command("run")
+def suite_run(
+    path: Path = typer.Argument(..., help="Path to suite directory"),
+    series: str | None = typer.Option(
+        None, "--series", "-s", help="Run only this series"
+    ),
+    benchmark: str | None = typer.Option(
+        None, "--benchmark", "-b", help="Run specific benchmark (series/config_name)"
+    ),
+    resume: bool = typer.Option(
+        False, "--resume", "-r", help="Skip completed benchmarks"
+    ),
+    parallel: int = typer.Option(
+        1, "--parallel", "-p", help="Number of concurrent benchmarks"
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Show plan without executing"
+    ),
+    no_cleanup: bool = typer.Option(
+        False, "--no-cleanup", help="Keep infrastructure after each benchmark"
+    ),
+    tag: str = typer.Option("", "--tag", "-t", help="Tag for this run"),
+    systems: str | None = typer.Option(
+        None, "--systems", help="Comma-separated list of systems to run"
+    ),
+    enable: list[str] = typer.Option(
+        [], "--enable", help="Enable specific series (can be repeated)"
+    ),
+    disable: list[str] = typer.Option(
+        [], "--disable", help="Disable specific series (can be repeated)"
+    ),
+    debug: bool = typer.Option(False, "--debug", help="Enable debug output"),
+) -> None:
+    """Run benchmarks in a suite.
+
+    Examples:
+        # Run all enabled series
+        benchkit suite run ./my-suite/
+
+        # Dry run to see plan
+        benchkit suite run ./my-suite/ --dry-run
+
+        # Run specific series
+        benchkit suite run ./my-suite/ --series 01_node_scaling
+
+        # Run specific benchmark
+        benchkit suite run ./my-suite/ --benchmark 01_node_scaling/nodes_04
+
+        # Resume after interruption
+        benchkit suite run ./my-suite/ --resume
+
+        # Enable disabled series for this run
+        benchkit suite run ./my-suite/ --enable 03_concurrency
+    """
+    from ..debug import set_debug
+    from ..suite import SuiteRunner, load_suite_config
+
+    set_debug(debug)
+
+    suite_yaml = path / "suite.yaml"
+    if not suite_yaml.exists():
+        console.print(f"[red]Suite configuration not found: {suite_yaml}[/red]")
+        console.print("[dim]Use 'benchkit suite init' to create a new suite[/dim]")
+        raise typer.Exit(1)
+
+    try:
+        config = load_suite_config(suite_yaml)
+
+        # Apply enable/disable overrides
+        for series_name in enable:
+            if series_name in config.series:
+                config.series[series_name].enabled = True
+            else:
+                # Create new series config if not defined
+                from ..suite import SeriesConfig
+
+                config.series[series_name] = SeriesConfig(
+                    name=series_name, enabled=True
+                )
+
+        for series_name in disable:
+            if series_name in config.series:
+                config.series[series_name].enabled = False
+
+        runner = SuiteRunner(path, config)
+
+        success = runner.run(
+            series=series,
+            benchmark=benchmark,
+            resume=resume,
+            parallel=parallel,
+            dry_run=dry_run,
+            no_cleanup=no_cleanup,
+            tag=tag,
+            systems=systems,
+        )
+
+        if not success:
+            raise typer.Exit(1)
+
+    except FileNotFoundError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1) from e
+    except Exception as e:
+        console.print(f"[red]Suite run failed: {e}[/red]")
+        if debug:
+            import traceback
+
+            console.print(traceback.format_exc())
+        raise typer.Exit(1) from e
+
+
+@suite_app.command("status")
+def suite_status(
+    path: Path = typer.Argument(..., help="Path to suite directory"),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Show detailed per-system status"
+    ),
+) -> None:
+    """Show status of all benchmarks in a suite.
+
+    Displays actual benchmark progress by checking results directories.
+    Shows phase completion (setup, load, run) for each benchmark.
+
+    Use --verbose to see per-system details including query counts and errors.
+    """
+    from ..suite import SuiteRunner, load_suite_config
+
+    suite_yaml = path / "suite.yaml"
+    if not suite_yaml.exists():
+        console.print(f"[red]Suite configuration not found: {suite_yaml}[/red]")
+        raise typer.Exit(1)
+
+    try:
+        config = load_suite_config(suite_yaml)
+        runner = SuiteRunner(path, config)
+        runner.show_status(verbose=verbose)
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1) from e
+
+
+@suite_app.command("list")
+def suite_list(
+    path: Path = typer.Argument(..., help="Path to suite directory"),
+    hide_disabled: bool = typer.Option(
+        False, "--hide-disabled", help="Hide disabled series from output"
+    ),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Show system kinds and instance types"
+    ),
+) -> None:
+    """List all series and configs in a suite.
+
+    Shows the structure of the suite including all series and their
+    benchmark configurations with workload type, scale factor, and counts.
+
+    Use --verbose to see detailed system kinds and instance types for each config.
+    Use --hide-disabled to hide disabled series.
+    """
+    from ..suite import SuiteRunner, load_suite_config
+
+    suite_yaml = path / "suite.yaml"
+    if not suite_yaml.exists():
+        console.print(f"[red]Suite configuration not found: {suite_yaml}[/red]")
+        raise typer.Exit(1)
+
+    try:
+        config = load_suite_config(suite_yaml)
+        runner = SuiteRunner(path, config)
+        runner.list_configs(hide_disabled=hide_disabled, verbose=verbose)
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1) from e
+
+
+@suite_app.command("report")
+def suite_report(
+    path: Path = typer.Argument(..., help="Path to suite directory"),
+    output: Path | None = typer.Option(
+        None, "--output", "-o", help="Output directory for reports"
+    ),
+    combined: bool = typer.Option(
+        False,
+        "--combined",
+        "-c",
+        help="Generate a single combined report instead of individual reports",
+    ),
+) -> None:
+    """Generate reports for all completed benchmarks.
+
+    By default, generates individual reports for each completed benchmark.
+    Use --combined to merge all results into a single unified report.
+    """
+    from ..suite import SuiteRunner, load_suite_config
+
+    suite_yaml = path / "suite.yaml"
+    if not suite_yaml.exists():
+        console.print(f"[red]Suite configuration not found: {suite_yaml}[/red]")
+        raise typer.Exit(1)
+
+    try:
+        config = load_suite_config(suite_yaml)
+        runner = SuiteRunner(path, config)
+        result = runner.generate_report(output, combined=combined)
+        if not result:
+            raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]Report generation failed: {e}[/red]")
+        raise typer.Exit(1) from e
+
+
+@suite_app.command("reset")
+def suite_reset(
+    path: Path = typer.Argument(..., help="Path to suite directory"),
+    confirm: bool = typer.Option(
+        False, "--yes", "-y", help="Confirm reset without prompting"
+    ),
+) -> None:
+    """Reset suite state (clear completion markers).
+
+    This clears all recorded state, allowing benchmarks to be re-run.
+    Does not delete result data.
+    """
+    from ..suite import SuiteRunner, load_suite_config
+
+    suite_yaml = path / "suite.yaml"
+    if not suite_yaml.exists():
+        console.print(f"[red]Suite configuration not found: {suite_yaml}[/red]")
+        raise typer.Exit(1)
+
+    if not confirm:
+        console.print(
+            "[yellow]This will clear all suite state. "
+            "Result data will not be deleted.[/yellow]"
+        )
+        response = typer.prompt("Continue? [y/N]", default="n")
+        if response.lower() != "y":
+            console.print("[dim]Cancelled[/dim]")
+            raise typer.Exit(0)
+
+    try:
+        config = load_suite_config(suite_yaml)
+        runner = SuiteRunner(path, config)
+        runner.reset_state()
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1) from e
+
+
+@suite_app.command("sync")
+def suite_sync(
+    path: Path = typer.Argument(..., help="Path to suite directory"),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Show what would change without writing"
+    ),
+    force: bool = typer.Option(
+        False, "--force", help="Overwrite existing state entirely"
+    ),
+    verbose: bool = typer.Option(
+        False, "-v", "--verbose", help="Show detailed changes"
+    ),
+) -> None:
+    """Synchronize suite state with actual results.
+
+    Scans the results/ directory and updates .benchkit/state.json
+    to reflect which benchmarks have actually been completed.
+
+    Useful when:
+    - Benchmarks were run outside the suite runner
+    - State file was deleted or corrupted
+    - Results were copied from another machine
+    """
+    from ..suite import SuiteRunner, load_suite_config
+
+    suite_yaml = path / "suite.yaml"
+    if not suite_yaml.exists():
+        console.print(f"[red]Error: {suite_yaml} not found[/red]")
+        raise typer.Exit(1)
+
+    try:
+        config = load_suite_config(suite_yaml)
+        runner = SuiteRunner(path, config)
+
+        if dry_run:
+            console.print("[yellow]Dry run - no changes will be made[/yellow]")
+
+        summary = runner.sync_state(dry_run=dry_run, force=force)
+
+        # Display results
+        console.print()
+        if verbose and summary["details"]:
+            from rich.table import Table
+
+            table = Table(title="State Changes")
+            table.add_column("Benchmark")
+            table.add_column("Old Status")
+            table.add_column("New Status")
+
+            for detail in summary["details"]:
+                old = detail["old_status"] or "[dim]none[/dim]"
+                new = detail["new_status"]
+                color = "green" if new == "completed" else "yellow"
+                table.add_row(detail["benchmark_id"], old, f"[{color}]{new}[/{color}]")
+
+            console.print(table)
+            console.print()
+
+        # Summary line
+        console.print(
+            f"[bold]Summary:[/bold] {summary['updated']} updated, "
+            f"{summary['unchanged']} unchanged"
+        )
+
+        if not dry_run and summary["updated"] > 0:
+            state_file = path / ".benchkit" / "state.json"
+            console.print(f"[green]✓ State file updated: {state_file}[/green]")
+
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1) from e
+
+
+@suite_app.command("init")
+def suite_init(
+    path: Path = typer.Argument(..., help="Directory to create suite in"),
+    name: str = typer.Option(
+        "My Benchmark Suite", "--name", "-n", help="Name for the suite"
+    ),
+) -> None:
+    """Initialize a new benchmark suite with scaffolding.
+
+    Creates the basic structure for a benchmark suite including:
+    - suite.yaml configuration
+    - Example series directory
+    - Example benchmark configuration
+    - README and .gitignore
+    """
+    from ..suite import init_suite
+
+    if path.exists() and any(path.iterdir()):
+        console.print(f"[yellow]Warning: Directory {path} is not empty[/yellow]")
+        response = typer.prompt("Continue? [y/N]", default="n")
+        if response.lower() != "y":
+            console.print("[dim]Cancelled[/dim]")
+            raise typer.Exit(0)
+
+    try:
+        init_suite(path, name)
+    except Exception as e:
+        console.print(f"[red]Error creating suite: {e}[/red]")
+        raise typer.Exit(1) from e
+
+
+@suite_app.command("validate")
+def suite_validate(
+    path: Path = typer.Argument(..., help="Path to suite directory"),
+) -> None:
+    """Validate suite structure and configurations.
+
+    Checks that:
+    - suite.yaml exists and is valid
+    - All referenced series directories exist
+    - All benchmark configurations are valid
+    """
+    from ..suite import SuiteRunner, load_suite_config
+
+    suite_yaml = path / "suite.yaml"
+    if not suite_yaml.exists():
+        console.print(f"[red]✗ Suite configuration not found: {suite_yaml}[/red]")
+        raise typer.Exit(1)
+
+    errors = []
+    warnings = []
+
+    # Validate suite.yaml
+    try:
+        config = load_suite_config(suite_yaml)
+        console.print(f"[green]✓ Suite configuration valid: {config.name}[/green]")
+    except Exception as e:
+        console.print(f"[red]✗ Invalid suite.yaml: {e}[/red]")
+        raise typer.Exit(1) from e
+
+    # Check series directories
+    runner = SuiteRunner(path, config)
+    discovered = runner.discover_configs()
+
+    if not discovered:
+        warnings.append("No benchmark configurations found")
+
+    # Validate each config
+    total_configs = 0
+    valid_configs = 0
+
+    for series_name, configs in discovered.items():
+        console.print(f"\n[bold]Series: {series_name}[/bold]")
+
+        for config_path in configs:
+            total_configs += 1
+            try:
+                load_config(str(config_path))  # Validate the config
+                console.print(f"  [green]✓[/green] {config_path.name}")
+                valid_configs += 1
+            except Exception as e:
+                console.print(f"  [red]✗[/red] {config_path.name}: {e}")
+                errors.append(f"{config_path}: {e}")
+
+    # Summary
+    console.print()
+    if errors:
+        console.print(
+            f"[red]Validation failed: {len(errors)} errors, "
+            f"{valid_configs}/{total_configs} configs valid[/red]"
+        )
+        raise typer.Exit(1)
+    elif warnings:
+        console.print(
+            f"[yellow]Validation passed with warnings: "
+            f"{valid_configs}/{total_configs} configs valid[/yellow]"
+        )
+        for warning in warnings:
+            console.print(f"  [yellow]⚠ {warning}[/yellow]")
+    else:
+        console.print(
+            f"[green]✓ Suite valid: {valid_configs}/{total_configs} configs[/green]"
+        )
+
+
+@suite_app.command("publish")
+def suite_publish(
+    path: Path = typer.Argument(..., help="Path to suite directory"),
+    output: Path | None = typer.Option(
+        None, "-o", "--output", help="Output directory for the website"
+    ),
+    title: str | None = typer.Option(
+        None, "--title", help="Custom site title (default: suite name)"
+    ),
+    base_url: str = typer.Option("./", "--base-url", help="Base URL for assets"),
+    include_reports: bool = typer.Option(
+        True, "--include-reports/--no-reports", help="Copy individual benchmark reports"
+    ),
+    theme: str = typer.Option("auto", "--theme", help="Theme: light, dark, auto"),
+    regenerate_stale: bool = typer.Option(
+        False,
+        "--regenerate-stale",
+        help="Regenerate reports that are older than their data",
+    ),
+) -> None:
+    """Generate a static benchmark comparison website from suite results.
+
+    Creates an interactive dashboard with visualizations for comparing
+    benchmark results across all benchmarks in the suite.
+
+    Example:
+        benchkit suite publish ./my-suite/
+        benchkit suite publish ./my-suite/ -o docs/dashboard/
+    """
+    from ..suite.publisher import publish_suite
+
+    suite_yaml = path / "suite.yaml"
+    if not suite_yaml.exists():
+        console.print(f"[red]Suite configuration not found: {suite_yaml}[/red]")
+        raise typer.Exit(1)
+
+    try:
+        index_path = publish_suite(
+            suite_path=path,
+            output_dir=output,
+            title=title,
+            base_url=base_url,
+            include_reports=include_reports,
+            theme=theme,
+            regenerate_stale=regenerate_stale,
+        )
+        console.print(f"\n[bold green]✓ Dashboard published: {index_path}[/bold green]")
+    except Exception as e:
+        console.print(f"[red]Publishing failed: {e}[/red]")
+        raise typer.Exit(1) from e
 
 
 if __name__ == "__main__":
