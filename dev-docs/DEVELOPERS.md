@@ -33,9 +33,9 @@ Templates work everywhere - AWS, GCP, Azure, local, on-premises. All tuning para
 ```
 benchkit/
 ├── benchkit/                  # Core framework
-│   ├── cli/                   # Command-line interface (13 commands)
+│   ├── cli/                   # Command-line interface (13 main + 9 suite commands)
 │   ├── systems/               # Database system implementations (5 systems)
-│   ├── workloads/             # Benchmark workloads (TPC-H, ClickBench, Estuary)
+│   ├── workloads/             # Benchmark workloads (TPC-H, Estuary)
 │   ├── gather/                # System information collection
 │   ├── run/                   # Benchmark execution
 │   ├── report/                # Report generation
@@ -43,10 +43,13 @@ benchkit/
 │   ├── package/               # Minimal package creation
 │   ├── verify/                # Result verification
 │   ├── combine/               # Result combination from multiple projects
+│   ├── suite/                 # Benchmark suite orchestration
 │   ├── storage/               # Storage backends (local, S3)
 │   └── common/                # Shared utilities and markers
 ├── templates/                 # Jinja2 templates for reports
+│   └── suite_publish/         # Static dashboard templates
 ├── configs/                   # Benchmark configurations
+│   └── extended_scalability/  # Example benchmark suite
 ├── infra/aws/                 # AWS Terraform templates (source)
 ├── workloads/tpch/            # TPC-H queries and schemas
 └── results/                   # Generated results (auto-created)
@@ -119,6 +122,92 @@ This is particularly useful for:
 
 The parallel loader respects table dependencies and system-specific loading methods.
 
+## Benchmark Suites
+
+The `benchkit/suite/` module provides orchestration for running multiple related benchmarks as a cohesive study.
+
+### Suite Structure
+
+A suite is a directory containing:
+- `suite.yaml` - Suite configuration (name, series definitions, execution settings)
+- `series/` - Subdirectories containing benchmark configuration files
+- `.benchkit/` - Auto-managed state directory (gitignored)
+
+```
+my-suite/
+├── suite.yaml
+├── series/
+│   ├── series_1_nodes/
+│   │   ├── nodes_1.yaml
+│   │   └── nodes_4.yaml
+│   └── series_2_sf/
+│       ├── sf_25.yaml
+│       └── sf_100.yaml
+└── .benchkit/
+    └── state.json
+```
+
+### Suite Configuration (suite.yaml)
+
+```yaml
+name: "My Benchmark Suite"
+version: "1.0.0"
+description: "Comprehensive performance study"
+author: "Your Name"
+
+series:
+  series_1_nodes:
+    name: "Node Scaling"
+    description: "Test horizontal scaling"
+    enabled: true
+  series_2_sf:
+    name: "Data Scaling"
+    enabled: false  # Disabled series are skipped
+
+execution:
+  mode: sequential          # sequential or parallel
+  continue_on_failure: true # Continue if a benchmark fails
+  pause_between: 30         # Seconds between benchmarks
+
+infrastructure:
+  cleanup_after_each: true  # Destroy infrastructure after each benchmark
+```
+
+### Suite Commands
+
+| Command | Description |
+|---------|-------------|
+| `suite init` | Create a new suite with scaffolding |
+| `suite run` | Execute benchmarks (supports `--resume`, `--dry-run`) |
+| `suite status` | Show status of all benchmarks |
+| `suite list` | List all series and configurations |
+| `suite report` | Generate reports for completed benchmarks |
+| `suite sync` | Synchronize state with actual results |
+| `suite reset` | Clear completion markers |
+| `suite validate` | Validate suite structure |
+| `suite publish` | Generate static comparison dashboard |
+
+### State Management
+
+The suite runner maintains persistent state in `.benchkit/state.json`, enabling:
+- **Resume capability**: Restart interrupted runs without re-executing completed benchmarks
+- **Progress tracking**: Monitor which benchmarks have completed, failed, or are pending
+- **Synchronization**: Detect when results exist but state is missing via `suite sync`
+
+### Publishing Dashboards
+
+The `suite publish` command generates a static website for viewing benchmark results:
+
+```bash
+benchkit suite publish ./my-suite --output docs/dashboard
+```
+
+This creates an interactive dashboard with:
+- Filterable benchmark comparisons
+- Per-query statistics
+- Links to individual reports
+- JSON data export for custom analysis
+
 ## Adding New Workloads
 
 A workload defines the contents of the benchmark, in terms of
@@ -132,8 +221,11 @@ A workload defines the contents of the benchmark, in terms of
 
 ## Adding Query Variants To Existing Workloads
 
-> [!NOTE]
-> Section needs content.
+Query variants allow running modified versions of standard queries (e.g., system-optimized versions).
+
+1. Create query files with a variant suffix in `workloads/<workload>/queries/<system>/` (e.g., `Q01.sql` for system-specific version)
+2. The framework automatically selects system-specific queries when available
+3. Variants share expected results with base queries unless overridden in `workloads/<workload>/expected/<system>/`
 
 ## Adding New Systems
 
@@ -148,10 +240,13 @@ Systems are defined by python code at `benchkit/systems/`, which needs to provid
 
 ## Adding New Infrastructure Providers
 
-> [!NOTE]
-> Section needs content.
+The framework currently supports AWS with Terraform. To add GCP or Azure:
 
-📖 **See [Extending Guide](EXTENDING.md) for details**
+1. Create Terraform module in `infra/<provider>/main.tf`
+2. Update `benchkit/infra/manager.py` to handle provider-specific variables
+3. Add provider configuration options to the config schema
+
+📖 **See [Extending Guide](EXTENDING.md#adding-cloud-providers) for detailed implementation steps**
 
 
 ## Best Practices

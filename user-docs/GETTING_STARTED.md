@@ -70,23 +70,7 @@ pip install -e .
 benchkit --help
 ```
 
-You should see the framework's help message with 10 available commands.
-
-### 3. Install TPC-H Tools (Optional/Obsolete?)
-
-For TPC-H benchmarks, install the data generation tools:
-
-```bash
-# Clone and build TPC-H dbgen
-cd /tmp
-git clone https://github.com/electrum/tpch-dbgen.git
-cd tpch-dbgen
-make
-sudo cp dbgen qgen /usr/local/bin/
-
-# Verify installation
-dbgen -h
-```
+You should see the framework's help message with 13 main commands (plus the `suite` command group with 9 subcommands).
 
 ## Your First Benchmark
 
@@ -103,7 +87,7 @@ This configuration defines:
 - TPC-H workload at scale factor 1
 - 7 runs per query with 1 warmup run
 
-### 2. Prepare Data Directory (Obsolete ?)
+### 2. Prepare Data Directory (Cloud: automatic, Local: required)
 
 ```bash
 # Create data directory
@@ -114,12 +98,15 @@ sudo chown $USER:$USER /data
 mkdir -p /data/{exasol,clickhouse,tpch}
 ```
 
+> [!NOTE]
+> For cloud (AWS) deployments, data directories are created automatically on remote instances.
+
 ### 3. Run the Benchmark
 
 #### Option A: Run Everything at Once
 
 The included Makefile provides some shortcuts combining multiple calls to `benchkit`.
-Run `make` without arguments to get acommand overview.
+Run `make` without arguments to get a command overview.
 
 ```bash
 # Run the complete benchmark pipeline
@@ -158,7 +145,7 @@ ls -la results/exa_vs_ch_1g/
 
 ## CLI Commands Reference
 
-The framework provides 10 commands for complete benchmark lifecycle management.
+The framework provides 13 main commands plus 9 suite subcommands for complete benchmark lifecycle management.
 
 ### 1. `probe` - System Information Collection
 
@@ -439,6 +426,94 @@ benchkit combine \
 
 > [!IMPORTANT]
 > All source benchmarks must have identical workload configurations (scale factor, queries, runs per query) to be combined.
+
+### 11. `suite` - Benchmark Suite Management
+
+Orchestrate multiple related benchmarks as a cohesive study with state management and resumable runs:
+
+```bash
+# Initialize a new suite
+benchkit suite init ./my-suite --name "My Benchmark Suite"
+
+# List all configurations in a suite
+benchkit suite list ./my-suite
+
+# View execution plan without running (dry-run)
+benchkit suite run ./my-suite --dry-run
+
+# Run all benchmarks in a suite
+benchkit suite run ./my-suite
+
+# Run specific series only
+benchkit suite run ./my-suite --series series_1_nodes
+
+# Run specific benchmark
+benchkit suite run ./my-suite --benchmark series_1_nodes/nodes_4
+
+# Resume after interruption (skips completed benchmarks)
+benchkit suite run ./my-suite --resume
+
+# Run systems sequentially (reduces cloud resource pressure)
+benchkit suite run ./my-suite --systems sequential
+
+# Check status of all benchmarks
+benchkit suite status ./my-suite
+
+# Synchronize state with actual results
+benchkit suite sync ./my-suite
+
+# Generate reports for completed benchmarks
+benchkit suite report ./my-suite
+
+# Generate static comparison dashboard
+benchkit suite publish ./my-suite --output docs/dashboard
+
+# Reset suite state (clear completion markers)
+benchkit suite reset ./my-suite
+
+# Validate suite structure and configurations
+benchkit suite validate ./my-suite
+```
+
+**Suite Structure**:
+```
+my-suite/
+├── suite.yaml              # Suite configuration
+├── series/
+│   ├── series_1_nodes/     # Series directory
+│   │   ├── nodes_1.yaml    # Benchmark configs
+│   │   └── nodes_4.yaml
+│   └── series_2_sf/
+│       └── sf_100.yaml
+└── .benchkit/              # State directory (auto-managed)
+    └── state.json
+```
+
+**Suite Configuration (suite.yaml)**:
+```yaml
+name: "My Benchmark Suite"
+version: "1.0.0"
+description: "Performance study description"
+
+series:
+  series_1_nodes:
+    name: "Node Scaling"
+    description: "Test horizontal scaling"
+    enabled: true
+  series_2_sf:
+    name: "Data Scaling"
+    enabled: false  # Disabled series are skipped
+
+execution:
+  mode: sequential
+  continue_on_failure: true
+  pause_between: 30
+
+infrastructure:
+  cleanup_after_each: true
+```
+
+See [configs/extended_scalability/](../configs/extended_scalability/) for a comprehensive example.
 
 ## Configuration Guide
 
@@ -956,6 +1031,42 @@ benchkit run --config configs/my_benchmark.yaml \
   --force \
   --queries Q17,Q20 \
   --debug
+```
+
+### Multi-Dimensional Scalability Study
+
+```bash
+# Use the extended scalability suite for comprehensive testing
+cd configs/extended_scalability
+
+# Preview the execution plan
+benchkit suite run . --dry-run
+
+# Run node scaling series only
+benchkit suite run . --series series_1_nodes
+
+# Run all enabled series with resume capability
+benchkit suite run . --resume
+
+# Check progress
+benchkit suite status .
+
+# Generate comparison dashboard
+benchkit suite publish . --output ../../docs/scalability_results
+```
+
+### Creating a Custom Suite
+
+```bash
+# Initialize new suite
+benchkit suite init ./my-study --name "Database Comparison Study"
+
+# Add benchmark configurations to series directories
+cp configs/exasol_sf100.yaml ./my-study/series/01_baseline/
+cp configs/clickhouse_sf100.yaml ./my-study/series/01_baseline/
+
+# Run the suite
+benchkit suite run ./my-study
 ```
 
 ## Understanding Output

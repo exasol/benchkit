@@ -8,11 +8,13 @@ collect detailed system information, run benchmark workloads, and generate repor
 
 - 🏗️ **Modular Architecture**: Fine-grained templates for setup, execution, and reporting
 - ☁️ **Multi-Cloud Support**: Infrastructure automation with separate instances per database
-- 📊 **Benchmark Workloads**: TPC-H with support for custom workloads
+- 📊 **Benchmark Workloads**: TPC-H, Estuary, and support for custom workloads
 - 📝 **Self-Contained Reports**: Generate reproducible reports with all attachments
 - 🔧 **Extensible**: Easy to add new systems, workloads, and cloud providers
 - 📈 **Rich Visualizations**: Automated generation of performance plots and tables
 - 🔍 **Result Verification**: Validate query correctness against expected outputs
+- 📦 **Benchmark Suites**: Orchestrate multiple benchmarks with state management and resumable runs
+- 🌐 **Static Dashboards**: Publish interactive benchmark comparison websites
 
 ## Requirements
 
@@ -41,9 +43,6 @@ python -m pip install -e .
 cp .env.example .env
 $EDITOR .env
 
-# 3b. (temporary) fix hardcoded ssh-key names in 'env' section of configuration
-$EDITOR configs/exa_vs_ch_1g.yaml
-
 # 4. Validate your configuration
 benchkit check --config configs/exa_vs_ch_1g.yaml
 
@@ -53,13 +52,14 @@ make all CFG=configs/exa_vs_ch_1g.yaml
 # 6. Clean up AWS resources
 make infra-destroy CFG=configs/exa_vs_ch_1g.yaml
 
-# 7. view benchmark report
-...TBD
+# 7. View benchmark report
+cat results/exa_vs_ch_1g/reports/*/REPORT.md
+# Or open HTML version in browser
 ```
 
 ## Usage
 
-The framework provides 13 commands for complete benchmark lifecycle management:
+The framework provides 13 main commands (plus 9 suite subcommands) for complete benchmark lifecycle management:
 
 ```bash
 # Manage infrastructure
@@ -73,6 +73,11 @@ benchkit run --config configs/my_benchmark.yaml [--systems exasol] [--queries Q0
 
 # Generate reports
 benchkit report --config configs/my_benchmark.yaml
+
+# Suite management (orchestrate multiple benchmarks)
+benchkit suite run ./my-benchmark-suite/
+benchkit suite status ./my-benchmark-suite/
+benchkit suite publish ./my-benchmark-suite/
 
 # Other commands: check, setup, load, execute, status, package, verify, cleanup, combine
 ```
@@ -101,6 +106,7 @@ benchkit report --config configs/my_benchmark.yaml
 benchkit/
 ├── benchkit/                  # Core framework
 ├── configs/                   # Benchmark configurations
+│   └── extended_scalability/  # Example benchmark suite
 └── results/                   # Generated results (auto-created)
 ```
 
@@ -137,7 +143,6 @@ benchmark configurations using supported modules.**
 | Workload       | Exasol | ClickHouse | Trino | StarRocks | DuckDB |
 |----------------|--------|------------|-------|-----------|--------|
 | TPC-H          | ✓      | ✓          | ✓     | ✓         | ✓      |
-| ClickBench     | ✓      | ✓          | ✗     | ✗         | ✗      |
 | [Estuary]      | WIP    | ✗          | ✗     | ✗         | ✗      |
 
 Notes:
@@ -145,6 +150,46 @@ Notes:
 - **Stream Load**: Supports parallel data loading via streaming protocols
 - **DuckDB**: Embedded database, runs locally without infrastructure
 
+
+## Benchmark Suites
+
+For complex benchmarking studies (e.g., scalability testing across multiple dimensions), the framework
+supports **benchmark suites** - collections of related benchmarks organized into series.
+
+```bash
+# Initialize a new suite
+benchkit suite init ./my-suite --name "My Benchmark Suite"
+
+# View execution plan (dry-run)
+benchkit suite run ./my-suite --dry-run
+
+# Run all benchmarks (with automatic resume on interruption)
+benchkit suite run ./my-suite
+
+# Check status of all benchmarks
+benchkit suite status ./my-suite
+
+# Generate static comparison dashboard
+benchkit suite publish ./my-suite --output docs/
+```
+
+**Suite Structure**:
+```
+my-suite/
+├── suite.yaml              # Suite configuration
+├── series/
+│   ├── 01_node_scaling/    # Series: test node counts
+│   │   ├── nodes_1.yaml
+│   │   ├── nodes_4.yaml
+│   │   └── nodes_8.yaml
+│   └── 02_data_scaling/    # Series: test data sizes
+│       ├── sf_25.yaml
+│       └── sf_100.yaml
+└── .benchkit/              # State directory (auto-managed)
+```
+
+See [configs/extended_scalability/](configs/extended_scalability/) for a comprehensive example
+comparing 5 database systems across node scaling, data volume, and concurrency dimensions.
 
 ## Documentation
 

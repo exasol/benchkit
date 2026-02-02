@@ -11,7 +11,7 @@ This guide explains how to extend the database benchmark framework with new syst
 - [Adding Cloud Providers](#adding-cloud-providers)
 - [Customizing Reports](#customizing-reports)
 - [Adding Result Verification](#adding-result-verification)
-- [Best Practices](#best-practices)
+- [Creating Benchmark Suites](#creating-benchmark-suites)
 
 ## Dependencies
 
@@ -792,5 +792,130 @@ class ResultVerifier:
 
 The `verify` command is already implemented in `benchkit/cli.py`. Extend the verification logic in `benchkit/verify/__init__.py`.
 
+
+## Creating Benchmark Suites
+
+Benchmark suites allow you to organize multiple related benchmarks for comprehensive studies.
+
+### Step 1: Create Suite Structure
+
+```bash
+# Use the init command
+benchkit suite init ./my-suite --name "My Benchmark Suite"
+
+# Or create manually:
+mkdir -p my-suite/series/01_baseline
+```
+
+### Step 2: Configure suite.yaml
+
+```yaml
+name: "My Benchmark Suite"
+version: "1.0.0"
+description: "Comprehensive database comparison"
+author: "Your Name"
+
+series:
+  01_baseline:
+    name: "Baseline Tests"
+    description: "Single-node baseline performance"
+    enabled: true
+  02_scaling:
+    name: "Scaling Tests"
+    description: "Multi-node scalability tests"
+    enabled: true
+
+execution:
+  mode: sequential
+  continue_on_failure: true
+  pause_between: 30
+
+infrastructure:
+  cleanup_after_each: true
+  cleanup_on_failure: true
+
+timeouts:
+  infrastructure: 3600   # 1 hour
+  benchmark: 14400       # 4 hours
+
+reports:
+  index_enabled: true
+  index_title: "Suite Results"
+```
+
+### Step 3: Add Benchmark Configurations
+
+Place standard benchmark YAML configurations in series directories:
+
+```
+my-suite/
+├── suite.yaml
+└── series/
+    ├── 01_baseline/
+    │   ├── exasol_sf10.yaml
+    │   └── clickhouse_sf10.yaml
+    └── 02_scaling/
+        ├── nodes_1.yaml
+        ├── nodes_4.yaml
+        └── nodes_8.yaml
+```
+
+Each benchmark config is a standard benchkit configuration file with `project_id`, `systems`, `workload`, etc.
+
+### Step 4: Run and Monitor
+
+```bash
+# Preview execution plan
+benchkit suite run ./my-suite --dry-run
+
+# Run with resume capability
+benchkit suite run ./my-suite --resume
+
+# Monitor progress
+benchkit suite status ./my-suite --verbose
+
+# Sync state with results (if state is lost)
+benchkit suite sync ./my-suite
+```
+
+### Step 5: Generate Outputs
+
+```bash
+# Individual reports for each benchmark
+benchkit suite report ./my-suite
+
+# Combined report across all benchmarks
+benchkit suite report ./my-suite --combined
+
+# Static comparison dashboard
+benchkit suite publish ./my-suite --output docs/
+```
+
+### Suite Design Patterns
+
+**Independent Dimension Testing**: Test one variable while holding others constant:
+
+```yaml
+# Series 1: Node scaling (fixed SF=50, streams=4)
+# Series 2: Scale factor scaling (fixed nodes=1, streams=4)
+# Series 3: Stream scaling (fixed nodes=4, SF=50)
+```
+
+**Progressive Complexity**: Start simple, add complexity:
+
+```yaml
+# 01_baseline: Single-node, small data
+# 02_moderate: Multi-node, medium data
+# 03_stress: Maximum nodes, large data, high concurrency
+```
+
+**System Comparison Groups**: Group by system capabilities:
+
+```yaml
+# cluster_capable: Exasol, ClickHouse, Trino, StarRocks
+# single_node_only: DuckDB
+```
+
+See [configs/extended_scalability/](../configs/extended_scalability/) for a comprehensive real-world example.
 
 This extensible design allows the framework to grow and adapt to new requirements while maintaining consistency and reliability across all components.
