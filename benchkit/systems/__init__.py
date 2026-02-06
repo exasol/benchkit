@@ -10,6 +10,7 @@ SYSTEM_IMPLEMENTATIONS = {
     "clickhouse": "ClickHouseSystem",
     "trino": "TrinoSystem",
     "starrocks": "StarrocksSystem",
+    "doris": "DorisSystem",
     "duckdb": "DuckdbSystem",
 }
 
@@ -43,6 +44,10 @@ def _lazy_import_system(kind: str) -> type[SystemUnderTest]:
         from .starrocks import StarrocksSystem
 
         return StarrocksSystem
+    if kind == "doris":
+        from .doris import DorisSystem
+
+        return DorisSystem
     if kind == "duckdb":
         from .duckdb import DuckdbSystem
 
