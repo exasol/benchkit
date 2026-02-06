@@ -68,7 +68,7 @@ class TPCH(Workload):
                         missing = True
                         break
                 if not missing:
-                    print("Parquet data already exists, skipping generation")
+                    self._log("Parquet data already exists, skipping generation")
                     return True
             else:
                 # For tbl format, check for single file
@@ -86,7 +86,9 @@ class TPCH(Workload):
             # Check if tpchgen-cli is available
             result = safe_command("python -m pip show tpchgen-cli")
             if not result["success"]:
-                print("tpchgen-cli not found. Install with: pip install tpchgen-cli")
+                self._log(
+                    "tpchgen-cli not found. Install with: pip install tpchgen-cli"
+                )
                 return False
 
             # Create output directory
@@ -109,12 +111,12 @@ class TPCH(Workload):
                     num_parts = 1
                 cmd.append(f"--parts={num_parts}")
                 # SNAPPY is already the default but be explicit
-                print(
+                self._log(
                     f"Generating TPC-H Parquet data (SF {self.scale_factor}, "
                     f"{num_parts} parts, SNAPPY compression)..."
                 )
             else:
-                print(
+                self._log(
                     f"Generating TPC-H data (scale factor {self.scale_factor}) "
                     "using tpchgen-cli..."
                 )
@@ -127,7 +129,9 @@ class TPCH(Workload):
             result = safe_command(" ".join(cmd), timeout=timeout)
 
             if not result["success"]:
-                print(f"tpchgen-cli failed: {result.get('stderr', 'Unknown error')}")
+                self._log(
+                    f"tpchgen-cli failed: {result.get('stderr', 'Unknown error')}"
+                )
                 return False
 
             # Verify files were created
@@ -142,9 +146,11 @@ class TPCH(Workload):
                         if not parquet_files:
                             missing_tables.append(table)
                         else:
-                            print(f"  ✓ {table}: {len(parquet_files)} parquet file(s)")
+                            self._log(
+                                f"  ✓ {table}: {len(parquet_files)} parquet file(s)"
+                            )
                 if missing_tables:
-                    print(f"Missing Parquet data for tables: {missing_tables}")
+                    self._log(f"Missing Parquet data for tables: {missing_tables}")
                     return False
             else:
                 missing_files = []
@@ -153,7 +159,7 @@ class TPCH(Workload):
                     if not tbl_file.exists():
                         missing_files.append(str(tbl_file))
                 if missing_files:
-                    print(f"Missing data files: {missing_files}")
+                    self._log(f"Missing data files: {missing_files}")
                     return False
 
             # Post-process .tbl files to strip trailing delimiters
@@ -162,11 +168,11 @@ class TPCH(Workload):
             if data_format == "tbl":
                 self._strip_trailing_delimiters(output_dir)
 
-            print(f"Successfully generated TPC-H data in {output_dir}")
+            self._log(f"Successfully generated TPC-H data in {output_dir}")
             return True
 
         except Exception as e:
-            print(f"Data generation failed: {e}")
+            self._log(f"Data generation failed: {e}")
             return False
 
     def _strip_trailing_delimiters(self, data_dir: Path) -> None:
@@ -174,14 +180,35 @@ class TPCH(Workload):
 
         TPC-H dbgen produces files with trailing delimiters (e.g., "0|ALGERIA|0|comment|")
         which causes issues with some databases that count this as an extra empty column.
+        sed -i requires temp disk space equal to the file size, so skip files that
+        would exceed available space (databases like Exasol handle trailing pipes
+        natively via column range specs in IMPORT).
         """
+        import shutil
+
         for tbl_file in data_dir.glob("*.tbl"):
-            # Use sed to strip trailing pipe in-place (efficient for large files)
+            file_size = tbl_file.stat().st_size
+            free_space = shutil.disk_usage(data_dir).free
+            if file_size > free_space * 0.8:
+                self._log(
+                    f"  Skipping delimiter strip for {tbl_file.name} "
+                    f"({file_size / 1e9:.1f}GB file, {free_space / 1e9:.1f}GB free)"
+                )
+                continue
             result = safe_command(f"sed -i 's/|$//' {tbl_file}")
             if not result["success"]:
-                print(
+                self._log(
                     f"  Warning: Failed to strip trailing delimiter from {tbl_file.name}"
                 )
+
+    def create_constraints(self, system: SystemUnderTest) -> bool:
+        """Create TPC-H constraints (PK/FK) using templated setup scripts.
+
+        Constraints are optional — returns True (skip) if no script exists for this system.
+        """
+        return self.execute_setup_script(
+            system, "create_constraints.sql", optional=True
+        )
 
     def create_indexes(self, system: SystemUnderTest) -> bool:
         """Create TPC-H indexes using templated setup scripts."""
@@ -233,9 +260,9 @@ class TPCH(Workload):
 
         return system.estimate_execution_time("DEFAULT", self.scale_factor)
 
-    def prepare(self, system: SystemUnderTest) -> bool:
+    def _do_prepare(self, system: SystemUnderTest) -> bool:
         """Complete TPC-H setup process: generate data, create tables, load data, create indexes, analyze tables."""
-        print("Setting up TPC-H workload...")
+        self._log("Setting up TPC-H workload...")
 
         # Store system reference for template resolution
         self._current_system = system
@@ -259,43 +286,56 @@ class TPCH(Workload):
         """
         storage = system.get_storage_backend()
         if storage is None:
-            print("ERROR: System supports external tables but has no storage backend")
+            self._log(
+                "ERROR: System supports external tables but has no storage backend"
+            )
             return False
 
         # Step 0: Generate Parquet data and upload to storage
-        print(f"0. Generating and uploading Parquet data to {storage}...")
-        if not self.generate_data_for_external_tables(storage, schema):
-            print("Failed to generate/upload Parquet data")
+        self._log("0. Generating and uploading Parquet data to {storage}...")
+        if not self._time_step(
+            "data_generation_s",
+            lambda: self.generate_data_for_external_tables(storage, schema),
+        ):
+            self._log("Failed to generate/upload Parquet data")
             return False
 
         # Ensure storage permissions are correct for table creation
-        # (After data upload, directories may have restrictive permissions)
         if not system.ensure_storage_permissions():
-            print("Failed to ensure storage permissions")
+            self._log("Failed to ensure storage permissions")
             return False
 
         # Step 1: Create tables and schema (external table DDL)
-        print("1. Creating external tables...")
-        if not self.create_schema(system):
-            print("Failed to create schema and tables")
+        self._log("1. Creating external tables...")
+        if not self._time_step("schema_creation_s", lambda: self.create_schema(system)):
+            self._log("Failed to create schema and tables")
             return False
 
         # Step 2: No data loading needed for external tables
-        print("2. Skipping data load (external tables read from storage)")
+        self._log("2. Skipping data load (external tables read from storage)")
+        self.preparation_timings["data_loading_s"] = 0.0
 
-        # Step 3: Create indexes (if applicable)
-        print("3. Creating indexes...")
-        if not self.create_indexes(system):
-            print("Failed to create indexes")
+        # Step 3: Create constraints (PK/FK as optimizer hints)
+        self._log("3. Creating constraints...")
+        if not self._time_step(
+            "constraint_creation_s", lambda: self.create_constraints(system)
+        ):
+            self._log("Failed to create constraints")
             return False
 
-        # Step 4: Analyze tables
-        print("4. Analyzing tables...")
-        if not self.analyze_tables(system):
-            print("Failed to analyze tables")
+        # Step 4: Create indexes (if applicable)
+        self._log("4. Creating indexes...")
+        if not self._time_step("index_creation_s", lambda: self.create_indexes(system)):
+            self._log("Failed to create indexes")
             return False
 
-        print("TPC-H workload setup completed successfully (external tables)")
+        # Step 5: Analyze tables
+        self._log("5. Analyzing tables...")
+        if not self._time_step("table_analysis_s", lambda: self.analyze_tables(system)):
+            self._log("Failed to analyze tables")
+            return False
+
+        self._log("TPC-H workload setup completed successfully (external tables)")
         return True
 
     def _prepare_traditional(self, system: SystemUnderTest) -> bool:
@@ -310,39 +350,50 @@ class TPCH(Workload):
         custom_data_dir = system.get_data_generation_directory(self)
         if custom_data_dir:
             self.data_dir = Path(custom_data_dir)
-            print(f"Using system-provided data directory: {self.data_dir}")
+            self._log(f"Using system-provided data directory: {self.data_dir}")
 
         # Step 0: Generate TPC-H data
-        print("0. Generating TPC-H data (format: tbl)...")
-        if not self.generate_data(self.data_dir, data_format="tbl"):
-            print("Failed to generate TPC-H data")
+        self._log("0. Generating TPC-H data (format: tbl)...")
+        if not self._time_step(
+            "data_generation_s",
+            lambda: self.generate_data(self.data_dir, data_format="tbl"),
+        ):
+            self._log("Failed to generate TPC-H data")
             return False
 
         # Step 1: Create tables and schema
-        print("1. Creating tables and schema...")
-        if not self.create_schema(system):
-            print("Failed to create schema and tables")
+        self._log("1. Creating tables and schema...")
+        if not self._time_step("schema_creation_s", lambda: self.create_schema(system)):
+            self._log("Failed to create schema and tables")
             return False
 
         # Step 2: Load data
-        print("2. Loading data...")
-        if not self.load_data(system):
-            print("Failed to load data")
+        self._log("2. Loading data...")
+        if not self._time_step("data_loading_s", lambda: self.load_data(system)):
+            self._log("Failed to load data")
             return False
 
-        # Step 3: Create indexes for performance
-        print("3. Creating indexes...")
-        if not self.create_indexes(system):
-            print("Failed to create indexes")
+        # Step 3: Create constraints (PK/FK as optimizer hints)
+        self._log("3. Creating constraints...")
+        if not self._time_step(
+            "constraint_creation_s", lambda: self.create_constraints(system)
+        ):
+            self._log("Failed to create constraints")
             return False
 
-        # Step 4: Analyze tables for query optimization
-        print("4. Analyzing tables...")
-        if not self.analyze_tables(system):
-            print("Failed to analyze tables")
+        # Step 4: Create indexes for performance
+        self._log("4. Creating indexes...")
+        if not self._time_step("index_creation_s", lambda: self.create_indexes(system)):
+            self._log("Failed to create indexes")
             return False
 
-        print("TPC-H workload setup completed successfully")
+        # Step 5: Analyze tables for query optimization
+        self._log("5. Analyzing tables...")
+        if not self._time_step("table_analysis_s", lambda: self.analyze_tables(system)):
+            self._log("Failed to analyze tables")
+            return False
+
+        self._log("TPC-H workload setup completed successfully")
         return True
 
     def load_data(self, system: SystemUnderTest) -> bool:
@@ -350,8 +401,8 @@ class TPCH(Workload):
         # External table systems don't need INSERT-based loading
         # Data is read directly from storage (S3, local files)
         if system.SUPPORTS_EXTERNAL_TABLES:
-            print("Using external tables - no data loading needed")
-            print("  Data files are read directly from storage")
+            self._log("Using external tables - no data loading needed")
+            self._log("  Data files are read directly from storage")
             return True
 
         if self.generator == "dbgen-pipe" and system.SUPPORTS_STREAMLOAD:
@@ -369,10 +420,10 @@ class TPCH(Workload):
             data_file = self.data_dir / f"{table_name}.tbl"
 
             if not data_file.exists():
-                print(f"Data file not found: {data_file}")
+                self._log(f"Data file not found: {data_file}")
                 return False
 
-            print(f"Loading {table_name}...")
+            self._log(f"Loading {table_name}...")
             columns = self.get_table_columns(table_name)
             column_types = self.get_table_column_types(table_name)
             success = system.load_data(
@@ -385,23 +436,23 @@ class TPCH(Workload):
             )
 
             if not success:
-                print(f"Failed to load {table_name}")
+                self._log(f"Failed to load {table_name}")
                 return False
 
             # Delete data file immediately after successful load to save disk space
             try:
                 data_file.unlink()
-                print(f"  ✓ Cleaned up {data_file.name}")
+                self._log(f"  ✓ Cleaned up {data_file.name}")
             except Exception as e:
-                print(f"  Warning: Could not delete {data_file.name}: {e}")
+                self._log(f"  Warning: Could not delete {data_file.name}: {e}")
 
         # Try to remove the empty data directory
         try:
             if self.data_dir.exists() and not any(self.data_dir.iterdir()):
                 self.data_dir.rmdir()
-                print(f"Cleaned up empty data directory: {self.data_dir}")
+                self._log(f"Cleaned up empty data directory: {self.data_dir}")
         except Exception as e:
-            print(f"Warning: Could not remove data directory: {e}")
+            self._log(f"Warning: Could not remove data directory: {e}")
 
         return True
 
@@ -411,13 +462,13 @@ class TPCH(Workload):
         schema_name = self.get_schema_name()
 
         for table_name in self.get_table_names():
-            print(f"Loading {table_name}...")
+            self._log(f"Loading {table_name}...")
 
             with DbGenPipe(table_name, self.scale_factor) as dbgen:
                 if not system.load_data_from_iterable(
                     table_name, dbgen.file_stream(), DataFormat.CSV, schema=schema_name
                 ):
-                    print(f"Failed to load {table_name}")
+                    self._log(f"Failed to load {table_name}")
                     return False
         return True
 
@@ -729,6 +780,7 @@ class TPCH(Workload):
         """Return TPC-H setup step descriptions."""
         return {
             "schema_creation": "Create 8 TPC-H tables with system-optimized data types",
+            "constraint_creation": "Create PK/FK constraints as optimizer hints",
             "index_creation": "Create indexes on foreign keys and join columns",
             "table_analysis": "Update database statistics for query optimizer",
         }
@@ -739,14 +791,19 @@ class TPCH(Workload):
         scripts = {}
         context = self._get_template_context(system)
 
-        for script_name in ["create_tables", "create_indexes", "analyze_tables"]:
+        for script_name in [
+            "create_tables",
+            "create_constraints",
+            "create_indexes",
+            "analyze_tables",
+        ]:
             try:
                 template = self.get_template_env().get_template(
                     f"{system.kind}/{script_name}.sql"
                 )
                 scripts[script_name] = template.render(**context)
             except Exception as e:
-                print(f"Warning: Failed to render {script_name}.sql: {e}")
+                self._log(f"Warning: Failed to render {script_name}.sql: {e}")
                 scripts[script_name] = f"-- Error rendering script: {e}"
 
         return scripts
@@ -813,7 +870,7 @@ class TPCH(Workload):
         try:
             # Prepare storage
             if not storage.prepare():
-                print("Failed to prepare storage backend")
+                self._log("Failed to prepare storage backend")
                 return False
 
             # Create temp directory for data generation
@@ -821,30 +878,30 @@ class TPCH(Workload):
                 temp_path = Path(temp_dir)
 
                 # Generate Parquet data to temp directory
-                print(f"Generating TPC-H Parquet data (SF {self.scale_factor})...")
+                self._log(f"Generating TPC-H Parquet data (SF {self.scale_factor})...")
                 if not self._generate_with_tpchgen_cli(
                     temp_path, force=False, data_format="parquet"
                 ):
-                    print("Failed to generate Parquet data")
+                    self._log("Failed to generate Parquet data")
                     return False
 
                 # Upload each table to storage
                 for table_name in self.get_table_names():
                     table_dir = temp_path / table_name
                     if not table_dir.exists():
-                        print(f"Table data not found: {table_dir}")
+                        self._log(f"Table data not found: {table_dir}")
                         return False
 
-                    print(f"Uploading {table_name} to storage...")
+                    self._log(f"Uploading {table_name} to storage...")
                     if not storage.upload_data(table_dir, schema, table_name):
-                        print(f"Failed to upload {table_name}")
+                        self._log(f"Failed to upload {table_name}")
                         return False
 
-            print(f"Successfully uploaded TPC-H data to {storage}")
+            self._log(f"Successfully uploaded TPC-H data to {storage}")
             return True
 
         except Exception as e:
-            print(f"Failed to generate/upload external table data: {e}")
+            self._log(f"Failed to generate/upload external table data: {e}")
             import traceback
 
             traceback.print_exc()

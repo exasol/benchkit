@@ -11,8 +11,6 @@ from rich.console import Console
 
 from benchkit.common import exclude_from_package
 
-from ..debug import is_debug_enabled
-
 if TYPE_CHECKING:
     from .parallel_executor import ParallelExecutor
     from .runner import BenchmarkRunner
@@ -326,6 +324,9 @@ class RemoteExecutor:
     ) -> bool:
         """Deploy minimal package to remote instance.
 
+        Copies the package zip, extracts it, and installs dependencies.
+        Retries once on failure to handle transient transfer/extraction issues.
+
         Args:
             instance_manager: Cloud instance manager
             package_path: Path to the package zip file
@@ -334,31 +335,60 @@ class RemoteExecutor:
         Returns:
             True if deployment succeeded, False otherwise
         """
-        try:
-            # Copy package
-            remote_path = f"/home/ubuntu/{package_path.name}"
-            if not instance_manager.copy_file_to_instance(package_path, remote_path):
-                return False
+        max_attempts = 2
 
-            # Extract package
-            extract_commands = [
-                f"rm -rf /home/ubuntu/{project_id}",
-                f"mkdir -p /home/ubuntu/{project_id}",
-                f"cd /home/ubuntu && unzip -o -q {package_path.name} -d {project_id}",
-                f"cd /home/ubuntu/{project_id} && python3 -m pip install -r requirements.txt",
-            ]
-
-            for cmd in extract_commands:
-                result = instance_manager.run_remote_command(cmd, debug=False)
-                if not result.get("success"):
-                    console.print(f"[red]Deploy command failed: {cmd}[/red]")
+        for attempt in range(1, max_attempts + 1):
+            try:
+                # Copy package
+                remote_path = f"/home/ubuntu/{package_path.name}"
+                if not instance_manager.copy_file_to_instance(
+                    package_path, remote_path
+                ):
+                    console.print(
+                        f"[red]Failed to copy package to instance: "
+                        f"{package_path.name}[/red]"
+                    )
+                    if attempt < max_attempts:
+                        console.print("[yellow]Retrying package deployment...[/yellow]")
+                        continue
                     return False
 
-            return True
+                # Extract package
+                extract_commands = [
+                    f"rm -rf /home/ubuntu/{project_id}",
+                    f"mkdir -p /home/ubuntu/{project_id}",
+                    f"cd /home/ubuntu && unzip -o -q {package_path.name} -d {project_id}",
+                    f"cd /home/ubuntu/{project_id} && python3 -m pip install -r requirements.txt",
+                ]
 
-        except Exception as e:
-            console.print(f"[red]Package deployment failed: {e}[/red]")
-            return False
+                all_ok = True
+                for cmd in extract_commands:
+                    result = instance_manager.run_remote_command(cmd, debug=False)
+                    if not result.get("success"):
+                        stderr = result.get("stderr", "").strip()
+                        stdout = result.get("stdout", "").strip()
+                        error_detail = stderr or stdout or "no output"
+                        console.print(
+                            f"[red]Deploy command failed: {cmd}[/red]\n"
+                            f"[red]  Error: {error_detail}[/red]"
+                        )
+                        all_ok = False
+                        break
+
+                if all_ok:
+                    return True
+
+                if attempt < max_attempts:
+                    console.print("[yellow]Retrying package deployment...[/yellow]")
+
+            except Exception as e:
+                console.print(f"[red]Package deployment failed: {e}[/red]")
+                if attempt < max_attempts:
+                    console.print("[yellow]Retrying package deployment...[/yellow]")
+                    continue
+                return False
+
+        return False
 
     @exclude_from_package
     def collect_results(
@@ -388,9 +418,10 @@ class RemoteExecutor:
             )
             local_warmup = self._runner.output_dir / f"runs_{system_name}_warmup.csv"
 
-            # Also collect preparation timings
-            remote_prep = f"/home/ubuntu/{project_id}/results/{project_id}/preparation_{system_name}.json"
-            local_prep = self._runner.output_dir / f"preparation_{system_name}.json"
+            # Also collect preparation timings from load_complete file
+            # (load_complete_*.json contains full timing data including table sizes)
+            remote_prep = f"/home/ubuntu/{project_id}/results/{project_id}/load_complete_{system_name}.json"
+            local_prep = self._runner.output_dir / f"load_complete_{system_name}.json"
 
             if instance_manager.copy_file_from_instance(remote_results, local_results):
                 # Load CSV results and convert to list of dicts
@@ -538,6 +569,8 @@ class RemoteExecutor:
                 timeout: int = 300,
                 record: bool = True,
                 category: str = "installation",
+                node_info: str | None = None,
+                description: str | None = None,
             ) -> dict[str, Any]:
                 self._log_output(f"[dim]$ {cmd}[/dim]", executor, system_name)
 
@@ -547,10 +580,12 @@ class RemoteExecutor:
                         line = f"[stderr] {line}"
                     self._log_output(line, executor, system_name)
 
+                # Use runner's explicit debug flag, not is_debug_enabled() which
+                # checks env var and causes debug spam during parallel execution
                 result = primary_manager.run_remote_command(
                     cmd,
                     timeout=timeout,
-                    debug=is_debug_enabled(),
+                    debug=self._runner._debug,
                     stream_callback=tag_output,
                 )
 

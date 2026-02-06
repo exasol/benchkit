@@ -5,6 +5,7 @@ and service management.
 """
 
 import time
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from rich.console import Console
@@ -15,6 +16,22 @@ if TYPE_CHECKING:
     from .runner import BenchmarkRunner
 
 console = Console()
+
+
+def _log(message: str, callback: Callable[[str], None] | None = None) -> None:
+    """Route message through callback if provided, otherwise print to console.
+
+    Args:
+        message: Message to output (may contain Rich markup)
+        callback: Optional callback function for logging
+    """
+    if callback:
+        # Strip Rich markup for log files
+        from benchkit.common.markup import strip_markup
+
+        callback(strip_markup(message))
+    else:
+        console.print(message)
 
 
 class InfrastructureHelper:
@@ -267,6 +284,8 @@ class InfrastructureHelper:
                 timeout: int = 300,
                 record: bool = True,
                 category: str = "installation",
+                node_info: str | None = None,
+                description: str | None = None,
             ) -> dict[str, Any]:
                 result = instance_manager.run_remote_command(
                     cmd, timeout=timeout, debug=False
@@ -293,11 +312,15 @@ class InfrastructureHelper:
 
 
 @exclude_from_package
-def setup_cloud_infrastructure(runner: "BenchmarkRunner") -> bool:
+def setup_cloud_infrastructure(
+    runner: "BenchmarkRunner",
+    log_callback: Callable[[str], None] | None = None,
+) -> bool:
     """Setup cloud infrastructure connection and managers.
 
     Args:
         runner: BenchmarkRunner instance
+        log_callback: Optional callback for routing log messages (for parallel execution)
 
     Returns:
         True if setup succeeded, False otherwise
@@ -313,13 +336,15 @@ def setup_cloud_infrastructure(runner: "BenchmarkRunner") -> bool:
 
         cloud_provider = get_first_cloud_provider(runner.config)
         if not cloud_provider:
-            console.print("[red]❌ No cloud provider found in config[/red]")
+            _log("[red]❌ No cloud provider found in config[/red]", log_callback)
             return False
 
-        console.print(f"🔗 Connecting to {cloud_provider.upper()} infrastructure...")
+        _log(
+            f"🔗 Connecting to {cloud_provider.upper()} infrastructure...", log_callback
+        )
 
         # Initialize infrastructure manager
-        infra_manager = InfraManager(cloud_provider, runner.config)
+        infra_manager = InfraManager(cloud_provider, runner.config, log_callback)
 
         # Check if instances exist, provision if needed
         with Timer("Infrastructure provisioning") as provision_timer:
@@ -327,33 +352,49 @@ def setup_cloud_infrastructure(runner: "BenchmarkRunner") -> bool:
 
             # If no instances found, try to provision them
             if "error" in instance_info or not instance_info:
-                console.print(
-                    "[yellow]⚠ No instances found, provisioning infrastructure...[/yellow]"
+                _log(
+                    "[yellow]⚠ No instances found, provisioning infrastructure...[/yellow]",
+                    log_callback,
                 )
 
                 apply_result = infra_manager.apply(wait_for_init=True)
                 if not apply_result.success:
-                    console.print(
-                        f"[red]❌ Failed to provision infrastructure: {apply_result.error}[/red]"
+                    _log(
+                        f"[red]❌ Failed to provision infrastructure: {apply_result.error}[/red]",
+                        log_callback,
                     )
                     return False
 
                 instance_info = infra_manager.get_instance_info()
                 runner.infrastructure_provisioning_time = provision_timer.elapsed
-                console.print(
-                    f"[green]✅ Infrastructure provisioned in {provision_timer.elapsed:.2f}s[/green]"
+                _log(
+                    f"[green]✅ Infrastructure provisioned in {provision_timer.elapsed:.2f}s[/green]",
+                    log_callback,
                 )
             else:
                 runner.infrastructure_provisioning_time = (
                     runner._load_provisioning_timing()
                 )
-                console.print(
-                    f"[green]✅ Using existing infrastructure (provisioned in {runner.infrastructure_provisioning_time:.2f}s)[/green]"
+                _log(
+                    f"[green]✅ Using existing infrastructure (provisioned in {runner.infrastructure_provisioning_time:.2f}s)[/green]",
+                    log_callback,
                 )
 
         if "error" in instance_info:
-            console.print(
-                f"[red]❌ Failed to get instance info: {instance_info['error']}[/red]"
+            # Retry once — terraform output can fail transiently under parallel load
+            import time
+
+            _log(
+                f"[yellow]⚠ Instance info retrieval failed ({instance_info['error']}), retrying in 10s...[/yellow]",
+                log_callback,
+            )
+            time.sleep(10)
+            instance_info = infra_manager.get_instance_info()
+
+        if "error" in instance_info:
+            _log(
+                f"[red]❌ Failed to get instance info: {instance_info['error']}[/red]",
+                log_callback,
             )
             return False
 
@@ -374,8 +415,9 @@ def setup_cloud_infrastructure(runner: "BenchmarkRunner") -> bool:
                     runner._cloud_instance_managers[system_name] = node_managers
                     node_count = len(node_managers)
                     primary_ip = node_managers[0].public_ip
-                    console.print(
-                        f"[green]✅ Connected to {system_name}: {node_count} nodes (primary: {primary_ip})[/green]"
+                    _log(
+                        f"[green]✅ Connected to {system_name}: {node_count} nodes (primary: {primary_ip})[/green]",
+                        log_callback,
                     )
 
                     # Set environment variables for IP resolution
@@ -397,8 +439,9 @@ def setup_cloud_infrastructure(runner: "BenchmarkRunner") -> bool:
                         system_info, ssh_private_key_path
                     )
                     runner._cloud_instance_managers[system_name] = instance_manager
-                    console.print(
-                        f"[green]✅ Connected to {system_name}: {system_info.get('public_ip', 'N/A')}[/green]"
+                    _log(
+                        f"[green]✅ Connected to {system_name}: {system_info.get('public_ip', 'N/A')}[/green]",
+                        log_callback,
                     )
 
                     # Set environment variables for IP resolution
@@ -410,11 +453,11 @@ def setup_cloud_infrastructure(runner: "BenchmarkRunner") -> bool:
                     os.environ[public_ip_var] = system_info.get("public_ip", "")
 
         if not runner._cloud_instance_managers:
-            console.print("[red]❌ No cloud instances found[/red]")
+            _log("[red]❌ No cloud instances found[/red]", log_callback)
             return False
 
         return True
 
     except Exception as e:
-        console.print(f"[red]❌ Infrastructure setup failed: {e}[/red]")
+        _log(f"[red]❌ Infrastructure setup failed: {e}[/red]", log_callback)
         return False

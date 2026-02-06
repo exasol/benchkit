@@ -29,15 +29,19 @@ class FileLogger:
     def write(self, message: str) -> None:
         """Write message to log file (thread-safe).
 
-        Strips Rich markup tags for clean log files.
+        Strips Rich markup tags and normalizes whitespace for clean log files.
+        Leading/trailing whitespace is removed to ensure consistent tag formatting
+        when TailMonitor prepends [task_name] prefixes.
 
         Args:
             message: Message to write (may contain Rich markup)
         """
         with self._lock:
             if self._file:
-                clean = strip_markup(message.rstrip("\n"))
-                self._file.write(clean + "\n")
+                # Strip markup and normalize whitespace for consistent tag formatting
+                clean = strip_markup(message).strip()
+                if clean:  # Only write non-empty lines
+                    self._file.write(clean + "\n")
 
     def close(self) -> None:
         """Close the log file."""

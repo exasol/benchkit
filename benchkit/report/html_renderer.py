@@ -25,6 +25,18 @@ def _format_duration(seconds: float) -> str:
     return f"{minutes}m {secs:.1f}s"
 
 
+def _format_bytes(value: float | int) -> str:
+    """Format bytes to human-readable size."""
+    if not value or value <= 0:
+        return "N/A"
+    v = float(value)
+    for unit in ["B", "KB", "MB", "GB", "TB"]:
+        if abs(v) < 1024.0:
+            return f"{v:.1f} {unit}"
+        v /= 1024.0
+    return f"{v:.1f} PB"
+
+
 def _sanitize(value: Any) -> Any:
     """Sanitize sensitive information (placeholder - actual sanitization done in renderer)."""
     # This is a passthrough filter - actual sanitization is handled by the renderer
@@ -55,6 +67,7 @@ def render_html_report(
 
     jinja_env.filters["format_number"] = _format_number
     jinja_env.filters["format_duration"] = _format_duration
+    jinja_env.filters["format_bytes"] = _format_bytes
     jinja_env.filters["sanitize"] = _sanitize
 
     template = jinja_env.get_template("report.html.j2")

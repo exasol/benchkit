@@ -75,7 +75,7 @@ The following steps were performed to install and configure {{ tested_system.nam
 {{ setup_macros.render_setup_sections_md(setup) }}
 
 {% if preparation_timings and tested_system.name in preparation_timings %}
-**Installation Time:** {{ preparation_timings[tested_system.name].elapsed_s | format_duration }}
+**Installation Time:** {{ preparation_timings[tested_system.name].total_preparation_s | format_duration }}
 {% endif %}
 {% endif %}
 

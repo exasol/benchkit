@@ -43,13 +43,12 @@ class ExasolClusterManager:
         """
         system = self._system
 
-        system.record_setup_command(
+        ps_result = system.execute_command(
             "c4 ps",
-            "Get cluster play ID for confd_client operations",
-            "cluster_management",
+            timeout=30,
+            description="Get cluster play ID for confd_client operations",
+            category="cluster_management",
         )
-
-        ps_result = system.execute_command("c4 ps", timeout=30)
         if ps_result["success"]:
             lines = ps_result.get("stdout", "").strip().split("\n")
             if len(lines) >= 2:
@@ -94,7 +93,7 @@ class ExasolClusterManager:
         if not silent:
             system.record_setup_command(confd_command, description, category)
 
-        result = system.execute_command(full_cmd, timeout=300)
+        result = system.execute_command(full_cmd, timeout=300, record=False)
         return bool(result.get("success", False))
 
     @exclude_from_package
@@ -117,7 +116,7 @@ class ExasolClusterManager:
             "license_setup",
         )
 
-        license_result = system.execute_command(license_cmd, timeout=120)
+        license_result = system.execute_command(license_cmd, timeout=120, record=False)
         if license_result["success"]:
             system.record_setup_note("Exasol license installed successfully")
         else:
@@ -150,12 +149,6 @@ class ExasolClusterManager:
         system.record_setup_note("Stopping database for parameter configuration...")
         stop_command = "confd_client db_stop db_name: Exasol"
 
-        system.record_setup_command(
-            stop_command,
-            "Stop Exasol database for parameter configuration",
-            "database_tuning",
-        )
-
         self._log("Stopping database for parameter configuration...")
         if not self.execute_confd_client_command(
             play_id,
@@ -176,12 +169,6 @@ class ExasolClusterManager:
         params_str = ",".join(params_with_quotes)
         params_command = (
             f'confd_client db_configure db_name: Exasol params_add: "[{params_str}]"'
-        )
-
-        system.record_setup_command(
-            params_command,
-            "Configure Exasol database parameters for analytical workload optimization",
-            "database_tuning",
         )
 
         self._log(f"Configuring database with parameters: {params_str}")

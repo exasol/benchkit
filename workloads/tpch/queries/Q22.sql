@@ -1,6 +1,6 @@
 -- TPC-H Query 22: Global Sales Opportunity
-{% if system_kind == 'starrocks' %}
--- StarRocks uses MySQL-style SUBSTRING(str, pos, len) syntax
+{% if system_kind in ['starrocks', 'doris'] %}
+-- StarRocks/Doris use MySQL-style SUBSTRING(str, pos, len) syntax
 SELECT
     cntrycode,
     COUNT(*) AS numcust,

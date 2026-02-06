@@ -52,6 +52,7 @@ class ReportRenderer:
         self.jinja_env.filters["format_duration"] = self._format_duration
         self.jinja_env.filters["sanitize"] = self._sanitize_for_report
         self.jinja_env.filters["safe_divide"] = self._safe_divide
+        self.jinja_env.filters["format_bytes"] = self._format_bytes
 
         # Shared setup rendering configuration
         self.setup_category_order = [
@@ -521,24 +522,32 @@ class ReportRenderer:
     ) -> dict[str, Any]:
         """Load workload preparation timings for all systems.
 
+        Looks for preparation_*.json first (legacy), then falls back to
+        load_complete_*.json which contains the full timing data including
+        table sizes and storage metrics.
+
         Args:
             results_dir: Directory containing result files
             system_names: Optional list of system names to filter by. If None, loads all systems.
         """
         preparation_timings = {}
 
-        # Find all preparation_*.json files
-        prep_files = list(results_dir.glob("preparation_*.json"))
-
-        for prep_file in prep_files:
-            # Extract system name from filename (preparation_systemname.json -> systemname)
+        # Try preparation_*.json first (legacy format)
+        for prep_file in results_dir.glob("preparation_*.json"):
             system_name = prep_file.stem.replace("preparation_", "")
-
-            # Filter by system_names if provided
             if system_names is not None and system_name not in system_names:
                 continue
-
             preparation_timings[system_name] = load_json(prep_file)
+
+        # Fallback to load_complete_*.json for missing systems
+        # This file now contains all preparation timings including table sizes
+        for load_file in results_dir.glob("load_complete_*.json"):
+            system_name = load_file.stem.replace("load_complete_", "")
+            if system_name in preparation_timings:
+                continue  # Already have data from preparation_*.json
+            if system_names is not None and system_name not in system_names:
+                continue
+            preparation_timings[system_name] = load_json(load_file)
 
         return preparation_timings
 
@@ -744,6 +753,17 @@ class ReportRenderer:
             minutes = int(seconds // 60)
             secs = seconds % 60
             return f"{minutes}m {secs:.1f}s"
+
+    def _format_bytes(self, value: float | int) -> str:
+        """Format bytes to human-readable size."""
+        if not value or value <= 0:
+            return "N/A"
+        v = float(value)
+        for unit in ["B", "KB", "MB", "GB", "TB"]:
+            if abs(v) < 1024.0:
+                return f"{v:.1f} {unit}"
+            v /= 1024.0
+        return f"{v:.1f} PB"
 
     def _safe_divide(
         self, numerator: float, denominator: float, default: float = 0.0

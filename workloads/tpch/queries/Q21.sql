@@ -10,7 +10,7 @@ WHERE
     AND o_orderkey = l1.l_orderkey
     AND o_orderstatus = 'F'
     AND l1.l_receiptdate > l1.l_commitdate
-    {% if system_kind == 'exasol' %}
+    {% if system_kind in ['exasol', 'doris'] %}
     AND EXISTS (
         SELECT
             *

@@ -373,24 +373,22 @@ class TrinoSystem(SystemUnderTest):
             self._create_systemd_service(has_local_metastore=False)
 
             # Step 6: Start Trino
-            self.record_setup_command(
+            result = self.execute_command(
                 "sudo systemctl start trino",
-                "Start Trino server service",
-                "service_management",
+                description="Start Trino server service",
+                category="service_management",
             )
-            result = self.execute_command("sudo systemctl start trino", record=False)
             if not result["success"]:
                 print(
                     f"Failed to start Trino service: {result.get('stderr', 'Unknown error')}"
                 )
                 return False
 
-            self.record_setup_command(
+            self.execute_command(
                 "sudo systemctl enable trino",
-                "Enable Trino server to start on boot",
-                "service_management",
+                description="Enable Trino server to start on boot",
+                category="service_management",
             )
-            self.execute_command("sudo systemctl enable trino", record=False)
 
             # Step 7: Wait for health
             self.record_setup_note("Waiting for Trino to be ready for connections...")
@@ -527,25 +525,21 @@ class TrinoSystem(SystemUnderTest):
         # Add Adoptium (Eclipse Temurin) repository for Java 25
         add_repo_cmd = """wget -qO - https://packages.adoptium.net/artifactory/api/gpg/key/public | sudo gpg --dearmor -o /usr/share/keyrings/adoptium.gpg 2>/dev/null || true
 echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/adoptium.list"""
-        self.record_setup_command(
+        result = self.execute_command(
             add_repo_cmd,
-            "Add Eclipse Temurin (Adoptium) repository for Java 22",
-            "prerequisites",
+            timeout=60,
+            description="Add Eclipse Temurin (Adoptium) repository for Java 22",
+            category="prerequisites",
         )
-        result = self.execute_command(add_repo_cmd, timeout=60, record=False)
         if not result.get("success", False):
             print(f"Warning: Failed to add Adoptium repo: {result.get('stderr', '')}")
 
         # Install Java 25
-        self.record_setup_command(
-            "sudo apt-get update && sudo apt-get install -y temurin-25-jdk",
-            "Install Java 25 (required by Trino 479+)",
-            "prerequisites",
-        )
         result = self.execute_command(
             "sudo apt-get update && sudo apt-get install -y temurin-25-jdk",
             timeout=300,
-            record=False,
+            description="Install Java 25 (required by Trino 479+)",
+            category="prerequisites",
         )
 
         if not result.get("success", False):
@@ -553,13 +547,11 @@ echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium
             return False
 
         # Install python-is-python3 (required by Trino launcher)
-        self.record_setup_command(
-            "sudo apt-get install -y python-is-python3",
-            "Install python symlink (required by Trino launcher)",
-            "prerequisites",
-        )
         self.execute_command(
-            "sudo apt-get install -y python-is-python3", timeout=60, record=False
+            "sudo apt-get install -y python-is-python3",
+            timeout=60,
+            description="Install python symlink (required by Trino launcher)",
+            category="prerequisites",
         )
 
         print("✓ Java 25 installed")
@@ -581,51 +573,38 @@ echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium
         print(f"Downloading Trino {version}...")
 
         # Download
-        self.record_setup_command(
-            f"wget {download_url} -O /tmp/trino-server.tar.gz",
-            f"Download Trino server version {version}",
-            "installation",
-        )
         result = self.execute_command(
             f"wget {download_url} -O /tmp/trino-server.tar.gz",
             timeout=300,
-            record=False,
+            description=f"Download Trino server version {version}",
+            category="installation",
         )
         if not result.get("success", False):
             print(f"Failed to download Trino: {result.get('stderr', 'Unknown error')}")
             return False
 
         # Extract
-        self.record_setup_command(
-            "sudo tar -xzf /tmp/trino-server.tar.gz -C /opt/",
-            "Extract Trino server to /opt",
-            "installation",
-        )
         result = self.execute_command(
-            "sudo tar -xzf /tmp/trino-server.tar.gz -C /opt/", record=False
+            "sudo tar -xzf /tmp/trino-server.tar.gz -C /opt/",
+            description="Extract Trino server to /opt",
+            category="installation",
         )
         if not result.get("success", False):
             print(f"Failed to extract Trino: {result.get('stderr', 'Unknown error')}")
             return False
 
         # Create symlink
-        self.record_setup_command(
-            f"sudo ln -sf /opt/trino-server-{version} {self.trino_home}",
-            f"Create symlink {self.trino_home}",
-            "installation",
-        )
         self.execute_command(
-            f"sudo ln -sf /opt/trino-server-{version} {self.trino_home}", record=False
+            f"sudo ln -sf /opt/trino-server-{version} {self.trino_home}",
+            description=f"Create symlink {self.trino_home}",
+            category="installation",
         )
 
         # Create trino user
-        self.record_setup_command(
-            "sudo useradd -r -s /bin/false trino",
-            "Create Trino system user",
-            "user_setup",
-        )
         self.execute_command(
-            "sudo useradd -r -s /bin/false trino || true", record=False
+            "sudo useradd -r -s /bin/false trino || true",
+            description="Create Trino system user",
+            category="user_setup",
         )
 
         # Create directories
@@ -640,13 +619,10 @@ echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium
 
         # Create etc symlink inside trino installation directory
         # The Trino launcher looks for etc in the installation directory
-        self.record_setup_command(
-            f"sudo ln -sf /etc/trino {self.trino_home}/etc",
-            "Create etc symlink for Trino launcher",
-            "installation",
-        )
         self.execute_command(
-            f"sudo ln -sf /etc/trino {self.trino_home}/etc", record=False
+            f"sudo ln -sf /etc/trino {self.trino_home}/etc",
+            description="Create etc symlink for Trino launcher",
+            category="installation",
         )
 
         print("✓ Trino server installed")
@@ -661,15 +637,11 @@ echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium
         metastore_version = "3.1.3"
         download_url = f"https://repo1.maven.org/maven2/org/apache/hive/hive-standalone-metastore/{metastore_version}/hive-standalone-metastore-{metastore_version}-bin.tar.gz"
 
-        self.record_setup_command(
-            f"wget {download_url} -O /tmp/hive-metastore.tar.gz",
-            f"Download Hive Standalone Metastore {metastore_version}",
-            "hive_setup",
-        )
         result = self.execute_command(
             f"wget {download_url} -O /tmp/hive-metastore.tar.gz",
             timeout=300,
-            record=False,
+            description=f"Download Hive Standalone Metastore {metastore_version}",
+            category="hive_setup",
         )
         if not result.get("success", False):
             print(
@@ -678,24 +650,17 @@ echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium
             return False
 
         # Extract
-        self.record_setup_command(
-            "sudo tar -xzf /tmp/hive-metastore.tar.gz -C /opt/",
-            "Extract Hive Metastore to /opt",
-            "hive_setup",
-        )
         self.execute_command(
-            "sudo tar -xzf /tmp/hive-metastore.tar.gz -C /opt/", record=False
+            "sudo tar -xzf /tmp/hive-metastore.tar.gz -C /opt/",
+            description="Extract Hive Metastore to /opt",
+            category="hive_setup",
         )
 
         # Create symlink
-        self.record_setup_command(
-            f"sudo ln -sf /opt/apache-hive-metastore-{metastore_version}-bin {self.hive_metastore_home}",
-            "Create Hive Metastore symlink",
-            "hive_setup",
-        )
         self.execute_command(
             f"sudo ln -sf /opt/apache-hive-metastore-{metastore_version}-bin {self.hive_metastore_home}",
-            record=False,
+            description="Create Hive Metastore symlink",
+            category="hive_setup",
         )
 
         # Create Hive data directory
@@ -731,12 +696,11 @@ echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium
 </configuration>"""
 
         create_config_cmd = f"sudo tee {self.hive_metastore_home}/conf/metastore-site.xml > /dev/null << 'EOF'\n{metastore_config}\nEOF"
-        self.record_setup_command(
+        result = self.execute_command(
             create_config_cmd,
-            "Configure Hive Metastore with embedded Derby database",
-            "hive_setup",
+            description="Configure Hive Metastore with embedded Derby database",
+            category="hive_setup",
         )
-        result = self.execute_command(create_config_cmd, record=False)
         if not result.get("success", False):
             print(
                 f"Failed to create Hive Metastore config: {result.get('stderr', 'Unknown error')}"
@@ -749,15 +713,11 @@ echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium
 
         # Initialize metastore schema
         init_cmd = f"sudo -u trino {self.hive_metastore_home}/bin/schematool -dbType derby -initSchema"
-        self.record_setup_command(
-            init_cmd,
-            "Initialize Hive Metastore schema",
-            "hive_setup",
-        )
         init_result = self.execute_command(
             init_cmd,
             timeout=120,
-            record=False,
+            description="Initialize Hive Metastore schema",
+            category="hive_setup",
         )
         # Schema init may fail if already initialized, which is okay
         if not init_result.get(
@@ -771,13 +731,10 @@ echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium
         self._create_metastore_service()
 
         # Start metastore
-        self.record_setup_command(
-            "sudo systemctl start hive-metastore",
-            "Start Hive Metastore service",
-            "service_management",
-        )
         result = self.execute_command(
-            "sudo systemctl start hive-metastore", record=False
+            "sudo systemctl start hive-metastore",
+            description="Start Hive Metastore service",
+            category="service_management",
         )
         if not result.get("success", False):
             print(
@@ -785,12 +742,11 @@ echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium
             )
             return False
 
-        self.record_setup_command(
+        self.execute_command(
             "sudo systemctl enable hive-metastore",
-            "Enable Hive Metastore to start on boot",
-            "service_management",
+            description="Enable Hive Metastore to start on boot",
+            category="service_management",
         )
-        self.execute_command("sudo systemctl enable hive-metastore", record=False)
 
         print("✓ Hive Metastore setup complete")
         return True
@@ -1052,12 +1008,9 @@ tpch.splits-per-node=4"""
     def _write_config_file(self, path: str, content: str, description: str) -> None:
         """Helper to write configuration files."""
         cmd = f"sudo tee {path} > /dev/null << 'EOF'\n{content}\nEOF"
-        self.record_setup_command(
-            cmd,
-            description,
-            "configuration",
+        result = self.execute_command(
+            cmd, description=description, category="configuration"
         )
-        result = self.execute_command(cmd, record=False)
         if not result.get("success", False):
             print(
                 f"Warning: Failed to create {path}: {result.get('stderr', 'Unknown error')}"
@@ -1113,12 +1066,11 @@ WantedBy=multi-user.target"""
             service_content,
             "Create Trino systemd service",
         )
-        self.record_setup_command(
+        self.execute_command(
             "sudo systemctl daemon-reload",
-            "Reload systemd daemon",
-            "service_management",
+            description="Reload systemd daemon",
+            category="service_management",
         )
-        self.execute_command("sudo systemctl daemon-reload", record=False)
 
     @exclude_from_package
     def _create_metastore_service(self) -> None:
@@ -1557,6 +1509,74 @@ WantedBy=multi-user.target"""
 
         return metrics
 
+    def get_table_sizes(
+        self, schema: str, table_names: list[str]
+    ) -> dict[str, dict[str, Any]]:
+        """Query Trino for table storage sizes.
+
+        Trino uses external tables via Hive metastore, so storage sizes
+        come from the underlying storage (local filesystem or S3).
+
+        Args:
+            schema: Schema name containing the tables
+            table_names: List of table names to query
+
+        Returns:
+            Dict mapping table names to size info with raw_bytes, stored_bytes,
+            row_count, and compression_ratio.
+        """
+        sizes: dict[str, dict[str, Any]] = {}
+
+        try:
+            for table_name in table_names:
+                try:
+                    # Get row count
+                    count_query = f'SELECT COUNT(*) as cnt FROM "{self.catalog}"."{schema}"."{table_name}"'
+                    count_result = self.execute_query(
+                        count_query, query_name=f"count_{table_name}", return_data=True
+                    )
+                    row_count = 0
+                    if count_result.get("success") and "data" in count_result:
+                        df = count_result["data"]
+                        if not df.empty:
+                            row_count = int(df.iloc[0, 0])
+
+                    # Try to get table properties including size
+                    # Note: Size info may not be available for all storage backends
+                    stored_bytes = 0
+                    raw_bytes = 0
+
+                    # For Hive tables, we can try to get size from storage backend
+                    if self._storage_backend:
+                        try:
+                            storage_size = self._storage_backend.get_table_size(
+                                schema, table_name
+                            )
+                            if storage_size:
+                                stored_bytes = storage_size
+                                raw_bytes = storage_size  # Parquet is compressed
+                        except (AttributeError, Exception):
+                            pass  # Storage backend may not support size queries
+
+                    sizes[table_name.lower()] = {
+                        "raw_bytes": raw_bytes,
+                        "stored_bytes": stored_bytes,
+                        "row_count": row_count,
+                        "compression_ratio": (
+                            raw_bytes / stored_bytes if stored_bytes > 0 else 0.0
+                        ),
+                    }
+
+                except Exception as e:
+                    self._log(
+                        f"Warning: Failed to get size for table {table_name}: {e}"
+                    )
+
+        except Exception as e:
+            self._log(f"Warning: Failed to get table sizes: {e}")
+
+        return sizes
+
     def teardown(self) -> bool:
         """Clean up Trino installation."""
         success = True
@@ -1707,6 +1727,7 @@ WantedBy=multi-user.target"""
         record: bool = True,
         category: str = "setup",
         node_info: str | None = None,
+        description: str | None = None,
     ) -> dict[str, Any]:
         """Execute command with remote execution support if cloud instance manager is available."""
         if self._cloud_instance_manager and self.setup_method == "native":
@@ -1720,7 +1741,8 @@ WantedBy=multi-user.target"""
                 command_record = {
                     "command": self._sanitize_command_for_report(command),
                     "success": result.get("success", False),
-                    "description": f"Execute {command.split()[0]} command on remote system",
+                    "description": description
+                    or f"Execute {command.split()[0]} command on remote system",
                     "category": category,
                 }
                 if node_info:
@@ -1730,5 +1752,5 @@ WantedBy=multi-user.target"""
             return dict(result)
         else:
             return super().execute_command(
-                command, timeout, record, category, node_info
+                command, timeout, record, category, node_info, description
             )

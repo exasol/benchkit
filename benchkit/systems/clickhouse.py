@@ -333,21 +333,19 @@ class ClickHouseSystem(SystemUnderTest):
 
         try:
             # Step 1: Install prerequisite packages
-            self.record_setup_command(
-                "sudo apt-get update", "Update package lists", "prerequisites"
+            result = self.execute_command(
+                "sudo apt-get update",
+                description="Update package lists",
+                category="prerequisites",
             )
-            result = self.execute_command("sudo apt-get update")
             if not result["success"]:
                 self._log(f"Failed to update package lists: {result['stderr']}")
                 return False
 
-            self.record_setup_command(
-                "sudo apt-get install -y apt-transport-https ca-certificates curl gnupg",
-                "Install prerequisite packages for secure repository access",
-                "prerequisites",
-            )
             result = self.execute_command(
-                "sudo apt-get install -y apt-transport-https ca-certificates curl gnupg"
+                "sudo apt-get install -y apt-transport-https ca-certificates curl gnupg",
+                description="Install prerequisite packages for secure repository access",
+                category="prerequisites",
             )
             if not result["success"]:
                 self._log(f"Failed to install prerequisites: {result['stderr']}")
@@ -359,38 +357,31 @@ class ClickHouseSystem(SystemUnderTest):
                 "sudo rm -f /usr/share/keyrings/clickhouse-keyring.gpg", record=False
             )
 
-            self.record_setup_command(
-                "curl -fsSL 'https://packages.clickhouse.com/rpm/lts/repodata/repomd.xml.key' | sudo gpg --dearmor -o /usr/share/keyrings/clickhouse-keyring.gpg",
-                "Add ClickHouse GPG key to system keyring",
-                "repository_setup",
-            )
             result = self.execute_command(
-                "curl -fsSL 'https://packages.clickhouse.com/rpm/lts/repodata/repomd.xml.key' | sudo gpg --dearmor -o /usr/share/keyrings/clickhouse-keyring.gpg"
+                "curl -fsSL 'https://packages.clickhouse.com/rpm/lts/repodata/repomd.xml.key' | sudo gpg --dearmor -o /usr/share/keyrings/clickhouse-keyring.gpg",
+                description="Add ClickHouse GPG key to system keyring",
+                category="repository_setup",
             )
             if not result["success"]:
                 self._log(f"Failed to add ClickHouse GPG key: {result['stderr']}")
                 return False
 
             # Step 3: Add ClickHouse repository
-            self.record_setup_command(
-                'ARCH=$(dpkg --print-architecture) && echo "deb [signed-by=/usr/share/keyrings/clickhouse-keyring.gpg arch=${ARCH}] https://packages.clickhouse.com/deb stable main" | sudo tee /etc/apt/sources.list.d/clickhouse.list',
-                "Add ClickHouse official repository to APT sources",
-                "repository_setup",
-            )
             result = self.execute_command(
-                'ARCH=$(dpkg --print-architecture) && echo "deb [signed-by=/usr/share/keyrings/clickhouse-keyring.gpg arch=${ARCH}] https://packages.clickhouse.com/deb stable main" | sudo tee /etc/apt/sources.list.d/clickhouse.list'
+                'ARCH=$(dpkg --print-architecture) && echo "deb [signed-by=/usr/share/keyrings/clickhouse-keyring.gpg arch=${ARCH}] https://packages.clickhouse.com/deb stable main" | sudo tee /etc/apt/sources.list.d/clickhouse.list',
+                description="Add ClickHouse official repository to APT sources",
+                category="repository_setup",
             )
             if not result["success"]:
                 self._log(f"Failed to add ClickHouse repository: {result['stderr']}")
                 return False
 
             # Step 4: Update package lists with new repository
-            self.record_setup_command(
+            result = self.execute_command(
                 "sudo apt-get update",
-                "Update package lists with ClickHouse repository",
-                "repository_setup",
+                description="Update package lists with ClickHouse repository",
+                category="repository_setup",
             )
-            result = self.execute_command("sudo apt-get update")
             if not result["success"]:
                 self._log(
                     f"Failed to update package lists after adding repository: {result['stderr']}"
@@ -411,13 +402,11 @@ class ClickHouseSystem(SystemUnderTest):
                 )
                 self._log(f"Attempting to install ClickHouse {self.version}...")
 
-                self.record_setup_command(
-                    f"sudo apt-get install -y clickhouse-common-static{version_suffix} clickhouse-server{version_suffix} clickhouse-client{version_suffix}",
-                    description,
-                    "installation",
-                )
                 result = self.execute_command(
-                    install_cmd, timeout=300
+                    install_cmd,
+                    timeout=300,
+                    description=description,
+                    category="installation",
                 )  # 5 min timeout for installation
 
                 if not result["success"]:
@@ -430,12 +419,12 @@ class ClickHouseSystem(SystemUnderTest):
                         "Install latest ClickHouse server and client (fallback)"
                     )
 
-                    self.record_setup_command(
-                        "sudo apt-get install -y clickhouse-common-static clickhouse-server clickhouse-client",
-                        description,
-                        "installation",
+                    result = self.execute_command(
+                        install_cmd,
+                        timeout=300,
+                        description=description,
+                        category="installation",
                     )
-                    result = self.execute_command(install_cmd, timeout=300)
 
                     if not result["success"]:
                         self._log(
@@ -452,12 +441,12 @@ class ClickHouseSystem(SystemUnderTest):
                 description = "Install latest ClickHouse server and client"
                 self._log("Installing latest ClickHouse version...")
 
-                self.record_setup_command(
-                    "sudo apt-get install -y clickhouse-common-static clickhouse-server clickhouse-client",
-                    description,
-                    "installation",
+                result = self.execute_command(
+                    install_cmd,
+                    timeout=300,
+                    description=description,
+                    category="installation",
                 )
-                result = self.execute_command(install_cmd, timeout=300)
 
                 if not result["success"]:
                     self._log(f"Failed to install ClickHouse: {result['stderr']}")
@@ -509,22 +498,20 @@ class ClickHouseSystem(SystemUnderTest):
             # Note: Cluster configuration is handled at higher level for multinode
 
             # Step 10: Start and enable ClickHouse service
-            self.record_setup_command(
+            result = self.execute_command(
                 "sudo systemctl start clickhouse-server",
-                "Start ClickHouse server service",
-                "service_management",
+                description="Start ClickHouse server service",
+                category="service_management",
             )
-            result = self.execute_command("sudo systemctl start clickhouse-server")
             if not result["success"]:
                 self._log(f"Failed to start ClickHouse service: {result['stderr']}")
                 return False
 
-            self.record_setup_command(
+            self.execute_command(
                 "sudo systemctl enable clickhouse-server",
-                "Enable ClickHouse server to start on boot",
-                "service_management",
+                description="Enable ClickHouse server to start on boot",
+                category="service_management",
             )
-            self.execute_command("sudo systemctl enable clickhouse-server")
 
             # Step 11: Wait for ClickHouse to be ready
             self.record_setup_note(
@@ -637,15 +624,14 @@ class ClickHouseSystem(SystemUnderTest):
 </clickhouse>"""
 
             config_file_path = "/etc/clickhouse-server/config.d/benchmark.xml"
-            self.record_setup_command(
-                f"sudo tee {config_file_path} > /dev/null << 'EOF'\n{config_content}\nEOF",
-                "Create custom ClickHouse configuration file",
-                "configuration",
-            )
 
             # Create the config file
             create_config_cmd = f"sudo tee {config_file_path} > /dev/null << 'EOF'\n{config_content}\nEOF"
-            result = self.execute_command(create_config_cmd)
+            result = self.execute_command(
+                create_config_cmd,
+                description="Create custom ClickHouse configuration file",
+                category="configuration",
+            )
             if not result["success"]:
                 self._log(
                     f"Warning: Failed to create ClickHouse config file: {result.get('stderr', 'Unknown error')}"
@@ -756,17 +742,16 @@ class ClickHouseSystem(SystemUnderTest):
 </clickhouse>"""
 
         users_file_path = "/etc/clickhouse-server/users.d/benchmark.xml"
-        self.record_setup_command(
-            f"sudo tee {users_file_path} > /dev/null << 'EOF'\n{users_config}\nEOF",
-            "Configure ClickHouse user profile with password and query settings",
-            "user_configuration",
-        )
 
         # Create the users config file
         create_users_cmd = (
             f"sudo tee {users_file_path} > /dev/null << 'EOF'\n{users_config}\nEOF"
         )
-        result = self.execute_command(create_users_cmd)
+        result = self.execute_command(
+            create_users_cmd,
+            description="Configure ClickHouse user profile with password and query settings",
+            category="user_configuration",
+        )
         if not result["success"]:
             self._log(
                 f"Warning: Failed to configure user profile: {result.get('stderr', 'Unknown error')}"
@@ -1224,14 +1209,9 @@ class ClickHouseSystem(SystemUnderTest):
 
         # Only create if non-default directory
         if str(self.data_dir) != "/var/lib/clickhouse":
-            self.record_setup_command(
-                f"sudo mkdir -p {self.data_dir}",
-                f"Create ClickHouse data directory: {self.data_dir}",
-                "storage_setup",
-            )
             result = self.execute_command(
                 f"sudo mkdir -p {self.data_dir}",
-                record=True,
+                description=f"Create ClickHouse data directory: {self.data_dir}",
                 category="storage_setup",
             )
 
@@ -1762,6 +1742,73 @@ class ClickHouseSystem(SystemUnderTest):
             metrics["error"] = str(e)
 
         return metrics
+
+    def get_table_sizes(
+        self, schema: str, table_names: list[str]
+    ) -> dict[str, dict[str, Any]]:
+        """Query ClickHouse for table storage sizes.
+
+        Uses system.parts table to get:
+        - data_compressed_bytes: Actual storage size (compressed)
+        - data_uncompressed_bytes: Logical/uncompressed size
+
+        Args:
+            schema: Database name containing the tables
+            table_names: List of table names to query
+
+        Returns:
+            Dict mapping table names to size info with raw_bytes, stored_bytes,
+            row_count, and compression_ratio.
+        """
+        sizes: dict[str, dict[str, Any]] = {}
+
+        try:
+            # Query system.parts for storage details
+            # Group by table and sum across all parts
+            tables_str = ", ".join(f"'{t}'" for t in table_names)
+
+            # For multinode, query the distributed view or use local parts
+            # The active=1 filter ensures we only count live data
+            query = f"""
+                SELECT
+                    table,
+                    sum(data_compressed_bytes) AS stored_bytes,
+                    sum(data_uncompressed_bytes) AS raw_bytes,
+                    sum(rows) AS row_count
+                FROM system.parts
+                WHERE database = '{schema}'
+                  AND table IN ({tables_str})
+                  AND active = 1
+                GROUP BY table
+            """
+
+            result = self.execute_query(
+                query, query_name="get_table_sizes", return_data=True
+            )
+
+            if result.get("success") and "data" in result:
+                df = result["data"]
+                for _, row in df.iterrows():
+                    table_name = str(row["table"]).lower()
+                    raw_bytes = int(row["raw_bytes"]) if row["raw_bytes"] else 0
+                    stored_bytes = (
+                        int(row["stored_bytes"]) if row["stored_bytes"] else 0
+                    )
+                    row_count = int(row["row_count"]) if row["row_count"] else 0
+
+                    sizes[table_name] = {
+                        "raw_bytes": raw_bytes,
+                        "stored_bytes": stored_bytes,
+                        "row_count": row_count,
+                        "compression_ratio": (
+                            raw_bytes / stored_bytes if stored_bytes > 0 else 0.0
+                        ),
+                    }
+
+        except Exception as e:
+            self._log(f"Warning: Failed to get table sizes: {e}")
+
+        return sizes
 
     def teardown(self) -> bool:
         """Clean up ClickHouse installation."""

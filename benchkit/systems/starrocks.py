@@ -5,18 +5,10 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Iterable
 from datetime import timedelta
+from importlib import import_module
 from pathlib import Path
+from types import ModuleType
 from typing import TYPE_CHECKING, Any
-
-try:
-    import pymysql  # type: ignore[import-untyped]
-except ModuleNotFoundError:
-    pymysql = None  # type: ignore[assignment]
-
-try:
-    import requests
-except ModuleNotFoundError:
-    requests = None  # type: ignore[assignment]
 
 from benchkit.common import DataFormat, exclude_from_package
 
@@ -25,6 +17,19 @@ from .base import SystemUnderTest, TableOperation
 
 if TYPE_CHECKING:
     from ..workloads import Workload
+
+# Optional dependencies - use import_module for proper typing without type: ignore
+pymysql: ModuleType | None
+try:
+    pymysql = import_module("pymysql")
+except ModuleNotFoundError:
+    pymysql = None
+
+requests: ModuleType | None
+try:
+    requests = import_module("requests")
+except ModuleNotFoundError:
+    requests = None
 
 
 class StarrocksSystem(SystemUnderTest):
@@ -357,14 +362,11 @@ class StarrocksSystem(SystemUnderTest):
             self._log(
                 f"Installing prerequisites (JDK for StarRocks {major_version}.x)..."
             )
-            self.record_setup_command(
-                f"sudo apt-get update && sudo apt-get install -y {jdk_package} curl wget mysql-client",
-                "Install Java, MySQL client, and utilities",
-                "prerequisites",
-            )
             result = self.execute_command(
                 f"sudo apt-get update && sudo apt-get install -y {jdk_package} curl wget mysql-client",
                 timeout=300.0,
+                description="Install Java, MySQL client, and utilities",
+                category="prerequisites",
             )
             if not result.get("success", False):
                 self._log(
@@ -373,13 +375,10 @@ class StarrocksSystem(SystemUnderTest):
                 return False
 
             # Set JAVA_HOME
-            self.record_setup_command(
-                f'echo "export JAVA_HOME={java_home}" | sudo tee -a /etc/profile.d/java.sh',
-                "Set JAVA_HOME environment variable",
-                "prerequisites",
-            )
             self.execute_command(
-                f'echo "export JAVA_HOME={java_home}" | sudo tee -a /etc/profile.d/java.sh'
+                f'echo "export JAVA_HOME={java_home}" | sudo tee -a /etc/profile.d/java.sh',
+                description="Set JAVA_HOME environment variable",
+                category="prerequisites",
             )
             self._java_home = java_home
 
@@ -400,14 +399,11 @@ class StarrocksSystem(SystemUnderTest):
                 )
             else:
                 self._log(f"Downloading StarRocks {self.version}...")
-                self.record_setup_command(
-                    f"wget -q -O {tarball} {download_url}",
-                    f"Download StarRocks {self.version}",
-                    "installation",
-                )
                 result = self.execute_command(
                     f"wget -q -O {tarball} {download_url}",
                     timeout=900.0,  # 15 minutes for ~3GB
+                    description=f"Download StarRocks {self.version}",
+                    category="installation",
                 )
                 if not result.get("success", False):
                     self._log(
@@ -417,14 +413,11 @@ class StarrocksSystem(SystemUnderTest):
 
             # Step 3: Extract and install
             self._log("Extracting StarRocks...")
-            self.record_setup_command(
-                f"sudo mkdir -p {self.install_dir} && sudo tar -xzf {tarball} -C {self.install_dir} --strip-components=1",
-                "Extract StarRocks to installation directory",
-                "installation",
-            )
             result = self.execute_command(
                 f"sudo mkdir -p {self.install_dir} && sudo tar -xzf {tarball} -C {self.install_dir} --strip-components=1",
                 timeout=120.0,
+                description="Extract StarRocks to installation directory",
+                category="installation",
             )
             if not result.get("success", False):
                 self._log(f"Failed to extract StarRocks: {result.get('stderr', '')}")
@@ -451,13 +444,10 @@ class StarrocksSystem(SystemUnderTest):
             )
 
             # Step 6: Set permissions
-            self.record_setup_command(
-                f"sudo chown -R $(whoami):$(whoami) {self.install_dir}",
-                "Set StarRocks directory ownership",
-                "installation",
-            )
             self.execute_command(
-                f"sudo chown -R $(whoami):$(whoami) {self.install_dir}"
+                f"sudo chown -R $(whoami):$(whoami) {self.install_dir}",
+                description="Set StarRocks directory ownership",
+                category="installation",
             )
 
             # Step 7: Start FE (skip on follower nodes - they'll be started with --helper)
@@ -467,13 +457,10 @@ class StarrocksSystem(SystemUnderTest):
                 )
             else:
                 self._log("Starting FE...")
-                self.record_setup_command(
-                    f"cd {self.fe_dir} && ./bin/start_fe.sh --daemon",
-                    "Start StarRocks FE",
-                    "service_management",
-                )
                 result = self.execute_command(
-                    f"export JAVA_HOME={self._java_home} && cd {self.fe_dir} && ./bin/start_fe.sh --daemon"
+                    f"export JAVA_HOME={self._java_home} && cd {self.fe_dir} && ./bin/start_fe.sh --daemon",
+                    description="Start StarRocks FE",
+                    category="service_management",
                 )
                 if not result.get("success", False):
                     self._log(f"Failed to start FE: {result.get('stderr', '')}")
@@ -492,13 +479,10 @@ class StarrocksSystem(SystemUnderTest):
                 )
             else:
                 self._log("Starting BE...")
-                self.record_setup_command(
-                    f"cd {self.be_dir} && ./bin/start_be.sh --daemon",
-                    "Start StarRocks BE",
-                    "service_management",
-                )
                 result = self.execute_command(
-                    f"export JAVA_HOME={self._java_home} && cd {self.be_dir} && ./bin/start_be.sh --daemon"
+                    f"export JAVA_HOME={self._java_home} && cd {self.be_dir} && ./bin/start_be.sh --daemon",
+                    description="Start StarRocks BE",
+                    category="service_management",
                 )
                 if not result.get("success", False):
                     self._log(f"Failed to start BE: {result.get('stderr', '')}")
@@ -859,12 +843,25 @@ spill_mode = auto
             # Get column separator from kwargs or default to pipe
             column_separator = kwargs.get("column_separator", "|")
 
+            # Get columns for explicit mapping (important when DDL column order
+            # differs from data file column order, e.g., date columns moved first)
+            columns = kwargs.get("columns", [])
+
             # Build Stream Load command
             # StarRocks Stream Load expects HTTP PUT to /api/{db}/{table}/_stream_load
+            headers = [
+                f'-H "column_separator:{column_separator}"',
+                '-H "Expect:100-continue"',
+            ]
+
+            # Add explicit column mapping if provided
+            if columns:
+                columns_str = ",".join(columns)
+                headers.append(f'-H "columns:{columns_str}"')
+
             curl_cmd = (
                 f"curl --location-trusted -u {self.username}:{self.password} "
-                f'-H "column_separator:{column_separator}" '
-                f'-H "Expect:100-continue" '
+                f"{' '.join(headers)} "
                 f"-T {data_path} "
                 f"http://{load_host}:{self.http_port}/api/{schema_name}/{table_name}/_stream_load"
             )
@@ -1039,6 +1036,116 @@ spill_mode = auto
             metrics["error"] = str(e)
 
         return metrics
+
+    def get_table_sizes(
+        self, schema: str, table_names: list[str]
+    ) -> dict[str, dict[str, Any]]:
+        """Query StarRocks for table storage sizes.
+
+        Uses information_schema.tables_config and SHOW DATA to get storage sizes.
+
+        Args:
+            schema: Database name containing the tables
+            table_names: List of table names to query
+
+        Returns:
+            Dict mapping table names to size info with raw_bytes, stored_bytes,
+            row_count, and compression_ratio.
+        """
+        sizes: dict[str, dict[str, Any]] = {}
+
+        try:
+            for table_name in table_names:
+                try:
+                    # Get row count
+                    count_query = (
+                        f"SELECT COUNT(*) as cnt FROM `{schema}`.`{table_name}`"
+                    )
+                    count_result = self.execute_query(
+                        count_query, query_name=f"count_{table_name}", return_data=True
+                    )
+                    row_count = 0
+                    if count_result.get("success") and "data" in count_result:
+                        df = count_result["data"]
+                        if not df.empty:
+                            row_count = int(df.iloc[0, 0])
+
+                    # Get table size using SHOW DATA
+                    # This returns size in bytes for the table
+                    show_data_query = f"SHOW DATA FROM `{schema}`.`{table_name}`"
+                    size_result = self.execute_query(
+                        show_data_query,
+                        query_name=f"size_{table_name}",
+                        return_data=True,
+                    )
+
+                    stored_bytes = 0
+                    raw_bytes = 0
+
+                    if size_result.get("success") and "data" in size_result:
+                        df = size_result["data"]
+                        if not df.empty:
+                            # SHOW DATA returns columns: TableName, Size, ReplicaCount
+                            # Size is the stored/compressed size
+                            size_str = (
+                                str(df.iloc[0]["Size"]) if "Size" in df.columns else "0"
+                            )
+                            # Parse size string (could be "10.5 GB", "100 MB", etc.)
+                            stored_bytes = self._parse_size_string(size_str)
+                            # StarRocks doesn't expose raw size directly
+                            # Use stored_bytes as approximation
+                            raw_bytes = stored_bytes
+
+                    sizes[table_name.lower()] = {
+                        "raw_bytes": raw_bytes,
+                        "stored_bytes": stored_bytes,
+                        "row_count": row_count,
+                        "compression_ratio": (
+                            raw_bytes / stored_bytes if stored_bytes > 0 else 0.0
+                        ),
+                    }
+
+                except Exception as e:
+                    self._log(
+                        f"Warning: Failed to get size for table {table_name}: {e}"
+                    )
+
+        except Exception as e:
+            self._log(f"Warning: Failed to get table sizes: {e}")
+
+        return sizes
+
+    def _parse_size_string(self, size_str: str) -> int:
+        """Parse size string like '10.5 GB' or '100 MB' to bytes."""
+        import re
+
+        if not size_str:
+            return 0
+
+        # Try to parse numeric value with optional unit
+        match = re.match(r"([\d.]+)\s*([KMGTP]?B?)", size_str.strip(), re.IGNORECASE)
+        if not match:
+            return 0
+
+        value = float(match.group(1))
+        unit = match.group(2).upper()
+
+        multipliers = {
+            "": 1,
+            "B": 1,
+            "K": 1024,
+            "KB": 1024,
+            "M": 1024**2,
+            "MB": 1024**2,
+            "G": 1024**3,
+            "GB": 1024**3,
+            "T": 1024**4,
+            "TB": 1024**4,
+            "P": 1024**5,
+            "PB": 1024**5,
+        }
+
+        return int(value * multipliers.get(unit, 1))
 
     def get_template_variables(self) -> dict[str, Any]:
         """Return StarRocks-specific template variables for SQL rendering.
