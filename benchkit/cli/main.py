@@ -169,7 +169,7 @@ def setup(
     console.print(f"[blue]Setting up systems for project:[/] {cfg['project_id']}")
     console.print(f"[dim]Systems: {[s['name'] for s in cfg['systems']]}[/]")
 
-    runner = BenchmarkRunner(cfg, outdir)
+    runner = BenchmarkRunner(cfg, outdir, debug=debug)
     success = runner.run_setup(force=force)
 
     if success:
@@ -230,7 +230,7 @@ def load(
     if local:
         console.print("[cyan]Mode: Local-to-remote (connecting to remote DBs)[/]")
 
-    runner = BenchmarkRunner(cfg, outdir)
+    runner = BenchmarkRunner(cfg, outdir, debug=debug)
     success = runner.run_load(force=force, local=local)
 
     if success:
@@ -309,7 +309,7 @@ def run(
     if local:
         console.print("[cyan]Mode: Local-to-remote (connecting to remote DBs)[/]")
 
-    runner = BenchmarkRunner(cfg, outdir)
+    runner = BenchmarkRunner(cfg, outdir, debug=debug)
 
     if full:
         # Check if sequential mode is enabled
@@ -2189,11 +2189,16 @@ def suite_run(
 
         runner = SuiteRunner(path, config)
 
+        # Use config execution settings when CLI --parallel is not explicitly set
+        effective_parallel = parallel
+        if parallel == 1 and config.execution.mode in ("parallel", "parallel_series"):
+            effective_parallel = config.execution.max_parallel
+
         success = runner.run(
             series=series,
             benchmark=benchmark,
             resume=resume,
-            parallel=parallel,
+            parallel=effective_parallel,
             dry_run=dry_run,
             no_cleanup=no_cleanup,
             tag=tag,
@@ -2350,6 +2355,200 @@ def suite_reset(
         runner.reset_state()
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1) from e
+
+
+@suite_app.command("destroy")
+def suite_destroy(
+    path: Path = typer.Argument(..., help="Path to suite directory"),
+    series: str | None = typer.Option(
+        None, "--series", "-s", help="Destroy only this series"
+    ),
+    benchmark: str | None = typer.Option(
+        None,
+        "--benchmark",
+        "-b",
+        help="Destroy specific benchmark (series/config_name)",
+    ),
+    systems: str | None = typer.Option(
+        None, "--systems", help="Comma-separated list of systems to destroy"
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Show what would be destroyed without executing"
+    ),
+    confirm: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+    debug: bool = typer.Option(False, "--debug", help="Enable debug output"),
+) -> None:
+    """Destroy infrastructure for benchmarks in a suite.
+
+    Destroys cloud infrastructure (via Terraform) and managed deployments
+    for matching benchmarks. Use filters to target specific benchmarks.
+
+    Examples:
+        # Destroy all infrastructure in suite
+        benchkit suite destroy ./my-suite/ --yes
+
+        # Dry run to see what would be destroyed
+        benchkit suite destroy ./my-suite/ --dry-run
+
+        # Destroy specific series
+        benchkit suite destroy ./my-suite/ --series 01_node_scaling --yes
+
+        # Destroy specific benchmark
+        benchkit suite destroy ./my-suite/ --benchmark 01_node_scaling/nodes_04 --yes
+
+        # Destroy only specific systems
+        benchkit suite destroy ./my-suite/ --systems exasol,clickhouse --yes
+    """
+    from ..debug import set_debug
+    from ..suite import SuiteRunner, load_suite_config
+
+    set_debug(debug)
+
+    suite_yaml = path / "suite.yaml"
+    if not suite_yaml.exists():
+        console.print(f"[red]Suite configuration not found: {suite_yaml}[/red]")
+        raise typer.Exit(1)
+
+    try:
+        config = load_suite_config(suite_yaml)
+        runner = SuiteRunner(path, config)
+
+        # Discover configs based on filters
+        if benchmark:
+            # Parse benchmark as series/config_name
+            parts = benchmark.split("/")
+            if len(parts) != 2:
+                console.print(
+                    f"[red]Invalid benchmark format: {benchmark}. "
+                    f"Use 'series_name/config_name'[/red]"
+                )
+                raise typer.Exit(1)
+
+            series_name, config_name = parts
+            configs_by_series = runner.discover_configs(
+                series_filter=series_name, include_disabled=True
+            )
+
+            # Find the specific config
+            target_configs: list[tuple[str, Path]] = []
+            for s_name, config_paths in configs_by_series.items():
+                for cfg_path in config_paths:
+                    if cfg_path.stem == config_name:
+                        target_configs.append((s_name, cfg_path))
+
+            if not target_configs:
+                console.print(f"[red]Benchmark not found: {benchmark}[/red]")
+                raise typer.Exit(1)
+        else:
+            # Use series filter if provided
+            configs_by_series = runner.discover_configs(
+                series_filter=series, include_disabled=True
+            )
+            target_configs = [
+                (s_name, cfg_path)
+                for s_name, config_paths in configs_by_series.items()
+                for cfg_path in config_paths
+            ]
+
+        if not target_configs:
+            console.print("[yellow]No matching benchmark configurations found[/yellow]")
+            raise typer.Exit(0)
+
+        # Parse systems filter
+        system_names_filter: list[str] | None = None
+        if systems:
+            system_names_filter = [s.strip() for s in systems.split(",")]
+
+        # Show what will be destroyed
+        console.print()
+        if dry_run:
+            console.print(
+                "[bold yellow]DRY RUN - Infrastructure to destroy:[/bold yellow]"
+            )
+        else:
+            console.print("[bold red]Infrastructure to destroy:[/bold red]")
+        console.print()
+
+        for series_name, cfg_path in target_configs:
+            benchmark_id = f"{series_name}/{cfg_path.stem}"
+            cfg = load_config(cfg_path)
+
+            # Filter systems if specified
+            cfg_systems = cfg.get("systems", [])
+            if system_names_filter:
+                cfg_systems = [
+                    s for s in cfg_systems if s.get("name") in system_names_filter
+                ]
+
+            if not cfg_systems:
+                continue
+
+            system_names_str = ", ".join(s.get("name", "unknown") for s in cfg_systems)
+            console.print(f"  • [cyan]{benchmark_id}[/cyan]: {system_names_str}")
+
+        console.print()
+
+        if dry_run:
+            console.print(
+                "[dim]Dry run complete - no infrastructure was destroyed[/dim]"
+            )
+            return
+
+        # Confirm destruction
+        if not confirm:
+            console.print(
+                "[yellow]This will destroy cloud infrastructure and managed deployments.[/yellow]"
+            )
+            response = typer.prompt("Continue? [y/N]", default="n")
+            if response.lower() != "y":
+                console.print("[dim]Cancelled[/dim]")
+                raise typer.Exit(0)
+
+        # Destroy infrastructure for each matching benchmark
+        all_success = True
+        for series_name, cfg_path in target_configs:
+            benchmark_id = f"{series_name}/{cfg_path.stem}"
+            cfg = load_config(cfg_path)
+
+            # Filter systems if specified
+            if system_names_filter:
+                cfg["systems"] = [
+                    s
+                    for s in cfg.get("systems", [])
+                    if s.get("name") in system_names_filter
+                ]
+                if not cfg["systems"]:
+                    continue
+
+            console.print(f"\n[bold]Destroying: {benchmark_id}[/bold]")
+
+            success, errors = _destroy_all_environments(cfg)
+            if success:
+                console.print("  [green]✓ Destroyed successfully[/green]")
+            else:
+                console.print("  [red]✗ Errors during destruction:[/red]")
+                for error in errors:
+                    console.print(f"    - {error}")
+                all_success = False
+
+        console.print()
+        if all_success:
+            console.print("[green]✓ All infrastructure destroyed successfully[/green]")
+        else:
+            console.print(
+                "[yellow]⚠ Some infrastructure could not be destroyed[/yellow]"
+            )
+            raise typer.Exit(1)
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        console.print(f"[red]Suite destroy failed: {e}[/red]")
+        if debug:
+            import traceback
+
+            console.print(traceback.format_exc())
         raise typer.Exit(1) from e
 
 
