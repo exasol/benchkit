@@ -24,7 +24,9 @@ Usage:
 """
 
 import json
+import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
@@ -34,6 +36,8 @@ from pydantic import BaseModel, field_validator
 from rich.console import Console
 from rich.table import Table
 
+from ..common import PROJECT_ROOT
+from ..common.cli_helpers import is_any_system_cloud_mode, is_any_system_managed_mode
 from ..config import load_config
 from ..run.runner import BenchmarkRunner
 
@@ -77,14 +81,6 @@ class SuiteTimeoutsConfig(BaseModel):
     cleanup: int = 900  # 15 minutes
 
 
-class SuiteReportsConfig(BaseModel):
-    """Report generation settings."""
-
-    index_enabled: bool = True
-    index_title: str = "Suite Results"
-    series_reports_enabled: bool = True
-
-
 class SuiteConfig(BaseModel):
     """Main suite configuration loaded from suite.yaml."""
 
@@ -100,7 +96,6 @@ class SuiteConfig(BaseModel):
     execution: SuiteExecutionConfig = SuiteExecutionConfig()
     infrastructure: SuiteInfrastructureConfig = SuiteInfrastructureConfig()
     timeouts: SuiteTimeoutsConfig = SuiteTimeoutsConfig()
-    reports: SuiteReportsConfig = SuiteReportsConfig()
 
     @field_validator("name")
     @classmethod
@@ -182,6 +177,7 @@ class SuiteState:
     run_tag: str = ""
     started_at: str = ""
     updated_at: str = ""
+    completed_at: str = ""
     status: Literal["pending", "running", "completed", "failed", "interrupted"] = (
         "pending"
     )
@@ -196,6 +192,7 @@ class SuiteState:
             "run_tag": self.run_tag,
             "started_at": self.started_at,
             "updated_at": self.updated_at,
+            "completed_at": self.completed_at,
             "status": self.status,
             "current_benchmark": self.current_benchmark,
             "summary": {
@@ -251,6 +248,7 @@ class SuiteState:
             run_tag=data.get("run_tag", ""),
             started_at=data.get("started_at", ""),
             updated_at=data.get("updated_at", ""),
+            completed_at=data.get("completed_at", ""),
             status=data.get("status", "pending"),
             current_benchmark=data.get("current_benchmark"),
             benchmarks=benchmarks,
@@ -269,6 +267,7 @@ class SuiteStateManager:
         self.suite_path = suite_path
         self.state_dir = suite_path / ".benchkit"
         self.state_file = self.state_dir / "state.json"
+        self._lock = threading.Lock()  # Thread-safe for parallel execution
 
     def ensure_state_dir(self) -> None:
         """Create state directory if it doesn't exist."""
@@ -291,15 +290,60 @@ class SuiteStateManager:
             return None
 
     def save_state(self, state: SuiteState) -> None:
-        """Save state to disk.
+        """Save state to disk (thread-safe).
 
         Args:
             state: State to save
         """
+        with self._lock:
+            self._save_unlocked(state)
+
+    def _save_unlocked(self, state: SuiteState) -> None:
+        """Save state without acquiring lock (internal use only)."""
         self.ensure_state_dir()
         state.updated_at = time.strftime("%Y-%m-%dT%H:%M:%SZ")
         with open(self.state_file, "w", encoding="utf-8") as f:
             json.dump(state.to_dict(), f, indent=2)
+
+    def update_benchmark_status(
+        self,
+        state: SuiteState,
+        benchmark_id: str,
+        status: str,
+        error: str | None = None,
+    ) -> None:
+        """Atomically update a single benchmark's status (thread-safe).
+
+        Args:
+            state: Suite state to update
+            benchmark_id: ID of the benchmark to update
+            status: New status (running, completed, failed, etc.)
+            error: Optional error message if failed
+        """
+        with self._lock:
+            if benchmark_id not in state.benchmarks:
+                return
+
+            bench = state.benchmarks[benchmark_id]
+            bench.status = status  # type: ignore[assignment]
+
+            if status == "running":
+                bench.started_at = time.strftime("%Y-%m-%dT%H:%M:%SZ")
+            elif status in ("completed", "failed"):
+                bench.completed_at = time.strftime("%Y-%m-%dT%H:%M:%SZ")
+                # Calculate duration if started_at is set
+                if bench.started_at:
+                    try:
+                        start = time.strptime(bench.started_at, "%Y-%m-%dT%H:%M:%SZ")
+                        end = time.strptime(bench.completed_at, "%Y-%m-%dT%H:%M:%SZ")
+                        bench.duration_seconds = time.mktime(end) - time.mktime(start)
+                    except ValueError:
+                        pass  # Skip duration calculation on parse errors
+
+            if error:
+                bench.error = error
+
+            self._save_unlocked(state)
 
     def clear_state(self) -> None:
         """Clear all state files."""
@@ -503,6 +547,12 @@ class SuiteRunner:
             state.status = "running"
             state.started_at = time.strftime("%Y-%m-%dT%H:%M:%SZ")
             self.state_manager.save_state(state)
+
+        # Branch for parallel execution
+        if parallel > 1 and not dry_run:
+            return self._run_parallel(
+                discovered, state, parallel, no_cleanup, system_names_filter, resume
+            )
 
         all_success = True
         total_benchmarks = sum(len(configs) for configs in discovered.values())
@@ -937,19 +987,354 @@ class SuiteRunner:
         console.print(f"\n[cyan]Running benchmark: {benchmark}[/cyan]")
         return self._run_benchmark(config_path, no_cleanup=no_cleanup, systems=systems)
 
+    @staticmethod
+    def _slugify(text: str) -> str:
+        """Convert text to filesystem-safe slug.
+
+        Args:
+            text: Text to slugify
+
+        Returns:
+            Lowercase string with spaces/special chars replaced by underscores
+        """
+        import re
+
+        # Lowercase and replace non-alphanumeric with underscores
+        slug = re.sub(r"[^a-zA-Z0-9]+", "_", text.lower())
+        # Remove leading/trailing underscores
+        return slug.strip("_")
+
+    def _build_parallel_tasks(
+        self,
+        discovered: dict[str, list[Path]],
+        state: SuiteState,
+        no_cleanup: bool,
+        systems_filter: list[str] | None,
+        resume: bool,
+    ) -> list:
+        """Build list of SuiteBenchmarkTask from discovered configs.
+
+        Handles resume-skip, systems filtering, and absolute path resolution.
+        Config paths are made absolute because InfraManager uses os.chdir()
+        which is not thread-safe.
+
+        Args:
+            discovered: Discovered configurations by series
+            state: Suite state for tracking progress
+            no_cleanup: Keep infrastructure after each benchmark
+            systems_filter: List of system names to filter
+            resume: Whether to skip completed benchmarks
+
+        Returns:
+            List of SuiteBenchmarkTask ready for parallel execution
+        """
+        from .parallel_executor import SuiteBenchmarkTask
+
+        tasks: list[SuiteBenchmarkTask] = []
+        for series_name in sorted(discovered.keys()):
+            for config_path in discovered[series_name]:
+                config_path_abs = config_path.resolve()
+                benchmark_id = self.get_benchmark_id(series_name, config_path)
+
+                if resume and benchmark_id in state.benchmarks:
+                    if state.benchmarks[benchmark_id].status == "completed":
+                        console.print(
+                            f"  [dim]Skipping (completed): {benchmark_id}[/dim]"
+                        )
+                        continue
+
+                try:
+                    cfg = load_config(str(config_path_abs))
+                    project_id = cfg.get("project_id", config_path_abs.stem)
+
+                    if systems_filter:
+                        systems_list = cfg.get("systems", [])
+                        matching = [
+                            s for s in systems_list if s.get("name") in systems_filter
+                        ]
+                        if not matching:
+                            console.print(
+                                f"  [dim]Skipping (no matching systems): {benchmark_id}[/dim]"
+                            )
+                            continue
+                except Exception:
+                    project_id = config_path_abs.stem
+
+                tasks.append(
+                    SuiteBenchmarkTask(
+                        benchmark_id=benchmark_id,
+                        config_path=config_path_abs,
+                        project_id=project_id,
+                        no_cleanup=no_cleanup,
+                        systems_filter=(
+                            ",".join(systems_filter) if systems_filter else None
+                        ),
+                    )
+                )
+        return tasks
+
+    def _make_run_with_state(self, state: SuiteState) -> Callable:
+        """Create a run function that updates suite state on completion.
+
+        Args:
+            state: Suite state to update
+
+        Returns:
+            Function compatible with SuiteParallelExecutor.execute_benchmarks()
+        """
+        from .parallel_executor import SuiteBenchmarkTask
+
+        def run_with_state(
+            task: SuiteBenchmarkTask, log_callback: Callable[[str], None]
+        ) -> bool:
+            self.state_manager.update_benchmark_status(
+                state, task.benchmark_id, "running"
+            )
+            log_callback(f"State updated: {task.benchmark_id} -> running")
+
+            success = self._run_benchmark(
+                task.config_path,
+                no_cleanup=task.no_cleanup,
+                systems=task.systems_filter,
+                log_callback=log_callback,
+            )
+
+            status = "completed" if success else "failed"
+            self.state_manager.update_benchmark_status(state, task.benchmark_id, status)
+            log_callback(f"State updated: {task.benchmark_id} -> {status}")
+            return success
+
+        return run_with_state
+
+    def _run_parallel(
+        self,
+        discovered: dict[str, list[Path]],
+        state: SuiteState,
+        parallel: int,
+        no_cleanup: bool,
+        systems_filter: list[str] | None,
+        resume: bool,
+    ) -> bool:
+        """Execute all benchmarks in a flat parallel pool.
+
+        Args:
+            discovered: Discovered configurations by series
+            state: Suite state for tracking progress
+            parallel: Number of concurrent workers
+            no_cleanup: Keep infrastructure after each benchmark
+            systems_filter: List of system names to filter
+            resume: Whether to skip completed benchmarks
+
+        Returns:
+            True if all benchmarks succeeded
+        """
+        # Dispatch to parallel_series mode if configured
+        if self.config.execution.mode == "parallel_series":
+            return self._run_parallel_series(
+                discovered, state, parallel, no_cleanup, systems_filter, resume
+            )
+
+        from .parallel_executor import SuiteParallelExecutor
+
+        tasks = self._build_parallel_tasks(
+            discovered, state, no_cleanup, systems_filter, resume
+        )
+
+        if not tasks:
+            console.print("[yellow]No benchmarks to run[/yellow]")
+            state.status = "completed"
+            state.completed_at = time.strftime("%Y-%m-%dT%H:%M:%SZ")
+            self.state_manager.save_state(state)
+            return True
+
+        console.print(
+            f"\n[bold]Running {len(tasks)} benchmarks with {parallel} workers[/bold]\n"
+        )
+
+        run_timestamp = time.strftime("%Y-%m-%dT%H-%M-%S")
+        suite_slug = self._slugify(self.config.name)
+        log_dir = (
+            PROJECT_ROOT / "results" / suite_slug / "logs" / f"run_{run_timestamp}"
+        ).resolve()
+
+        executor = SuiteParallelExecutor(
+            max_workers=parallel,
+            log_dir=log_dir,
+            console=console,
+        )
+
+        total_timeout = (
+            self.config.timeouts.infrastructure
+            + self.config.timeouts.benchmark
+            + self.config.timeouts.cleanup
+        )
+
+        results = executor.execute_benchmarks(
+            tasks=tasks,
+            run_func=self._make_run_with_state(state),
+            continue_on_failure=self.config.execution.continue_on_failure,
+            benchmark_timeout=total_timeout,
+        )
+
+        # Final state update
+        completed = sum(1 for v in results.values() if v)
+        failed = sum(1 for v in results.values() if not v)
+
+        state.status = "completed" if failed == 0 else "failed"
+        state.completed_at = time.strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.state_manager.save_state(state)
+
+        console.print(
+            f"\n[bold]Suite completed: {completed} succeeded, {failed} failed[/bold]"
+        )
+
+        return failed == 0
+
+    def _run_parallel_series(
+        self,
+        discovered: dict[str, list[Path]],
+        state: SuiteState,
+        parallel: int,
+        no_cleanup: bool,
+        systems_filter: list[str] | None,
+        resume: bool,
+    ) -> bool:
+        """Execute series sequentially, benchmarks within each series in parallel.
+
+        Args:
+            discovered: Discovered configurations by series
+            state: Suite state for tracking progress
+            parallel: Number of concurrent workers per series
+            no_cleanup: Keep infrastructure after each benchmark
+            systems_filter: List of system names to filter
+            resume: Whether to skip completed benchmarks
+
+        Returns:
+            True if all benchmarks succeeded
+        """
+        from .parallel_executor import SuiteParallelExecutor
+
+        all_success = True
+        total_timeout = (
+            self.config.timeouts.infrastructure
+            + self.config.timeouts.benchmark
+            + self.config.timeouts.cleanup
+        )
+        run_with_state = self._make_run_with_state(state)
+
+        run_timestamp = time.strftime("%Y-%m-%dT%H-%M-%S")
+        suite_slug = self._slugify(self.config.name)
+
+        for series_name in sorted(discovered.keys()):
+            console.print(f"\n[bold magenta]Series: {series_name}[/bold magenta]")
+
+            # Build tasks for THIS series only
+            series_discovered = {series_name: discovered[series_name]}
+            tasks = self._build_parallel_tasks(
+                series_discovered, state, no_cleanup, systems_filter, resume
+            )
+            if not tasks:
+                console.print(f"  [dim]No benchmarks to run in {series_name}[/dim]")
+                continue
+
+            console.print(
+                f"  [bold]Running {len(tasks)} benchmarks "
+                f"with {parallel} workers[/bold]\n"
+            )
+
+            log_dir = (
+                PROJECT_ROOT
+                / "results"
+                / suite_slug
+                / "logs"
+                / f"run_{run_timestamp}"
+                / series_name
+            ).resolve()
+
+            executor = SuiteParallelExecutor(
+                max_workers=parallel,
+                log_dir=log_dir,
+                console=console,
+            )
+
+            results = executor.execute_benchmarks(
+                tasks=tasks,
+                run_func=run_with_state,
+                continue_on_failure=self.config.execution.continue_on_failure,
+                benchmark_timeout=total_timeout,
+            )
+
+            if any(not v for v in results.values()):
+                all_success = False
+                if not self.config.execution.continue_on_failure:
+                    console.print(
+                        f"[red]Series {series_name} had failures, stopping[/red]"
+                    )
+                    break
+
+            # Pause between series
+            if self.config.execution.pause_between > 0:
+                remaining_series = sorted(discovered.keys())
+                is_last = series_name == remaining_series[-1]
+                if not is_last:
+                    console.print(
+                        f"[dim]Pausing {self.config.execution.pause_between}s "
+                        f"between series...[/dim]"
+                    )
+                    time.sleep(self.config.execution.pause_between)
+
+        # Final state update
+        state.status = "completed" if all_success else "failed"
+        state.completed_at = time.strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.state_manager.save_state(state)
+
+        total = sum(len(configs) for configs in discovered.values())
+        status_word = "succeeded" if all_success else "completed with failures"
+        console.print(f"\n[bold]Suite {status_word} ({total} benchmarks)[/bold]")
+
+        return all_success
+
+    @staticmethod
+    def _log(msg: str, log_callback: Callable[[str], None] | None) -> None:
+        """Log a message via callback or console."""
+        if log_callback:
+            log_callback(msg)
+        else:
+            console.print(msg)
+
     def _run_benchmark(
-        self, config_path: Path, no_cleanup: bool = False, systems: str | None = None
+        self,
+        config_path: Path,
+        no_cleanup: bool = False,
+        systems: str | None = None,
+        log_callback: Callable[[str], None] | None = None,
     ) -> bool:
         """Execute a single benchmark using BenchmarkRunner.
+
+        Enforces suite-level timeouts between phases:
+        - infrastructure timeout: max time for Phase 0 (cloud provisioning)
+        - benchmark timeout: max time for Phases 1-3 combined (setup + load + queries)
+        - cleanup timeout: max time for infrastructure teardown
+
+        Timeouts are checked between phases (cooperative), not mid-phase.
 
         Args:
             config_path: Path to benchmark config
             no_cleanup: Keep infrastructure
             systems: Comma-separated systems to run
+            log_callback: Optional callback for routing log messages (for parallel execution)
 
         Returns:
             True if successful
         """
+        cfg = None
+        has_cloud = False
+        benchmark_success = False
+
+        infra_timeout = self.config.timeouts.infrastructure
+        benchmark_timeout = self.config.timeouts.benchmark
+        cleanup_timeout = self.config.timeouts.cleanup
+
         try:
             cfg = load_config(str(config_path))
 
@@ -960,8 +1345,9 @@ class SuiteRunner:
                     s for s in cfg["systems"] if s["name"] in system_names
                 ]
                 if not cfg["systems"]:
-                    console.print(
-                        f"[red]No matching systems found for: {system_names}[/red]"
+                    self._log(
+                        f"[red]No matching systems found for: {system_names}[/red]",
+                        log_callback,
                     )
                     return False
 
@@ -969,54 +1355,122 @@ class SuiteRunner:
             outdir = Path("results") / project_id
             outdir.mkdir(parents=True, exist_ok=True)
 
-            runner = BenchmarkRunner(cfg, outdir)
-
-            # Run full benchmark workflow
-            # This handles: infrastructure -> setup -> load -> run
-            from ..common.cli_helpers import (
-                is_any_system_cloud_mode,
-                is_any_system_managed_mode,
-            )
+            runner = BenchmarkRunner(cfg, outdir, log_callback=log_callback)
 
             has_cloud = is_any_system_cloud_mode(cfg)
             has_managed = is_any_system_managed_mode(cfg)
 
             # Phase 0: Infrastructure
+            phase_start = time.monotonic()
             if has_cloud or has_managed:
                 if has_cloud:
-                    if not runner.ensure_cloud_infrastructure():
+                    if not runner.ensure_cloud_infrastructure(log_callback):
                         return False
                 # Managed infrastructure is handled in setup
+
+            elapsed = time.monotonic() - phase_start
+            if elapsed > infra_timeout:
+                self._log(
+                    f"[red]Infrastructure phase exceeded timeout "
+                    f"({elapsed:.0f}s > {infra_timeout}s)[/red]",
+                    log_callback,
+                )
+                return False
+
+            # Phases 1-3 share the benchmark timeout
+            benchmark_start = time.monotonic()
 
             # Phase 1: Setup
             if not runner.run_setup(force=True):
                 return False
+            elapsed = time.monotonic() - benchmark_start
+            if elapsed > benchmark_timeout:
+                self._log(
+                    f"[red]Benchmark exceeded timeout after setup "
+                    f"({elapsed:.0f}s > {benchmark_timeout}s)[/red]",
+                    log_callback,
+                )
+                return False
 
             # Phase 2: Load
             if not runner.run_load(force=True):
+                return False
+            elapsed = time.monotonic() - benchmark_start
+            if elapsed > benchmark_timeout:
+                self._log(
+                    f"[red]Benchmark exceeded timeout after load "
+                    f"({elapsed:.0f}s > {benchmark_timeout}s)[/red]",
+                    log_callback,
+                )
                 return False
 
             # Phase 3: Run queries
             if not runner.run_queries(force=True):
                 return False
 
-            # Cleanup if requested
-            if not no_cleanup and self.config.infrastructure.cleanup_after_each:
-                if has_cloud:
-                    from ..infra.manager import InfraManager
-
-                    # Get provider from config
-                    env = cfg.get("env") or {}
-                    provider = env.get("mode", "aws")
-                    if provider in ("aws", "gcp", "azure"):
-                        manager = InfraManager(provider, cfg)
-                        manager.destroy()
-
+            benchmark_success = True
             return True
 
         except Exception as e:
-            console.print(f"[red]Benchmark failed: {e}[/red]")
+            self._log(f"[red]Benchmark failed: {e}[/red]", log_callback)
             return False
+
+        finally:
+            # Infrastructure cleanup in finally block ensures it happens
+            # regardless of success, failure, or exception
+            if cfg is not None and has_cloud and not no_cleanup:
+                should_cleanup = (
+                    benchmark_success and self.config.infrastructure.cleanup_after_each
+                ) or (
+                    not benchmark_success
+                    and self.config.infrastructure.cleanup_on_failure
+                )
+                if should_cleanup:
+                    self._run_cleanup_with_timeout(cfg, cleanup_timeout, log_callback)
+
+    def _run_cleanup_with_timeout(
+        self,
+        cfg: dict[str, Any],
+        timeout: int,
+        log_callback: Callable[[str], None] | None,
+    ) -> None:
+        """Run infrastructure cleanup with a timeout.
+
+        Executes cleanup in a daemon thread so it can be abandoned if it hangs.
+        """
+        cleanup_error: list[str] = []
+
+        def _do_cleanup() -> None:
+            try:
+                from ..common.cli_helpers import get_first_cloud_provider
+                from ..infra.manager import InfraManager
+
+                env = cfg.get("env") or {}
+                provider = env.get("mode", "aws")
+                if provider not in ("aws", "gcp", "azure"):
+                    provider = get_first_cloud_provider(cfg) or provider
+                if provider in ("aws", "gcp", "azure"):
+                    manager = InfraManager(provider, cfg)
+                    manager.destroy()
+            except Exception as e:
+                cleanup_error.append(str(e))
+
+        cleanup_thread = threading.Thread(target=_do_cleanup, daemon=True)
+        cleanup_thread.start()
+        cleanup_thread.join(timeout=timeout)
+
+        if cleanup_thread.is_alive():
+            self._log(
+                f"[yellow]Warning: infrastructure cleanup timed out "
+                f"after {timeout}s — may need manual teardown[/yellow]",
+                log_callback,
+            )
+        elif cleanup_error:
+            self._log(
+                f"[yellow]Warning: infrastructure cleanup failed: "
+                f"{cleanup_error[0]}[/yellow]",
+                log_callback,
+            )
 
     def show_plan(
         self, discovered: dict[str, list[Path]], state: SuiteState | None = None
@@ -1144,6 +1598,7 @@ class SuiteRunner:
             table = Table(show_header=True, header_style="bold")
             table.add_column("Config", style="cyan", no_wrap=True)
             table.add_column("State", justify="center")
+            table.add_column("Infra", justify="center")
             table.add_column("Setup", justify="center")
             table.add_column("Load", justify="center")
             table.add_column("Run", justify="center")
@@ -1173,6 +1628,7 @@ class SuiteRunner:
                     table.add_row(
                         config_name,
                         state_cell,
+                        "[dim]-[/dim]",
                         "[dim]-[/dim]",
                         "[dim]-[/dim]",
                         "[dim]-[/dim]",
@@ -1207,6 +1663,7 @@ class SuiteRunner:
                 table.add_row(
                     config_name,
                     state_cell,
+                    status_info["infra_cell"],
                     status_info["setup_cell"],
                     status_info["load_cell"],
                     status_info["run_cell"],
@@ -1218,6 +1675,7 @@ class SuiteRunner:
                     for sys_detail in status_info["system_details"]:
                         table.add_row(
                             f"  └─ {sys_detail['name']}",
+                            "",
                             "",
                             sys_detail["setup"],
                             sys_detail["load"],
@@ -1284,6 +1742,7 @@ class SuiteRunner:
             Dict with status information including phase cells and details
         """
         result: dict[str, Any] = {
+            "infra_cell": "[dim]-[/dim]",
             "setup_cell": "[dim]-[/dim]",
             "load_cell": "[dim]-[/dim]",
             "run_cell": "[dim]-[/dim]",
@@ -1304,6 +1763,35 @@ class SuiteRunner:
         results_dir = Path("results") / project_id
         systems = cfg.get("systems", [])
         system_names = [s["name"] for s in systems]
+
+        # Determine infrastructure status (fast, file-based check)
+        try:
+            has_cloud = is_any_system_cloud_mode(cfg)
+            has_managed = is_any_system_managed_mode(cfg)
+
+            if has_cloud:
+                tfstate_path = (
+                    PROJECT_ROOT
+                    / "results"
+                    / project_id
+                    / "terraform"
+                    / "terraform.tfstate"
+                )
+                if tfstate_path.exists():
+                    try:
+                        with open(tfstate_path, encoding="utf-8") as f:
+                            tfstate = json.load(f)
+                        resources = tfstate.get("resources", [])
+                        if resources:
+                            result["infra_cell"] = "[green]✓[/green]"
+                        else:
+                            result["infra_cell"] = "[dim]✗[/dim]"
+                    except (json.JSONDecodeError, OSError):
+                        result["infra_cell"] = "[yellow]?[/yellow]"
+            elif has_managed:
+                result["infra_cell"] = "[dim]mgd[/dim]"
+        except Exception:
+            pass  # Keep default "-"
 
         if not results_dir.exists():
             result["details"] = "[dim]no results[/dim]"
