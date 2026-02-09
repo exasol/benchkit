@@ -1,6 +1,17 @@
 -- Exasol TPC-H Table Creation
 -- Creates all 8 TPC-H tables with Exasol-specific data types and distribution
 
+-- Drop tables in reverse FK dependency order for clean re-runs
+-- (keeps schema intact so the active connection remains valid)
+DROP TABLE IF EXISTS {{ schema }}.lineitem;
+DROP TABLE IF EXISTS {{ schema }}.orders;
+DROP TABLE IF EXISTS {{ schema }}.partsupp;
+DROP TABLE IF EXISTS {{ schema }}.customer;
+DROP TABLE IF EXISTS {{ schema }}.supplier;
+DROP TABLE IF EXISTS {{ schema }}.part;
+DROP TABLE IF EXISTS {{ schema }}.nation;
+DROP TABLE IF EXISTS {{ schema }}.region;
+
 -- Nation table
 CREATE OR REPLACE TABLE {{ schema }}.nation (
     n_nationkey DEC(11),

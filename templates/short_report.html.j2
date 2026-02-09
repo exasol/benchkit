@@ -116,7 +116,7 @@
                 <summary>
                     <strong>{{ tested_system.name | title }} {{ tested_system.version }}</strong> &nbsp;&nbsp; Installation Steps
                     {% if preparation_timings and tested_system.name in preparation_timings %}
-                    <span class="setup-timing">({{ preparation_timings[tested_system.name].elapsed_s | format_duration }})</span>
+                    <span class="setup-timing">({{ preparation_timings[tested_system.name].total_preparation_s | format_duration }})</span>
                     {% endif %}
                 </summary>
 

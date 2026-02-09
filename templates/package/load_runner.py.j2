@@ -63,20 +63,18 @@ def execute_load(config: dict[str, Any], output_dir: Path, force: bool = False) 
             failed_systems.append(system_name)
             continue
 
-        # Save load completion marker
+        # Save load completion marker with all timing and size fields
+        prep_timings = getattr(workload, 'preparation_timings', {})
         load_complete_data = {
             "system_name": system_name,
-            "data_generation_s": 0.0,
-            "schema_creation_s": 0.0,
-            "data_loading_s": 0.0,
+            "data_generation_s": prep_timings.get("data_generation_s", 0.0),
+            "schema_creation_s": prep_timings.get("schema_creation_s", 0.0),
+            "data_loading_s": prep_timings.get("data_loading_s", 0.0),
+            "total_raw_bytes": prep_timings.get("total_raw_bytes", 0),
+            "total_stored_bytes": prep_timings.get("total_stored_bytes", 0),
+            "table_sizes": prep_timings.get("table_sizes", {}),
+            "total_preparation_s": prep_timings.get("total_preparation_s", 0.0),
         }
-
-        # Get preparation timings if available
-        if hasattr(workload, 'preparation_timings'):
-            prep_timings = workload.preparation_timings
-            load_complete_data["data_generation_s"] = prep_timings.get("data_generation_s", 0.0)
-            load_complete_data["schema_creation_s"] = prep_timings.get("schema_creation_s", 0.0)
-            load_complete_data["data_loading_s"] = prep_timings.get("data_loading_s", 0.0)
 
         from datetime import datetime
         load_complete_data["timestamp"] = datetime.now().isoformat()

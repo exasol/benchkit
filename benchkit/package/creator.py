@@ -193,13 +193,14 @@ class WorkloadPackage:
             f"({stats['files_processed']} files)[/]"
         )
 
-        # Clean unused imports
+        # Clean unused imports (skip __init__.py files)
         console.print("[blue]Cleaning unused imports...[/]")
         cleaner = ImportCleaner()
         for py_file in self.package_dir.rglob("*.py"):
-            if py_file.name != "__init__.py":
-                cleaned = cleaner.clean_file(py_file)
-                py_file.write_text(cleaned)
+            if py_file.name == "__init__.py":
+                continue
+            cleaned = cleaner.clean_file(py_file)
+            py_file.write_text(cleaned)
         console.print("[green]✓ Imports cleaned[/]")
 
         # Format package
@@ -525,21 +526,36 @@ class WorkloadPackage:
 
         init_content = f'''"""Database system implementations."""
 
+from typing import Any
+
 {chr(10).join(imports)}
 
 {impl_dict}
 
 
-def create_system(config: dict) -> SystemUnderTest:
+def _lazy_import_system(kind: str) -> type[SystemUnderTest]:
+    """Lazy import of system class.
+
+    In the minimal package, all configured systems are already imported,
+    so this is a simple lookup in SYSTEM_IMPLEMENTATIONS.
+    """
+    if kind not in SYSTEM_IMPLEMENTATIONS:
+        raise ValueError(f"Unknown system kind: {{kind}}")
+    return SYSTEM_IMPLEMENTATIONS[kind]
+
+
+def create_system(
+    config: dict, output_callback: Any = None, workload_config: dict | None = None
+) -> SystemUnderTest:
     """Create a system instance from configuration."""
     kind = config.get("kind")
     if kind not in SYSTEM_IMPLEMENTATIONS:
         available = ", ".join(SYSTEM_IMPLEMENTATIONS.keys())
         raise ValueError(f"Unsupported system: {{kind}}. Available: {{available}}")
-    return SYSTEM_IMPLEMENTATIONS[kind](config)
+    return SYSTEM_IMPLEMENTATIONS[kind](config, output_callback=output_callback, workload_config=workload_config)
 
 
-__all__ = ["SystemUnderTest", "create_system", "SYSTEM_IMPLEMENTATIONS"]
+__all__ = ["SystemUnderTest", "create_system", "SYSTEM_IMPLEMENTATIONS", "_lazy_import_system"]
 '''
         (dst_dir / "__init__.py").write_text(init_content)
 

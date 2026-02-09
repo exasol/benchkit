@@ -1,5 +1,5 @@
 -- TPC-H Query 2: Minimum Cost Supplier
-{% if system_kind == 'exasol' %}
+{% if system_kind in ['exasol', 'doris'] %}
 SELECT
     s_acctbal,
     s_name,

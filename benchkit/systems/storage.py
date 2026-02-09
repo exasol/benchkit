@@ -229,14 +229,10 @@ class StorageManager:
             True if successful, False otherwise
         """
         system = self._system
-        system.record_setup_command(
-            f"sudo umount {device_or_mount}",
-            f"Unmount {device_or_mount}",
-            "storage_setup",
-        )
-
         result = system.execute_command(
-            f"sudo umount {device_or_mount}", record=True, category="storage_setup"
+            f"sudo umount {device_or_mount}",
+            description=f"Unmount {device_or_mount}",
+            category="storage_setup",
         )
         return bool(result.get("success", False))
 
@@ -253,15 +249,9 @@ class StorageManager:
             True if successful, False otherwise
         """
         system = self._system
-        system.record_setup_command(
-            f"sudo mkfs.{filesystem} -F {device}",
-            f"Format {device} with {filesystem} filesystem",
-            "storage_setup",
-        )
-
         result = system.execute_command(
             f"sudo mkfs.{filesystem} -F {device}",
-            record=True,
+            description=f"Format {device} with {filesystem} filesystem",
             category="storage_setup",
         )
         return bool(result.get("success", False))
@@ -285,24 +275,17 @@ class StorageManager:
 
         # Create mount point if needed
         if create_mount_point:
-            system.record_setup_command(
-                f"sudo mkdir -p {mount_point}",
-                f"Create mount point {mount_point}",
-                "storage_setup",
-            )
             system.execute_command(
-                f"sudo mkdir -p {mount_point}", record=True, category="storage_setup"
+                f"sudo mkdir -p {mount_point}",
+                description=f"Create mount point {mount_point}",
+                category="storage_setup",
             )
 
         # Mount the disk
-        system.record_setup_command(
-            f"sudo mount {device} {mount_point}",
-            f"Mount {device} to {mount_point}",
-            "storage_setup",
-        )
-
         result = system.execute_command(
-            f"sudo mount {device} {mount_point}", record=True, category="storage_setup"
+            f"sudo mount {device} {mount_point}",
+            description=f"Mount {device} to {mount_point}",
+            category="storage_setup",
         )
         return bool(result.get("success", False))
 
@@ -353,14 +336,10 @@ class StorageManager:
             self._log("  Ownership will need to be set later during installation")
             return True
 
-        system.record_setup_command(
-            f"sudo chown -R {owner} {path}",
-            f"Set ownership of {path} to {owner}",
-            "storage_setup",
-        )
-
         result = system.execute_command(
-            f"sudo chown -R {owner} {path}", record=True, category="storage_setup"
+            f"sudo chown -R {owner} {path}",
+            description=f"Set ownership of {path} to {owner}",
+            category="storage_setup",
         )
         return bool(result.get("success", False))
 
@@ -392,14 +371,9 @@ class StorageManager:
         )
 
         # Step 1: Stop any existing RAID arrays on the target device
-        system.record_setup_command(
-            f"sudo mdadm --stop {raid_device} 2>/dev/null || true",
-            f"Stop existing RAID array at {raid_device} if present",
-            "storage_setup",
-        )
         system.execute_command(
             f"sudo mdadm --stop {raid_device} 2>/dev/null || true",
-            record=True,
+            description=f"Stop existing RAID array at {raid_device} if present",
             category="storage_setup",
         )
 
@@ -409,14 +383,9 @@ class StorageManager:
 
         # Step 3: Zero superblocks on all devices
         for dev in device_paths:
-            system.record_setup_command(
-                f"sudo mdadm --zero-superblock {dev} 2>/dev/null || true",
-                f"Clear RAID superblock on {dev}",
-                "storage_setup",
-            )
             system.execute_command(
                 f"sudo mdadm --zero-superblock {dev} 2>/dev/null || true",
-                record=True,
+                description=f"Clear RAID superblock on {dev}",
                 category="storage_setup",
             )
 
@@ -425,14 +394,10 @@ class StorageManager:
             f"yes | sudo mdadm --create {raid_device} "
             f"--level=0 --raid-devices={len(device_paths)} {devices_str}"
         )
-        system.record_setup_command(
-            create_cmd,
-            f"Create RAID0 array from {len(device_paths)} devices",
-            "storage_setup",
-        )
-
         result = system.execute_command(
-            create_cmd, record=True, category="storage_setup"
+            create_cmd,
+            description=f"Create RAID0 array from {len(device_paths)} devices",
+            category="storage_setup",
         )
         if not result.get("success", False):
             self._log(
@@ -453,24 +418,16 @@ class StorageManager:
         mount_check = system.execute_command(f"mount | grep '^{device} '", record=False)
         if mount_check.get("success", False) and mount_check.get("stdout", "").strip():
             self._log(f"Device {device} is mounted, unmounting...")
-            system.record_setup_command(
-                f"sudo umount {device}",
-                f"Unmount {device} before RAID creation",
-                "storage_setup",
-            )
             system.execute_command(
-                f"sudo umount {device}", record=True, category="storage_setup"
+                f"sudo umount {device}",
+                description=f"Unmount {device} before RAID creation",
+                category="storage_setup",
             )
 
         # Clear filesystem signatures
-        system.record_setup_command(
-            f"sudo wipefs -a {device} 2>/dev/null || true",
-            f"Clear filesystem signatures on {device}",
-            "storage_setup",
-        )
         system.execute_command(
             f"sudo wipefs -a {device} 2>/dev/null || true",
-            record=True,
+            description=f"Clear filesystem signatures on {device}",
             category="storage_setup",
         )
 
@@ -479,35 +436,22 @@ class StorageManager:
         system = self._system
 
         # Wait for array to be ready (non-fatal)
-        system.record_setup_command(
-            f"sudo mdadm --wait {raid_device} 2>/dev/null || true",
-            f"Wait for RAID array {raid_device} to be ready",
-            "storage_setup",
-        )
         system.execute_command(
             f"sudo mdadm --wait {raid_device} 2>/dev/null || true",
-            record=True,
+            description=f"Wait for RAID array {raid_device} to be ready",
             category="storage_setup",
         )
 
         # Save RAID configuration
-        system.record_setup_command(
-            "sudo mkdir -p /etc/mdadm",
-            "Create mdadm configuration directory",
-            "storage_setup",
-        )
         system.execute_command(
-            "sudo mkdir -p /etc/mdadm", record=True, category="storage_setup"
+            "sudo mkdir -p /etc/mdadm",
+            description="Create mdadm configuration directory",
+            category="storage_setup",
         )
 
-        system.record_setup_command(
-            "sudo mdadm --detail --scan | sudo tee -a /etc/mdadm/mdadm.conf",
-            "Save RAID configuration",
-            "storage_setup",
-        )
         system.execute_command(
             "sudo mdadm --detail --scan | sudo tee -a /etc/mdadm/mdadm.conf",
-            record=True,
+            description="Save RAID configuration",
             category="storage_setup",
         )
 
@@ -740,13 +684,10 @@ class StorageManager:
 
         self._log(f"Creating system subdirectory: {subdir} with owner {owner}")
 
-        system.record_setup_command(
-            f"sudo mkdir -p {subdir}",
-            f"Create {system.kind} data directory",
-            "storage_setup",
-        )
         system.execute_command(
-            f"sudo mkdir -p {subdir}", record=True, category="storage_setup"
+            f"sudo mkdir -p {subdir}",
+            description=f"Create {system.kind} data directory",
+            category="storage_setup",
         )
         self.set_ownership(subdir, owner=owner)
 
@@ -782,13 +723,10 @@ class StorageManager:
         _, owner = system.get_storage_config()
 
         # Create directory
-        system.record_setup_command(
-            f"sudo mkdir -p {system.data_dir}",
-            f"Create data directory {system.data_dir}",
-            "storage_setup",
-        )
         result = system.execute_command(
-            f"sudo mkdir -p {system.data_dir}", record=True, category="storage_setup"
+            f"sudo mkdir -p {system.data_dir}",
+            description=f"Create data directory {system.data_dir}",
+            category="storage_setup",
         )
 
         if not result.get("success", False):

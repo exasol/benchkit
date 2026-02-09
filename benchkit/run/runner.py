@@ -51,6 +51,7 @@ class ExecutionContext:
     executor: ParallelExecutor | None = (
         None  # Reference to executor for output callbacks
     )
+    debug: bool = False  # Explicit debug flag from CLI (not env var)
 
     @property
     def is_remote(self) -> bool:
@@ -106,20 +107,31 @@ class TaskResult:
 class BenchmarkRunner:
     """Orchestrates benchmark execution across multiple systems."""
 
-    def __init__(self, config: dict[str, Any], output_dir: Path):
+    def __init__(
+        self,
+        config: dict[str, Any],
+        output_dir: Path,
+        log_callback: Callable[[str], None] | None = None,
+        debug: bool = False,
+    ):
         self.config = config
         self.output_dir = Path(output_dir)
         self.project_id = config["project_id"]
+        self._debug = debug  # Explicit debug flag from CLI, not env var
         ensure_directory(self.output_dir)
         self.parallel_log_dir = self.output_dir / "logs"
         self._cloud_instance_managers: dict[str, Any] = {}
         self.infrastructure_provisioning_time: float = 0.0
 
+        # Suite-level log callback for parallel execution
+        # When set, output is routed through this callback instead of console.print()
+        self._log_callback = log_callback
+
         # Parallel execution configuration
         exec_config = config.get("execution", {})
         self.use_parallel = exec_config.get("parallel", False)
-        self.max_workers = exec_config.get(
-            "max_workers", len(config.get("systems", []))
+        self.max_workers = exec_config.get("max_workers") or len(
+            config.get("systems", [])
         )
 
         # Thread-safe locks for shared state (not needed if we don't modify shared state during parallel execution)
@@ -132,6 +144,23 @@ class BenchmarkRunner:
         self._infra_helper = InfrastructureHelper(self)
         self._results_manager = ResultsManager(self)
 
+    def _log(self, message: str) -> None:
+        """Route output through log callback if set, otherwise print to console.
+
+        Used during suite parallel execution to route all output through
+        the FileLogger for proper [benchmark_id] tagging.
+
+        Args:
+            message: Message to output (may contain Rich markup)
+        """
+        if self._log_callback:
+            # Strip Rich markup for log files
+            from ..common.markup import strip_markup
+
+            self._log_callback(strip_markup(message))
+        else:
+            console.print(message)
+
     def _load_provisioning_timing(self) -> float:
         """Load infrastructure provisioning timing from saved file."""
         timing_file = self.output_dir / "infrastructure_provisioning.json"
@@ -142,7 +171,7 @@ class BenchmarkRunner:
                 value = data.get("infrastructure_provisioning_s", 0.0)
                 return float(value) if value is not None else 0.0
             except Exception as e:
-                console.print(
+                self._log(
                     f"[yellow]Warning: Failed to load provisioning timing: {e}[/yellow]"
                 )
                 return 0.0
@@ -163,7 +192,7 @@ class BenchmarkRunner:
             with open(timing_file, "w") as f:
                 json.dump(timing_data, f, indent=2)
         except Exception as e:
-            console.print(
+            self._log(
                 f"[yellow]Warning: Failed to save installation timing for {system_name}: {e}[/yellow]"
             )
 
@@ -177,7 +206,7 @@ class BenchmarkRunner:
                 value = data.get("installation_s", 0.0)
                 return float(value) if value is not None else 0.0
             except Exception as e:
-                console.print(
+                self._log(
                     f"[yellow]Warning: Failed to load installation timing for {system_name}: {e}[/yellow]"
                 )
                 return 0.0
@@ -259,7 +288,7 @@ class BenchmarkRunner:
                 current_ip = current_mgr.public_ip
 
             if marker_ip and current_ip and marker_ip != current_ip:
-                console.print(
+                self._log(
                     f"[yellow]⚠ {system_name} setup marker has stale IP "
                     f"({marker_ip} != {current_ip}), will reinstall[/yellow]"
                 )
@@ -288,16 +317,24 @@ class BenchmarkRunner:
     def _save_load_complete(
         self,
         system_name: str,
-        data_generation_s: float = 0.0,
-        schema_creation_s: float = 0.0,
-        data_loading_s: float = 0.0,
+        preparation_timings: dict[str, Any] | None = None,
     ) -> None:
-        """Save load completion marker with timing info."""
+        """Save load completion marker with full timing info.
+
+        Args:
+            system_name: Name of the system
+            preparation_timings: Full preparation timings dict from workload.prepare()
+        """
+        prep = preparation_timings or {}
         marker_data = {
             "system_name": system_name,
-            "data_generation_s": data_generation_s,
-            "schema_creation_s": schema_creation_s,
-            "data_loading_s": data_loading_s,
+            "data_generation_s": prep.get("data_generation_s", 0.0),
+            "schema_creation_s": prep.get("schema_creation_s", 0.0),
+            "data_loading_s": prep.get("data_loading_s", 0.0),
+            "total_raw_bytes": prep.get("total_raw_bytes", 0),
+            "total_stored_bytes": prep.get("total_stored_bytes", 0),
+            "table_sizes": prep.get("table_sizes", {}),
+            "total_preparation_s": prep.get("total_preparation_s", 0.0),
             "timestamp": self._get_timestamp(),
         }
         save_json(marker_data, self._get_load_complete_path(system_name))
@@ -396,6 +433,7 @@ class BenchmarkRunner:
             max_workers=self.max_workers,
             cloud_managers=self._cloud_instance_managers or None,
             managed_managers=managed_managers or None,
+            debug=self._debug,
         )
 
     @exclude_from_package
@@ -425,10 +463,7 @@ class BenchmarkRunner:
             prerequisite_phase="setup",
             completion_check=self._is_load_complete,
             completion_save=lambda name, data: self._save_load_complete(
-                name,
-                data_generation_s=data.get("data_generation_s", 0.0),
-                schema_creation_s=data.get("schema_creation_s", 0.0),
-                data_loading_s=data.get("data_loading_s", 0.0),
+                name, preparation_timings=data
             ),
             operation=self._load_operation,
             collects_results=False,
@@ -480,7 +515,7 @@ class BenchmarkRunner:
             "local_to_remote": "Local-to-Remote",
             "managed_remote": "Managed-Remote",
         }[context.mode]
-        console.print(
+        self._log(
             f"[bold blue]{phase.header_emoji}  {phase.header_text} ({mode_label})[/bold blue]"
         )
 
@@ -502,11 +537,11 @@ class BenchmarkRunner:
             if prereq_check:
                 ok, missing = prereq_check()
                 if not ok:
-                    console.print(
+                    self._log(
                         f"[red]Error: {phase.prerequisite_phase} phase not complete "
                         f"for system(s): {', '.join(missing)}[/red]"
                     )
-                    console.print(
+                    self._log(
                         f"[yellow]Run 'benchkit {phase.prerequisite_phase} --config <config.yaml>' first, "
                         "or use 'benchkit run --full' to run all phases.[/yellow]"
                     )
@@ -515,18 +550,18 @@ class BenchmarkRunner:
         # 4. Create package if needed (cloud mode only)
         package_path: Path | None = None
         if phase.creates_package and context.needs_package:
-            console.print("📦 Creating package...")
+            self._log("📦 Creating package...")
             package_path = self._create_package()
             if not package_path:
-                console.print("[red]❌ Failed to create package[/red]")
+                self._log("[red]❌ Failed to create package[/red]")
                 return False if not phase.collects_results else []
-            console.print(f"✅ Package created: {package_path}")
+            self._log(f"✅ Package created: {package_path}")
 
         # 5. Build and execute tasks
         tasks = self._build_phase_tasks(phase, context, force, package_path, workload)
 
         if not tasks:
-            console.print(
+            self._log(
                 f"[bold green]✅ All systems already completed {phase.name}![/bold green]"
             )
             return True if not phase.collects_results else []
@@ -554,7 +589,7 @@ class BenchmarkRunner:
         status = "completed successfully" if all_success else "failed for some systems"
         color = "green" if all_success else "red"
         icon = "✅" if all_success else "❌"
-        console.print(
+        self._log(
             f"[bold {color}]{icon} {phase.name.capitalize()} phase {status}![/bold {color}]"
         )
 
@@ -589,7 +624,7 @@ class BenchmarkRunner:
 
             # Skip if already complete (unless force)
             if not force and phase.completion_check(system_name):
-                console.print(
+                self._log(
                     f"[green]✅ {system_name} {phase.name} already complete, skipping[/green]"
                 )
                 continue
@@ -599,16 +634,12 @@ class BenchmarkRunner:
                 marker_path = self._get_setup_complete_path(system_name)
                 if marker_path.exists():
                     marker_path.unlink()
-                    console.print(
-                        f"[dim]Deleted local setup marker: {marker_path}[/dim]"
-                    )
+                    self._log(f"[dim]Deleted local setup marker: {marker_path}[/dim]")
             elif force and phase.name == "load":
                 marker_path = self._get_load_complete_path(system_name)
                 if marker_path.exists():
                     marker_path.unlink()
-                    console.print(
-                        f"[dim]Deleted local load marker: {marker_path}[/dim]"
-                    )
+                    self._log(f"[dim]Deleted local load marker: {marker_path}[/dim]")
 
             # Create task closure with captured variables
             def make_task(cfg: dict[str, Any], name: str) -> Callable[[], TaskResult]:
@@ -633,7 +664,12 @@ class BenchmarkRunner:
                         )
 
                         # Save completion marker on success
-                        if success and phase.completion_save is not None:
+                        # Skip if data is None (e.g., cloud mode handles its own file)
+                        if (
+                            success
+                            and phase.completion_save is not None
+                            and data is not None
+                        ):
                             phase.completion_save(
                                 name, data if isinstance(data, dict) else {}
                             )
@@ -687,7 +723,11 @@ class BenchmarkRunner:
         """
         # Always use executor for consistent file-based logging
         # ThreadPoolExecutor(max_workers=1) runs tasks sequentially
-        executor = ParallelExecutor(max_workers=max(1, max_workers))
+        # Pass log_callback so summary output is properly tagged in suite-level parallelism
+        executor = ParallelExecutor(
+            max_workers=max(1, max_workers),
+            log_callback=self._log_callback,
+        )
 
         # Store executor in context so task closures can access it for output callbacks
         # This enables thread-safe output tagging by allowing systems to use
@@ -840,7 +880,7 @@ class BenchmarkRunner:
         # Local mode - simple install flow
         if instance_manager is None:
             if not force_reinstall and system.is_already_installed():
-                console.print(f"  [green]✓ {system_name} already installed[/green]")
+                self._log(f"  [green]✓ {system_name} already installed[/green]")
                 return True, {
                     "status": "already_installed",
                     "connection_info": {
@@ -850,18 +890,18 @@ class BenchmarkRunner:
                 }
 
             if force_reinstall:
-                console.print(
+                self._log(
                     f"  [yellow]Force reinstall requested for {system_name}[/yellow]"
                 )
 
-            console.print(f"  Installing {system_name}...")
+            self._log(f"  Installing {system_name}...")
             if not system.install():
                 return False, {"error": "installation_failed"}
 
             if not system.start():
                 return False, {"error": "start_failed"}
 
-            console.print(f"  Waiting for {system_name} to be ready...")
+            self._log(f"  Waiting for {system_name} to be ready...")
             if not system.wait_for_health():
                 return False, {"error": "health_check_failed"}
 
@@ -882,9 +922,7 @@ class BenchmarkRunner:
         if is_managed_system(self.config, system_name):
             # Managed systems are already set up via 'infra apply'
             # Just mark as ready and prepare remote environment
-            console.print(
-                f"[green]✅ {system_name} managed infrastructure ready[/green]"
-            )
+            self._log(f"[green]✅ {system_name} managed infrastructure ready[/green]")
 
             # Prepare remote environment for package execution
             from ..common.cli_helpers import get_managed_deployment_dir
@@ -895,7 +933,7 @@ class BenchmarkRunner:
                 system_config["kind"], deployment_dir
             )
             if deployment and deployment.SUPPORTS_REMOTE_EXECUTION:
-                console.print(f"🔧 Preparing remote environment for {system_name}...")
+                self._log(f"🔧 Preparing remote environment for {system_name}...")
                 with Timer(f"Remote env prep for {system_name}") as timer:
                     if not deployment.prepare_remote_environment(
                         instance_manager, system=system
@@ -903,7 +941,7 @@ class BenchmarkRunner:
                         return False, {"error": "remote_environment_preparation_failed"}
                 timings["installation_s"] = timer.elapsed
                 self._save_installation_timing(system_name, timer.elapsed)
-                console.print(
+                self._log(
                     f"[green]✓ Remote environment ready for {system_name} ({timer.elapsed:.2f}s)[/green]"
                 )
             else:
@@ -1024,11 +1062,13 @@ class BenchmarkRunner:
         system_name = system_config["name"]
 
         # Cloud mode - deploy package and run remotely
+        # Note: _execute_load_remotely() handles copying load_complete_{system}.json
+        # from the remote, so we return None to skip local completion_save
         if package_path and instance_manager:
             success = self._execute_load_remotely(
                 system_config, instance_manager, package_path, executor
             )
-            return success, {}
+            return success, None  # type: ignore[return-value]
 
         # Local/local-to-remote mode - run directly
         if not system.is_healthy():
@@ -1043,11 +1083,7 @@ class BenchmarkRunner:
 
         prep_timings = getattr(workload, "preparation_timings", {})
 
-        return True, {
-            "data_generation_s": prep_timings.get("data_generation_s", 0.0),
-            "schema_creation_s": prep_timings.get("schema_creation_s", 0.0),
-            "data_loading_s": prep_timings.get("data_loading_s", 0.0),
-        }
+        return True, prep_timings
 
     def _query_operation(
         self,
@@ -1143,7 +1179,7 @@ class BenchmarkRunner:
             for idx, mgr in enumerate(instance_manager):
                 result = mgr.run_remote_command(f"rm -f {marker_path}", debug=False)
                 if result.get("success"):
-                    console.print(
+                    self._log(
                         f"  [dim]Deleted remote marker on node {idx}: {marker_path}[/dim]"
                     )
         else:
@@ -1151,7 +1187,7 @@ class BenchmarkRunner:
                 f"rm -f {marker_path}", debug=False
             )
             if result.get("success"):
-                console.print(f"  [dim]Deleted remote marker: {marker_path}[/dim]")
+                self._log(f"  [dim]Deleted remote marker: {marker_path}[/dim]")
 
     # ========================================================================
     # Phase-Separated Benchmark Execution
@@ -1173,7 +1209,7 @@ class BenchmarkRunner:
         Returns:
             True if setup completed successfully, False otherwise
         """
-        console.print(f"[bold blue]Starting setup phase: {self.project_id}[/bold blue]")
+        self._log(f"[bold blue]Starting setup phase: {self.project_id}[/bold blue]")
 
         # Store force flag for use in _setup_operation
         self._force_setup = force
@@ -1191,7 +1227,7 @@ class BenchmarkRunner:
 
             # Prepare storage (partition disks) before system installation
             if not self._prepare_storage_phase():
-                console.print("[red]❌ Storage preparation phase failed[/red]")
+                self._log("[red]❌ Storage preparation phase failed[/red]")
                 return False
 
         # Run setup phase using unified executor
@@ -1221,7 +1257,7 @@ class BenchmarkRunner:
         Returns:
             True if load completed successfully, False otherwise
         """
-        console.print(f"[bold blue]Starting load phase: {self.project_id}[/bold blue]")
+        self._log(f"[bold blue]Starting load phase: {self.project_id}[/bold blue]")
 
         context = self._create_execution_context(local_override=local)
 
@@ -1270,12 +1306,12 @@ class BenchmarkRunner:
         if isinstance(instance_manager, list):
             # Multinode: use first/coordinator node's PUBLIC IP
             public_ip = instance_manager[0].public_ip
-            console.print(
+            self._log(
                 f"[dim]  Using public IP for {name}: {public_ip} (coordinator node)[/dim]"
             )
         else:
             public_ip = instance_manager.public_ip
-            console.print(f"[dim]  Using public IP for {name}: {public_ip}[/dim]")
+            self._log(f"[dim]  Using public IP for {name}: {public_ip}[/dim]")
 
         if not public_ip:
             raise ValueError(
@@ -1324,17 +1360,15 @@ class BenchmarkRunner:
         Returns:
             True if queries completed successfully, False otherwise
         """
-        console.print(
-            f"[bold blue]Starting query execution: {self.project_id}[/bold blue]"
-        )
+        self._log(f"[bold blue]Starting query execution: {self.project_id}[/bold blue]")
 
         # Check if results already exist
         runs_file = self.output_dir / "runs.csv"
         if runs_file.exists() and not force:
-            console.print(
+            self._log(
                 f"[yellow]Skipping benchmark - results already exist:[/] {runs_file}"
             )
-            console.print("[dim]Use --force to overwrite existing results[/dim]")
+            self._log("[dim]Use --force to overwrite existing results[/dim]")
             return True
 
         context = self._create_execution_context(local_override=local)
@@ -1350,12 +1384,12 @@ class BenchmarkRunner:
         if isinstance(results, list) and results:
             warmup = getattr(self, "_all_warmup_results", [])
             self._save_benchmark_results(results, warmup)
-            console.print(f"[green]✅ Results saved to: {self.output_dir}[/green]")
+            self._log(f"[green]✅ Results saved to: {self.output_dir}[/green]")
             return True
         elif isinstance(results, bool):
             return results
         else:
-            console.print("[red]❌ No results collected[/red]")
+            self._log("[red]❌ No results collected[/red]")
             return False
 
     def _execute_load_remotely(
@@ -1465,32 +1499,36 @@ class BenchmarkRunner:
 
     def run_full_benchmark(self) -> bool:
         """Run the complete benchmark with all three phases."""
-        console.print(f"[bold blue]Starting benchmark: {self.project_id}[/bold blue]")
+        self._log(f"[bold blue]Starting benchmark: {self.project_id}[/bold blue]")
 
         # Phase 2: Setup
         if not self.run_setup():
-            console.print("[red]❌ Setup phase failed[/red]")
+            self._log("[red]❌ Setup phase failed[/red]")
             return False
 
         # Phase 3: Load data
         if not self.run_load():
-            console.print("[red]❌ Load phase failed[/red]")
+            self._log("[red]❌ Load phase failed[/red]")
             return False
 
         # Phase 4: Execute queries
         if not self.run_queries():
-            console.print("[red]❌ Query execution failed[/red]")
+            self._log("[red]❌ Query execution failed[/red]")
             return False
 
-        console.print("[bold green]✅ Benchmark completed successfully![/bold green]")
+        self._log("[bold green]✅ Benchmark completed successfully![/bold green]")
         return True
 
-    def _setup_cloud_infrastructure(self) -> bool:
+    def _setup_cloud_infrastructure(
+        self, log_callback: Callable[[str], None] | None = None
+    ) -> bool:
         """Setup cloud infrastructure connection and managers."""
-        return _setup_cloud_infra(self)
+        return _setup_cloud_infra(self, log_callback)
 
     @exclude_from_package
-    def ensure_cloud_infrastructure(self) -> bool:
+    def ensure_cloud_infrastructure(
+        self, log_callback: Callable[[str], None] | None = None
+    ) -> bool:
         """
         Ensure cloud infrastructure is provisioned.
 
@@ -1499,6 +1537,9 @@ class BenchmarkRunner:
 
         Note: This only handles cloud (terraform) infrastructure.
         Managed systems are handled separately via _apply_managed_systems().
+
+        Args:
+            log_callback: Optional callback for routing log messages (for parallel execution)
 
         Returns:
             True if infrastructure is ready, False on failure
@@ -1514,11 +1555,11 @@ class BenchmarkRunner:
         if self._cloud_instance_managers:
             return True
 
-        return self._setup_cloud_infrastructure()
+        return self._setup_cloud_infrastructure(log_callback)
 
     def _prepare_storage_phase(self) -> bool:
         """Phase 0.5: Prepare storage (partition disks) before system installation."""
-        console.print("\n[bold blue]💾 Preparing Storage for Systems[/bold blue]")
+        self._log("\n[bold blue]💾 Preparing Storage for Systems[/bold blue]")
 
         # Create workload instance to determine storage needs
         from ..workloads import create_workload
@@ -1528,15 +1569,15 @@ class BenchmarkRunner:
         try:
             workload = create_workload(workload_config)
         except Exception as e:
-            console.print(
+            self._log(
                 f"[yellow]⚠️  Could not create workload for storage prep: {e}[/yellow]"
             )
-            console.print("[dim]Systems will use default storage configuration[/dim]")
+            self._log("[dim]Systems will use default storage configuration[/dim]")
             return True  # Non-critical, continue with defaults
 
         for system_config in self.config["systems"]:
             system_name = system_config["name"]
-            console.print(f"\n🔧 Preparing storage for: [bold]{system_name}[/bold]")
+            self._log(f"\n🔧 Preparing storage for: [bold]{system_name}[/bold]")
 
             try:
                 # Inject project_id so system can access it
@@ -1547,7 +1588,7 @@ class BenchmarkRunner:
                 instance_manager = self._cloud_instance_managers.get(system_name)
 
                 if not instance_manager:
-                    console.print(
+                    self._log(
                         f"[yellow]⚠️  No instance manager for {system_name}, skipping storage prep[/yellow]"
                     )
                     continue
@@ -1555,6 +1596,10 @@ class BenchmarkRunner:
                 # Set cloud instance manager on the system
                 if hasattr(system, "set_cloud_instance_manager"):
                     system.set_cloud_instance_manager(instance_manager)
+
+                # Route system output through runner's log callback for suite parallel execution
+                if self._log_callback:
+                    system._output_callback = self._log
 
                 # First setup storage (RAID0 if multiple disks)
                 # This must happen BEFORE get_data_generation_directory which partitions the disk
@@ -1565,11 +1610,9 @@ class BenchmarkRunner:
                 data_dir = system.get_data_generation_directory(workload)
 
                 if data_dir:
-                    console.print(f"[green]✅ Storage prepared: {data_dir}[/green]")
+                    self._log(f"[green]✅ Storage prepared: {data_dir}[/green]")
                 else:
-                    console.print(
-                        f"[dim]✅ Using default storage for {system_name}[/dim]"
-                    )
+                    self._log(f"[dim]✅ Using default storage for {system_name}[/dim]")
 
                 # Save the system instance with partition info for later use
                 # Store it temporarily so installation phase can use the same instance
@@ -1578,15 +1621,13 @@ class BenchmarkRunner:
                 self._prepared_systems[system_name] = system
 
             except Exception as e:
-                console.print(
+                self._log(
                     f"[yellow]⚠️  Storage preparation warning for {system_name}: {e}[/yellow]"
                 )
-                console.print(
-                    "[dim]System will use default storage configuration[/dim]"
-                )
+                self._log("[dim]System will use default storage configuration[/dim]")
                 # Continue with other systems
 
-        console.print("[green]✅ Storage preparation phase completed[/green]")
+        self._log("[green]✅ Storage preparation phase completed[/green]")
         return True
 
     def _execute_queries(
@@ -1750,7 +1791,7 @@ class BenchmarkRunner:
 
             return create_workload_zip(self.config)
         except Exception as e:
-            console.print(f"[red]Package creation failed: {e}[/red]")
+            self._log(f"[red]Package creation failed: {e}[/red]")
             return None
 
     def _execute_workload_remotely(
@@ -1827,11 +1868,9 @@ class BenchmarkRunner:
         for idx, system_config in enumerate(original_config["systems"], 1):
             system_name = system_config["name"]
 
-            console.print(f"\n[bold blue]{'═'*60}[/bold blue]")
-            console.print(
-                f"[bold blue]  System {idx}/{total}: {system_name}[/bold blue]"
-            )
-            console.print(f"[bold blue]{'═'*60}[/bold blue]")
+            self._log(f"\n[bold blue]{'═'*60}[/bold blue]")
+            self._log(f"[bold blue]  System {idx}/{total}: {system_name}[/bold blue]")
+            self._log(f"[bold blue]{'═'*60}[/bold blue]")
 
             # Create single-system config for this iteration
             self.config = _filter_config_to_system(original_config, system_name)
@@ -1850,7 +1889,7 @@ class BenchmarkRunner:
                         break
 
             except Exception as e:
-                console.print(f"[red]System {system_name} failed: {e}[/red]")
+                self._log(f"[red]System {system_name} failed: {e}[/red]")
                 failed_systems.append(system_name)
                 if not continue_on_failure:
                     # Destroy infrastructure before exiting
@@ -1873,10 +1912,10 @@ class BenchmarkRunner:
             run_report_fn(original_config, lambda: [])
 
         if failed_systems:
-            console.print(f"\n[red]Failed systems: {failed_systems}[/red]")
+            self._log(f"\n[red]Failed systems: {failed_systems}[/red]")
             return False
 
-        console.print("\n[bold green]✓ Sequential benchmark completed![/bold green]")
+        self._log("\n[bold green]✓ Sequential benchmark completed![/bold green]")
         return True
 
     def _run_single_system_lifecycle(
@@ -1903,33 +1942,33 @@ class BenchmarkRunner:
 
         # Phase 0: Provision infrastructure
         if is_any_system_cloud_mode(self.config):
-            console.print("\n[bold]Phase 0: Infrastructure Provisioning[/bold]")
+            self._log("\n[bold]Phase 0: Infrastructure Provisioning[/bold]")
             if not self.ensure_cloud_infrastructure():
                 return False
 
         # Phase 1: Probe
         if run_probe_fn:
-            console.print("\n[bold]Phase 1: System Probe[/bold]")
+            self._log("\n[bold]Phase 1: System Probe[/bold]")
             run_probe_fn(self.config, self.output_dir)
             # Rename to system-specific file
             generic = self.output_dir / "system.json"
             if generic.exists():
                 target = self.output_dir / f"system_{system_name}.json"
                 generic.rename(target)
-                console.print(f"[dim]Saved: {target}[/dim]")
+                self._log(f"[dim]Saved: {target}[/dim]")
 
         # Phase 2: Setup (reuse existing)
-        console.print("\n[bold]Phase 2: Setup[/bold]")
+        self._log("\n[bold]Phase 2: Setup[/bold]")
         if not self.run_setup():
             return False
 
         # Phase 3: Load (reuse existing)
-        console.print("\n[bold]Phase 3: Load[/bold]")
+        self._log("\n[bold]Phase 3: Load[/bold]")
         if not self.run_load():
             return False
 
         # Phase 4: Queries (reuse existing)
-        console.print("\n[bold]Phase 4: Query Execution[/bold]")
+        self._log("\n[bold]Phase 4: Query Execution[/bold]")
 
         # Create workload for direct query execution
         workload = create_workload(self.config["workload"])
@@ -1961,7 +2000,7 @@ class BenchmarkRunner:
         runs_file = self.output_dir / f"runs_{system_name}.csv"
         df = pd.DataFrame(results)
         df.to_csv(runs_file, index=False)
-        console.print(f"[green]✓ Saved: {runs_file}[/green]")
+        self._log(f"[green]✓ Saved: {runs_file}[/green]")
 
     def _save_aggregated_results(
         self, results: list[dict[str, Any]], warmup: list[dict[str, Any]]
@@ -1975,7 +2014,7 @@ class BenchmarkRunner:
             warmup_file = self.output_dir / "warmup.csv"
             pd.DataFrame(warmup).to_csv(warmup_file, index=False)
 
-        console.print(f"[green]✓ Aggregated results: {runs_file}[/green]")
+        self._log(f"[green]✓ Aggregated results: {runs_file}[/green]")
 
     # ========================================================================
     # File-Based Logging and Parallel Sequential Execution
@@ -2111,11 +2150,11 @@ class BenchmarkRunner:
                 log("Infrastructure destroyed")
 
         # Display header
-        console.print(
+        self._log(
             f"\n[bold blue]Parallel lifecycle: {len(system_names)} systems "
             f"(max {max_workers} concurrent)[/bold blue]"
         )
-        console.print(f"[dim]Logs: {self.output_dir / 'logs' / 'lifecycle'}[/dim]\n")
+        self._log(f"[dim]Logs: {self.output_dir / 'logs' / 'lifecycle'}[/dim]\n")
 
         # Execute systems in parallel
         success_map: dict[str, bool] = {}
@@ -2130,7 +2169,7 @@ class BenchmarkRunner:
                     try:
                         success_map[name] = future.result()
                     except Exception as e:
-                        console.print(f"[red]Thread exception for {name}: {e}[/red]")
+                        self._log(f"[red]Thread exception for {name}: {e}[/red]")
                         success_map[name] = False
         finally:
             # Stop monitor and close loggers
@@ -2139,10 +2178,10 @@ class BenchmarkRunner:
                 logger.close()
 
         # Print final summary
-        console.print("\n[bold]Parallel Sequential Summary:[/bold]")
+        self._log("\n[bold]Parallel Sequential Summary:[/bold]")
         for name in sorted(success_map):
             status = "✅" if success_map[name] else "❌"
-            console.print(f"  {status} {name}")
+            self._log(f"  {status} {name}")
 
         # Aggregate and save results
         if all_results:
@@ -2154,11 +2193,11 @@ class BenchmarkRunner:
 
         failed = [n for n, s in success_map.items() if not s]
         if failed:
-            console.print(f"\n[red]Failed systems: {failed}[/red]")
+            self._log(f"\n[red]Failed systems: {failed}[/red]")
             if not continue_on_failure:
                 return False
 
-        console.print("\n[bold green]✓ Parallel sequential completed![/bold green]")
+        self._log("\n[bold green]✓ Parallel sequential completed![/bold green]")
         return len(failed) == 0
 
     def _run_single_system_lifecycle_logged(

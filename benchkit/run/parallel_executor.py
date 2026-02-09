@@ -56,12 +56,20 @@ class ParallelExecutor:
     redirect_stdout approaches.
     """
 
-    def __init__(self, max_workers: int = 2, console: Any = None):
+    def __init__(
+        self,
+        max_workers: int = 2,
+        console: Any = None,
+        log_callback: Callable[[str], None] | None = None,
+    ):
         """Initialize the parallel executor.
 
         Args:
             max_workers: Maximum concurrent tasks
             console: Rich console for display (optional, uses default if not provided)
+            log_callback: Optional callback for routing summary output (for suite-level
+                parallel execution). If provided, summary output goes through this
+                callback instead of directly to stdout.
         """
         self.max_workers = max_workers
 
@@ -85,6 +93,9 @@ class ParallelExecutor:
 
             console = Console()
         self._console = console
+
+        # Log callback for suite-level output routing
+        self._log_callback = log_callback
 
         # Remember original streams for direct output
         self._stdout_original = sys.stdout
@@ -297,8 +308,10 @@ class ParallelExecutor:
         self._print_line("")
 
     def _print_line(self, text: str) -> None:
-        """Print a line to the original stdout."""
-        if self._stdout_original:
+        """Print a line, routing through log callback if available."""
+        if self._log_callback:
+            self._log_callback(text)
+        elif self._stdout_original:
             self._stdout_original.write(text + "\n")
             self._stdout_original.flush()
 

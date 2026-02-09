@@ -44,18 +44,18 @@ class Estuary(Workload):
     def get_schema_name(self) -> str:
         return "estuary"
 
-    def prepare(self, system: SystemUnderTest) -> bool:
+    def _do_prepare(self, system: SystemUnderTest) -> bool:
         print("Setting up estuary workload...")
 
         # Step 1: Create tables and schema
         print("1. Creating tables and schema...")
-        if not self.create_schema(system):
+        if not self._time_step("schema_creation_s", lambda: self.create_schema(system)):
             print("Failed to create schema and tables")
             return False
 
         # Step 2: Load data
         print("2. Loading data...")
-        if not self.load_data(system):
+        if not self._time_step("data_loading_s", lambda: self.load_data(system)):
             print("Failed to load data")
             return False
 

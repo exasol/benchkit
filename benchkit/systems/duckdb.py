@@ -4,13 +4,10 @@ from __future__ import annotations
 
 import tempfile
 from collections.abc import Callable, Iterable
+from importlib import import_module
 from pathlib import Path
+from types import ModuleType
 from typing import TYPE_CHECKING, Any
-
-try:
-    import duckdb
-except ModuleNotFoundError:
-    duckdb = None  # type: ignore[assignment]
 
 from benchkit.common import DataFormat, exclude_from_package
 
@@ -19,6 +16,13 @@ from .base import SystemUnderTest
 
 if TYPE_CHECKING:
     pass
+
+# Optional dependency - use import_module for proper typing without type: ignore
+duckdb: ModuleType | None
+try:
+    duckdb = import_module("duckdb")
+except ModuleNotFoundError:
+    duckdb = None
 
 
 class DuckdbSystem(SystemUnderTest):
@@ -700,6 +704,81 @@ class DuckdbSystem(SystemUnderTest):
             metrics["error"] = str(e)
 
         return metrics
+
+    def get_table_sizes(
+        self, schema: str, table_names: list[str]
+    ) -> dict[str, dict[str, Any]]:
+        """Query DuckDB for table storage sizes.
+
+        DuckDB uses pragma_table_info and estimates sizes based on database file.
+        For accurate per-table sizes, we query duckdb_tables() function.
+
+        Args:
+            schema: Schema name containing the tables
+            table_names: List of table names to query
+
+        Returns:
+            Dict mapping table names to size info with raw_bytes, stored_bytes,
+            row_count, and compression_ratio.
+        """
+        sizes: dict[str, dict[str, Any]] = {}
+
+        try:
+            conn = self._get_connection()
+
+            # Get database file size as total stored bytes
+            total_stored_bytes = 0
+            if self.database_path != ":memory:":
+                db_path = Path(self.database_path)
+                if db_path.exists():
+                    total_stored_bytes = db_path.stat().st_size
+
+            # Query table information for each table
+            for table_name in table_names:
+                try:
+                    # Get row count
+                    count_result = conn.execute(
+                        f'SELECT COUNT(*) as cnt FROM "{schema}"."{table_name}"'
+                    ).fetchone()
+                    row_count = count_result[0] if count_result else 0
+
+                    # DuckDB doesn't expose per-table storage sizes directly
+                    # We can estimate raw bytes from column statistics
+                    # For now, use the database file size as stored bytes
+                    # and estimate raw bytes from row count and typical row size
+                    info_result = conn.execute(
+                        f"SELECT estimated_size FROM duckdb_tables() "
+                        f"WHERE schema_name = '{schema}' AND table_name = '{table_name}'"
+                    ).fetchone()
+
+                    if info_result and info_result[0]:
+                        raw_bytes = int(info_result[0])
+                    else:
+                        # Fallback: estimate raw size (approximate)
+                        raw_bytes = 0
+
+                    # For single-table workloads like ClickBench,
+                    # use database file size as stored bytes
+                    stored_bytes = total_stored_bytes if len(table_names) == 1 else 0
+
+                    sizes[table_name.lower()] = {
+                        "raw_bytes": raw_bytes,
+                        "stored_bytes": stored_bytes,
+                        "row_count": row_count,
+                        "compression_ratio": (
+                            raw_bytes / stored_bytes if stored_bytes > 0 else 0.0
+                        ),
+                    }
+
+                except Exception as e:
+                    self._log(
+                        f"Warning: Failed to get size for table {table_name}: {e}"
+                    )
+
+        except Exception as e:
+            self._log(f"Warning: Failed to get table sizes: {e}")
+
+        return sizes
 
     def teardown(self) -> bool:
         """Clean up DuckDB resources."""

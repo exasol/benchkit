@@ -276,10 +276,10 @@ The following table shows the time taken to provision cloud instances and instal
 {% if preparation_timings %}
 The following table shows the time taken for data generation, schema creation, and data loading for each system:
 
-| System | Data Generation | Schema Creation | Data Loading | Total Preparation |
-|--------|----------------|-----------------|--------------|-------------------|
+| System | Data Generation | Schema Creation | Data Loading | Total Preparation | Raw Size | Stored Size | Compression |
+|--------|----------------|-----------------|--------------|-------------------|----------|-------------|-------------|
 {% for system_name, timings in preparation_timings.items() %}
-| {{ system_name | title }} | {{ "%.2f"|format(timings.data_generation_s) }}s | {{ "%.2f"|format(timings.schema_creation_s) }}s | {{ "%.2f"|format(timings.data_loading_s) }}s | {{ "%.2f"|format(timings.total_preparation_s) }}s |
+| {{ system_name | title }} | {{ "%.2f"|format(timings.data_generation_s) }}s | {{ "%.2f"|format(timings.schema_creation_s) }}s | {{ "%.2f"|format(timings.data_loading_s) }}s | {{ "%.2f"|format(timings.total_preparation_s) }}s | {{ timings.total_raw_bytes | format_bytes }} | {{ timings.total_stored_bytes | format_bytes }} | {% if timings.total_raw_bytes and timings.total_stored_bytes and timings.total_stored_bytes > 0 %}{{ (timings.total_raw_bytes / timings.total_stored_bytes) | format_number(1) }}x{% else %}N/A{% endif %} |
 {% endfor %}
 
 {% if preparation_timings | length > 1 %}

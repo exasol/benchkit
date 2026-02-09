@@ -48,6 +48,17 @@ class Workload(ABC):
         self.queries_include = queries_config.get("include", [])
         self.queries_exclude = queries_config.get("exclude", [])
 
+    def _log(self, message: str) -> None:
+        """Log a message, routing through the current system's callback if available.
+
+        This enables workload output to be properly tagged during parallel execution.
+        Falls back to print() for standalone/package execution.
+        """
+        if self._current_system is not None and hasattr(self._current_system, "_log"):
+            self._current_system._log(message)
+        else:
+            print(message)
+
     def get_template_env(self) -> Environment:
         """Get the workload's jinja2 template environment"""
         if not self.template_env:
@@ -116,14 +127,14 @@ class Workload(ABC):
         # First, create the schema using the system's method
         if hasattr(system, "create_schema"):
             if not system.create_schema(schema):
-                print(f"        Failed to create schema '{schema}'")
+                self._log(f"        Failed to create schema '{schema}'")
                 return False
-            print(f"        ✓ Schema '{schema}' ready")
+            self._log(f"        ✓ Schema '{schema}' ready")
 
         # Then create the tables using the templated script
         if not self.execute_setup_script(system, "create_tables.sql"):
             return False
-        print("        ✓ Tables created")
+        self._log("        ✓ Tables created")
         return True
 
     @abstractmethod
@@ -350,7 +361,7 @@ class Workload(ABC):
         # Get and log the variant being used for this system
         variant = self._get_query_variant_for_system(target_system)
         if variant != "official":
-            print(f"Loading '{variant}' variant queries for {target_system.kind}")
+            self._log(f"Loading '{variant}' variant queries for {target_system.kind}")
 
         queries = {}
         for query_name in self.get_included_queries():
@@ -403,10 +414,11 @@ class Workload(ABC):
 
         return system.execute_query(formatted_sql, query_name=query_name)
 
-    @exclude_from_package
     def prepare(self, system: SystemUnderTest) -> bool:
-        """
-        Prepare the workload for execution (generate data, create schema, load data).
+        """Prepare workload with timing measurement and table size capture.
+
+        This is the template method. Subclasses override _do_prepare() instead
+        of this method to get automatic timing and table size tracking.
 
         Args:
             system: System under test
@@ -414,57 +426,87 @@ class Workload(ABC):
         Returns:
             True if preparation successful, False otherwise
         """
-        from ..util import Timer
+        import time
 
-        # Initialize preparation timings
-        self.preparation_timings = {}
+        self.preparation_timings: dict[str, Any] = {}
+        overall_start = time.perf_counter()
 
-        # Check if system provides a custom data generation directory (e.g., on additional disk)
-        custom_data_dir = system.get_data_generation_directory(self)
-        if custom_data_dir:
-            self.data_dir = Path(custom_data_dir)
-            print(f"Using system-provided data directory: {self.data_dir}")
+        success = self._do_prepare(system)
 
-        # Ensure data directory exists
-        self.data_dir.mkdir(parents=True, exist_ok=True)
+        total_s = time.perf_counter() - overall_start
+        if not success:
+            return False
 
-        # Generate data if not already present
-        if not self._is_data_generated():
-            print(f"Generating {self.name} data (SF={self.scale_factor})...")
-            with Timer(f"Data generation (SF={self.scale_factor})") as timer:
-                if not self.generate_data(self.data_dir):
-                    print("Data generation failed")
-                    return False
-            self.preparation_timings["data_generation_s"] = timer.elapsed
-            print(f"  ✓ Data generated in {timer.elapsed:.2f}s")
-        else:
-            print("Data already exists, skipping generation")
-            self.preparation_timings["data_generation_s"] = 0.0
+        # Fallback: if subclass didn't set data_loading_s, use total time
+        if "data_loading_s" not in self.preparation_timings:
+            self.preparation_timings["data_loading_s"] = total_s
 
-        # Create schema
-        print(f"Creating schema for {self.name}...")
-        with Timer("Schema creation") as timer:
-            if not self.create_schema(system):
-                print("Schema creation failed")
-                return False
-        self.preparation_timings["schema_creation_s"] = timer.elapsed
-        print(f"  ✓ Schema created in {timer.elapsed:.2f}s")
+        # Capture table sizes (works in both local and remote packages)
+        self._capture_table_sizes(system)
 
-        # Load data
-        print(f"Loading {self.name} data...")
-        with Timer("Data loading") as timer:
-            if not self.load_data(system):
-                print("Data loading failed")
-                return False
-        self.preparation_timings["data_loading_s"] = timer.elapsed
-        print(f"  ✓ Data loaded in {timer.elapsed:.2f}s")
-
-        # Calculate total preparation time
-        self.preparation_timings["total_preparation_s"] = sum(
-            self.preparation_timings.values()
-        )
-
+        # Total preparation time
+        self.preparation_timings["total_preparation_s"] = total_s
         return True
+
+    def _do_prepare(self, system: SystemUnderTest) -> bool:
+        """Override in subclasses to implement workload-specific preparation.
+
+        The base prepare() wraps this with timing and table size capture.
+
+        Args:
+            system: System under test
+
+        Returns:
+            True if preparation successful, False otherwise
+        """
+        raise NotImplementedError("Subclasses must implement _do_prepare()")
+
+    def _time_step(self, step_name: str, fn: Callable[[], bool]) -> bool:
+        """Execute and time a preparation step, recording in preparation_timings.
+
+        Args:
+            step_name: Key name for the timing (e.g. "data_loading_s")
+            fn: Callable that returns True on success, False on failure
+
+        Returns:
+            The boolean result from fn()
+        """
+        import time
+
+        start = time.perf_counter()
+        result = fn()
+        self.preparation_timings[step_name] = time.perf_counter() - start
+        return result
+
+    def _capture_table_sizes(self, system: SystemUnderTest) -> None:
+        """Query database for table sizes after loading."""
+        self._log("Capturing table sizes...")
+        try:
+            table_names = self.get_table_names()
+            schema_name = self.get_schema_name()
+            table_sizes = system.get_table_sizes(schema_name, table_names)
+
+            if table_sizes:
+                self.preparation_timings["table_sizes"] = table_sizes
+
+                # Calculate totals for scoring
+                total_raw = sum(t.get("raw_bytes", 0) for t in table_sizes.values())
+                total_stored = sum(
+                    t.get("stored_bytes", 0) for t in table_sizes.values()
+                )
+                self.preparation_timings["total_raw_bytes"] = total_raw
+                self.preparation_timings["total_stored_bytes"] = total_stored
+
+                # Format for logging
+                if total_stored > 0:
+                    stored_gb = total_stored / (1024**3)
+                    self._log(f"  ✓ Table sizes captured ({stored_gb:.2f} GB stored)")
+                else:
+                    self._log("  ✓ Table sizes captured (size not available)")
+            else:
+                self._log("  ⚠ Table sizes not available for this system")
+        except Exception as e:
+            self._log(f"  ⚠ Failed to capture table sizes: {e}")
 
     def run_workload(
         self,
@@ -762,7 +804,7 @@ class Workload(ABC):
 
             except Exception as e:
                 # Log error but continue with other queries
-                print(f"  Stream {stream_id}: Error executing {query_name}: {e}")
+                self._log(f"  Stream {stream_id}: Error executing {query_name}: {e}")
 
                 # Record failed execution
                 error_result = {
@@ -836,6 +878,154 @@ class Workload(ABC):
             Empty dict means no categorization (all queries shown individually).
         """
         return {}
+
+    # -------------------------------------------------------------------------
+    # Report Contribution API
+    # -------------------------------------------------------------------------
+
+    def get_scoring_calculator(self) -> Any:
+        """Return a scoring calculator for this workload, if applicable.
+
+        Override in subclasses that have specialized scoring methodologies
+        (e.g., ClickBench with its official scoring formula).
+
+        Returns:
+            ScoringCalculator instance or None if no custom scoring.
+        """
+        return None
+
+    def get_custom_figures(
+        self,
+        runs_df: Any,
+        warmup_df: Any,
+        scores: dict[str, Any],
+        output_dir: Path,
+    ) -> dict[str, str]:
+        """Generate workload-specific custom figures for reports.
+
+        Override in subclasses to add custom visualizations beyond the
+        standard performance plots.
+
+        Args:
+            runs_df: DataFrame with measured benchmark runs
+            warmup_df: DataFrame with warmup runs (may be None)
+            scores: Scoring results from get_scoring_calculator (may be empty)
+            output_dir: Directory to save generated figures
+
+        Returns:
+            Dict mapping figure names to file paths (relative to output_dir)
+        """
+        return {}
+
+    def get_custom_tables(
+        self,
+        runs_df: Any,
+        warmup_df: Any,
+        scores: dict[str, Any],
+        preparation_timings: dict[str, Any] | None = None,
+    ) -> dict[str, str]:
+        """Generate workload-specific custom HTML tables for reports.
+
+        Override in subclasses to add custom data tables beyond the
+        standard summary and comparison tables.
+
+        Args:
+            runs_df: DataFrame with measured benchmark runs
+            warmup_df: DataFrame with warmup runs (may be None)
+            scores: Scoring results from get_scoring_calculator (may be empty)
+            preparation_timings: Dict mapping system names to preparation data
+
+        Returns:
+            Dict mapping table names to HTML content strings
+        """
+        return {}
+
+    def get_report_context(
+        self,
+        runs_df: Any,
+        warmup_df: Any,
+        preparation_timings: dict[str, Any],
+        output_dir: Path,
+    ) -> dict[str, Any]:
+        """Generate complete workload-specific context for report templates.
+
+        This is the main entry point for workload report contributions.
+        Calls get_scoring_calculator(), get_custom_figures(), and
+        get_custom_tables() to build a complete context dictionary.
+
+        Args:
+            runs_df: DataFrame with measured benchmark runs
+            warmup_df: DataFrame with warmup runs (may be None)
+            preparation_timings: Dict mapping system names to preparation data
+            output_dir: Directory for saving generated files
+
+        Returns:
+            Dict with workload-specific report context including:
+            - has_custom_scoring: bool indicating if scoring is available
+            - scores: Scoring results (if applicable)
+            - figures: Custom figure paths
+            - tables: Custom HTML tables
+            - metadata: Additional workload-specific info
+        """
+        context: dict[str, Any] = {
+            "has_custom_scoring": False,
+            "workload_name": self.name.title(),  # For template display
+            "scores": {},
+            "figures": {},
+            "tables": {},
+            "scoring_notes": [],  # Notes about scoring methodology
+            "metadata": {
+                "workload_name": self.name,
+                "scale_factor": self.scale_factor,
+            },
+        }
+
+        # Check for custom scoring
+        calculator = self.get_scoring_calculator()
+        if calculator is not None:
+            try:
+                scores = calculator.calculate_scores(
+                    runs_df, warmup_df, preparation_timings
+                )
+                context["has_custom_scoring"] = True
+                context["scores"] = scores
+            except Exception as e:
+                self._log(f"Warning: Scoring calculation failed: {e}")
+                context["scores"] = {"error": str(e)}
+        else:
+            scores = {}
+
+        # Generate custom figures
+        try:
+            context["figures"] = self.get_custom_figures(
+                runs_df, warmup_df, scores, output_dir
+            )
+        except Exception as e:
+            self._log(f"Warning: Custom figure generation failed: {e}")
+
+        # Generate custom tables
+        try:
+            context["tables"] = self.get_custom_tables(
+                runs_df, warmup_df, scores, preparation_timings
+            )
+        except Exception as e:
+            self._log(f"Warning: Custom table generation failed: {e}")
+
+        # Add scoring notes
+        context["scoring_notes"] = self.get_scoring_notes()
+
+        return context
+
+    def get_scoring_notes(self) -> list[str]:
+        """Return notes about the scoring methodology.
+
+        Subclasses can override to provide workload-specific scoring
+        methodology explanations displayed in the report.
+
+        Returns:
+            List of note strings explaining the scoring methodology
+        """
+        return []
 
     def get_table_info(self) -> dict[str, dict[str, Any]]:
         """
@@ -938,6 +1128,7 @@ class Workload(ABC):
             "system_extra": system_extra,
             "node_count": node_count,
             "cluster": cluster,
+            "variant": self._get_query_variant_for_system(system),
         }
 
         # Add data_locations for systems that support external tables
@@ -957,7 +1148,9 @@ class Workload(ABC):
 
         return context
 
-    def execute_setup_script(self, system: SystemUnderTest, script_name: str) -> bool:
+    def execute_setup_script(
+        self, system: SystemUnderTest, script_name: str, *, optional: bool = False
+    ) -> bool:
         """Execute a templated setup script with per-system file support.
 
         Priority order for template loading:
@@ -966,6 +1159,11 @@ class Workload(ABC):
 
         This mirrors the query variant pattern, making each system's SQL
         self-contained and easier to maintain.
+
+        Args:
+            system: The system to execute the script on
+            script_name: Name of the SQL script file
+            optional: If True, return success when script doesn't exist (skip gracefully)
         """
         try:
             # Build priority-ordered list of template paths
@@ -983,10 +1181,13 @@ class Workload(ABC):
                     continue
 
             if template is None:
-                raise FileNotFoundError(
+                if optional:
+                    return True  # Script not required, skip gracefully
+                self._log(
                     f"Setup script {script_name} not found for system {system.kind}. "
                     f"Tried: {', '.join(template_paths)}"
                 )
+                return False
 
             context = self._get_template_context(system)
             rendered_sql = template.render(**context)
@@ -1011,16 +1212,16 @@ class Workload(ABC):
                 )
 
                 if not result["success"]:
-                    print(
+                    self._log(
                         f"Failed to execute statement {idx+1} in {script_name}: {result.get('error', 'Unknown error')}"
                     )
-                    print(f"Statement was: {statement[:200]}...")
+                    self._log(f"Statement was: {statement[:200]}...")
                     return False
 
             return True
 
         except Exception as e:
-            print(f"Error executing setup script {script_name}: {e}")
+            self._log(f"Error executing setup script {script_name}: {e}")
             return False
 
     def _get_query_variant_for_system(self, system: SystemUnderTest) -> str:
@@ -1113,7 +1314,7 @@ class Workload(ABC):
             return rendered_sql
 
         except Exception as e:
-            print(f"Error loading query {query_name}: {e}")
+            self._log(f"Error loading query {query_name}: {e}")
             return f"-- Error loading query {query_name}: {e}"
 
     def calculate_statement_timeout(

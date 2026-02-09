@@ -41,7 +41,10 @@ class ExasolSystem(SystemUnderTest):
     @classmethod
     def get_python_dependencies(cls) -> list[str]:
         """Return Python packages required by Exasol system."""
-        return ["pyexasol>=0.25.0"]
+        return [
+            "pyexasol>=0.25.0",
+            "pyarrow>=12.0.0",
+        ]
 
     def get_storage_config(self) -> tuple[str | None, str]:
         """Return Exasol-specific storage configuration.
@@ -558,15 +561,11 @@ class ExasolSystem(SystemUnderTest):
         self._log(f"  - Exasol raw partition: {exasol_partition_gb} GB")
 
         # Step 5: Create partition table using parted
-        self.record_setup_command(
-            f"sudo parted {detected_disk} mklabel gpt",
-            "Create GPT partition table",
-            "storage_setup",
-        )
         parted_result = self.execute_command(
             f"sudo parted -s {detected_disk} mklabel gpt",
-            record=True,
+            description="Create GPT partition table",
             category="storage_setup",
+            record=True,
         )
         if not parted_result.get("success", False):
             self._log("Failed to create partition table")
@@ -574,30 +573,22 @@ class ExasolSystem(SystemUnderTest):
 
         # Step 6: Create data generation partition (partition 1)
         data_partition_end_gb = data_partition_gb
-        self.record_setup_command(
-            f"sudo parted {detected_disk} mkpart primary ext4 1MiB {data_partition_end_gb}GiB",
-            f"Create {data_partition_gb}GB partition for data generation",
-            "storage_setup",
-        )
         data_part_result = self.execute_command(
             f"sudo parted -s {detected_disk} mkpart primary ext4 1MiB {data_partition_end_gb}GiB",
-            record=True,
+            description=f"Create {data_partition_gb}GB partition for data generation",
             category="storage_setup",
+            record=True,
         )
         if not data_part_result.get("success", False):
             self._log("Failed to create data generation partition")
             return None, None
 
         # Step 7: Create Exasol raw partition (partition 2)
-        self.record_setup_command(
-            f"sudo parted {detected_disk} mkpart primary {data_partition_end_gb}GiB 100%",
-            f"Create raw partition for Exasol ({exasol_partition_gb}GB)",
-            "storage_setup",
-        )
         exasol_part_result = self.execute_command(
             f"sudo parted -s {detected_disk} mkpart primary {data_partition_end_gb}GiB 100%",
-            record=True,
+            description=f"Create raw partition for Exasol ({exasol_partition_gb}GB)",
             category="storage_setup",
+            record=True,
         )
         if not exasol_part_result.get("success", False):
             self._log("Failed to create Exasol partition")
@@ -680,7 +671,39 @@ class ExasolSystem(SystemUnderTest):
         # Check if /data is already mounted
         check_mount = self.execute_command("mount | grep ' /data '", record=False)
         if check_mount.get("success", False) and check_mount.get("stdout", "").strip():
-            self._log("    ✓ Storage already configured, skipping")
+            self._log("    ✓ Storage already mounted at /data")
+
+            # Detect Exasol raw partition from the mounted data partition
+            # /data uses partition 1; Exasol raw storage uses partition 2
+            mount_line = check_mount.get("stdout", "").strip().split("\n")[0]
+            data_partition = mount_line.split()[0]  # e.g., /dev/nvme1n1p1
+
+            # Derive partition 2 from partition 1
+            exasol_partition = None
+            if data_partition.endswith("p1"):
+                exasol_partition = data_partition[:-1] + "2"
+            elif data_partition.endswith("1"):
+                exasol_partition = data_partition[:-1] + "2"
+
+            if exasol_partition:
+                check_p2 = self.execute_command(
+                    f"test -b {exasol_partition} && echo 'exists'", record=False
+                )
+                if check_p2.get("success", False) and "exists" in check_p2.get(
+                    "stdout", ""
+                ):
+                    self._exasol_raw_partition = exasol_partition
+                    self._data_generation_mount_point = "/data"
+                    self._log(
+                        f"    ✓ Detected Exasol raw partition: {exasol_partition}"
+                    )
+                else:
+                    self._log(f"    ⚠ Exasol partition {exasol_partition} not found")
+            else:
+                self._log(
+                    f"    ⚠ Could not derive Exasol partition from {data_partition}"
+                )
+
             return True
 
         # Detect local instance store devices first
@@ -821,24 +844,47 @@ if [[ "$TARGET_DEV" =~ ^/dev/md[0-9]+ ]]; then
 elif [[ "$TARGET_DEV" =~ ^/dev/(xvd|sd)[a-z] ]]; then
     INSTANCE_STORE="$TARGET_DEV"
 
-# Single local NVMe: need Instance_Storage detection (device naming may differ between nodes)
+# NVMe device: detect actual device on THIS node
+# Device names and by-id paths differ between nodes, so we must detect locally
 else
-    INSTANCE_STORE=$(
-        # Find Instance_Storage devices (exclude _1 namespace variants, prefer shortest path)
-        for byid in $(ls -1 /dev/disk/by-id/ 2>/dev/null | grep 'Instance_Storage' | grep -v '_1' | grep -v -- '-part'); do
-            # Check if this device or its partition 2 exists
-            if [ -b "/dev/disk/by-id/${byid}-part2" ]; then
-                echo "/dev/disk/by-id/${byid}-part2"
-                break
-            elif [ -b "/dev/disk/by-id/${byid}" ]; then
-                echo "/dev/disk/by-id/${byid}"
-                break
+    # Extract partition number from target device path
+    # by-id paths always use -partN format, so normalize to that
+    PART_SUFFIX=""
+    if [[ "$TARGET_DEV" =~ -part([0-9]+)$ ]]; then
+        PART_SUFFIX="-part${BASH_REMATCH[1]}"
+    elif [[ "$TARGET_DEV" =~ p([0-9]+)$ ]]; then
+        PART_SUFFIX="-part${BASH_REMATCH[1]}"
+    fi
+
+    INSTANCE_STORE=""
+    # Search for storage devices in /dev/disk/by-id/
+    # Try EBS volumes first (Amazon_Elastic_Block_Store), then Instance Storage
+    for pattern in 'Amazon_Elastic_Block_Store' 'Instance_Storage'; do
+        for byid in $(ls -1 /dev/disk/by-id/ 2>/dev/null | grep "$pattern" | grep -v '_1$' | grep -v -- '-part'); do
+            BASE="/dev/disk/by-id/${byid}"
+            if [ -n "$PART_SUFFIX" ]; then
+                CANDIDATE="${BASE}${PART_SUFFIX}"
+                if [ -b "$CANDIDATE" ]; then
+                    INSTANCE_STORE="$CANDIDATE"
+                    break 2
+                fi
+            else
+                if [ -b "$BASE" ]; then
+                    INSTANCE_STORE="$BASE"
+                    break 2
+                fi
             fi
-        done | head -1
-    )
-    # Fallback if detection fails
+        done
+    done
+
+    # Fallback: use direct path if it exists as a block device on this node
     if [ -z "$INSTANCE_STORE" ]; then
-        INSTANCE_STORE="$TARGET_DEV"
+        if [ -b "$TARGET_DEV" ]; then
+            INSTANCE_STORE="$TARGET_DEV"
+        else
+            echo "ERROR: Could not find storage device on this node" >&2
+            INSTANCE_STORE="$TARGET_DEV"
+        fi
     fi
 fi
 
@@ -877,15 +923,11 @@ echo "Symlink: %s -> $INSTANCE_STORE"
             )
 
             # Create symlink in /dev (no directory creation needed - /dev already exists)
-            self.record_setup_command(
-                f"sudo ln -sf {target_device} {symlink_path}",
-                f"Create storage symlink: {symlink_path} -> {target_device}",
-                "storage_setup",
-            )
             symlink_result = self.execute_command(
                 f"sudo ln -sf {target_device} {symlink_path}",
-                record=True,
+                description=f"Create storage symlink: {symlink_path} -> {target_device}",
                 category="storage_setup",
+                record=True,
             )
 
             if symlink_result.get("success", False):
@@ -1460,6 +1502,80 @@ echo "Symlink: %s -> $INSTANCE_STORE"
             metrics["error"] = str(e)
 
         return metrics
+
+    def get_table_sizes(
+        self, schema: str, table_names: list[str]
+    ) -> dict[str, dict[str, Any]]:
+        """Query Exasol for table storage sizes.
+
+        Uses EXA_ALL_OBJECT_SIZES system table to get:
+        - RAW_OBJECT_SIZE: Uncompressed/logical data size
+        - MEM_OBJECT_SIZE: Compressed/in-memory size (stored size)
+
+        Args:
+            schema: Schema name containing the tables
+            table_names: List of table names to query
+
+        Returns:
+            Dict mapping table names to size info with raw_bytes, stored_bytes,
+            row_count, and compression_ratio.
+        """
+        sizes: dict[str, dict[str, Any]] = {}
+
+        try:
+            # Query EXA_ALL_OBJECT_SIZES for each table
+            # This system table provides both raw and compressed sizes
+            tables_str = ", ".join(f"'{t.upper()}'" for t in table_names)
+            query = f"""
+                SELECT
+                    OBJECT_NAME,
+                    RAW_OBJECT_SIZE,
+                    MEM_OBJECT_SIZE
+                FROM SYS.EXA_ALL_OBJECT_SIZES
+                WHERE ROOT_NAME = '{schema.upper()}'
+                  AND OBJECT_TYPE = 'TABLE'
+                  AND OBJECT_NAME IN ({tables_str})
+            """
+
+            result = self.execute_query(
+                query, query_name="get_table_sizes", return_data=True
+            )
+
+            if result.get("success") and "data" in result:
+                df = result["data"]
+                for _, row in df.iterrows():
+                    table_name = str(row["OBJECT_NAME"]).lower()
+                    raw_bytes = (
+                        int(row["RAW_OBJECT_SIZE"]) if row["RAW_OBJECT_SIZE"] else 0
+                    )
+                    stored_bytes = (
+                        int(row["MEM_OBJECT_SIZE"]) if row["MEM_OBJECT_SIZE"] else 0
+                    )
+
+                    # Get row count from the table
+                    row_count = 0
+                    count_query = (
+                        f'SELECT COUNT(*) as cnt FROM "{schema}"."{row["OBJECT_NAME"]}"'
+                    )
+                    count_result = self.execute_query(
+                        count_query, query_name=f"count_{table_name}", return_data=True
+                    )
+                    if count_result.get("success") and "data" in count_result:
+                        row_count = int(count_result["data"]["CNT"].iloc[0])
+
+                    sizes[table_name] = {
+                        "raw_bytes": raw_bytes,
+                        "stored_bytes": stored_bytes,
+                        "row_count": row_count,
+                        "compression_ratio": (
+                            raw_bytes / stored_bytes if stored_bytes > 0 else 0.0
+                        ),
+                    }
+
+        except Exception as e:
+            self._log(f"Warning: Failed to get table sizes: {e}")
+
+        return sizes
 
     def teardown(self) -> bool:
         """Clean up Exasol installation."""

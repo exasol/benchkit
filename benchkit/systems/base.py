@@ -427,6 +427,7 @@ class SystemUnderTest(ABC):
         description: str = "",
         timeout: int = 300,
         record: bool = True,
+        category: str = "setup",
     ) -> bool:
         """Execute a command on all nodes. Returns True if all succeed."""
         managers = (
@@ -439,7 +440,11 @@ class SystemUnderTest(ABC):
         if not managers:
             return bool(
                 self.execute_command(
-                    command, timeout=float(timeout), record=record
+                    command,
+                    timeout=float(timeout),
+                    record=record,
+                    description=description or None,
+                    category=category,
                 ).get("success", False)
             )
         all_success = True
@@ -455,7 +460,7 @@ class SystemUnderTest(ABC):
             self.record_setup_command(
                 self._sanitize_command_for_report(command),
                 description or "Execute on all nodes",
-                "setup",
+                category,
                 node_info,
             )
         return bool(all_success)
@@ -472,8 +477,11 @@ class SystemUnderTest(ABC):
         """Write a config file remotely using heredoc (no escaping needed)."""
         prefix = "sudo " if use_sudo else ""
         cmd = f"{prefix}tee {path} > /dev/null << 'EOF'\n{content}\nEOF"
-        self.record_setup_command(cmd, description, category)
-        return bool(self.execute_command(cmd).get("success", False))
+        return bool(
+            self.execute_command(cmd, description=description, category=category).get(
+                "success", False
+            )
+        )
 
     @abstractmethod
     @exclude_from_package
@@ -581,6 +589,34 @@ class SystemUnderTest(ABC):
 
         Returns:
             Dictionary of template variable names to values
+        """
+        return {}
+
+    def get_table_sizes(
+        self, schema: str, table_names: list[str]
+    ) -> dict[str, dict[str, Any]]:
+        """Query database for table storage sizes.
+
+        This method is used by scoring calculators (e.g., ClickBench) to
+        capture storage efficiency metrics after data loading completes.
+
+        Override in subclasses to provide system-specific size queries.
+
+        Args:
+            schema: Schema/database name containing the tables
+            table_names: List of table names to query sizes for
+
+        Returns:
+            Dict mapping table names to size info:
+            {
+                "table_name": {
+                    "raw_bytes": int,       # Uncompressed/logical size
+                    "stored_bytes": int,    # Actual storage (compressed)
+                    "row_count": int,       # Number of rows
+                    "compression_ratio": float,  # raw / stored (optional)
+                }
+            }
+            Returns empty dict if size information is not available.
         """
         return {}
 
@@ -805,6 +841,7 @@ class SystemUnderTest(ABC):
         record: bool = True,
         category: str = "setup",
         node_info: str | None = None,
+        description: str | None = None,
     ) -> dict[str, Any]:
         """Execute a system command safely and optionally record it.
 
@@ -817,15 +854,17 @@ class SystemUnderTest(ABC):
             record: Whether to record command for report reproduction
             category: Category for organizing commands in report
             node_info: Node information (e.g., "node0", "all nodes", "node1,node2")
+            description: Human-readable description for report. If None, a generic
+                description is auto-generated.
         """
         # Check if should execute remotely (on cloud instance)
         if self._should_execute_remotely():
             return self._execute_remote_command(
-                command, timeout, record, category, node_info
+                command, timeout, record, category, node_info, description
             )
         else:
             return self._execute_local_command(
-                command, timeout, record, category, node_info
+                command, timeout, record, category, node_info, description
             )
 
     def _execute_local_command(
@@ -835,6 +874,7 @@ class SystemUnderTest(ABC):
         record: bool = True,
         category: str = "setup",
         node_info: str | None = None,
+        description: str | None = None,
     ) -> dict[str, Any]:
         """Execute a command locally using safe_command."""
         result = safe_command(command, timeout=timeout)
@@ -842,9 +882,9 @@ class SystemUnderTest(ABC):
         # Record command for report reproduction
         if record:
             command_record = {
-                "command": command,
+                "command": self._sanitize_command_for_report(command),
                 "success": result["success"],
-                "description": f"Execute {command.split()[0]} command",
+                "description": description or f"Execute {command.split()[0]} command",
                 "category": category,
             }
             if node_info:
@@ -861,6 +901,7 @@ class SystemUnderTest(ABC):
         record: bool = True,
         category: str = "setup",
         node_info: str | None = None,
+        description: str | None = None,
     ) -> dict[str, Any]:
         """Execute a command on remote cloud instance via instance manager."""
         result = self._cloud_instance_manager.run_remote_command(
@@ -872,7 +913,8 @@ class SystemUnderTest(ABC):
             command_record = {
                 "command": self._sanitize_command_for_report(command),
                 "success": result.get("success", False),
-                "description": f"Execute {command.split()[0]} command on remote system",
+                "description": description
+                or f"Execute {command.split()[0]} command on remote system",
                 "category": category,
             }
             if node_info:

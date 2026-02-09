@@ -91,6 +91,7 @@ class ExasolNativeInstaller:
         )
         storage_disk_size = system.setup_config.get("storage_disk_size", "100GB")
         db_mem_size = system.setup_config.get("db_mem_size")  # In MB, optional
+        db_redundancy = system.setup_config.get("db_redundancy")  # 1=no redundancy
 
         try:
             # Step 0: Handle license file
@@ -150,7 +151,7 @@ class ExasolNativeInstaller:
             )
 
             # Step 8: Post-deployment configuration
-            if not self._post_deployment_config(remote_license_path):
+            if not self._post_deployment_config(remote_license_path, db_redundancy):
                 return False
 
             return True
@@ -194,34 +195,18 @@ class ExasolNativeInstaller:
             True if successful
         """
         system = self._system
-        node_count = (
-            len(system._cloud_instance_managers)
-            if system._cloud_instance_managers
-            else 1
-        )
-        node_info = f"all_nodes_{node_count}" if node_count > 1 else None
 
-        system.record_setup_command(
-            "sudo useradd -m -s /bin/bash exasol",
-            "Create Exasol system user",
-            "user_setup",
-            node_info=node_info,
-        )
         if not system.execute_command_on_all_nodes(
             "sudo useradd -m -s /bin/bash exasol || true",
-            description="Creating exasol user on all nodes",
+            description="Create Exasol system user",
+            category="user_setup",
         ):
             self._log("Warning: Failed to create exasol user on some nodes")
 
-        system.record_setup_command(
-            "sudo usermod -aG sudo exasol",
-            "Add exasol user to sudo group",
-            "user_setup",
-            node_info=node_info,
-        )
         if not system.execute_command_on_all_nodes(
             "sudo usermod -aG sudo exasol || true",
-            description="Adding exasol to sudo group on all nodes",
+            description="Add exasol user to sudo group",
+            category="user_setup",
         ):
             self._log("Warning: Failed to add exasol to sudo group on some nodes")
 
@@ -323,53 +308,29 @@ class ExasolNativeInstaller:
         storage_file_path = f"{data_dir}/storage_disk1"
         exasol_storage_link = "/dev/exasol.storage"
 
-        is_multinode = (
-            system._cloud_instance_managers and len(system._cloud_instance_managers) > 1
-        )
-        node_info = (
-            f"all_nodes_{len(system._cloud_instance_managers)}"
-            if is_multinode
-            else None
-        )
-
         # Create data directory
-        system.record_setup_command(
-            f"sudo mkdir -p {data_dir}",
-            "Create Exasol data directory",
-            "storage_setup",
-            node_info=node_info,
-        )
         if not system.execute_command_on_all_nodes(
             f"sudo mkdir -p {data_dir}",
-            description="Creating data directory on all nodes",
+            description="Create Exasol data directory",
+            category="storage_setup",
         ):
             self._log("Failed to create data directory on some nodes")
             return False, "", None
 
         # Create storage file
-        system.record_setup_command(
-            f"sudo truncate -s {storage_disk_size} {storage_file_path}",
-            f"Create {storage_disk_size} storage disk file",
-            "storage_setup",
-            node_info=node_info,
-        )
         if not system.execute_command_on_all_nodes(
             f"sudo truncate -s {storage_disk_size} {storage_file_path}",
-            description="Creating storage file on all nodes",
+            description=f"Create {storage_disk_size} storage disk file",
+            category="storage_setup",
         ):
             self._log("Failed to create storage file on some nodes")
             return False, "", None
 
         # Set ownership
-        system.record_setup_command(
-            f"sudo chown -R exasol:exasol {data_dir}",
-            "Set ownership of data directory to exasol user",
-            "storage_setup",
-            node_info=node_info,
-        )
         system.execute_command_on_all_nodes(
             f"sudo chown -R exasol:exasol {data_dir}",
-            description="Setting ownership on all nodes",
+            description="Set ownership of data directory to exasol user",
+            category="storage_setup",
         )
 
         # Detach existing loopback
@@ -390,16 +351,10 @@ class ExasolNativeInstaller:
             f"sudo ln -sf $LOOP_DEV {exasol_storage_link} && "
             f"echo $LOOP_DEV"
         )
-        system.record_setup_command(
-            f"sudo losetup --find --show {storage_file_path} && "
-            f"sudo ln -sf <loop_device> {exasol_storage_link}",
-            f"Setup loopback device for storage file with symlink {exasol_storage_link}",
-            "storage_setup",
-            node_info=node_info,
-        )
         if not system.execute_command_on_all_nodes(
             losetup_cmd,
-            description="Setting up loopback device on all nodes",
+            description=f"Setup loopback device for storage file with symlink {exasol_storage_link}",
+            category="storage_setup",
         ):
             self._log("Failed to setup loopback device on some nodes")
             return False, "", None
@@ -427,12 +382,11 @@ class ExasolNativeInstaller:
             f"https://x-up.s3.amazonaws.com/releases/c4/linux/x86_64/{c4_version}/c4"
         )
 
-        system.record_setup_command(
-            f"wget {c4_url} -O c4 && chmod +x c4",
-            f"Download c4 cluster management tool v{c4_version}",
-            "tool_setup",
+        result = system.execute_command(
+            f"wget -q {c4_url} -O c4 && chmod +x c4",
+            description=f"Download c4 cluster management tool v{c4_version}",
+            category="tool_setup",
         )
-        result = system.execute_command(f"wget -q {c4_url} -O c4 && chmod +x c4")
         if not result["success"]:
             self._log(f"Failed to download c4: {result['stderr']}")
             return False
@@ -685,12 +639,11 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
             f'echo "{escaped_config}" | tee {remote_config_path} > /dev/null'
         )
 
-        system.record_setup_command(
-            f"cat > {remote_config_path} << 'EOF'\n{system._sanitize_command_for_report(config_content)}\nEOF",
-            "Create c4 configuration file on remote system",
-            "configuration",
+        result = system.execute_command(
+            create_config_cmd,
+            description="Create c4 configuration file on remote system",
+            category="configuration",
         )
-        result = system.execute_command(create_config_cmd)
         if not result["success"]:
             self._log(
                 f"Failed to create config file on remote system: {result.get('stderr', 'Unknown error')}"
@@ -710,13 +663,11 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
         """
         system = self._system
 
-        system.record_setup_command(
-            f"./c4 host play -i {remote_config_path}",
-            "Deploy Exasol cluster using c4",
-            "cluster_deployment",
-        )
         result = system.execute_command(
-            f"./c4 host play -i {remote_config_path}", timeout=1800
+            f"./c4 host play -i {remote_config_path}",
+            timeout=1800,
+            description="Deploy Exasol cluster using c4",
+            category="cluster_deployment",
         )
 
         if not result["success"]:
@@ -752,11 +703,16 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
         )
         system.record_setup_note("Admin UI will be available (if enabled)")
 
-    def _post_deployment_config(self, remote_license_path: str | None) -> bool:
+    def _post_deployment_config(
+        self,
+        remote_license_path: str | None,
+        db_redundancy: int | None = None,
+    ) -> bool:
         """Perform post-deployment configuration.
 
         Args:
             remote_license_path: Path to license file if specified
+            db_redundancy: Desired redundancy level (1=no redundancy)
 
         Returns:
             True if successful
@@ -784,6 +740,10 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
             system._install_license_file(play_id, remote_license_path)
             self._log("✓ License file installation completed")
 
+        # Configure volume redundancy if specified
+        if db_redundancy is not None:
+            self._configure_volume_redundancy(play_id, db_redundancy)
+
         # Configure database parameters if specified
         extra_config = system.setup_config.get("extra", {})
         db_params = extra_config.get("db_params", [])
@@ -806,3 +766,83 @@ CCC_PLAY_ADMIN_PASSWORD={admin_password}"""
                     system.record_setup_note(f"  {key}: {value}")
 
         return True
+
+    def _configure_volume_redundancy(
+        self, play_id: str, target_redundancy: int
+    ) -> None:
+        """Configure data volume redundancy level via ConfD.
+
+        Uses st_volume_decrease_redundancy to reduce redundancy from the
+        default (typically 2 for multinode) to the target level.
+
+        Args:
+            play_id: The cluster play ID
+            target_redundancy: Desired redundancy level (1=no redundancy)
+        """
+        system = self._system
+        node_count = (
+            len(system._cloud_instance_managers)
+            if system._cloud_instance_managers
+            else 1
+        )
+
+        if node_count <= 1 and target_redundancy == 1:
+            self._log("Single-node cluster already has redundancy 1, skipping")
+            return
+
+        # Default redundancy for multinode is 2
+        default_redundancy = min(2, node_count)
+        delta = default_redundancy - target_redundancy
+
+        if delta <= 0:
+            self._log(
+                f"Volume redundancy already at or below target ({target_redundancy}), skipping"
+            )
+            return
+
+        self._log(
+            f"Decreasing volume redundancy from {default_redundancy} to {target_redundancy} "
+            f"(delta={delta})..."
+        )
+
+        # Stop database before changing volume redundancy
+        stop_cmd = "confd_client db_stop db_name: Exasol"
+        system._execute_confd_client_command(
+            play_id, stop_cmd, "Stop database for redundancy change", "redundancy"
+        )
+
+        import time
+
+        time.sleep(5)
+
+        # Decrease redundancy on DataVolume1
+        decrease_cmd = (
+            f"confd_client st_volume_decrease_redundancy "
+            f"vname: DataVolume1 delta: {delta}"
+        )
+        result = system._execute_confd_client_command(
+            play_id,
+            decrease_cmd,
+            f"Decrease volume redundancy to {target_redundancy}",
+            "redundancy",
+        )
+
+        if result:
+            self._log(f"✓ Volume redundancy set to {target_redundancy}")
+        else:
+            self._log(
+                "⚠ Failed to decrease volume redundancy (may already be at target level)"
+            )
+
+        # Restart database
+        start_cmd = "confd_client db_start db_name: Exasol"
+        system._execute_confd_client_command(
+            play_id, start_cmd, "Restart database after redundancy change", "redundancy"
+        )
+
+        # Wait for database to be ready
+        self._log("Waiting for database to be ready after redundancy change...")
+        if system.wait_for_health(max_attempts=60, delay=5.0):
+            self._log("✓ Database ready after redundancy change")
+        else:
+            self._log("⚠ Database not ready after redundancy change, continuing anyway")
