@@ -10,11 +10,12 @@ from rich.table import Table
 
 # Load .env file if it exists - this must be done early before other imports
 try:
-    from dotenv import load_dotenv
+    from dotenv import find_dotenv, load_dotenv
 
-    load_dotenv(
-        override=True
-    )  # override=True makes .env vars take precedence over existing env vars
+    # Use usecwd=True so that the .env search starts from the user's current
+    # working directory rather than from this installed module's location in
+    # site-packages (the default frame-based resolution).
+    load_dotenv(find_dotenv(usecwd=True), override=True)
 except ImportError:
     pass  # python-dotenv not installed, continue without .env support
 
