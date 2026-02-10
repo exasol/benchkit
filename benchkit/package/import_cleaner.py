@@ -146,7 +146,10 @@ class UnusedImportRemover(ast.NodeTransformer):
 
         for alias in node.names:
             name = alias.asname if alias.asname else alias.name
-            if name in self.used_names:
+            # For dotted imports (e.g., "import importlib.resources"),
+            # the code references just the top-level name ("importlib")
+            top_level = name.split(".")[0]
+            if name in self.used_names or top_level in self.used_names:
                 used_aliases.append(alias)
 
         if not used_aliases:

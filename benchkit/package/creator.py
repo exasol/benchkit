@@ -1,6 +1,7 @@
 """Create portable benchmark packages."""
 
 import hashlib
+import importlib.resources
 import json
 import shutil
 import zipfile
@@ -11,7 +12,7 @@ from jinja2 import Environment, FileSystemLoader
 from rich.console import Console
 
 from ..systems.base import SystemUnderTest
-from ..util import ensure_directory
+from ..util import ensure_directory, get_templates_dir, get_workloads_dir
 from .code_minimizer import CodeMinimizer
 from .formatter import PackageFormatter
 from .import_cleaner import ImportCleaner
@@ -74,11 +75,16 @@ class WorkloadPackage:
         ] = ""
         self._jinja_env: Environment | None = None
 
+        # Resolve source directories via centralized helpers so packaging works
+        # both from source (python -m benchkit) and installed console script
+        self._benchkit_src = Path(str(importlib.resources.files("benchkit")))
+        self._workloads_src = get_workloads_dir()
+
     def _get_jinja_env(self) -> Environment:
         """Get or create Jinja2 environment for package templates."""
         if self._jinja_env is None:
             self._jinja_env = Environment(  # nosec B701
-                loader=FileSystemLoader("templates/package"),
+                loader=FileSystemLoader(str(get_templates_dir() / "package")),
                 keep_trailing_newline=True,
             )
         return self._jinja_env
@@ -345,7 +351,9 @@ class WorkloadPackage:
         ]
 
         for file_path in core_files:
-            src = Path(file_path)
+            # Resolve source relative to installed benchkit package
+            relative = file_path.removeprefix("benchkit/")
+            src = self._benchkit_src / relative
             if src.exists():
                 dst = self.package_dir / file_path
                 ensure_directory(dst.parent)
@@ -368,7 +376,7 @@ class WorkloadPackage:
 
     def _copy_run_module(self) -> None:
         """Copy minimal run module with essential files."""
-        src_dir = Path("benchkit/run")
+        src_dir = self._benchkit_src / "run"
         dst_dir = self.package_dir / "benchkit" / "run"
 
         if not src_dir.exists():
@@ -395,7 +403,7 @@ class WorkloadPackage:
         - enums.py (only used by cli_helpers)
         - multinode.py (not imported by package runtime)
         """
-        src_dir = Path("benchkit/common")
+        src_dir = self._benchkit_src / "common"
         dst_dir = self.package_dir / "benchkit" / "common"
 
         if not src_dir.exists():
@@ -469,7 +477,7 @@ class WorkloadPackage:
         - System files for configured systems (e.g., exasol.py, clickhouse.py)
         - System packages for package-based systems (e.g., exasol/)
         """
-        src_dir = Path("benchkit/systems")
+        src_dir = self._benchkit_src / "systems"
         dst_dir = self.package_dir / "benchkit" / "systems"
 
         if not src_dir.exists():
@@ -605,7 +613,7 @@ __all__ = ["{class_name}"]
         if not needs_storage:
             return
 
-        src_dir = Path("benchkit/storage")
+        src_dir = self._benchkit_src / "storage"
         dst_dir = self.package_dir / "benchkit" / "storage"
 
         if not src_dir.exists():
@@ -683,7 +691,7 @@ __all__ = ["{class_name}"]
     def _copy_workload_module(self) -> None:
         """Copy only the required workload module files."""
         workload_name = self.config["workload"]["name"]
-        src_dir = Path("benchkit/workloads")
+        src_dir = self._benchkit_src / "workloads"
         dst_dir = self.package_dir / "benchkit" / "workloads"
 
         ensure_directory(dst_dir)
@@ -741,16 +749,17 @@ __all__ = ["Workload", "{class_name}", "create_workload", "WORKLOAD_IMPLEMENTATI
         (dst_dir / "__init__.py").write_text(init_content)
 
     def _copy_workload_files(self) -> None:
-        """Copy workload-specific files, filtering to only configured variants.
+        """Copy workload-specific files, filtering to only configured systems and variants.
 
-        Instead of copying all variant directories, only copies:
-        - Base queries (queries/*.sql)
-        - Setup scripts (setup/*.sql)
-        - Only variant directories matching the configured variant
-        - Within variants, only system-specific subdirs for configured systems
+        Filtering rules:
+        - Base queries (queries/*.sql): always included
+        - Setup scripts: only system-specific subdirs for configured systems
+        - Variants: only configured variant directories
+        - Within variants: only system-specific subdirs for configured systems
+        - Excluded: verify/ (parquet data), __pycache__, *.md, *.pyc, __init__.py
         """
         workload_name = self.config["workload"]["name"]
-        workload_dir = Path("workloads") / workload_name
+        workload_dir = self._workloads_src / workload_name
 
         if not workload_dir.exists():
             return
@@ -761,27 +770,39 @@ __all__ = ["Workload", "{class_name}", "create_workload", "WORKLOAD_IMPLEMENTATI
         needed_variants = self._get_needed_variants()
         configured_systems = {s["kind"] for s in self.config.get("systems", [])}
 
-        def variant_filter(directory: str, files: list[str]) -> set[str]:
-            """Filter function for shutil.copytree - exclude unneeded variants."""
+        def workload_file_filter(directory: str, files: list[str]) -> set[str]:
+            """Filter function for shutil.copytree - exclude unneeded files."""
             dir_path = Path(directory)
             ignore: set[str] = set()
 
-            # Always exclude these
-            ignore.update({"verify", "__pycache__"})
+            # Always exclude cache artifacts and non-essential files
+            ignore.add("__pycache__")
             ignore.update(f for f in files if f.endswith(".pyc"))
+            ignore.update(f for f in files if f.endswith(".md"))
 
-            # If we're in the variants directory, filter by variant name
+            # At the workload root, exclude verify/ (parquet data) and __init__.py
+            if dir_path == workload_dir:
+                ignore.add("verify")
+                ignore.add("__init__.py")
+
+            # Filter setup/ subdirectories by configured system kind.
+            # Only exclude directories (not files) so flat setup patterns
+            # like Estuary's setup/*.sql are preserved.
+            if dir_path.name == "setup":
+                for f in files:
+                    if (dir_path / f).is_dir() and f not in configured_systems:
+                        ignore.add(f)
+
+            # Filter variant directories by configured variant names
             if dir_path.name == "variants":
                 for f in files:
                     if (dir_path / f).is_dir() and f not in needed_variants:
                         ignore.add(f)
 
-            # If we're inside a variant directory (e.g., variants/tuned/),
-            # filter by system kind
+            # Filter system-specific subdirs within a variant
             if dir_path.parent.name == "variants":
                 for f in files:
-                    sub_path = dir_path / f
-                    if sub_path.is_dir() and f not in configured_systems:
+                    if (dir_path / f).is_dir() and f not in configured_systems:
                         ignore.add(f)
 
             return ignore
@@ -790,7 +811,7 @@ __all__ = ["Workload", "{class_name}", "create_workload", "WORKLOAD_IMPLEMENTATI
             workload_dir,
             dst_dir,
             dirs_exist_ok=True,
-            ignore=variant_filter,
+            ignore=workload_file_filter,
         )
 
     def _get_needed_variants(self) -> set[str]:
