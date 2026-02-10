@@ -791,6 +791,7 @@ class TPCH(Workload):
         scripts = {}
         context = self._get_template_context(system)
 
+        optional_scripts = {"create_constraints"}
         for script_name in [
             "create_tables",
             "create_constraints",
@@ -803,8 +804,9 @@ class TPCH(Workload):
                 )
                 scripts[script_name] = template.render(**context)
             except Exception as e:
-                self._log(f"Warning: Failed to render {script_name}.sql: {e}")
-                scripts[script_name] = f"-- Error rendering script: {e}"
+                if script_name not in optional_scripts:
+                    self._log(f"Warning: Failed to render {script_name}.sql: {e}")
+                    scripts[script_name] = f"-- Error rendering script: {e}"
 
         return scripts
 
