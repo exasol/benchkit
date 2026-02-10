@@ -490,16 +490,14 @@ class TrinoSystem(SystemUnderTest):
 
         # Step 2: Start all nodes
         print("\n🚀 Starting Trino cluster...")
-        for idx, mgr in enumerate(self._cloud_instance_managers):
-            role = "Coordinator" if idx == 0 else "Worker"
-            print(f"[Node {idx} - {role}] Starting Trino...")
-            result = mgr.run_remote_command(
-                "sudo systemctl start trino && sudo systemctl enable trino"
-            )
-            if not result.get("success"):
-                print(f"[Node {idx}] ✗ Failed to start Trino")
-                return False
-            print(f"[Node {idx}] ✓ Trino started")
+        if not self.execute_command_on_all_nodes(
+            "sudo systemctl start trino && sudo systemctl enable trino",
+            description="Start and enable Trino service",
+            category="service_management",
+        ):
+            print("✗ Failed to start Trino on some nodes")
+            return False
+        print("✓ Trino started on all nodes")
 
         # Step 3: Wait for coordinator health
         print("\n⏳ Waiting for coordinator to be ready...")

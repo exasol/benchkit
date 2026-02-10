@@ -875,11 +875,6 @@ class InfraManager:
         """
         import json
 
-        # First check environment variable
-        resolved = os.environ.get(var_name)
-        if resolved:
-            return resolved
-
         # Determine if we need public or private IP based on variable name
         ip_type = "public_ip" if "PUBLIC" in var_name.upper() else "private_ip"
 

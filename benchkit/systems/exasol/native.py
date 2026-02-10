@@ -427,14 +427,19 @@ class ExasolNativeInstaller:
         self._log(
             f"Distributing SSH key to all {len(system._cloud_instance_managers)} nodes..."
         )
-        for idx, mgr in enumerate(system._cloud_instance_managers):
-            setup_cmd = f"sudo mkdir -p ~exasol/.ssh && echo '{pub_key}' | sudo tee ~exasol/.ssh/authorized_keys > /dev/null && sudo chown -R exasol:exasol ~exasol/.ssh && sudo chmod 700 ~exasol/.ssh && sudo chmod 600 ~exasol/.ssh/authorized_keys"
-            result = mgr.run_remote_command(setup_cmd, timeout=60)
-            if result.get("success"):
-                self._log(f"  ✓ SSH key installed on node {idx}")
-            else:
-                self._log(f"  ✗ Failed to install SSH key on node {idx}")
-                return False
+        setup_cmd = (
+            f"sudo mkdir -p ~exasol/.ssh && "
+            f"echo '{pub_key}' | sudo tee ~exasol/.ssh/authorized_keys > /dev/null && "
+            f"sudo chown -R exasol:exasol ~exasol/.ssh && "
+            f"sudo chmod 700 ~exasol/.ssh && sudo chmod 600 ~exasol/.ssh/authorized_keys"
+        )
+        if not system.execute_command_on_all_nodes(
+            setup_cmd,
+            description="Distribute ubuntu SSH key to exasol user",
+            category="ssh_setup",
+        ):
+            self._log("Failed to distribute SSH key to all nodes")
+            return False
 
         # Test SSH connectivity
         self._log("Testing SSH connectivity to all nodes...")
@@ -463,9 +468,7 @@ class ExasolNativeInstaller:
         system = self._system
         self._log("Setting up ubuntu→exasol@localhost SSH access on all nodes...")
 
-        for idx, mgr in enumerate(system._cloud_instance_managers):
-            localhost_ssh_cmd = """
-ssh-keyscan -H localhost >> ~/.ssh/known_hosts 2>/dev/null || true
+        localhost_ssh_cmd = """ssh-keyscan -H localhost >> ~/.ssh/known_hosts 2>/dev/null || true
 ssh-keyscan -H 127.0.0.1 >> ~/.ssh/known_hosts 2>/dev/null || true
 mkdir -p ~/.ssh
 touch ~/.ssh/config
@@ -476,15 +479,15 @@ Host localhost 127.0.0.1
     UserKnownHostsFile /dev/null
     LogLevel ERROR
 SSHEOF
-chmod 600 ~/.ssh/config
-"""
-            result = mgr.run_remote_command(localhost_ssh_cmd, timeout=60)
-            if result.get("success"):
-                self._log(f"  ✓ localhost SSH configured on node {idx}")
-            else:
-                self._log(f"  ⚠ Failed to configure localhost SSH on node {idx}")
+chmod 600 ~/.ssh/config"""
+        system.execute_command_on_all_nodes(
+            localhost_ssh_cmd,
+            description="Configure localhost SSH access to exasol user",
+            category="ssh_setup",
+        )
 
-            # Verify ubuntu can SSH to exasol@localhost
+        # Verify ubuntu can SSH to exasol@localhost on each node
+        for idx, mgr in enumerate(system._cloud_instance_managers):
             test_result = mgr.run_remote_command(
                 "ssh -o BatchMode=yes exasol@localhost 'echo ok' 2>/dev/null",
                 timeout=30,
@@ -502,21 +505,12 @@ chmod 600 ~/.ssh/config
         self._log("Setting up exasol→exasol SSH access on all nodes...")
 
         # Generate SSH keys for exasol user on all nodes
-        for idx, mgr in enumerate(system._cloud_instance_managers):
-            keygen_cmd = """
-sudo -u exasol bash -c '
-    mkdir -p ~/.ssh
-    chmod 700 ~/.ssh
-    if [ ! -f ~/.ssh/id_rsa ]; then
-        ssh-keygen -t rsa -b 2048 -f ~/.ssh/id_rsa -N "" -q
-    fi
-'
-"""
-            result = mgr.run_remote_command(keygen_cmd, timeout=60)
-            if result.get("success"):
-                self._log(f"  ✓ SSH key generated for exasol user on node {idx}")
-            else:
-                self._log(f"  ⚠ Failed to generate SSH key for exasol on node {idx}")
+        keygen_cmd = "sudo -u exasol bash -c 'mkdir -p ~/.ssh && chmod 700 ~/.ssh && if [ ! -f ~/.ssh/id_rsa ]; then ssh-keygen -t rsa -b 2048 -f ~/.ssh/id_rsa -N \"\" -q; fi'"
+        system.execute_command_on_all_nodes(
+            keygen_cmd,
+            description="Generate SSH key pair for exasol user",
+            category="ssh_setup",
+        )
 
         # Collect all exasol public keys
         exasol_pub_keys = []
@@ -540,6 +534,18 @@ sudo -u exasol bash -c '
                 timeout=30,
             )
 
+        # Record the cross-distribution step for report reproduction
+        system.record_setup_command(
+            "# Collect exasol public keys from all nodes, distribute to all authorized_keys\n"
+            "sudo cat ~exasol/.ssh/id_rsa.pub  # on each node\n"
+            "echo '<KEY>' | sudo tee -a ~exasol/.ssh/authorized_keys > /dev/null\n"
+            "sudo chown exasol:exasol ~exasol/.ssh/authorized_keys && "
+            "sudo chmod 600 ~exasol/.ssh/authorized_keys",
+            "Cross-distribute exasol SSH keys for cluster communication",
+            "ssh_setup",
+            f"all_nodes_{len(system._cloud_instance_managers)}",
+        )
+
         # Build list of all hosts for SSH config
         all_hosts = ["localhost", "127.0.0.1"]
         all_hosts.extend(host_addrs.split())
@@ -547,14 +553,9 @@ sudo -u exasol bash -c '
         hosts_pattern = " ".join(all_hosts)
 
         # Configure exasol's SSH config for all hosts
-        for idx, mgr in enumerate(system._cloud_instance_managers):
-            exasol_ssh_config_cmd = f"""
-sudo -u exasol bash -c '
-mkdir -p ~/.ssh
-chmod 700 ~/.ssh
-touch ~/.ssh/config
-chmod 600 ~/.ssh/config
-
+        exasol_ssh_config_cmd = f"""sudo -u exasol bash -c '
+mkdir -p ~/.ssh && chmod 700 ~/.ssh
+touch ~/.ssh/config && chmod 600 ~/.ssh/config
 grep -q "Host localhost" ~/.ssh/config 2>/dev/null || cat >> ~/.ssh/config << SSHEOF
 
 Host {hosts_pattern}
@@ -562,13 +563,12 @@ Host {hosts_pattern}
     UserKnownHostsFile /dev/null
     LogLevel ERROR
 SSHEOF
-'
-"""
-            result = mgr.run_remote_command(exasol_ssh_config_cmd, timeout=60)
-            if result.get("success"):
-                self._log(f"  ✓ exasol SSH config set on node {idx}")
-            else:
-                self._log(f"  ⚠ Failed to set exasol SSH config on node {idx}")
+'"""
+        system.execute_command_on_all_nodes(
+            exasol_ssh_config_cmd,
+            description="Configure exasol SSH config for cluster nodes",
+            category="ssh_setup",
+        )
 
         # Verify exasol can SSH to exasol@localhost
         for idx, mgr in enumerate(system._cloud_instance_managers):

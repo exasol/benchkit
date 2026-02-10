@@ -420,19 +420,6 @@ def setup_cloud_infrastructure(
                         log_callback,
                     )
 
-                    # Set environment variables for IP resolution
-                    import os
-
-                    private_ips = ",".join(
-                        [str(mgr.private_ip) for mgr in node_managers if mgr.private_ip]
-                    )
-                    public_ips = ",".join(
-                        [str(mgr.public_ip) for mgr in node_managers if mgr.public_ip]
-                    )
-                    private_ip_var = f"{system_name.upper()}_PRIVATE_IP"
-                    public_ip_var = f"{system_name.upper()}_PUBLIC_IP"
-                    os.environ[private_ip_var] = private_ips
-                    os.environ[public_ip_var] = public_ips
                 else:
                     # Single node system
                     instance_manager = CloudInstanceManager(
@@ -444,14 +431,6 @@ def setup_cloud_infrastructure(
                         log_callback,
                     )
 
-                    # Set environment variables for IP resolution
-                    import os
-
-                    private_ip_var = f"{system_name.upper()}_PRIVATE_IP"
-                    public_ip_var = f"{system_name.upper()}_PUBLIC_IP"
-                    os.environ[private_ip_var] = system_info.get("private_ip", "")
-                    os.environ[public_ip_var] = system_info.get("public_ip", "")
-
         if not runner._cloud_instance_managers:
             _log("[red]❌ No cloud instances found[/red]", log_callback)
             return False
@@ -461,19 +440,3 @@ def setup_cloud_infrastructure(
     except Exception as e:
         _log(f"[red]❌ Infrastructure setup failed: {e}[/red]", log_callback)
         return False
-
-
-def cleanup_infrastructure_env_vars(config: dict[str, Any]) -> None:
-    """Remove IP environment variables set during infrastructure setup.
-
-    When running multiple benchmarks in the same process (e.g., suite execution
-    via ThreadPoolExecutor), env vars like EXASOL_PUBLIC_IP from one benchmark
-    can leak into subsequent benchmarks, causing them to connect to stale IPs.
-    """
-    import os
-
-    for system_config in config.get("systems", []):
-        system_name = system_config["name"]
-        for suffix in ["_PUBLIC_IP", "_PRIVATE_IP"]:
-            var_name = f"{system_name.upper()}{suffix}"
-            os.environ.pop(var_name, None)

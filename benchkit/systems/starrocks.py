@@ -663,6 +663,13 @@ spill_mode = auto
                 self._log(f"  ✗ Failed to start FE on node {idx}")
                 return False
 
+        self.record_setup_command(
+            f"export JAVA_HOME={self._java_home} && "
+            f"cd {self.fe_dir} && ./bin/start_fe.sh --helper {leader_ip}:{self.FE_EDIT_LOG_PORT} --daemon",
+            "Start FE on follower nodes to join cluster",
+            "service_management",
+        )
+
         # Wait for FE cluster to sync
         time.sleep(10)
 
@@ -706,6 +713,13 @@ spill_mode = auto
                 self._log(f"  ✓ Started BE on node {idx}")
             else:
                 self._log(f"  ⚠ Failed to start BE on node {idx}")
+
+        self.record_setup_command(
+            f"export JAVA_HOME={self._java_home} && "
+            f"cd {self.be_dir} && ./bin/start_be.sh --daemon",
+            "Start BE on all cluster nodes",
+            "service_management",
+        )
 
         # Wait for cluster to stabilize
         time.sleep(15)
