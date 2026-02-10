@@ -873,8 +873,12 @@ class TPCH(Workload):
                 self._log("Failed to prepare storage backend")
                 return False
 
-            # Create temp directory for data generation
-            with tempfile.TemporaryDirectory(prefix="tpch_parquet_") as temp_dir:
+            # Use storage volume for temp dir to avoid root EBS space constraints
+            # (e.g., SF100 generates ~30GB of Parquet data)
+            temp_base = storage.get_temp_directory()
+            with tempfile.TemporaryDirectory(
+                prefix="tpch_parquet_", dir=temp_base
+            ) as temp_dir:
                 temp_path = Path(temp_dir)
 
                 # Generate Parquet data to temp directory

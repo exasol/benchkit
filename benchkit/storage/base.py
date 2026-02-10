@@ -75,6 +75,18 @@ class StorageBackend(ABC):
         """
         pass
 
+    def get_temp_directory(self) -> str | None:
+        """Return a directory path for temporary data generation.
+
+        Used by workloads that generate large intermediate files (e.g., Parquet)
+        to avoid filling up the root filesystem's /tmp. Returns a path on the
+        same volume as the storage backend when possible.
+
+        Returns:
+            Directory path string, or None to use system default (/tmp)
+        """
+        return None
+
     def prepare(self) -> bool:
         """Prepare the storage backend for use.
 

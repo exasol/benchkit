@@ -118,6 +118,14 @@ class LocalStorage(StorageBackend):
             return any(path.iterdir())
         return True
 
+    def get_temp_directory(self) -> str | None:
+        """Return base path for temporary data generation.
+
+        Uses the same volume as the storage location (typically the additional
+        NVMe disk), avoiding root EBS volume space constraints for large datasets.
+        """
+        return str(self.base_path)
+
     def prepare(self) -> bool:
         """Prepare local storage by creating base directory.
 
