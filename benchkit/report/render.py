@@ -12,7 +12,7 @@ import pandas as pd
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from ..package.creator import create_workload_zip
-from ..util import ensure_directory, load_json
+from ..util import ensure_directory, get_templates_dir, load_json
 from .figures import create_performance_plots
 from .html_renderer import render_html_report
 from .tables import (
@@ -39,7 +39,7 @@ class ReportRenderer:
 
         # Setup Jinja2 environment
         self.jinja_env = Environment(
-            loader=FileSystemLoader("templates"),
+            loader=FileSystemLoader(str(get_templates_dir())),
             autoescape=select_autoescape(enabled_extensions=("j2",)),
             trim_blocks=True,
             lstrip_blocks=True,
@@ -169,6 +169,15 @@ class ReportRenderer:
         # Generate workload metadata
         workload_metadata = self._generate_workload_metadata()
 
+        # Generate workload-specific report context (scoring, custom figures, tables)
+        workload_context = self._generate_workload_context(
+            data, preparation_timings, results_dir
+        )
+
+        # Merge workload custom figures into main figures dict
+        if workload_context.get("figures"):
+            figures.update(workload_context["figures"])
+
         # Prepare template context
         context = {
             "cfg": self.config,
@@ -180,6 +189,7 @@ class ReportRenderer:
             "preparation_timings": preparation_timings,
             "infrastructure_timings": infrastructure_timings,
             "workload_metadata": workload_metadata,
+            "workload_context": workload_context,
             "project_id": self.project_id,
             "results_dir": str(results_dir),
         }
@@ -311,6 +321,23 @@ class ReportRenderer:
         # Generate workload metadata
         workload_metadata = self._generate_workload_metadata()
 
+        # Generate workload-specific context (scoring, custom figures, tables)
+        workload_context = self._generate_workload_context(
+            data, preparation_timings, results_dir
+        )
+
+        # Merge workload custom figures into relative_figures dict
+        # and update workload_context figures to use relative paths for templates
+        if workload_context.get("figures"):
+            relative_wl_figures = {}
+            for fig_name, fig_path in workload_context["figures"].items():
+                # Convert absolute path to relative path for HTML
+                fig_filename = Path(fig_path).name
+                rel_path = f"attachments/figures/{fig_filename}"
+                relative_figures[fig_name] = rel_path
+                relative_wl_figures[fig_name] = fig_filename
+            workload_context["figures"] = relative_wl_figures
+
         # Prepare context for HTML rendering
         context = {
             "cfg": self.config,
@@ -322,16 +349,19 @@ class ReportRenderer:
             "preparation_timings": preparation_timings,
             "infrastructure_timings": infrastructure_timings,
             "workload_metadata": workload_metadata,
+            "workload_context": workload_context,
             "project_id": self.project_id,
             "results_dir": str(results_dir),
         }
 
         # Render HTML report
         html_file = report_dir / "REPORT.html"
-        render_html_report(context, template_dir="templates", output_file=html_file)
+        render_html_report(
+            context, template_dir=str(get_templates_dir()), output_file=html_file
+        )
 
         # Copy CSS file
-        css_src = Path("templates/styles.css.j2")
+        css_src = get_templates_dir() / "styles.css.j2"
         if css_src.exists():
             css_dst = report_dir / "styles.css"
             # Render CSS template (in case it has variables)
@@ -1149,6 +1179,107 @@ class ReportRenderer:
 
         return {"info": workload_info, "per_system_ddl": per_system_ddl}
 
+    def _generate_workload_context(
+        self,
+        data: dict[str, Any],
+        preparation_timings: dict[str, Any],
+        results_dir: Path,
+    ) -> dict[str, Any]:
+        """Generate workload-specific context for report templates.
+
+        This method instantiates the workload and calls its get_report_context()
+        method to get scoring, custom figures, and tables for workloads that
+        support them (e.g., ClickBench with its official scoring methodology).
+
+        Args:
+            data: Benchmark data including runs_df
+            preparation_timings: Dict mapping system names to preparation timing data
+            results_dir: Directory for saving generated files
+
+        Returns:
+            Workload context dict with has_custom_scoring, scores, figures, tables
+        """
+        from ..workloads import create_workload
+
+        # Default empty context
+        default_context: dict[str, Any] = {
+            "has_custom_scoring": False,
+            "scores": {},
+            "figures": {},
+            "tables": {},
+            "metadata": {},
+        }
+
+        # Get workload configuration
+        workload_config = self.config.get("workload", {})
+        workload_name = workload_config.get("name")
+
+        if not workload_name:
+            return default_context
+
+        # Instantiate the workload
+        try:
+            workload = create_workload(workload_config)
+        except Exception as e:
+            print(f"Warning: Failed to instantiate workload for context: {e}")
+            return default_context
+
+        # Get runs dataframe and warmup dataframe
+        runs_df = data.get("runs_df")
+        if runs_df is None or runs_df.empty:
+            return default_context
+
+        # Load warmup data if available
+        warmup_df = self._load_warmup_data(results_dir)
+
+        # Get figures directory
+        figures_dir = Path(self.report_config["figures_dir"])
+
+        # Call workload's report context method
+        try:
+            context = workload.get_report_context(
+                runs_df=runs_df,
+                warmup_df=warmup_df,
+                preparation_timings=preparation_timings,
+                output_dir=figures_dir,
+            )
+            return context
+        except Exception as e:
+            print(f"Warning: Failed to generate workload context: {e}")
+            return default_context
+
+    def _load_warmup_data(self, results_dir: Path) -> pd.DataFrame | None:
+        """Load warmup run data if available.
+
+        Warmup data is stored separately from measured runs and is used
+        for cold run scoring in ClickBench.
+        """
+        warmup_file = results_dir / "warmup_runs.csv"
+        if warmup_file.exists():
+            try:
+                return pd.read_csv(warmup_file)
+            except Exception:
+                pass
+
+        # Try to extract warmup data from raw_results.json
+        raw_results_file = results_dir / "raw_results.json"
+        if raw_results_file.exists():
+            try:
+                raw_results = load_json(raw_results_file)
+                warmup_data = []
+
+                # Extract warmup results from each system's raw data
+                for result in raw_results:
+                    if isinstance(result, dict) and "warmup" in result:
+                        warmup_data.extend(result["warmup"])
+
+                if warmup_data:
+                    return pd.DataFrame(warmup_data)
+            except Exception:
+                pass
+
+        return None
+
     def _generate_query_files(
         self, attachments_dir: Path, system_names: list[str] | None = None
     ) -> None:
@@ -1395,7 +1526,7 @@ class ReportRenderer:
             f.write(content_html)
 
         # Copy CSS file
-        css_src = Path("templates/styles.css.j2")
+        css_src = get_templates_dir() / "styles.css.j2"
         if css_src.exists():
             css_dst = short_dir / "styles.css"
             css_template = self.jinja_env.get_template("styles.css.j2")
@@ -1481,7 +1612,7 @@ class ReportRenderer:
             f.write(content_html)
 
         # Copy CSS file
-        css_src = Path("templates/styles.css.j2")
+        css_src = get_templates_dir() / "styles.css.j2"
         if css_src.exists():
             css_dst = results_report_dir / "styles.css"
             css_template = self.jinja_env.get_template("styles.css.j2")
@@ -1880,14 +2011,15 @@ def collect_all_project_metadata(index_dir: Path) -> list[dict[str, Any]]:
 
 
 def render_global_report_index(
-    index_dir: Path = Path("results"), template_dir: str = "templates"
+    index_dir: Path = Path("results"), template_dir: str | None = None
 ) -> Path:
     """Render the standalone report index for all available projects."""
     ensure_directory(index_dir)
     projects = collect_all_project_metadata(index_dir)
 
+    resolved_dir = template_dir or str(get_templates_dir())
     env = Environment(
-        loader=FileSystemLoader(template_dir),
+        loader=FileSystemLoader(resolved_dir),
         autoescape=select_autoescape(enabled_extensions=("j2",)),
         trim_blocks=True,
         lstrip_blocks=True,

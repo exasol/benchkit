@@ -63,6 +63,11 @@ benchkit = "benchkit.cli:app"
 
 [tool.setuptools.packages.find]
 where = ["."]
+include = ["benchkit*", "workloads*", "templates*"]
+
+[tool.setuptools.package-data]
+workloads = ["**/*.sql", "**/*.json"]
+templates = ["**/*.j2", "**/*.css", "**/*.js", "**/*.html"]
 
 [tool.black]
 line-length = 88

@@ -6,6 +6,8 @@ from typing import Any
 import pandas as pd
 from jinja2 import Environment, FileSystemLoader
 
+from ..util import get_templates_dir
+
 
 def _format_number(value: float, decimals: int = 1) -> str:
     """Format number for display."""
@@ -46,7 +48,7 @@ def _sanitize(value: Any) -> Any:
 
 def render_html_report(
     context: dict[str, Any],
-    template_dir: str = "templates",
+    template_dir: str | None = None,
     output_file: Path | None = None,
 ) -> str:
     """
@@ -60,8 +62,9 @@ def render_html_report(
     Returns:
         Rendered HTML content
     """
+    resolved_dir = template_dir or str(get_templates_dir())
     jinja_env = Environment(
-        loader=FileSystemLoader(template_dir),
+        loader=FileSystemLoader(resolved_dir),
         autoescape=True,
     )
 
