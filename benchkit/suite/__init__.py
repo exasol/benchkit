@@ -1416,6 +1416,12 @@ class SuiteRunner:
             return False
 
         finally:
+            # Clean up IP env vars to prevent leaking into subsequent benchmarks
+            if cfg is not None:
+                from ..run.infrastructure import cleanup_infrastructure_env_vars
+
+                cleanup_infrastructure_env_vars(cfg)
+
             # Infrastructure cleanup in finally block ensures it happens
             # regardless of success, failure, or exception
             if cfg is not None and has_cloud and not no_cleanup:
