@@ -383,7 +383,7 @@ class ExasolNativeInstaller:
         )
 
         result = system.execute_command(
-            f"wget -q {c4_url} -O c4 && chmod +x c4",
+            f"wget -q --tries=3 --retry-connrefused --waitretry=5 {c4_url} -O c4 && chmod +x c4",
             description=f"Download c4 cluster management tool v{c4_version}",
             category="tool_setup",
         )

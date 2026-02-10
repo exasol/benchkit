@@ -296,9 +296,9 @@ class StarrocksSystem(SystemUnderTest):
                 if "exists" in check_result.get("stdout", ""):
                     return (idx, True, "already exists")
 
-                # Download
+                # Download with retries for transient network failures
                 result = mgr.run_remote_command(
-                    f"wget -q -O {tarball} {download_url}",
+                    f"wget -q --tries=3 --retry-connrefused --waitretry=5 -O {tarball} {download_url}",
                     timeout=900,  # 15 minutes for ~3GB
                 )
                 if result.get("success", False):
@@ -400,7 +400,7 @@ class StarrocksSystem(SystemUnderTest):
             else:
                 self._log(f"Downloading StarRocks {self.version}...")
                 result = self.execute_command(
-                    f"wget -q -O {tarball} {download_url}",
+                    f"wget -q --tries=3 --retry-connrefused --waitretry=5 -O {tarball} {download_url}",
                     timeout=900.0,  # 15 minutes for ~3GB
                     description=f"Download StarRocks {self.version}",
                     category="installation",
