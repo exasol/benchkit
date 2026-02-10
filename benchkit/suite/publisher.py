@@ -16,7 +16,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from rich.console import Console
 
 from ..config import load_config
-from ..util import ensure_directory, load_json
+from ..util import ensure_directory, get_templates_dir, load_json
 from . import SuiteConfig, SuiteRunner, SuiteStateManager
 
 console = Console()
@@ -113,7 +113,7 @@ class SuitePublisher:
 
         # Setup Jinja2 environment
         self.jinja_env = Environment(
-            loader=FileSystemLoader("templates"),
+            loader=FileSystemLoader(str(get_templates_dir())),
             autoescape=select_autoescape(enabled_extensions=("j2",)),
             trim_blocks=True,
             lstrip_blocks=True,

@@ -461,3 +461,19 @@ def setup_cloud_infrastructure(
     except Exception as e:
         _log(f"[red]❌ Infrastructure setup failed: {e}[/red]", log_callback)
         return False
+
+
+def cleanup_infrastructure_env_vars(config: dict[str, Any]) -> None:
+    """Remove IP environment variables set during infrastructure setup.
+
+    When running multiple benchmarks in the same process (e.g., suite execution
+    via ThreadPoolExecutor), env vars like EXASOL_PUBLIC_IP from one benchmark
+    can leak into subsequent benchmarks, causing them to connect to stale IPs.
+    """
+    import os
+
+    for system_config in config.get("systems", []):
+        system_name = system_config["name"]
+        for suffix in ["_PUBLIC_IP", "_PRIVATE_IP"]:
+            var_name = f"{system_name.upper()}{suffix}"
+            os.environ.pop(var_name, None)

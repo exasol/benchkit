@@ -13,6 +13,7 @@ from jinja2 import Environment, FileSystemLoader
 
 from ..common.markers import exclude_from_package
 from ..systems.base import SystemUnderTest
+from ..util import get_workloads_dir
 
 
 class Workload(ABC):
@@ -28,9 +29,7 @@ class Workload(ABC):
         self.scale_factor = config.get("scale_factor", 1)
         self.config = config
         self.data_dir = Path(f"data/{self.name}/sf{self.scale_factor}")
-        self.workload_dir = (
-            Path(__file__).parent.parent.parent / "workloads" / self.name
-        )
+        self.workload_dir = get_workloads_dir() / self.name
         self.template_env: Environment | None = None
         # Store system for template resolution
         self._current_system: SystemUnderTest | None = None

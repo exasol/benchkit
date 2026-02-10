@@ -1,5 +1,6 @@
 """Utility functions for the benchmark framework."""
 
+import importlib.resources
 import json
 import subprocess
 import time
@@ -110,3 +111,24 @@ def load_json(path: str | Path) -> Any:
     """Load data from JSON file."""
     with open(path, encoding="utf-8") as f:
         return json.load(f)
+
+
+def _get_package_root() -> Path:
+    """Return the root directory containing benchkit, workloads, and templates.
+
+    Resolves via the benchkit package location (which is unique and always
+    installed), then navigates to its parent. This avoids namespace collisions
+    that occur when using importlib.resources with generic names like
+    'templates' or 'workloads'.
+    """
+    return Path(str(importlib.resources.files("benchkit"))).parent
+
+
+def get_templates_dir() -> Path:
+    """Return the absolute path to the templates directory."""
+    return _get_package_root() / "templates"
+
+
+def get_workloads_dir() -> Path:
+    """Return the absolute path to the workloads data directory."""
+    return _get_package_root() / "workloads"

@@ -574,7 +574,7 @@ echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium
 
         # Download
         result = self.execute_command(
-            f"wget {download_url} -O /tmp/trino-server.tar.gz",
+            f"wget -q --tries=3 --retry-connrefused --waitretry=5 {download_url} -O /tmp/trino-server.tar.gz",
             timeout=300,
             description=f"Download Trino server version {version}",
             category="installation",
@@ -638,7 +638,7 @@ echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium
         download_url = f"https://repo1.maven.org/maven2/org/apache/hive/hive-standalone-metastore/{metastore_version}/hive-standalone-metastore-{metastore_version}-bin.tar.gz"
 
         result = self.execute_command(
-            f"wget {download_url} -O /tmp/hive-metastore.tar.gz",
+            f"wget -q --tries=3 --retry-connrefused --waitretry=5 {download_url} -O /tmp/hive-metastore.tar.gz",
             timeout=300,
             description=f"Download Hive Standalone Metastore {metastore_version}",
             category="hive_setup",
