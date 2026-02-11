@@ -55,6 +55,7 @@ class SeriesConfig(BaseModel):
     name: str
     description: str = ""
     enabled: bool = True
+    path: str | None = None  # relative path to config dir (default: series key name)
 
 
 class SuiteExecutionConfig(BaseModel):
@@ -81,6 +82,31 @@ class SuiteTimeoutsConfig(BaseModel):
     cleanup: int = 900  # 15 minutes
 
 
+class SuitePublishChartsConfig(BaseModel):
+    """Chart visibility for suite dashboard. None = auto-detect based on data."""
+
+    scaling_by_nodes: bool | None = None
+    scaling_by_streams: bool | None = None
+    scaling_by_sf: bool | None = None
+    comparison: bool | None = None
+    heatmap: bool | None = None
+    efficiency: bool | None = None
+    query_scatter: bool | None = None
+    stacked_series: bool | None = None
+
+
+class SuitePublishConfig(BaseModel):
+    """Configuration for suite dashboard publishing."""
+
+    title: str | None = None
+    description: str | None = None
+    output_dir: str | None = None
+    theme: str = "auto"
+    base_url: str = "./"
+    include_reports: bool = True
+    charts: SuitePublishChartsConfig = SuitePublishChartsConfig()
+
+
 class SuiteConfig(BaseModel):
     """Main suite configuration loaded from suite.yaml."""
 
@@ -96,6 +122,7 @@ class SuiteConfig(BaseModel):
     execution: SuiteExecutionConfig = SuiteExecutionConfig()
     infrastructure: SuiteInfrastructureConfig = SuiteInfrastructureConfig()
     timeouts: SuiteTimeoutsConfig = SuiteTimeoutsConfig()
+    publish: SuitePublishConfig = SuitePublishConfig()
 
     @field_validator("name")
     @classmethod
@@ -406,28 +433,46 @@ class SuiteRunner:
 
         discovered: dict[str, list[Path]] = {}
 
-        # Look for series directories
-        for entry in sorted(series_dir.iterdir()):
-            if not entry.is_dir():
-                continue
-            if entry.name.startswith("."):
-                continue
-
-            series_name = entry.name
-
-            # Skip if not in configured series or disabled (unless include_disabled)
-            if series_name in self.config.series:
-                series_config = self.config.series[series_name]
+        # If series have custom paths configured, use those directly
+        if self.config.series:
+            for series_key, series_config in sorted(self.config.series.items()):
                 if not series_config.enabled and not include_disabled:
                     continue
-            elif self.config.series:
-                # If series are explicitly configured, skip undeclared ones
-                continue
 
-            # Find yaml configs in series directory
-            configs = sorted(entry.glob("*.yaml"))
-            if configs:
-                discovered[series_name] = configs
+                if series_config.path:
+                    # Custom path: resolve relative to suite root
+                    config_dir = self.suite_path / series_config.path
+                else:
+                    # Default: use series key as directory name under series_dir
+                    config_dir = series_dir / series_key
+
+                if config_dir.is_dir():
+                    configs = sorted(config_dir.glob("*.yaml"))
+                    if configs:
+                        discovered[series_key] = configs
+
+        # Also discover any series directories not explicitly configured
+        if series_dir.is_dir():
+            for entry in sorted(series_dir.iterdir()):
+                if not entry.is_dir():
+                    continue
+                if entry.name.startswith("."):
+                    continue
+
+                series_name = entry.name
+
+                # Skip already-discovered series
+                if series_name in discovered:
+                    continue
+
+                # Skip if series are explicitly configured and this one isn't listed
+                if self.config.series and series_name not in self.config.series:
+                    continue
+
+                # Find yaml configs in series directory
+                configs = sorted(entry.glob("*.yaml"))
+                if configs:
+                    discovered[series_name] = configs
 
         self._discovered_configs = discovered
 
@@ -457,6 +502,13 @@ class SuiteRunner:
         Returns:
             Path to the config file, or None if not found
         """
+        # Check if series has a custom path configured
+        series_config = self.config.series.get(series_name)
+        if series_config and series_config.path:
+            config_path = self.suite_path / series_config.path / f"{config_name}.yaml"
+            if config_path.exists():
+                return config_path
+
         # Try series subdirectory first
         series_dir = self.suite_path / "series"
         if not series_dir.exists():

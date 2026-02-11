@@ -411,6 +411,17 @@ def create_system_overview_plot(df: pd.DataFrame, output_dir: Path) -> str:
         .reset_index()
     )
 
+    # Compute per-system geomean from per-query medians
+    geomean_values = []
+    for system in system_stats["system"]:
+        sys_df = df[df["system"] == system]
+        query_medians = sys_df.groupby("query")["elapsed_ms"].median()
+        if len(query_medians) > 0 and (query_medians > 0).all():
+            geomean_values.append(float(np.exp(np.log(query_medians.values).mean())))
+        else:
+            geomean_values.append(0.0)
+    system_stats["geomean"] = geomean_values
+
     systems = system_stats["system"].tolist()
     color_map = _build_system_color_map(systems)
     system_stats["system_label"] = system_stats["system"].apply(_format_system_label)
@@ -424,7 +435,7 @@ def create_system_overview_plot(df: pd.DataFrame, output_dir: Path) -> str:
         cols=3,
         subplot_titles=(
             "Total Runtime by System",
-            "Average Query Runtime",
+            "Geomean Query Runtime",
             "Runtime Variability (CV%)",
         ),
     )
@@ -441,13 +452,13 @@ def create_system_overview_plot(df: pd.DataFrame, output_dir: Path) -> str:
         col=1,
     )
 
-    # 2. Average runtime
+    # 2. Geomean runtime (geometric mean of per-query medians)
     fig.add_trace(
         go.Bar(
             x=system_stats["system_label"],
-            y=system_stats["mean"],
+            y=system_stats["geomean"],
             marker_color=colors_list,
-            name="Average",
+            name="Geomean",
         ),
         row=1,
         col=2,
@@ -455,8 +466,8 @@ def create_system_overview_plot(df: pd.DataFrame, output_dir: Path) -> str:
 
     # 3. Coefficient of variation (moved to col 3)
     # Replace zeros with NaN to avoid division by zero
-    mean_safe = system_stats["mean"].replace(0, float("nan"))
-    cv = (system_stats["std"] / mean_safe) * 100
+    geomean_safe = system_stats["geomean"].replace(0, float("nan"))
+    cv = (system_stats["std"] / geomean_safe) * 100
     fig.add_trace(
         go.Bar(
             x=system_stats["system_label"], y=cv, marker_color=colors_list, name="CV"

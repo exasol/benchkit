@@ -99,23 +99,21 @@
                 </div>
                 {% endif %}
 
-                <!-- Metric Selector -->
-                <div class="filter-group" data-dimension="metric">
-                    <label>Metric</label>
-                    <div class="metric-toggles" id="metric-toggles">
-                        <button class="toggle active" data-metric="median">Median</button>
-                        <button class="toggle" data-metric="avg">Average</button>
-                        <button class="toggle" data-metric="total">Total</button>
+                <!-- Metric & Scale -->
+                <div class="filter-group filter-group-metric-scale" data-dimension="metric">
+                    <label>Metric / Scale</label>
+                    <div class="metric-scale-row">
+                        <div class="metric-toggles" id="metric-toggles">
+                            <button class="toggle" data-metric="median">Median</button>
+                            <button class="toggle" data-metric="avg">Average</button>
+                            <button class="toggle active" data-metric="geomean">Geomean</button>
+                            <button class="toggle" data-metric="total">Total</button>
+                        </div>
+                        <button class="scale-toggle" id="scale-toggle" data-log="true">
+                            <span class="scale-log">Log</span>
+                            <span class="scale-linear">Linear</span>
+                        </button>
                     </div>
-                </div>
-
-                <!-- Scale Toggle -->
-                <div class="filter-group">
-                    <label>Scale</label>
-                    <button class="scale-toggle" id="scale-toggle" data-log="true">
-                        <span class="scale-log">Log</span>
-                        <span class="scale-linear">Linear</span>
-                    </button>
                 </div>
             </div>
         </section>
@@ -144,8 +142,12 @@
 
         <!-- Charts Section -->
         <section class="charts-section">
-            <!-- Scaling Charts (3-column) -->
-            <div class="chart-row chart-row-3">
+            <!-- Scaling Charts — only render visible ones -->
+            {% set scaling_charts = [charts.scaling_by_nodes, charts.scaling_by_streams, charts.scaling_by_sf] %}
+            {% set visible_scaling = scaling_charts | select | list | length %}
+            {% if visible_scaling > 0 %}
+            <div class="chart-row chart-row-{{ visible_scaling }}">
+                {% if charts.scaling_by_nodes %}
                 <div class="chart-container">
                     <div class="chart-header">
                         <h3>Scaling by Node Count</h3>
@@ -153,7 +155,9 @@
                     </div>
                     <div id="scaling-by-nodes" class="chart"></div>
                 </div>
+                {% endif %}
 
+                {% if charts.scaling_by_streams %}
                 <div class="chart-container">
                     <div class="chart-header">
                         <h3>Scaling by Stream Count</h3>
@@ -161,7 +165,9 @@
                     </div>
                     <div id="scaling-by-streams" class="chart"></div>
                 </div>
+                {% endif %}
 
+                {% if charts.scaling_by_sf %}
                 <div class="chart-container">
                     <div class="chart-header">
                         <h3>Scaling by Scale Factor</h3>
@@ -169,9 +175,12 @@
                     </div>
                     <div id="scaling-by-sf" class="chart"></div>
                 </div>
+                {% endif %}
             </div>
+            {% endif %}
 
             <!-- Primary Charts (full width) -->
+            {% if charts.comparison %}
             <div class="chart-container full-width">
                 <div class="chart-header">
                     <h3>System Comparison Across Benchmarks</h3>
@@ -179,9 +188,14 @@
                 </div>
                 <div id="comparison-chart" class="chart"></div>
             </div>
+            {% endif %}
 
-            <!-- Secondary Charts (2-column) -->
-            <div class="chart-row">
+            <!-- Secondary Charts -->
+            {% set secondary_charts = [charts.heatmap, charts.efficiency] %}
+            {% set visible_secondary = secondary_charts | select | list | length %}
+            {% if visible_secondary > 0 %}
+            <div class="chart-row {% if visible_secondary == 1 %}chart-row-1{% endif %}">
+                {% if charts.heatmap %}
                 <div class="chart-container">
                     <div class="chart-header">
                         <h3>Performance Heatmap</h3>
@@ -193,7 +207,9 @@
                         <select id="heatmap-benchmark-select"></select>
                     </div>
                 </div>
+                {% endif %}
 
+                {% if charts.efficiency %}
                 <div class="chart-container">
                     <div class="chart-header">
                         <h3>Scaling Efficiency</h3>
@@ -201,10 +217,16 @@
                     </div>
                     <div id="efficiency-chart" class="chart"></div>
                 </div>
+                {% endif %}
             </div>
+            {% endif %}
 
             <!-- Tertiary Charts -->
-            <div class="chart-row">
+            {% set tertiary_charts = [charts.query_scatter, charts.stacked_series] %}
+            {% set visible_tertiary = tertiary_charts | select | list | length %}
+            {% if visible_tertiary > 0 %}
+            <div class="chart-row {% if visible_tertiary == 1 %}chart-row-1{% endif %}">
+                {% if charts.query_scatter %}
                 <div class="chart-container">
                     <div class="chart-header">
                         <h3>Query Performance by Query</h3>
@@ -212,7 +234,9 @@
                     </div>
                     <div id="query-scatter-chart" class="chart"></div>
                 </div>
+                {% endif %}
 
+                {% if charts.stacked_series %}
                 <div class="chart-container">
                     <div class="chart-header">
                         <h3>Total Runtime by Series</h3>
@@ -220,7 +244,9 @@
                     </div>
                     <div id="stacked-chart" class="chart"></div>
                 </div>
+                {% endif %}
             </div>
+            {% endif %}
         </section>
 
         <!-- Benchmark Table -->
@@ -233,16 +259,9 @@
                 <table class="benchmark-table" id="benchmark-table">
                     <thead>
                         <tr>
-                            <th>Benchmark</th>
-                            <th>Series</th>
-                            <th>Nodes</th>
-                            <th>Scale Factor</th>
-                            <th>Systems</th>
-                            <th>Winner</th>
-                            <th>Speedup</th>
-                            {% if include_reports %}
-                            <th>Report</th>
-                            {% endif %}
+                            {% for col in table_columns %}
+                            <th>{{ col.label }}</th>
+                            {% endfor %}
                         </tr>
                     </thead>
                     <tbody id="benchmark-tbody">

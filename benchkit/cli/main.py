@@ -2740,11 +2740,13 @@ def suite_publish(
     title: str | None = typer.Option(
         None, "--title", help="Custom site title (default: suite name)"
     ),
-    base_url: str = typer.Option("./", "--base-url", help="Base URL for assets"),
-    include_reports: bool = typer.Option(
-        True, "--include-reports/--no-reports", help="Copy individual benchmark reports"
+    base_url: str | None = typer.Option(
+        None, "--base-url", help="Base URL for assets (default: ./)"
     ),
-    theme: str = typer.Option("auto", "--theme", help="Theme: light, dark, auto"),
+    include_reports: bool | None = typer.Option(
+        None, "--include-reports/--no-reports", help="Copy individual benchmark reports"
+    ),
+    theme: str | None = typer.Option(None, "--theme", help="Theme: light, dark, auto"),
     regenerate_stale: bool = typer.Option(
         False,
         "--regenerate-stale",
@@ -2754,7 +2756,8 @@ def suite_publish(
     """Generate a static benchmark comparison website from suite results.
 
     Creates an interactive dashboard with visualizations for comparing
-    benchmark results across all benchmarks in the suite.
+    benchmark results across all benchmarks in the suite. Settings from
+    suite.yaml's publish section are used as defaults; CLI flags override.
 
     Example:
         benchkit suite publish ./my-suite/

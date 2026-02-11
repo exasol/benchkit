@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from rich.console import Console
@@ -44,6 +45,7 @@ class SystemDataEntry:
     version: str
     median_ms: float
     avg_ms: float
+    geomean_ms: float
     total_ms: float
     min_ms: float
     max_ms: float
@@ -82,9 +84,9 @@ class SuitePublisher:
         config: SuiteConfig,
         output_dir: Path | None = None,
         title: str | None = None,
-        base_url: str = "./",
-        include_reports: bool = True,
-        theme: str = "auto",
+        base_url: str | None = None,
+        include_reports: bool | None = None,
+        theme: str | None = None,
         regenerate_stale: bool = False,
     ):
         """Initialize the publisher.
@@ -92,21 +94,40 @@ class SuitePublisher:
         Args:
             suite_path: Path to the suite directory
             config: Loaded suite configuration
-            output_dir: Output directory for the website
-            title: Custom site title (defaults to suite name)
-            base_url: Base URL for assets
-            include_reports: Whether to copy individual benchmark reports
-            theme: Theme (light, dark, auto)
+            output_dir: Output directory (overrides suite.yaml publish.output_dir)
+            title: Custom site title (overrides suite.yaml publish.title)
+            base_url: Base URL for assets (overrides suite.yaml publish.base_url)
+            include_reports: Whether to copy reports (overrides suite.yaml)
+            theme: Theme (overrides suite.yaml publish.theme)
             regenerate_stale: Whether to regenerate reports older than their data
         """
         self.suite_path = suite_path
         self.config = config
-        self.output_dir = output_dir or Path("docs") / self._slugify(config.name)
-        self.title = title or config.name
-        self.base_url = base_url
-        self.include_reports = include_reports
-        self.theme = theme
+        pub = config.publish
+
+        # Resolve output_dir: CLI arg > suite.yaml > default
+        if output_dir is not None:
+            self.output_dir = output_dir
+        elif pub.output_dir:
+            self.output_dir = Path(pub.output_dir)
+        else:
+            self.output_dir = Path("docs") / self._slugify(config.name)
+
+        # Resolve title: CLI arg > suite.yaml > suite name
+        self.title = title or pub.title or config.name
+
+        # Resolve other settings: CLI arg > suite.yaml defaults
+        self.base_url = base_url if base_url is not None else pub.base_url
+        self.include_reports = (
+            include_reports if include_reports is not None else pub.include_reports
+        )
+        self.theme = theme if theme is not None else pub.theme
         self.regenerate_stale = regenerate_stale
+
+        # Build series display names mapping (series key -> display name)
+        self.series_display_names: dict[str, str] = {}
+        for key, series_cfg in config.series.items():
+            self.series_display_names[key] = series_cfg.name
 
         self.state_manager = SuiteStateManager(suite_path)
         self.runner = SuiteRunner(suite_path, config)
@@ -227,7 +248,7 @@ class SuitePublisher:
         workload_name = workload_config.get("name", "unknown")
         scale_factor = workload_config.get("scale_factor")
         # num_streams can be at workload level or nested under multiuser
-        multiuser_config = workload_config.get("multiuser", {})
+        multiuser_config = workload_config.get("multiuser") or {}
         stream_count = (
             multiuser_config.get("num_streams")
             or workload_config.get("num_streams")
@@ -266,6 +287,13 @@ class SuitePublisher:
             success_rate = (success_count / total_count * 100) if total_count > 0 else 0
 
             if not success_df.empty:
+                # Geometric mean of per-query medians (log-space to avoid overflow)
+                query_medians = success_df.groupby("query")["elapsed_ms"].median()
+                if len(query_medians) > 0 and (query_medians > 0).all():
+                    geomean_ms = float(np.exp(np.log(query_medians.values).mean()))
+                else:
+                    geomean_ms = 0.0
+
                 systems.append(
                     SystemDataEntry(
                         name=system_name,
@@ -273,6 +301,7 @@ class SuitePublisher:
                         version=system_config.get("version", "unknown"),
                         median_ms=float(success_df["elapsed_ms"].median()),
                         avg_ms=float(success_df["elapsed_ms"].mean()),
+                        geomean_ms=geomean_ms,
                         total_ms=float(success_df["elapsed_ms"].sum()),
                         min_ms=float(success_df["elapsed_ms"].min()),
                         max_ms=float(success_df["elapsed_ms"].max()),
@@ -360,7 +389,11 @@ class SuitePublisher:
         stream_counts_set: set[int] = set()
 
         for benchmark in benchmarks:
-            series_set.add(benchmark.series_name)
+            # Use display name for the series filter/label
+            display_name = self.series_display_names.get(
+                benchmark.series_name, benchmark.series_name
+            )
+            series_set.add(display_name)
             workloads_set.add(benchmark.workload)
             if benchmark.scale_factor is not None:
                 scale_factors_set.add(benchmark.scale_factor)
@@ -379,6 +412,7 @@ class SuitePublisher:
                     "version": s.version,
                     "median_ms": round(s.median_ms, 2),
                     "avg_ms": round(s.avg_ms, 2),
+                    "geomean_ms": round(s.geomean_ms, 2),
                     "total_ms": round(s.total_ms, 2),
                     "min_ms": round(s.min_ms, 2),
                     "max_ms": round(s.max_ms, 2),
@@ -403,10 +437,13 @@ class SuitePublisher:
                     for sys_name, stats in system_stats.items()
                 }
 
+            series_display = self.series_display_names.get(
+                benchmark.series_name, benchmark.series_name
+            )
             benchmark_entries.append(
                 {
                     "id": benchmark.benchmark_id,
-                    "series": benchmark.series_name,
+                    "series": series_display,
                     "config": benchmark.config_name,
                     "project_id": benchmark.project_id,
                     "workload": benchmark.workload,
@@ -440,6 +477,64 @@ class SuitePublisher:
             },
             "benchmarks": benchmark_entries,
         }
+
+    def _resolve_chart_visibility(self, site_data: dict[str, Any]) -> dict[str, bool]:
+        """Auto-detect which charts are relevant, then apply explicit overrides."""
+        filters = site_data["filters"]
+        benchmarks = site_data["benchmarks"]
+        has_queries = any(len(b.get("queries", {})) > 0 for b in benchmarks)
+
+        # Auto-detect based on data
+        auto = {
+            "scaling_by_nodes": len(filters["node_counts"]) > 1,
+            "scaling_by_streams": len(filters["stream_counts"]) > 1,
+            "scaling_by_sf": len(filters["scale_factors"]) > 1,
+            "comparison": len(benchmarks) > 0,
+            "heatmap": has_queries,
+            "efficiency": len(filters["node_counts"]) > 1,
+            "query_scatter": has_queries,
+            "stacked_series": len(filters["series"]) > 1,
+        }
+
+        # Apply explicit overrides from config (non-None values win)
+        charts_config = self.config.publish.charts
+        for chart_name in auto:
+            override = getattr(charts_config, chart_name, None)
+            if override is not None:
+                auto[chart_name] = override
+
+        return auto
+
+    def _resolve_table_columns(self, site_data: dict[str, Any]) -> list[dict[str, str]]:
+        """Auto-detect which table columns are relevant."""
+        filters = site_data["filters"]
+
+        # Always-present columns
+        columns = [{"key": "benchmark", "label": "Benchmark"}]
+
+        # Conditional columns
+        if len(filters["series"]) > 1:
+            columns.append({"key": "series", "label": "Series"})
+        if len(filters["node_counts"]) > 1:
+            columns.append({"key": "nodes", "label": "Nodes"})
+        if len(filters["scale_factors"]) > 1:
+            columns.append({"key": "scale_factor", "label": "Scale Factor"})
+        if len(filters["stream_counts"]) > 1:
+            columns.append({"key": "streams", "label": "Streams"})
+
+        # Always-present columns
+        columns.extend(
+            [
+                {"key": "systems", "label": "Systems"},
+                {"key": "winner", "label": "Winner"},
+                {"key": "speedup", "label": "Speedup"},
+            ]
+        )
+
+        if self.include_reports:
+            columns.append({"key": "report", "label": "Report"})
+
+        return columns
 
     def _copy_reports(self, benchmarks: list[BenchmarkDataEntry]) -> None:
         """Copy individual benchmark reports to the output directory."""
@@ -480,6 +575,13 @@ class SuitePublisher:
         assets_dir = self.output_dir / "assets"
         ensure_directory(assets_dir)
 
+        # Resolve chart visibility and table columns
+        charts = self._resolve_chart_visibility(site_data)
+        table_columns = self._resolve_table_columns(site_data)
+
+        # Embed table_columns in site_data so JS can use them
+        site_data["table_columns"] = table_columns
+
         # Prepare context
         context = {
             "title": self.title,
@@ -488,6 +590,8 @@ class SuitePublisher:
             "data": site_data,
             "data_json": json.dumps(site_data, indent=2),
             "include_reports": self.include_reports,
+            "charts": charts,
+            "table_columns": table_columns,
         }
 
         # Render main template
@@ -519,8 +623,12 @@ class SuitePublisher:
             console.print(f"[yellow]Warning: Could not render JS: {e}[/yellow]")
 
     def _slugify(self, text: str) -> str:
-        """Convert text to URL-safe slug."""
-        return text.lower().replace(" ", "_").replace("-", "_").replace(".", "_")
+        """Convert text to filesystem-safe slug."""
+        import re
+
+        slug = text.lower()
+        slug = re.sub(r"[^a-z0-9]+", "_", slug)
+        return slug.strip("_")
 
     def _format_number(self, value: float, decimals: int = 1) -> str:
         """Format number for display."""
@@ -608,20 +716,20 @@ def publish_suite(
     suite_path: Path,
     output_dir: Path | None = None,
     title: str | None = None,
-    base_url: str = "./",
-    include_reports: bool = True,
-    theme: str = "auto",
+    base_url: str | None = None,
+    include_reports: bool | None = None,
+    theme: str | None = None,
     regenerate_stale: bool = False,
 ) -> Path:
     """Main entry point for publishing a suite.
 
     Args:
         suite_path: Path to suite directory
-        output_dir: Output directory for the website
-        title: Custom site title
-        base_url: Base URL for assets
-        include_reports: Whether to copy individual reports
-        theme: Theme (light, dark, auto)
+        output_dir: Output directory (overrides suite.yaml)
+        title: Custom site title (overrides suite.yaml)
+        base_url: Base URL for assets (overrides suite.yaml)
+        include_reports: Whether to copy reports (overrides suite.yaml)
+        theme: Theme (overrides suite.yaml)
         regenerate_stale: Whether to regenerate reports older than their data
 
     Returns:
