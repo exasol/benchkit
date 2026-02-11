@@ -1377,6 +1377,18 @@ class SuiteRunner:
                 )
                 return False
 
+            # Probe phase (non-fatal, matches run --full behavior)
+            self._log("[blue]Running system probe...[/blue]", log_callback)
+            try:
+                from ..cli.workflows import run_probe_for_full
+
+                run_probe_for_full(cfg, outdir)
+            except Exception as e:
+                self._log(
+                    f"[yellow]Warning: Probe failed (continuing): {e}[/yellow]",
+                    log_callback,
+                )
+
             # Phases 1-3 share the benchmark timeout
             benchmark_start = time.monotonic()
 
