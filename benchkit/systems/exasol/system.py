@@ -857,11 +857,20 @@ else
     fi
 
     INSTANCE_STORE=""
+    # Determine root device to exclude it from storage candidates
+    ROOT_DEV=$(findmnt -n -o SOURCE / | sed 's/p\\?[0-9]*$//')
+
     # Search for storage devices in /dev/disk/by-id/
-    # Try EBS volumes first (Amazon_Elastic_Block_Store), then Instance Storage
-    for pattern in 'Amazon_Elastic_Block_Store' 'Instance_Storage'; do
+    # Try Instance Storage first (local NVMe), then EBS volumes
+    # This prevents matching the root EBS volume on instances with local NVMe (e.g. r6id)
+    for pattern in 'Instance_Storage' 'Amazon_Elastic_Block_Store'; do
         for byid in $(ls -1 /dev/disk/by-id/ 2>/dev/null | grep "$pattern" | grep -v '_1$' | grep -v -- '-part'); do
             BASE="/dev/disk/by-id/${byid}"
+            # Skip if this device resolves to the root device
+            REAL=$(readlink -f "$BASE" 2>/dev/null)
+            if [ "$REAL" = "$ROOT_DEV" ]; then
+                continue
+            fi
             if [ -n "$PART_SUFFIX" ]; then
                 CANDIDATE="${BASE}${PART_SUFFIX}"
                 if [ -b "$CANDIDATE" ]; then

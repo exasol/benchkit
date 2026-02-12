@@ -51,6 +51,7 @@ class SystemDataEntry:
     max_ms: float
     query_count: int
     success_rate: float = 100.0
+    node_count: int = 1
 
 
 @dataclass
@@ -259,17 +260,20 @@ class SuitePublisher:
         env_config = cfg.get("env", {})
         environment = env_config.get("mode", "local")
 
-        # Get node count from first system
+        # Get node count and instance type from systems
         systems_config = cfg.get("systems", [])
-        node_count = 1
         instance_type = None
         if systems_config:
             first_system = systems_config[0]
-            node_count = first_system.get("setup", {}).get("node_count", 1)
             system_name = first_system.get("name", "")
             instances = env_config.get("instances", {})
             if system_name in instances:
                 instance_type = instances[system_name].get("instance_type")
+        # Benchmark-level node_count = max across all systems
+        node_count = max(
+            (s.get("setup", {}).get("node_count", 1) for s in systems_config),
+            default=1,
+        )
 
         # Build system data
         systems: list[SystemDataEntry] = []
@@ -307,6 +311,7 @@ class SuitePublisher:
                         max_ms=float(success_df["elapsed_ms"].max()),
                         query_count=len(success_df["query"].unique()),
                         success_rate=success_rate,
+                        node_count=system_config.get("setup", {}).get("node_count", 1),
                     )
                 )
 
@@ -401,6 +406,7 @@ class SuitePublisher:
             stream_counts_set.add(benchmark.stream_count)
             for system in benchmark.systems:
                 systems_set.add(system.name)
+                node_counts_set.add(system.node_count)
 
         # Build benchmark entries for JSON
         benchmark_entries = []
@@ -410,6 +416,7 @@ class SuitePublisher:
                     "name": s.name,
                     "kind": s.kind,
                     "version": s.version,
+                    "node_count": s.node_count,
                     "median_ms": round(s.median_ms, 2),
                     "avg_ms": round(s.avg_ms, 2),
                     "geomean_ms": round(s.geomean_ms, 2),
