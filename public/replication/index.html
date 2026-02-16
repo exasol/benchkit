@@ -1,0 +1,1924 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="auto">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Replication Border Comparison Results - Benchmark Suite Results Dashboard">
+    <title>Replication Border Comparison Results | Benchmark Dashboard</title>
+    <link rel="stylesheet" href="assets/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+</head>
+<body>
+    <div class="dashboard">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="header-title">
+                    <h1>Replication Border Comparison Results</h1>
+                    <p class="header-description">Compare Exasol replication border SF*11000 vs SF*210000 across 2, 4, 8 nodes</p>
+                </div>
+                <div class="header-meta">
+                    <span class="meta-badge">
+                        <strong>6</strong> benchmarks
+                    </span>
+                    <span class="meta-badge">
+                        v1.0.0
+                    </span>
+                    <span class="meta-badge meta-date">
+                        Generated: <time datetime="2026-02-11T12:31:21.192055+00:00">2026-02-11</time>
+                    </span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Filters Section -->
+        <section class="filters-section">
+            <div class="filters-header">
+                <h2>Filters</h2>
+                <button class="btn btn-outline" id="reset-filters">Reset All</button>
+            </div>
+            <div class="filters-grid">
+                <!-- Series Filter -->
+                <div class="filter-group" data-dimension="series">
+                    <label>Series</label>
+                    <div class="filter-chips" id="series-chips">
+                        <button class="chip active" data-value="Replication Border SF*11000">Replication Border SF*11000</button>
+                        <button class="chip active" data-value="Replication Border SF*210000">Replication Border SF*210000</button>
+                    </div>
+                </div>
+
+                <!-- Systems Filter -->
+                <div class="filter-group" data-dimension="systems">
+                    <label>Systems</label>
+                    <div class="filter-chips" id="systems-chips">
+                        <button class="chip active" data-value="exasol">exasol</button>
+                    </div>
+                </div>
+
+                <!-- Node Count Filter -->
+                <div class="filter-group" data-dimension="nodeCount">
+                    <label>Node Count</label>
+                    <div class="filter-chips" id="node-chips">
+                        <button class="chip active" data-value="2">2 nodes</button>
+                        <button class="chip active" data-value="4">4 nodes</button>
+                        <button class="chip active" data-value="8">8 nodes</button>
+                    </div>
+                </div>
+
+                <!-- Stream Count Filter -->
+
+                <!-- Scale Factor Filter -->
+
+                <!-- Metric & Scale -->
+                <div class="filter-group filter-group-metric-scale" data-dimension="metric">
+                    <label>Metric / Scale</label>
+                    <div class="metric-scale-row">
+                        <div class="metric-toggles" id="metric-toggles">
+                            <button class="toggle" data-metric="median">Median</button>
+                            <button class="toggle" data-metric="avg">Average</button>
+                            <button class="toggle active" data-metric="geomean">Geomean</button>
+                            <button class="toggle" data-metric="total">Total</button>
+                        </div>
+                        <button class="scale-toggle" id="scale-toggle" data-log="true">
+                            <span class="scale-log">Log</span>
+                            <span class="scale-linear">Linear</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Stats Cards -->
+        <section class="stats-section">
+            <div class="stats-cards">
+                <div class="stat-card">
+                    <span class="stat-value" id="stat-benchmarks">6</span>
+                    <span class="stat-label">Benchmarks</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-value" id="stat-queries">-</span>
+                    <span class="stat-label">Query Executions</span>
+                </div>
+                <div class="stat-card stat-winner">
+                    <span class="stat-value" id="stat-fastest">-</span>
+                    <span class="stat-label">Fastest Overall</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-value" id="stat-speedup">-</span>
+                    <span class="stat-label">Max Speedup</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Charts Section -->
+        <section class="charts-section">
+            <!-- Scaling Charts — only render visible ones -->
+            <div class="chart-row chart-row-1">
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3>Scaling by Node Count</h3>
+                        <p class="chart-description">Performance vs cluster nodes</p>
+                    </div>
+                    <div id="scaling-by-nodes" class="chart"></div>
+                </div>
+
+
+            </div>
+
+            <!-- Primary Charts (full width) -->
+            <div class="chart-container full-width">
+                <div class="chart-header">
+                    <h3>System Comparison Across Benchmarks</h3>
+                    <p class="chart-description">Runtime comparison for each benchmark configuration</p>
+                </div>
+                <div id="comparison-chart" class="chart"></div>
+            </div>
+
+            <!-- Secondary Charts -->
+            <div class="chart-row ">
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3>Performance Heatmap</h3>
+                        <p class="chart-description">Query performance matrix (green=fast, red=slow)</p>
+                    </div>
+                    <div id="heatmap-chart" class="chart"></div>
+                    <div class="heatmap-controls">
+                        <label>Benchmark:</label>
+                        <select id="heatmap-benchmark-select"></select>
+                    </div>
+                </div>
+
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3>Scaling Efficiency</h3>
+                        <p class="chart-description">Time ratio vs baseline (1.0 = ideal, below = super scaling)</p>
+                    </div>
+                    <div id="efficiency-chart" class="chart"></div>
+                </div>
+            </div>
+
+            <!-- Tertiary Charts -->
+            <div class="chart-row ">
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3>Query Performance by Query</h3>
+                        <p class="chart-description">Individual query runtimes (hover for details)</p>
+                    </div>
+                    <div id="query-scatter-chart" class="chart"></div>
+                </div>
+
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3>Total Runtime by Series</h3>
+                        <p class="chart-description">Time breakdown per benchmark series</p>
+                    </div>
+                    <div id="stacked-chart" class="chart"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Benchmark Table -->
+        <section class="table-section">
+            <div class="table-header">
+                <h2>Benchmark Results</h2>
+                <span class="table-count" id="table-count">Showing all benchmarks</span>
+            </div>
+            <div class="table-wrapper">
+                <table class="benchmark-table" id="benchmark-table">
+                    <thead>
+                        <tr>
+                            <th>Benchmark</th>
+                            <th>Series</th>
+                            <th>Nodes</th>
+                            <th>Systems</th>
+                            <th>Winner</th>
+                            <th>Speedup</th>
+                            <th>Report</th>
+                        </tr>
+                    </thead>
+                    <tbody id="benchmark-tbody">
+                        <!-- Populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Generated by <a href="https://github.com/exasol/benchkit" target="_blank">BenchKit</a></p>
+            <p class="footer-date">2026-02-11T12:31:21.192055+00:00</p>
+        </footer>
+    </div>
+
+    <!-- Embedded Data -->
+    <script type="application/json" id="benchmark-data">
+    {
+  "meta": {
+    "suite_name": "Replication Border Comparison",
+    "suite_version": "1.0.0",
+    "suite_description": "Compare Exasol replication border SF*11000 vs SF*210000 across 2, 4, 8 nodes",
+    "generated_at": "2026-02-11T12:31:21.192055+00:00",
+    "total_benchmarks": 6
+  },
+  "filters": {
+    "series": [
+      "Replication Border SF*11000",
+      "Replication Border SF*210000"
+    ],
+    "systems": [
+      "exasol"
+    ],
+    "workloads": [
+      "tpch"
+    ],
+    "scale_factors": [
+      50
+    ],
+    "node_counts": [
+      2,
+      4,
+      8
+    ],
+    "stream_counts": [
+      4
+    ]
+  },
+  "benchmarks": [
+    {
+      "id": "rep_11k/nodes_2",
+      "series": "Replication Border SF*11000",
+      "config": "nodes_2",
+      "project_id": "extscal_rep11k_n2",
+      "workload": "tpch",
+      "scale_factor": 50,
+      "node_count": 2,
+      "stream_count": 4,
+      "environment": "aws",
+      "instance_type": "r6id.2xlarge",
+      "run_date": "2026-02-10 13:21:11",
+      "report_url": "reports/rep_11k/nodes_2/REPORT.html",
+      "systems": [
+        {
+          "name": "exasol",
+          "kind": "exasol",
+          "version": "2025.2.0",
+          "median_ms": 834.15,
+          "avg_ms": 1354.03,
+          "geomean_ms": 795.01,
+          "total_ms": 148943.0,
+          "min_ms": 87.2,
+          "max_ms": 8672.5,
+          "query_count": 22,
+          "success_rate": 100.0
+        }
+      ],
+      "queries": {
+        "Q02": {
+          "exasol": {
+            "median": 219.2,
+            "avg": 205.62,
+            "min": 167.4,
+            "max": 230.8,
+            "std": 26.78,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q11": {
+          "exasol": {
+            "median": 228.9,
+            "avg": 227.0,
+            "min": 142.2,
+            "max": 282.5,
+            "std": 55.22,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q04": {
+          "exasol": {
+            "median": 542.5,
+            "avg": 554.58,
+            "min": 244.9,
+            "max": 857.7,
+            "std": 217.51,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q14": {
+          "exasol": {
+            "median": 671.8,
+            "avg": 749.02,
+            "min": 601.3,
+            "max": 1111.3,
+            "std": 210.55,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q06": {
+          "exasol": {
+            "median": 140.4,
+            "avg": 155.72,
+            "min": 87.2,
+            "max": 283.6,
+            "std": 79.16,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q15": {
+          "exasol": {
+            "median": 879.8,
+            "avg": 890.34,
+            "min": 843.3,
+            "max": 938.4,
+            "std": 38.96,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q01": {
+          "exasol": {
+            "median": 2779.7,
+            "avg": 2467.66,
+            "min": 1442.7,
+            "max": 2833.9,
+            "std": 593.32,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q13": {
+          "exasol": {
+            "median": 2786.6,
+            "avg": 2626.22,
+            "min": 1329.7,
+            "max": 3335.3,
+            "std": 761.68,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q12": {
+          "exasol": {
+            "median": 497.0,
+            "avg": 532.84,
+            "min": 411.0,
+            "max": 676.9,
+            "std": 124.77,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q17": {
+          "exasol": {
+            "median": 142.9,
+            "avg": 140.9,
+            "min": 132.5,
+            "max": 148.7,
+            "std": 7.1,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q07": {
+          "exasol": {
+            "median": 2746.8,
+            "avg": 2514.3,
+            "min": 1427.8,
+            "max": 2916.9,
+            "std": 613.54,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q20": {
+          "exasol": {
+            "median": 521.1,
+            "avg": 626.16,
+            "min": 399.5,
+            "max": 895.9,
+            "std": 219.91,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q21": {
+          "exasol": {
+            "median": 1491.3,
+            "avg": 1459.38,
+            "min": 808.2,
+            "max": 1972.8,
+            "std": 493.57,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q16": {
+          "exasol": {
+            "median": 1382.7,
+            "avg": 1383.42,
+            "min": 1219.2,
+            "max": 1547.7,
+            "std": 159.96,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q10": {
+          "exasol": {
+            "median": 1902.9,
+            "avg": 1594.54,
+            "min": 988.7,
+            "max": 2059.7,
+            "std": 542.33,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q08": {
+          "exasol": {
+            "median": 792.1,
+            "avg": 684.22,
+            "min": 278.1,
+            "max": 849.5,
+            "std": 236.4,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q22": {
+          "exasol": {
+            "median": 328.8,
+            "avg": 314.04,
+            "min": 206.8,
+            "max": 385.2,
+            "std": 70.64,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q18": {
+          "exasol": {
+            "median": 1761.6,
+            "avg": 1702.92,
+            "min": 1193.8,
+            "max": 1920.8,
+            "std": 294.11,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q05": {
+          "exasol": {
+            "median": 1714.5,
+            "avg": 1535.72,
+            "min": 803.7,
+            "max": 1807.3,
+            "std": 414.82,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q03": {
+          "exasol": {
+            "median": 913.6,
+            "avg": 1433.9,
+            "min": 751.3,
+            "max": 2394.0,
+            "std": 830.16,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q09": {
+          "exasol": {
+            "median": 8456.0,
+            "avg": 7809.42,
+            "min": 5887.2,
+            "max": 8672.5,
+            "std": 1181.35,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q19": {
+          "exasol": {
+            "median": 151.6,
+            "avg": 180.68,
+            "min": 111.1,
+            "max": 289.2,
+            "std": 72.95,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        }
+      }
+    },
+    {
+      "id": "rep_11k/nodes_4",
+      "series": "Replication Border SF*11000",
+      "config": "nodes_4",
+      "project_id": "extscal_rep11k_n4",
+      "workload": "tpch",
+      "scale_factor": 50,
+      "node_count": 4,
+      "stream_count": 4,
+      "environment": "aws",
+      "instance_type": "r6id.xlarge",
+      "run_date": "2026-02-10 13:54:59",
+      "report_url": "reports/rep_11k/nodes_4/REPORT.html",
+      "systems": [
+        {
+          "name": "exasol",
+          "kind": "exasol",
+          "version": "2025.2.0",
+          "median_ms": 999.8,
+          "avg_ms": 1747.97,
+          "geomean_ms": 1010.59,
+          "total_ms": 192276.3,
+          "min_ms": 84.7,
+          "max_ms": 12348.2,
+          "query_count": 22,
+          "success_rate": 100.0
+        }
+      ],
+      "queries": {
+        "Q11": {
+          "exasol": {
+            "median": 395.4,
+            "avg": 377.06,
+            "min": 225.0,
+            "max": 480.5,
+            "std": 95.98,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q02": {
+          "exasol": {
+            "median": 509.8,
+            "avg": 523.02,
+            "min": 250.3,
+            "max": 805.8,
+            "std": 217.1,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q14": {
+          "exasol": {
+            "median": 989.6,
+            "avg": 1057.52,
+            "min": 720.9,
+            "max": 1626.5,
+            "std": 337.99,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q04": {
+          "exasol": {
+            "median": 788.0,
+            "avg": 726.78,
+            "min": 365.6,
+            "max": 1076.1,
+            "std": 262.18,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q01": {
+          "exasol": {
+            "median": 2637.6,
+            "avg": 2753.7,
+            "min": 1641.2,
+            "max": 3508.2,
+            "std": 770.87,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q06": {
+          "exasol": {
+            "median": 175.9,
+            "avg": 242.4,
+            "min": 112.3,
+            "max": 615.2,
+            "std": 211.63,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q15": {
+          "exasol": {
+            "median": 945.8,
+            "avg": 887.78,
+            "min": 611.8,
+            "max": 994.5,
+            "std": 155.82,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q13": {
+          "exasol": {
+            "median": 2328.6,
+            "avg": 2728.22,
+            "min": 1466.1,
+            "max": 3976.0,
+            "std": 1153.47,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q12": {
+          "exasol": {
+            "median": 655.8,
+            "avg": 683.72,
+            "min": 588.9,
+            "max": 917.0,
+            "std": 135.36,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q20": {
+          "exasol": {
+            "median": 645.9,
+            "avg": 713.38,
+            "min": 497.9,
+            "max": 1063.4,
+            "std": 244.62,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q17": {
+          "exasol": {
+            "median": 161.5,
+            "avg": 180.72,
+            "min": 147.8,
+            "max": 226.6,
+            "std": 36.16,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q07": {
+          "exasol": {
+            "median": 3965.8,
+            "avg": 3649.3,
+            "min": 1492.4,
+            "max": 4744.2,
+            "std": 1248.6,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q21": {
+          "exasol": {
+            "median": 1637.3,
+            "avg": 1894.0,
+            "min": 1008.8,
+            "max": 3507.4,
+            "std": 1036.94,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q16": {
+          "exasol": {
+            "median": 1422.4,
+            "avg": 1332.0,
+            "min": 1053.9,
+            "max": 1517.4,
+            "std": 208.12,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q10": {
+          "exasol": {
+            "median": 2171.2,
+            "avg": 2122.4,
+            "min": 958.8,
+            "max": 4113.8,
+            "std": 1282.51,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q18": {
+          "exasol": {
+            "median": 2242.0,
+            "avg": 2027.46,
+            "min": 1049.1,
+            "max": 2488.1,
+            "std": 564.49,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q08": {
+          "exasol": {
+            "median": 851.4,
+            "avg": 881.28,
+            "min": 536.2,
+            "max": 1205.8,
+            "std": 296.46,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q22": {
+          "exasol": {
+            "median": 478.7,
+            "avg": 421.8,
+            "min": 245.2,
+            "max": 578.9,
+            "std": 151.63,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q05": {
+          "exasol": {
+            "median": 2233.2,
+            "avg": 2046.78,
+            "min": 1058.7,
+            "max": 2633.6,
+            "std": 593.25,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q03": {
+          "exasol": {
+            "median": 1196.0,
+            "avg": 1701.96,
+            "min": 1048.0,
+            "max": 2841.1,
+            "std": 819.4,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q09": {
+          "exasol": {
+            "median": 11652.1,
+            "avg": 11273.3,
+            "min": 9237.4,
+            "max": 12348.2,
+            "std": 1206.41,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q19": {
+          "exasol": {
+            "median": 201.2,
+            "avg": 230.68,
+            "min": 84.7,
+            "max": 338.8,
+            "std": 105.59,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        }
+      }
+    },
+    {
+      "id": "rep_11k/nodes_8",
+      "series": "Replication Border SF*11000",
+      "config": "nodes_8",
+      "project_id": "extscal_rep11k_n8",
+      "workload": "tpch",
+      "scale_factor": 50,
+      "node_count": 8,
+      "stream_count": 4,
+      "environment": "aws",
+      "instance_type": "r6id.large",
+      "run_date": "2026-02-10 14:45:48",
+      "report_url": "reports/rep_11k/nodes_8/REPORT.html",
+      "systems": [
+        {
+          "name": "exasol",
+          "kind": "exasol",
+          "version": "2025.2.0",
+          "median_ms": 1484.9,
+          "avg_ms": 2410.09,
+          "geomean_ms": 1343.82,
+          "total_ms": 265109.7,
+          "min_ms": 108.1,
+          "max_ms": 20172.2,
+          "query_count": 22,
+          "success_rate": 100.0
+        }
+      ],
+      "queries": {
+        "Q11": {
+          "exasol": {
+            "median": 553.6,
+            "avg": 673.64,
+            "min": 166.3,
+            "max": 1108.3,
+            "std": 413.78,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q02": {
+          "exasol": {
+            "median": 1052.8,
+            "avg": 1222.66,
+            "min": 621.9,
+            "max": 2450.6,
+            "std": 711.49,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q04": {
+          "exasol": {
+            "median": 728.3,
+            "avg": 786.06,
+            "min": 240.0,
+            "max": 1353.1,
+            "std": 408.98,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q06": {
+          "exasol": {
+            "median": 134.7,
+            "avg": 190.48,
+            "min": 108.1,
+            "max": 305.2,
+            "std": 91.21,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q14": {
+          "exasol": {
+            "median": 849.4,
+            "avg": 1136.0,
+            "min": 808.3,
+            "max": 1756.8,
+            "std": 441.71,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q01": {
+          "exasol": {
+            "median": 4014.8,
+            "avg": 4464.3,
+            "min": 3645.7,
+            "max": 6439.1,
+            "std": 1124.27,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q12": {
+          "exasol": {
+            "median": 906.7,
+            "avg": 1068.86,
+            "min": 705.6,
+            "max": 1644.4,
+            "std": 393.99,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q13": {
+          "exasol": {
+            "median": 4972.8,
+            "avg": 5741.32,
+            "min": 3357.8,
+            "max": 9726.4,
+            "std": 2681.18,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q15": {
+          "exasol": {
+            "median": 1350.8,
+            "avg": 1875.18,
+            "min": 1102.2,
+            "max": 4022.4,
+            "std": 1227.03,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q20": {
+          "exasol": {
+            "median": 860.5,
+            "avg": 983.96,
+            "min": 717.4,
+            "max": 1612.8,
+            "std": 365.75,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q07": {
+          "exasol": {
+            "median": 3844.5,
+            "avg": 3577.52,
+            "min": 2023.8,
+            "max": 4579.5,
+            "std": 993.08,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q17": {
+          "exasol": {
+            "median": 547.1,
+            "avg": 534.6,
+            "min": 350.7,
+            "max": 731.7,
+            "std": 140.94,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q21": {
+          "exasol": {
+            "median": 2321.0,
+            "avg": 2080.18,
+            "min": 608.8,
+            "max": 3018.5,
+            "std": 919.45,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q16": {
+          "exasol": {
+            "median": 1575.8,
+            "avg": 1689.28,
+            "min": 1437.7,
+            "max": 1947.4,
+            "std": 240.13,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q10": {
+          "exasol": {
+            "median": 1915.7,
+            "avg": 2364.82,
+            "min": 1478.1,
+            "max": 3856.5,
+            "std": 974.0,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q08": {
+          "exasol": {
+            "median": 1387.6,
+            "avg": 1734.1,
+            "min": 1145.2,
+            "max": 2612.0,
+            "std": 682.86,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q22": {
+          "exasol": {
+            "median": 404.0,
+            "avg": 694.68,
+            "min": 329.3,
+            "max": 1274.0,
+            "std": 447.75,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q18": {
+          "exasol": {
+            "median": 3037.4,
+            "avg": 2547.3,
+            "min": 1513.8,
+            "max": 3218.4,
+            "std": 803.05,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q05": {
+          "exasol": {
+            "median": 3198.2,
+            "avg": 3217.6,
+            "min": 1737.5,
+            "max": 4794.1,
+            "std": 1386.54,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q03": {
+          "exasol": {
+            "median": 1576.0,
+            "avg": 1888.56,
+            "min": 1381.9,
+            "max": 2982.9,
+            "std": 656.56,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q09": {
+          "exasol": {
+            "median": 13396.3,
+            "avg": 13828.22,
+            "min": 6380.3,
+            "max": 20172.2,
+            "std": 5145.69,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q19": {
+          "exasol": {
+            "median": 384.7,
+            "avg": 722.62,
+            "min": 116.1,
+            "max": 2055.3,
+            "std": 795.24,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        }
+      }
+    },
+    {
+      "id": "rep_210k/nodes_2",
+      "series": "Replication Border SF*210000",
+      "config": "nodes_2",
+      "project_id": "extscal_rep210k_n2",
+      "workload": "tpch",
+      "scale_factor": 50,
+      "node_count": 2,
+      "stream_count": 4,
+      "environment": "aws",
+      "instance_type": "r6id.2xlarge",
+      "run_date": "2026-02-10 15:13:30",
+      "report_url": "reports/rep_210k/nodes_2/REPORT.html",
+      "systems": [
+        {
+          "name": "exasol",
+          "kind": "exasol",
+          "version": "2025.2.0",
+          "median_ms": 678.35,
+          "avg_ms": 1352.31,
+          "geomean_ms": 734.47,
+          "total_ms": 148753.7,
+          "min_ms": 65.0,
+          "max_ms": 7964.2,
+          "query_count": 22,
+          "success_rate": 100.0
+        }
+      ],
+      "queries": {
+        "Q11": {
+          "exasol": {
+            "median": 319.4,
+            "avg": 273.9,
+            "min": 177.5,
+            "max": 333.9,
+            "std": 72.53,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q02": {
+          "exasol": {
+            "median": 254.5,
+            "avg": 260.84,
+            "min": 197.6,
+            "max": 359.6,
+            "std": 64.84,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q14": {
+          "exasol": {
+            "median": 450.4,
+            "avg": 464.2,
+            "min": 288.0,
+            "max": 677.4,
+            "std": 141.58,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q04": {
+          "exasol": {
+            "median": 586.1,
+            "avg": 555.64,
+            "min": 300.1,
+            "max": 840.5,
+            "std": 201.92,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q06": {
+          "exasol": {
+            "median": 166.9,
+            "avg": 177.18,
+            "min": 79.9,
+            "max": 368.3,
+            "std": 118.05,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q15": {
+          "exasol": {
+            "median": 731.5,
+            "avg": 770.34,
+            "min": 487.4,
+            "max": 1054.7,
+            "std": 208.0,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q12": {
+          "exasol": {
+            "median": 544.2,
+            "avg": 578.4,
+            "min": 364.7,
+            "max": 886.5,
+            "std": 201.66,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q01": {
+          "exasol": {
+            "median": 2883.6,
+            "avg": 2495.5,
+            "min": 1242.2,
+            "max": 3048.4,
+            "std": 742.21,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q17": {
+          "exasol": {
+            "median": 144.4,
+            "avg": 135.06,
+            "min": 108.3,
+            "max": 162.7,
+            "std": 24.7,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q07": {
+          "exasol": {
+            "median": 1911.5,
+            "avg": 1529.12,
+            "min": 556.1,
+            "max": 2161.0,
+            "std": 676.11,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q20": {
+          "exasol": {
+            "median": 498.7,
+            "avg": 621.44,
+            "min": 484.8,
+            "max": 830.9,
+            "std": 176.44,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q10": {
+          "exasol": {
+            "median": 996.9,
+            "avg": 1422.4,
+            "min": 913.0,
+            "max": 2228.6,
+            "std": 638.99,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q13": {
+          "exasol": {
+            "median": 6585.0,
+            "avg": 5985.9,
+            "min": 2527.8,
+            "max": 7392.3,
+            "std": 1989.88,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q08": {
+          "exasol": {
+            "median": 679.3,
+            "avg": 636.88,
+            "min": 376.1,
+            "max": 793.3,
+            "std": 165.13,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q21": {
+          "exasol": {
+            "median": 933.5,
+            "avg": 1100.74,
+            "min": 614.4,
+            "max": 1724.8,
+            "std": 506.73,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q22": {
+          "exasol": {
+            "median": 352.9,
+            "avg": 323.32,
+            "min": 107.0,
+            "max": 420.4,
+            "std": 124.68,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q16": {
+          "exasol": {
+            "median": 1373.6,
+            "avg": 1389.44,
+            "min": 1267.5,
+            "max": 1523.2,
+            "std": 98.57,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q18": {
+          "exasol": {
+            "median": 1807.8,
+            "avg": 1712.06,
+            "min": 901.0,
+            "max": 2187.6,
+            "std": 493.25,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q05": {
+          "exasol": {
+            "median": 1545.0,
+            "avg": 1270.62,
+            "min": 556.6,
+            "max": 1718.7,
+            "std": 546.06,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q03": {
+          "exasol": {
+            "median": 589.7,
+            "avg": 1171.8,
+            "min": 584.2,
+            "max": 2241.9,
+            "std": 812.85,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q09": {
+          "exasol": {
+            "median": 7425.4,
+            "avg": 6763.62,
+            "min": 3324.2,
+            "max": 7964.2,
+            "std": 1936.55,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q19": {
+          "exasol": {
+            "median": 80.6,
+            "avg": 112.34,
+            "min": 65.0,
+            "max": 185.3,
+            "std": 58.46,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        }
+      }
+    },
+    {
+      "id": "rep_210k/nodes_4",
+      "series": "Replication Border SF*210000",
+      "config": "nodes_4",
+      "project_id": "extscal_rep210k_n4",
+      "workload": "tpch",
+      "scale_factor": 50,
+      "node_count": 4,
+      "stream_count": 4,
+      "environment": "aws",
+      "instance_type": "r6id.xlarge",
+      "run_date": "2026-02-10 15:48:16",
+      "report_url": "reports/rep_210k/nodes_4/REPORT.html",
+      "systems": [
+        {
+          "name": "exasol",
+          "kind": "exasol",
+          "version": "2025.2.0",
+          "median_ms": 990.4,
+          "avg_ms": 1872.61,
+          "geomean_ms": 949.62,
+          "total_ms": 205987.6,
+          "min_ms": 95.7,
+          "max_ms": 12854.4,
+          "query_count": 22,
+          "success_rate": 100.0
+        }
+      ],
+      "queries": {
+        "Q02": {
+          "exasol": {
+            "median": 397.1,
+            "avg": 375.52,
+            "min": 273.9,
+            "max": 447.8,
+            "std": 76.0,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q11": {
+          "exasol": {
+            "median": 345.2,
+            "avg": 379.22,
+            "min": 113.5,
+            "max": 807.6,
+            "std": 263.64,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q04": {
+          "exasol": {
+            "median": 872.1,
+            "avg": 850.1,
+            "min": 479.2,
+            "max": 1075.3,
+            "std": 248.5,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q06": {
+          "exasol": {
+            "median": 123.2,
+            "avg": 193.6,
+            "min": 95.7,
+            "max": 441.4,
+            "std": 143.49,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q14": {
+          "exasol": {
+            "median": 550.8,
+            "avg": 505.26,
+            "min": 286.3,
+            "max": 814.9,
+            "std": 218.06,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q01": {
+          "exasol": {
+            "median": 3028.1,
+            "avg": 2753.1,
+            "min": 1174.2,
+            "max": 3846.7,
+            "std": 1072.21,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q15": {
+          "exasol": {
+            "median": 977.7,
+            "avg": 996.16,
+            "min": 634.6,
+            "max": 1279.9,
+            "std": 251.89,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q12": {
+          "exasol": {
+            "median": 727.1,
+            "avg": 782.58,
+            "min": 702.5,
+            "max": 958.4,
+            "std": 108.99,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q20": {
+          "exasol": {
+            "median": 629.3,
+            "avg": 816.2,
+            "min": 456.2,
+            "max": 1313.7,
+            "std": 359.81,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q07": {
+          "exasol": {
+            "median": 2099.8,
+            "avg": 2299.7,
+            "min": 1085.8,
+            "max": 3148.7,
+            "std": 852.39,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q17": {
+          "exasol": {
+            "median": 184.8,
+            "avg": 190.54,
+            "min": 171.1,
+            "max": 216.8,
+            "std": 17.12,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q13": {
+          "exasol": {
+            "median": 8041.5,
+            "avg": 7082.92,
+            "min": 3735.5,
+            "max": 8388.6,
+            "std": 1950.8,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q10": {
+          "exasol": {
+            "median": 1319.9,
+            "avg": 1782.84,
+            "min": 1102.0,
+            "max": 2901.5,
+            "std": 819.53,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q08": {
+          "exasol": {
+            "median": 1005.5,
+            "avg": 967.68,
+            "min": 606.9,
+            "max": 1363.5,
+            "std": 291.6,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q21": {
+          "exasol": {
+            "median": 1125.5,
+            "avg": 1480.0,
+            "min": 915.2,
+            "max": 2273.5,
+            "std": 665.2,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q22": {
+          "exasol": {
+            "median": 362.9,
+            "avg": 355.86,
+            "min": 215.1,
+            "max": 509.2,
+            "std": 124.94,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q16": {
+          "exasol": {
+            "median": 2025.6,
+            "avg": 2073.84,
+            "min": 1716.6,
+            "max": 2541.6,
+            "std": 305.89,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q18": {
+          "exasol": {
+            "median": 2412.7,
+            "avg": 2217.8,
+            "min": 1003.1,
+            "max": 3347.2,
+            "std": 855.96,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q05": {
+          "exasol": {
+            "median": 2256.0,
+            "avg": 2080.76,
+            "min": 885.2,
+            "max": 2675.4,
+            "std": 706.06,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q03": {
+          "exasol": {
+            "median": 1182.3,
+            "avg": 1680.68,
+            "min": 730.0,
+            "max": 3239.2,
+            "std": 1009.05,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q09": {
+          "exasol": {
+            "median": 11631.4,
+            "avg": 11191.64,
+            "min": 8892.7,
+            "max": 12854.4,
+            "std": 1671.49,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q19": {
+          "exasol": {
+            "median": 113.8,
+            "avg": 141.52,
+            "min": 98.7,
+            "max": 250.8,
+            "std": 62.18,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        }
+      }
+    },
+    {
+      "id": "rep_210k/nodes_8",
+      "series": "Replication Border SF*210000",
+      "config": "nodes_8",
+      "project_id": "extscal_rep210k_n8",
+      "workload": "tpch",
+      "scale_factor": 50,
+      "node_count": 8,
+      "stream_count": 4,
+      "environment": "aws",
+      "instance_type": "r6id.large",
+      "run_date": "2026-02-10 16:38:58",
+      "report_url": "reports/rep_210k/nodes_8/REPORT.html",
+      "systems": [
+        {
+          "name": "exasol",
+          "kind": "exasol",
+          "version": "2025.2.0",
+          "median_ms": 1437.7,
+          "avg_ms": 2448.95,
+          "geomean_ms": 1352.52,
+          "total_ms": 269385.0,
+          "min_ms": 70.8,
+          "max_ms": 14174.5,
+          "query_count": 22,
+          "success_rate": 100.0
+        }
+      ],
+      "queries": {
+        "Q11": {
+          "exasol": {
+            "median": 672.1,
+            "avg": 1028.88,
+            "min": 559.1,
+            "max": 2105.4,
+            "std": 666.0,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q02": {
+          "exasol": {
+            "median": 1442.0,
+            "avg": 1497.34,
+            "min": 684.3,
+            "max": 2729.6,
+            "std": 811.16,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q04": {
+          "exasol": {
+            "median": 927.0,
+            "avg": 1004.0,
+            "min": 411.5,
+            "max": 1756.0,
+            "std": 564.12,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q06": {
+          "exasol": {
+            "median": 380.6,
+            "avg": 391.48,
+            "min": 70.8,
+            "max": 955.6,
+            "std": 363.76,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q01": {
+          "exasol": {
+            "median": 2461.8,
+            "avg": 2425.86,
+            "min": 1566.2,
+            "max": 3486.7,
+            "std": 759.19,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q14": {
+          "exasol": {
+            "median": 1041.8,
+            "avg": 1152.34,
+            "min": 377.3,
+            "max": 2241.9,
+            "std": 695.65,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q12": {
+          "exasol": {
+            "median": 763.9,
+            "avg": 974.12,
+            "min": 686.5,
+            "max": 1504.6,
+            "std": 349.02,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q20": {
+          "exasol": {
+            "median": 734.6,
+            "avg": 1222.88,
+            "min": 643.4,
+            "max": 2602.1,
+            "std": 835.65,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q07": {
+          "exasol": {
+            "median": 2187.1,
+            "avg": 2140.06,
+            "min": 905.6,
+            "max": 2876.8,
+            "std": 754.87,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q15": {
+          "exasol": {
+            "median": 1566.0,
+            "avg": 1707.12,
+            "min": 996.6,
+            "max": 2603.9,
+            "std": 698.76,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q17": {
+          "exasol": {
+            "median": 539.9,
+            "avg": 605.5,
+            "min": 483.1,
+            "max": 964.2,
+            "std": 202.99,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q13": {
+          "exasol": {
+            "median": 6389.8,
+            "avg": 6671.06,
+            "min": 3053.6,
+            "max": 9690.1,
+            "std": 2689.38,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q10": {
+          "exasol": {
+            "median": 1493.5,
+            "avg": 1745.8,
+            "min": 1284.3,
+            "max": 2671.6,
+            "std": 551.18,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q08": {
+          "exasol": {
+            "median": 1501.4,
+            "avg": 2641.4,
+            "min": 812.0,
+            "max": 6981.1,
+            "std": 2514.74,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q21": {
+          "exasol": {
+            "median": 1315.7,
+            "avg": 1740.58,
+            "min": 1005.0,
+            "max": 3409.6,
+            "std": 962.35,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q22": {
+          "exasol": {
+            "median": 507.3,
+            "avg": 476.18,
+            "min": 214.3,
+            "max": 697.2,
+            "std": 176.0,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q16": {
+          "exasol": {
+            "median": 6403.1,
+            "avg": 6840.64,
+            "min": 2147.0,
+            "max": 12810.8,
+            "std": 4333.14,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q18": {
+          "exasol": {
+            "median": 1690.5,
+            "avg": 2382.18,
+            "min": 836.2,
+            "max": 5988.9,
+            "std": 2053.52,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q05": {
+          "exasol": {
+            "median": 4317.6,
+            "avg": 4127.6,
+            "min": 1759.8,
+            "max": 6215.7,
+            "std": 2116.61,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q03": {
+          "exasol": {
+            "median": 830.5,
+            "avg": 1552.78,
+            "min": 805.8,
+            "max": 3465.2,
+            "std": 1157.09,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q09": {
+          "exasol": {
+            "median": 11097.2,
+            "avg": 11161.24,
+            "min": 8397.1,
+            "max": 14174.5,
+            "std": 2049.46,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        },
+        "Q19": {
+          "exasol": {
+            "median": 204.8,
+            "avg": 387.96,
+            "min": 129.6,
+            "max": 1032.5,
+            "std": 372.85,
+            "count": 5,
+            "success_rate": 100.0
+          }
+        }
+      }
+    }
+  ],
+  "table_columns": [
+    {
+      "key": "benchmark",
+      "label": "Benchmark"
+    },
+    {
+      "key": "series",
+      "label": "Series"
+    },
+    {
+      "key": "nodes",
+      "label": "Nodes"
+    },
+    {
+      "key": "systems",
+      "label": "Systems"
+    },
+    {
+      "key": "winner",
+      "label": "Winner"
+    },
+    {
+      "key": "speedup",
+      "label": "Speedup"
+    },
+    {
+      "key": "report",
+      "label": "Report"
+    }
+  ]
+}
+    </script>
+
+    <script src="assets/app.js"></script>
+</body>
+</html>

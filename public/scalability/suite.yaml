@@ -1,0 +1,48 @@
+name: "Scalability Benchmark"
+version: "1.0.0"
+description: "Clean scalability testing with consistent 2x doublings across nodes, data volume, and concurrency"
+author: "Exasol Benchmark Team"
+license: "MIT"
+homepage: "https://github.com/exasol/benchkit"
+keywords: ["scalability", "tpc-h", "analytical", "multinode"]
+
+series:
+  series_1_nodes:
+    name: "Node Scaling"
+    description: "Test horizontal scaling with 1, 2, 4, 8 nodes at constant 128GB total RAM"
+    enabled: true
+
+  series_2_sf:
+    name: "Scale Factor Scaling"
+    description: "Test data volume scaling SF25-SF100 with proportional hardware"
+    enabled: true
+
+  series_3_streams:
+    name: "Stream Scaling"
+    description: "Test concurrent query streams 2-16 with constant 2 vCPU/stream"
+    enabled: true
+
+publish:
+  title: "Scalability Study Results"
+  description: "Clean scalability testing with consistent 2x doublings across nodes, data volume, and concurrency"
+
+
+execution:
+  mode: sequential
+  max_parallel: 1
+  continue_on_failure: true
+  pause_between: 30
+
+infrastructure:
+  cleanup_after_each: true
+  cleanup_on_failure: true
+
+timeouts:
+  infrastructure: 3600   # 1 hour
+  benchmark: 14400       # 4 hours
+  cleanup: 900           # 15 minutes
+
+reports:
+  index_enabled: true
+  index_title: "Scalability Study Results"
+  series_reports_enabled: true

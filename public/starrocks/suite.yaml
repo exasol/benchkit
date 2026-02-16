@@ -1,0 +1,12 @@
+name: "StarRocks Comparison"
+version: "1.0.0"
+description: "Exasol vs StarRocks comparison benchmarks"
+
+series:
+  exa_vs_starrocks:
+    name: "Exasol vs StarRocks"
+    description: "Comparisons across scale factors and configurations"
+
+publish:
+  title: "StarRocks Comparison Results"
+  include_reports: true

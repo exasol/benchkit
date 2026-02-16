@@ -1,0 +1,70 @@
+# Replication Border SF*11000 - 2 Nodes (128GB total)
+# Replicates: supplier (500K rows)
+# Fixed: SF=50, Streams=4, 128GB total RAM, 16 total vCPU
+project_id: "extscal_rep11k_n2"
+title: "Replication Border SF*11000 - 2 Nodes"
+author: "Benchmark Team"
+
+execution:
+  parallel: false
+  max_workers: 1
+
+env:
+  mode: "aws"
+  region: "eu-west-1"
+  allow_external_database_access: true
+  instances:
+    exasol:
+      instance_type: "r6id.2xlarge"  # 8 vCPUs, 64GB RAM per node (128GB total, 16 vCPU)
+      disk:
+        type: "local"
+      label: "extscal-rep11k-n2"
+  os_image: "ubuntu-22.04"
+  ssh_key_name: "ok-work3"
+  ssh_private_key_path: "~/.ssh/ok-work3.pem"
+
+systems:
+  - name: "exasol"
+    kind: "exasol"
+    version: "2025.2.0"
+    setup:
+      method: "installer"
+      node_count: 2
+      use_additional_disk: true
+      c4_version: "4.28.5"
+      host_addrs: "$EXASOL_PRIVATE_IP"
+      host_external_addrs: "$EXASOL_PUBLIC_IP"
+      image_password: "exasol123"
+      db_password: "exasol456"
+      admin_password: "exasol789"
+      license_file: "configs/exasol.license"
+      db_mem_size: 96000  # 48GB x 2 nodes
+      extra:
+        optimizer_mode: "analytical"
+        db_params:
+          - "-writeTouchInit=1"
+          - "-cacheMonitorLimit=0"
+          - "-maxOverallSlbUsageRatio=0.95"
+          - "-useQueryCache=0"
+          - "-query_log_timeout=0"
+          - "-joinOrderMethod=0"
+          - "-etlCheckCertsDefault=0"
+          - "-replicationborder=550000"  # SF50 * 11000
+
+workload:
+  name: "tpch"
+  scale_factor: 50
+  runs_per_query: 5
+  warmup_runs: 1
+  data_format: "csv"
+  generator: "dbgen"
+  multiuser:
+    enabled: true
+    num_streams: 4
+    randomize: true
+    random_seed: 42
+
+report:
+  show_boxplots: true
+  show_bar_chart: true
+  show_heatmap: true

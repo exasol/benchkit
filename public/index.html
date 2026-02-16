@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Benchkit - Database Benchmark Results</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+:root {
+    --color-primary: #2E86AB;
+    --color-secondary: #A23B72;
+    --color-accent-1: #F18F01;
+    --color-accent-2: #C73E1D;
+    --color-accent-3: #6A994E;
+    --color-accent-4: #7209B7;
+    --color-text: #1a1a1a;
+    --color-text-light: #666;
+    --color-bg: #ffffff;
+    --color-bg-alt: #f8f9fa;
+    --color-border: #e0e0e0;
+    --color-shadow: rgba(0, 0, 0, 0.1);
+    --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-code: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --shadow-sm: 0 2px 4px var(--color-shadow);
+    --shadow-md: 0 4px 12px var(--color-shadow);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--color-text);
+    background: var(--color-bg-alt);
+}
+
+.header {
+    background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+    color: white;
+    padding: 3rem 2rem;
+    text-align: center;
+}
+
+.header h1 {
+    font-size: 2.2rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+
+.header p {
+    font-size: 1.1rem;
+    opacity: 0.9;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
+}
+
+.section-title {
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    color: var(--color-text);
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid var(--color-primary);
+    display: inline-block;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1.25rem;
+    margin-bottom: 2.5rem;
+}
+
+.card {
+    background: var(--color-bg);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    padding: 1.5rem;
+    transition: box-shadow 0.2s, transform 0.2s;
+    border: 1px solid var(--color-border);
+    text-decoration: none;
+    color: inherit;
+    display: block;
+}
+
+.card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+}
+
+.card-badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+    margin-bottom: 0.75rem;
+}
+
+.badge-community { background: #e8f5e9; color: #2e7d32; }
+.badge-scalability { background: #e3f2fd; color: #1565c0; }
+.badge-comparison { background: #fce4ec; color: #c62828; }
+
+.card h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--color-primary);
+}
+
+.card p {
+    font-size: 0.9rem;
+    color: var(--color-text-light);
+    margin-bottom: 0.75rem;
+}
+
+.card-series {
+    font-size: 0.8rem;
+    color: var(--color-text-light);
+    font-family: var(--font-code);
+}
+
+.card-series span {
+    display: inline-block;
+    background: var(--color-bg-alt);
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    margin-right: 0.4rem;
+    margin-bottom: 0.3rem;
+}
+
+.footer {
+    text-align: center;
+    padding: 2rem;
+    color: var(--color-text-light);
+    font-size: 0.85rem;
+    border-top: 1px solid var(--color-border);
+    margin-top: 1rem;
+}
+
+.footer a {
+    color: var(--color-primary);
+    text-decoration: none;
+}
+
+.footer a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Benchkit Results Portal</h1>
+        <p>Database benchmark results, scalability studies, and performance comparisons</p>
+    </div>
+
+    <div class="container">
+        <h2 class="section-title">Community Benchmarks</h2>
+        <div class="grid">
+            <a class="card" href="performance/">
+                <span class="card-badge badge-community">Community</span>
+                <h3>Performance Benchmarks</h3>
+                <p>Community-contributed database performance benchmarks across single-node, multi-node, and concurrent workloads.</p>
+                <div class="card-series">
+                    <span>single_node</span>
+                    <span>multi_node</span>
+                    <span>multi_user</span>
+                </div>
+            </a>
+        </div>
+
+        <h2 class="section-title">Scalability Studies</h2>
+        <div class="grid">
+            <a class="card" href="extended_scalability/">
+                <span class="card-badge badge-scalability">Scalability</span>
+                <h3>Extended Scalability</h3>
+                <p>Comprehensive scalability testing across node count, data volume, and concurrency.</p>
+                <div class="card-series">
+                    <span>series_1_nodes</span>
+                    <span>series_2_sf</span>
+                    <span>series_3_streams_cluster</span>
+                    <span>series_4_streams_single</span>
+                </div>
+            </a>
+
+            <a class="card" href="scalability/">
+                <span class="card-badge badge-scalability">Scalability</span>
+                <h3>Scalability</h3>
+                <p>Clean scalability testing with consistent 2x doublings across nodes, data volume, and concurrency.</p>
+                <div class="card-series">
+                    <span>series_1_nodes</span>
+                    <span>series_2_sf</span>
+                    <span>series_3_streams</span>
+                </div>
+            </a>
+
+            <a class="card" href="replication/">
+                <span class="card-badge badge-scalability">Scalability</span>
+                <h3>Replication Border Study</h3>
+                <p>Compare Exasol replication border SF*11000 vs SF*210000 across 2, 4, 8 nodes.</p>
+                <div class="card-series">
+                    <span>rep_11k</span>
+                    <span>rep_210k</span>
+                </div>
+            </a>
+
+            <a class="card" href="scaling/">
+                <span class="card-badge badge-scalability">Scalability</span>
+                <h3>Exasol Scaling</h3>
+                <p>Scale factor scaling (1N vs 2N) and node scaling (1N-10N) with replication border.</p>
+                <div class="card-series">
+                    <span>sf_scaling</span>
+                    <span>node_scaling</span>
+                </div>
+            </a>
+        </div>
+
+        <h2 class="section-title">Database Comparisons</h2>
+        <div class="grid">
+            <a class="card" href="comparisons/">
+                <span class="card-badge badge-comparison">Comparison</span>
+                <h3>Exasol vs ClickHouse</h3>
+                <p>Head-to-head single-node comparisons at SF1, SF10, SF30, and SF100.</p>
+                <div class="card-series">
+                    <span>exasol_vs_clickhouse</span>
+                </div>
+            </a>
+
+            <a class="card" href="exa_vs_ch_scalability/">
+                <span class="card-badge badge-comparison">Comparison</span>
+                <h3>Exasol vs ClickHouse Scalability</h3>
+                <p>Scalability comparison: node scaling, concurrency, and multi-variant runs.</p>
+                <div class="card-series">
+                    <span>scalability</span>
+                </div>
+            </a>
+
+            <a class="card" href="starrocks/">
+                <span class="card-badge badge-comparison">Comparison</span>
+                <h3>Exasol vs StarRocks</h3>
+                <p>Comparisons across scale factors and single/multi-node configurations.</p>
+                <div class="card-series">
+                    <span>exa_vs_starrocks</span>
+                </div>
+            </a>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>Powered by <a href="https://github.com/exasol/benchkit">Benchkit</a> &mdash; Database Benchmark Framework</p>
+    </div>
+</body>
+</html>

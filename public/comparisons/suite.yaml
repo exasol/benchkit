@@ -1,0 +1,12 @@
+name: "Database Comparisons"
+version: "1.0.0"
+description: "Head-to-head database comparison benchmarks"
+
+series:
+  exasol_vs_clickhouse:
+    name: "Exasol vs ClickHouse"
+    description: "Single-node comparisons across scale factors"
+
+publish:
+  title: "Database Comparison Results"
+  include_reports: true

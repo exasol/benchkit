@@ -49,6 +49,7 @@ Thumbs.db
 # Results and generated content
 results/
 docs/*/reports/*/workload-package
+public/*/reports/*/workload-package
 packages/
 !posts/.gitkeep
 .benchkit/
@@ -57,6 +58,7 @@ packages/
 **/terraform/
 # Benchmark execution logs (not needed for reports)
 docs/**/logs/
+public/**/logs/
 
 # Temporary files
 *.tmp
@@ -146,6 +148,13 @@ logs/
 # Temporary PR directories
 clickbench-pr/
 
-# Other files
-*.md
-*.yaml
+# Generated/local config files
+config.local.yaml
+*.tmp.yaml
+
+# Operational config files (not part of published suites)
+configs/*.yaml
+configs/test_modes/*.yaml
+
+# Suite state directories
+public/**/.benchkit/

@@ -1,0 +1,164 @@
+# Series 3: Stream Scaling - 8 Streams
+# Purpose: Measure single-node performance with higher concurrency
+# Variable: Streams (8)
+# Fixed: Nodes=1, SF=50, 2 vCPU/stream, ~12GB usable/stream
+# Systems: All 5 (Exasol, ClickHouse, Trino, StarRocks, DuckDB)
+project_id: "extscal_streams_8"
+title: "Streamlined Scalability - Stream Scaling (8 Streams)"
+author: "Benchmark Team"
+
+execution:
+  parallel: true
+  max_workers: 5
+
+env:
+  mode: "aws"
+  region: "eu-west-1"
+  allow_external_database_access: true
+  instances:
+    exasol:
+      instance_type: "r6id.4xlarge"  # 16 vCPUs, 128GB RAM (2 vCPU/stream)
+      disk:
+        type: "local"
+      label: "extscal-exa-s8"
+    clickhouse:
+      instance_type: "r6id.4xlarge"  # 16 vCPUs, 128GB RAM (2 vCPU/stream)
+      disk:
+        type: "local"
+      label: "extscal-ch-s8"
+    trino:
+      instance_type: "r6id.4xlarge"  # 16 vCPUs, 128GB RAM (2 vCPU/stream)
+      disk:
+        type: "local"
+      label: "extscal-trino-s8"
+    starrocks:
+      instance_type: "r6id.4xlarge"  # 16 vCPUs, 128GB RAM (2 vCPU/stream)
+      disk:
+        type: "local"
+      label: "extscal-sr-s8"
+    duckdb:
+      instance_type: "r6id.4xlarge"  # 16 vCPUs, 128GB RAM (2 vCPU/stream)
+      disk:
+        type: "local"
+      label: "extscal-duck-s8"
+  os_image: "ubuntu-22.04"
+  ssh_key_name: "ok-work3"
+  ssh_private_key_path: "~/.ssh/ok-work3.pem"
+
+systems:
+  # Exasol - single node, 8 streams (~12GB per stream)
+  - name: "exasol"
+    kind: "exasol"
+    version: "2025.2.0"
+    setup:
+      method: "installer"
+      node_count: 1
+      use_additional_disk: true
+      c4_version: "4.28.5"
+      host_addrs: "$EXASOL_PRIVATE_IP"
+      host_external_addrs: "$EXASOL_PUBLIC_IP"
+      image_password: "exasol123"
+      db_password: "exasol456"
+      admin_password: "exasol789"
+      license_file: "configs/exasol.license"
+      db_mem_size: 96000  # ~75% of 128GB
+      extra:
+        optimizer_mode: "analytical"
+        db_params:
+          - "-writeTouchInit=1"
+          - "-cacheMonitorLimit=0"
+          - "-maxOverallSlbUsageRatio=0.95"
+          - "-useQueryCache=0"
+          - "-query_log_timeout=0"
+          - "-joinOrderMethod=0"
+          - "-etlCheckCertsDefault=0"
+
+  # ClickHouse - single node, 8 streams
+  - name: "clickhouse"
+    kind: "clickhouse"
+    version: "25.10.2.65"
+    setup:
+      method: "native"
+      node_count: 1
+      use_additional_disk: true
+      data_dir: "/data/clickhouse"
+      host: "$CLICKHOUSE_PUBLIC_IP"
+      port: 8123
+      username: "default"
+      password: "clickhouse123"
+      extra:
+        memory_limit: "96g"
+        max_threads: "16"
+        # 128GB instance, 8 streams: constant 12GB/query, grace_hash spills to disk
+        max_memory_usage: "12000000000"
+        max_bytes_before_external_group_by: "4000000000"
+        max_bytes_before_external_sort: "4000000000"
+        join_algorithm: "grace_hash"
+        max_bytes_in_join: "8000000000"
+
+  # Trino - single node, 8 streams (no S3 needed)
+  - name: "trino"
+    kind: "trino"
+    version: "479"
+    setup:
+      method: "native"
+      node_count: 1
+      use_additional_disk: true
+      host: "$TRINO_PUBLIC_IP"
+      port: 8080
+      username: "admin"
+      catalog: "hive"
+      schema: "tpch_views"
+      extra:
+        # 128GB RAM: heap=102GB, safe query memory = 102*0.7 = 71GB
+        query_max_memory: "71GB"
+        query_max_memory_per_node: "71GB"
+
+  # StarRocks - single node, 8 streams
+  - name: "starrocks"
+    kind: "starrocks"
+    version: "4.0.4"
+    setup:
+      method: "native"
+      node_count: 1
+      use_additional_disk: true
+      host: "$STARROCKS_PUBLIC_IP"
+      port: 9030
+      username: "root"
+      password: ""
+      extra:
+        bucket_count: 4
+        replication_num: 1
+
+  # DuckDB - embedded single node, 8 streams
+  - name: "duckdb"
+    kind: "duckdb"
+    version: "1.4.4"
+    setup:
+      method: "native"
+      use_additional_disk: true
+      data_dir: "/data/duckdb"
+      database_path: "/data/duckdb/benchmark.duckdb"
+      extra:
+        memory_limit: "96GB"  # ~75% of 128GB
+        threads: 16
+
+workload:
+  name: "tpch"
+  scale_factor: 50
+  runs_per_query: 5
+  warmup_runs: 1
+  data_format: "csv"
+  generator: "dbgen"
+  system_variants:
+    clickhouse: "tuned"
+  multiuser:
+    enabled: true
+    num_streams: 8
+    randomize: true
+    random_seed: 42
+
+report:
+  show_boxplots: true
+  show_bar_chart: true
+  show_heatmap: true

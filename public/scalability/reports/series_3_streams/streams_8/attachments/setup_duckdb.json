@@ -1,0 +1,70 @@
+{
+  "system_name": "duckdb",
+  "system_kind": "duckdb",
+  "system_version": "1.4.4",
+  "commands": {
+    "storage_setup": [
+      {
+        "command": "sudo mkfs.ext4 -F /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS23BBA2997EFB6D3C6",
+        "success": true,
+        "description": "Format /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS23BBA2997EFB6D3C6 with ext4 filesystem",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mkdir -p /data",
+        "success": true,
+        "description": "Create mount point /data",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS23BBA2997EFB6D3C6 /data",
+        "success": true,
+        "description": "Mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS23BBA2997EFB6D3C6 to /data",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo chown -R ubuntu:ubuntu /data",
+        "success": true,
+        "description": "Set ownership of /data to ubuntu:ubuntu",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mkdir -p /data/duckdb",
+        "success": true,
+        "description": "Create duckdb data directory",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo chown -R ubuntu:ubuntu /data/duckdb",
+        "success": true,
+        "description": "Set ownership of /data/duckdb to ubuntu:ubuntu",
+        "category": "storage_setup"
+      }
+    ],
+    "preparation": [
+      {
+        "command": "sudo mkdir -p /data/duckdb && sudo chown ubuntu:ubuntu /data/duckdb",
+        "success": true,
+        "description": "Create DuckDB data directory: /data/duckdb",
+        "category": "preparation"
+      }
+    ]
+  },
+  "installation_notes": [
+    "Storage device /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS23BBA2997EFB6D3C6 mounted at /data",
+    "duckdb data directory: /data/duckdb",
+    "Setting up DuckDB embedded database",
+    "DuckDB 1.4.4 installed",
+    "Database path: /data/duckdb/benchmark.duckdb"
+  ],
+  "config_parameters": {
+    "use_additional_disk": true,
+    "data_dir": "/data/duckdb",
+    "database_path": "/data/duckdb/benchmark.duckdb",
+    "extra": {
+      "memory_limit": "96GB",
+      "threads": 16
+    }
+  },
+  "data_directory": "/data/duckdb"
+}

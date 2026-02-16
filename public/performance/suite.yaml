@@ -1,0 +1,19 @@
+name: "Performance Benchmarks"
+version: "1.0.0"
+description: "Community-contributed database performance benchmarks"
+author: "Benchkit Community"
+
+series:
+  single_node:
+    name: "Single Node"
+    description: "Single-node database performance comparisons"
+  multi_node:
+    name: "Multi Node"
+    description: "Multi-node cluster performance comparisons"
+  multi_user:
+    name: "Multi User"
+    description: "Concurrent multi-user performance comparisons"
+
+publish:
+  title: "Performance Benchmark Results"
+  include_reports: true

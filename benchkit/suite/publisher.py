@@ -112,7 +112,7 @@ class SuitePublisher:
         elif pub.output_dir:
             self.output_dir = Path(pub.output_dir)
         else:
-            self.output_dir = Path("docs") / self._slugify(config.name)
+            self.output_dir = self.suite_path
 
         # Resolve title: CLI arg > suite.yaml > suite name
         self.title = title or pub.title or config.name

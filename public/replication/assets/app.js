@@ -1,0 +1,928 @@
+/**
+ * Benchmark Dashboard Application
+ * Interactive visualization for suite benchmark results
+ */
+
+class BenchmarkDashboard {
+    constructor(data) {
+        this.data = data;
+        this.charts = {};
+
+        // System color mapping (consistent across charts)
+        this.systemColors = {};
+        const colorPalette = [
+            '#2E86AB', '#E63946', '#6A994E', '#F4A261',
+            '#9B5DE5', '#00BBF9', '#00F5D4', '#FEE440'
+        ];
+        data.filters.systems.forEach((system, i) => {
+            this.systemColors[system] = colorPalette[i % colorPalette.length];
+        });
+
+        // Filter state
+        this.filters = {
+            series: new Set(data.filters.series),
+            systems: new Set(data.filters.systems),
+            nodeCount: new Set(data.filters.node_counts),
+            streamCount: new Set(data.filters.stream_counts || []),
+            scaleFactor: new Set(data.filters.scale_factors),
+        };
+
+        // Display settings
+        this.metric = 'geomean';  // 'median', 'avg', 'geomean', 'total'
+        this.logScale = true;  // Log scale by default
+
+        this.init();
+    }
+
+    init() {
+        this.parseHashState();
+        this.bindEvents();
+        this.renderAllCharts();
+        this.renderTable();
+        this.updateStats();
+    }
+
+    // ==================== Event Binding ====================
+
+    bindEvents() {
+        // Filter chips
+        document.querySelectorAll('.chip').forEach(chip => {
+            chip.addEventListener('click', (e) => {
+                const dimension = e.target.closest('.filter-group').dataset.dimension;
+                const value = e.target.dataset.value;
+                this.toggleFilter(dimension, value);
+                e.target.classList.toggle('active');
+            });
+        });
+
+        // Metric toggles
+        document.querySelectorAll('.toggle[data-metric]').forEach(toggle => {
+            toggle.addEventListener('click', (e) => {
+                document.querySelectorAll('.toggle[data-metric]').forEach(t => t.classList.remove('active'));
+                e.target.classList.add('active');
+                this.metric = e.target.dataset.metric;
+                this.updateHashState();
+                this.renderAllCharts();
+                this.updateStats();
+            });
+        });
+
+        // Scale toggle
+        const scaleToggle = document.getElementById('scale-toggle');
+        if (scaleToggle) {
+            scaleToggle.addEventListener('click', () => {
+                this.logScale = !this.logScale;
+                scaleToggle.dataset.log = this.logScale.toString();
+                this.updateHashState();
+                this.renderAllCharts();
+            });
+        }
+
+        // Reset filters
+        const resetBtn = document.getElementById('reset-filters');
+        if (resetBtn) {
+            resetBtn.addEventListener('click', () => this.resetFilters());
+        }
+
+        // Heatmap benchmark selector
+        const heatmapSelect = document.getElementById('heatmap-benchmark-select');
+        if (heatmapSelect) {
+            heatmapSelect.addEventListener('change', () => {
+                this.renderHeatmap();
+            });
+        }
+
+        // Handle hash changes
+        window.addEventListener('hashchange', () => {
+            this.parseHashState();
+            this.syncFilterUI();
+            this.renderAllCharts();
+            this.renderTable();
+            this.updateStats();
+        });
+    }
+
+    // ==================== Filter Management ====================
+
+    toggleFilter(dimension, value) {
+        const filterSet = this.filters[dimension];
+        if (!filterSet) return;
+
+        // Parse value to correct type
+        let parsedValue = value;
+        if (dimension === 'nodeCount' || dimension === 'scaleFactor' || dimension === 'streamCount') {
+            parsedValue = parseFloat(value);
+        }
+
+        if (filterSet.has(parsedValue)) {
+            filterSet.delete(parsedValue);
+        } else {
+            filterSet.add(parsedValue);
+        }
+
+        this.updateHashState();
+        this.renderAllCharts();
+        this.renderTable();
+        this.updateStats();
+    }
+
+    resetFilters() {
+        this.filters = {
+            series: new Set(this.data.filters.series),
+            systems: new Set(this.data.filters.systems),
+            nodeCount: new Set(this.data.filters.node_counts),
+            streamCount: new Set(this.data.filters.stream_counts || []),
+            scaleFactor: new Set(this.data.filters.scale_factors),
+        };
+        this.metric = 'geomean';
+        this.logScale = true;
+
+        this.syncFilterUI();
+        window.location.hash = '';
+        this.renderAllCharts();
+        this.renderTable();
+        this.updateStats();
+    }
+
+    syncFilterUI() {
+        // Sync chips
+        document.querySelectorAll('.chip').forEach(chip => {
+            const dimension = chip.closest('.filter-group')?.dataset.dimension;
+            let value = chip.dataset.value;
+
+            if (dimension === 'nodeCount' || dimension === 'scaleFactor' || dimension === 'streamCount') {
+                value = parseFloat(value);
+            }
+
+            const isActive = this.filters[dimension]?.has(value);
+            chip.classList.toggle('active', isActive);
+        });
+
+        // Sync metric toggles
+        document.querySelectorAll('.toggle[data-metric]').forEach(toggle => {
+            toggle.classList.toggle('active', toggle.dataset.metric === this.metric);
+        });
+
+        // Sync scale toggle
+        const scaleToggle = document.getElementById('scale-toggle');
+        if (scaleToggle) {
+            scaleToggle.dataset.log = this.logScale.toString();
+        }
+    }
+
+    getFilteredBenchmarks() {
+        return this.data.benchmarks.filter(b => {
+            if (!this.filters.series.has(b.series)) return false;
+            if (this.filters.nodeCount.size > 0 && !this.filters.nodeCount.has(b.node_count)) return false;
+            if (this.filters.streamCount.size > 0 && b.stream_count !== undefined && !this.filters.streamCount.has(b.stream_count)) return false;
+            if (this.filters.scaleFactor.size > 0 && b.scale_factor !== null && !this.filters.scaleFactor.has(b.scale_factor)) return false;
+            return true;
+        });
+    }
+
+    // ==================== URL State ====================
+
+    parseHashState() {
+        const hash = window.location.hash.slice(1);
+        if (!hash) return;
+
+        const params = new URLSearchParams(hash);
+
+        if (params.has('metric')) {
+            this.metric = params.get('metric');
+        }
+
+        if (params.has('log')) {
+            this.logScale = params.get('log') === '1';
+        }
+
+        if (params.has('series')) {
+            this.filters.series = new Set(params.get('series').split(','));
+        }
+
+        if (params.has('systems')) {
+            this.filters.systems = new Set(params.get('systems').split(','));
+        }
+
+        if (params.has('nodes')) {
+            this.filters.nodeCount = new Set(params.get('nodes').split(',').map(Number));
+        }
+
+        if (params.has('sf')) {
+            this.filters.scaleFactor = new Set(params.get('sf').split(',').map(Number));
+        }
+    }
+
+    updateHashState() {
+        const params = new URLSearchParams();
+
+        params.set('metric', this.metric);
+        params.set('log', this.logScale ? '1' : '0');
+
+        if (this.filters.series.size < this.data.filters.series.length) {
+            params.set('series', Array.from(this.filters.series).join(','));
+        }
+
+        if (this.filters.systems.size < this.data.filters.systems.length) {
+            params.set('systems', Array.from(this.filters.systems).join(','));
+        }
+
+        if (this.filters.nodeCount.size < this.data.filters.node_counts.length) {
+            params.set('nodes', Array.from(this.filters.nodeCount).join(','));
+        }
+
+        if (this.filters.scaleFactor.size < this.data.filters.scale_factors.length) {
+            params.set('sf', Array.from(this.filters.scaleFactor).join(','));
+        }
+
+        window.location.hash = params.toString();
+    }
+
+    // ==================== Chart Rendering ====================
+
+    showNoData(container, icon, message) {
+        // Purge any existing Plotly chart before replacing content
+        if (container && container.data) {
+            Plotly.purge(container);
+        }
+        container.innerHTML = `<div class="no-data"><div class="no-data-icon">${icon}</div>${message}</div>`;
+    }
+
+    renderAllCharts() {
+        const filtered = this.getFilteredBenchmarks();
+
+        this.renderScalingChart(filtered, 'node_count', 'scaling-by-nodes', 'Node Count');
+        this.renderScalingChart(filtered, 'stream_count', 'scaling-by-streams', 'Stream Count');
+        this.renderScalingChart(filtered, 'scale_factor', 'scaling-by-sf', 'Scale Factor');
+        this.renderComparisonChart(filtered);
+        this.populateHeatmapSelect(filtered);
+        this.renderHeatmap();
+        this.renderEfficiencyChart(filtered);
+        this.renderQueryScatter(filtered);
+        this.renderStackedChart(filtered);
+    }
+
+    getSystemMetric(benchmark, systemName) {
+        const system = benchmark.systems.find(s => s.name === systemName);
+        if (!system) return null;
+
+        switch (this.metric) {
+            case 'avg': return system.avg_ms;
+            case 'geomean': return system.geomean_ms;
+            case 'total': return system.total_ms;
+            default: return system.median_ms;
+        }
+    }
+
+    getMetricLabel() {
+        switch (this.metric) {
+            case 'avg': return 'Average';
+            case 'geomean': return 'Geomean';
+            case 'total': return 'Total';
+            default: return 'Median';
+        }
+    }
+
+    // Convert milliseconds to seconds for display
+    msToSeconds(ms) {
+        return ms / 1000;
+    }
+
+    renderScalingChart(benchmarks, dimension, containerId, axisLabel) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+
+        if (benchmarks.length === 0) {
+            this.showNoData(container, '📊', 'No data available');
+            return;
+        }
+
+        // Group by the specified dimension
+        const groups = {};
+        benchmarks.forEach(b => {
+            const dimValue = b[dimension];
+            if (dimValue === undefined || dimValue === null) return;
+
+            if (!groups[dimValue]) {
+                groups[dimValue] = {};
+            }
+            b.systems.forEach(s => {
+                if (!this.filters.systems.has(s.name)) return;
+                if (!groups[dimValue][s.name]) {
+                    groups[dimValue][s.name] = [];
+                }
+                const value = this.getSystemMetric(b, s.name);
+                if (value !== null) {
+                    groups[dimValue][s.name].push(value);
+                }
+            });
+        });
+
+        // Calculate averages
+        const dimValues = Object.keys(groups).map(Number).sort((a, b) => a - b);
+
+        if (dimValues.length === 0) {
+            this.showNoData(container, '📊', 'No data for this dimension');
+            return;
+        }
+
+        const traces = [];
+
+        this.filters.systems.forEach(systemName => {
+            const y = dimValues.map(dv => {
+                const values = groups[dv]?.[systemName] || [];
+                if (values.length === 0) return null;
+                const avgMs = values.reduce((a, b) => a + b, 0) / values.length;
+                return this.msToSeconds(avgMs);
+            });
+
+            if (y.some(v => v !== null)) {
+                traces.push({
+                    x: dimValues.map(n => n.toString()),
+                    y: y,
+                    name: systemName,
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    marker: { size: 10, color: this.systemColors[systemName] },
+                    line: { width: 2, color: this.systemColors[systemName] },
+                    connectgaps: true,
+                    hovertemplate: '%{y:.1f}s<extra>' + systemName + '</extra>',
+                });
+            }
+        });
+
+        if (traces.length === 0) {
+            this.showNoData(container, '📊', 'No data available');
+            return;
+        }
+
+        const layout = {
+            xaxis: {
+                title: axisLabel,
+                type: 'category',
+            },
+            yaxis: {
+                title: `${this.getMetricLabel()} Runtime (s)`,
+                type: this.logScale ? 'log' : 'linear',
+            },
+            legend: {
+                orientation: 'h',
+                yanchor: 'bottom',
+                y: 1.02,
+                xanchor: 'right',
+                x: 1,
+            },
+            margin: { t: 40, r: 20, b: 60, l: 80 },
+            hovermode: 'closest',
+        };
+
+        Plotly.react(container, traces, layout, { responsive: true });
+    }
+
+    renderComparisonChart(benchmarks) {
+        const container = document.getElementById('comparison-chart');
+        if (!container) return;
+
+        if (benchmarks.length === 0) {
+            this.showNoData(container, '📊', 'No data available');
+            return;
+        }
+
+        const benchmarkIds = benchmarks.map(b => b.id);
+        // Use simple numeric indices for x-axis, full name shown on hover
+        const displayLabels = benchmarkIds.map((_, i) => (i + 1).toString());
+        const traces = [];
+
+        this.filters.systems.forEach(systemName => {
+            const y = benchmarks.map(b => {
+                const ms = this.getSystemMetric(b, systemName) || 0;
+                return this.msToSeconds(ms);
+            });
+
+            traces.push({
+                x: displayLabels,
+                y: y,
+                name: systemName,
+                type: 'bar',
+                marker: { color: this.systemColors[systemName] },
+                customdata: benchmarkIds,
+                hovertemplate: '<b>%{customdata}</b><br>' + systemName + ': %{y:.1f}s<extra></extra>',
+            });
+        });
+
+        const layout = {
+            xaxis: {
+                title: 'Benchmark #',
+                tickfont: { size: 10 },
+            },
+            yaxis: {
+                title: `${this.getMetricLabel()} Runtime (s)`,
+                type: this.logScale ? 'log' : 'linear',
+            },
+            barmode: 'group',
+            legend: {
+                orientation: 'h',
+                yanchor: 'bottom',
+                y: 1.02,
+                xanchor: 'right',
+                x: 1,
+            },
+            margin: { t: 40, r: 20, b: 50, l: 80 },
+        };
+
+        Plotly.react(container, traces, layout, { responsive: true });
+    }
+
+    populateHeatmapSelect(benchmarks) {
+        const select = document.getElementById('heatmap-benchmark-select');
+        if (!select) return;
+
+        const currentValue = select.value;
+        select.innerHTML = '';
+
+        benchmarks.forEach(b => {
+            const option = document.createElement('option');
+            option.value = b.id;
+            option.textContent = b.id;
+            select.appendChild(option);
+        });
+
+        // Restore selection if still valid
+        if (benchmarks.some(b => b.id === currentValue)) {
+            select.value = currentValue;
+        }
+    }
+
+    renderHeatmap() {
+        const container = document.getElementById('heatmap-chart');
+        const select = document.getElementById('heatmap-benchmark-select');
+        if (!container || !select) return;
+
+        const benchmarkId = select.value;
+        const benchmark = this.data.benchmarks.find(b => b.id === benchmarkId);
+
+        if (!benchmark || Object.keys(benchmark.queries).length === 0) {
+            this.showNoData(container, '🔥', 'No query data');
+            return;
+        }
+
+        const queries = Object.keys(benchmark.queries).sort();
+        const systems = Array.from(this.filters.systems).filter(s =>
+            benchmark.systems.some(bs => bs.name === s)
+        );
+
+        // Build heatmap data
+        const z = [];
+        const text = [];
+
+        systems.forEach(sys => {
+            const row = [];
+            const textRow = [];
+            queries.forEach(q => {
+                const stats = benchmark.queries[q]?.[sys];
+                if (stats) {
+                    row.push(stats.median);
+                    textRow.push(`${q}: ${stats.median.toFixed(1)}ms`);
+                } else {
+                    row.push(null);
+                    textRow.push('N/A');
+                }
+            });
+            z.push(row);
+            text.push(textRow);
+        });
+
+        const trace = {
+            x: queries,
+            y: systems,
+            z: z,
+            text: text,
+            type: 'heatmap',
+            colorscale: 'RdYlGn_r',
+            hovertemplate: '%{text}<extra></extra>',
+        };
+
+        const layout = {
+            margin: { t: 20, r: 20, b: 80, l: 100 },
+            xaxis: { tickangle: -45 },
+        };
+
+        Plotly.react(container, [trace], layout, { responsive: true });
+    }
+
+    renderEfficiencyChart(benchmarks) {
+        const container = document.getElementById('efficiency-chart');
+        if (!container) return;
+
+        if (benchmarks.length === 0) {
+            this.showNoData(container, '📈', 'No data available');
+            return;
+        }
+
+        // Group by node count and calculate time ratio vs minimum node count
+        // For proportional scaling benchmarks: workload scales with nodes
+        // so ideal = same time (ratio 1.0), below 1.0 = super scaling, above 1.0 = degraded
+
+        // Find minimum node count in filtered data (baseline for comparison)
+        const minNodeCount = Math.min(...benchmarks.map(b => b.node_count));
+
+        const baselineData = {};
+        benchmarks.filter(b => b.node_count === minNodeCount).forEach(b => {
+            b.systems.forEach(s => {
+                if (!this.filters.systems.has(s.name)) return;
+                if (!baselineData[s.name]) {
+                    baselineData[s.name] = [];
+                }
+                const value = this.getSystemMetric(b, s.name);
+                if (value !== null) {
+                    baselineData[s.name].push(value);
+                }
+            });
+        });
+
+        // Calculate baseline (average at minimum node count)
+        const baselines = {};
+        Object.entries(baselineData).forEach(([sys, values]) => {
+            if (values.length > 0) {
+                baselines[sys] = values.reduce((a, b) => a + b, 0) / values.length;
+            }
+        });
+
+        // Group multi-node data
+        const nodeGroups = {};
+        benchmarks.forEach(b => {
+            if (!nodeGroups[b.node_count]) {
+                nodeGroups[b.node_count] = {};
+            }
+            b.systems.forEach(s => {
+                if (!this.filters.systems.has(s.name)) return;
+                if (!nodeGroups[b.node_count][s.name]) {
+                    nodeGroups[b.node_count][s.name] = [];
+                }
+                const value = this.getSystemMetric(b, s.name);
+                if (value !== null) {
+                    nodeGroups[b.node_count][s.name].push(value);
+                }
+            });
+        });
+
+        const nodeCounts = Object.keys(nodeGroups).map(Number).sort((a, b) => a - b);
+        const traces = [];
+
+        // Ideal scaling line (time ratio = 1.0, workload scales with resources)
+        traces.push({
+            x: nodeCounts.map(n => n.toString()),
+            y: nodeCounts.map(() => 1.0),
+            name: `Ideal (baseline: ${minNodeCount}n)`,
+            type: 'scatter',
+            mode: 'lines',
+            line: { dash: 'dash', color: '#999', width: 2 },
+            hovertemplate: 'Ideal: 1.0<extra></extra>',
+        });
+
+        // Actual time ratio per system (time / baseline)
+        // < 1.0 = super scaling, = 1.0 = perfect, > 1.0 = degraded
+        Object.entries(baselines).forEach(([sys, baseline]) => {
+            const timeRatios = nodeCounts.map(nc => {
+                const values = nodeGroups[nc]?.[sys] || [];
+                if (values.length === 0) return null;
+                const avg = values.reduce((a, b) => a + b, 0) / values.length;
+                return avg / baseline;  // Time ratio: current / baseline
+            });
+
+            if (timeRatios.some(v => v !== null)) {
+                traces.push({
+                    x: nodeCounts.map(n => n.toString()),
+                    y: timeRatios,
+                    name: sys,
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    marker: { size: 8, color: this.systemColors[sys] },
+                    line: { width: 2, color: this.systemColors[sys] },
+                    connectgaps: true,
+                    hovertemplate: sys + ': %{y:.2f}x<extra></extra>',
+                });
+            }
+        });
+
+        if (traces.length <= 1) {
+            this.showNoData(container, '📈', 'Need baseline data');
+            return;
+        }
+
+        const layout = {
+            xaxis: { title: 'Node Count', type: 'category' },
+            yaxis: { title: 'Time Ratio (lower = better)' },
+            legend: { orientation: 'h', y: -0.2 },
+            margin: { t: 20, r: 20, b: 80, l: 60 },
+        };
+
+        Plotly.react(container, traces, layout, { responsive: true });
+    }
+
+    renderQueryScatter(benchmarks) {
+        const container = document.getElementById('query-scatter-chart');
+        if (!container) return;
+
+        if (benchmarks.length === 0) {
+            this.showNoData(container, '📊', 'No data available');
+            return;
+        }
+
+        // Collect all unique queries and sort them
+        const allQueries = new Set();
+        benchmarks.forEach(b => {
+            Object.keys(b.queries).forEach(q => allQueries.add(q));
+        });
+        const queryList = Array.from(allQueries).sort();
+
+        if (queryList.length === 0) {
+            this.showNoData(container, '📊', 'No query data');
+            return;
+        }
+
+        const traces = [];
+
+        this.filters.systems.forEach(systemName => {
+            const x = [];  // query names
+            const y = [];  // runtimes in seconds
+            const text = [];  // hover text
+
+            benchmarks.forEach(b => {
+                queryList.forEach(queryName => {
+                    const stats = b.queries[queryName]?.[systemName];
+                    if (stats) {
+                        const seconds = this.msToSeconds(stats.median);
+                        x.push(queryName);
+                        y.push(seconds);
+                        text.push(`${queryName}<br>${b.config}<br>${seconds.toFixed(2)}s`);
+                    }
+                });
+            });
+
+            if (x.length > 0) {
+                traces.push({
+                    x: x,
+                    y: y,
+                    name: systemName,
+                    type: 'scatter',
+                    mode: 'markers',
+                    marker: {
+                        size: 8,
+                        color: this.systemColors[systemName],
+                        opacity: 0.7,
+                    },
+                    text: text,
+                    hovertemplate: '%{text}<extra>' + systemName + '</extra>',
+                });
+            }
+        });
+
+        if (traces.length === 0) {
+            this.showNoData(container, '📊', 'No query data');
+            return;
+        }
+
+        const layout = {
+            xaxis: {
+                title: '',
+                tickangle: -90,
+                tickfont: { size: 9 },
+            },
+            yaxis: {
+                title: 'Query Runtime (s)',
+                type: this.logScale ? 'log' : 'linear',
+            },
+            legend: {
+                orientation: 'h',
+                yanchor: 'bottom',
+                y: 1.02,
+                xanchor: 'right',
+                x: 1,
+            },
+            margin: { t: 40, r: 20, b: 100, l: 80 },
+            hovermode: 'closest',
+        };
+
+        Plotly.react(container, traces, layout, { responsive: true });
+    }
+
+    renderStackedChart(benchmarks) {
+        const container = document.getElementById('stacked-chart');
+        if (!container) return;
+
+        if (benchmarks.length === 0) {
+            this.showNoData(container, '📊', 'No data available');
+            return;
+        }
+
+        // Group by series (convert ms to seconds)
+        const seriesData = {};
+        benchmarks.forEach(b => {
+            if (!seriesData[b.series]) {
+                seriesData[b.series] = {};
+            }
+            b.systems.forEach(s => {
+                if (!this.filters.systems.has(s.name)) return;
+                if (!seriesData[b.series][s.name]) {
+                    seriesData[b.series][s.name] = 0;
+                }
+                seriesData[b.series][s.name] += this.msToSeconds(s.total_ms);
+            });
+        });
+
+        const series = Object.keys(seriesData);
+
+        // Build traces for stacking by series
+        const correctTraces = [];
+        series.forEach(seriesName => {
+            const y = [];
+            this.filters.systems.forEach(sys => {
+                y.push(seriesData[seriesName]?.[sys] || 0);
+            });
+
+            correctTraces.push({
+                x: Array.from(this.filters.systems),
+                y: y,
+                name: seriesName,
+                hovertemplate: '%{y:.1f}s<extra>' + seriesName + '</extra>',
+                type: 'bar',
+            });
+        });
+
+        const layout = {
+            barmode: 'stack',
+            xaxis: { title: 'System' },
+            yaxis: { title: 'Total Runtime (s)' },
+            legend: { orientation: 'h', y: -0.2 },
+            margin: { t: 20, r: 20, b: 80, l: 80 },
+        };
+
+        Plotly.react(container, correctTraces, layout, { responsive: true });
+    }
+
+    // ==================== Table Rendering ====================
+
+    renderTable() {
+        const tbody = document.getElementById('benchmark-tbody');
+        const countSpan = document.getElementById('table-count');
+        if (!tbody) return;
+
+        const benchmarks = this.getFilteredBenchmarks();
+        const columns = this.data.table_columns || [];
+
+        if (countSpan) {
+            countSpan.textContent = `Showing ${benchmarks.length} of ${this.data.benchmarks.length} benchmarks`;
+        }
+
+        tbody.innerHTML = '';
+
+        benchmarks.forEach(b => {
+            const tr = document.createElement('tr');
+
+            // Pre-compute winner/speedup for this benchmark using selected metric
+            const filteredSystems = b.systems.filter(s => this.filters.systems.has(s.name));
+            let winner = null;
+            let speedup = 1;
+            let speedupClass = 'fast';
+            if (filteredSystems.length > 0) {
+                const metricKey = this.metric === 'avg' ? 'avg_ms'
+                    : this.metric === 'geomean' ? 'geomean_ms'
+                    : this.metric === 'total' ? 'total_ms'
+                    : 'median_ms';
+                const sorted = [...filteredSystems].sort((a, b) => a[metricKey] - b[metricKey]);
+                winner = sorted[0];
+                const slowest = sorted[sorted.length - 1];
+                speedup = slowest[metricKey] / winner[metricKey];
+                if (speedup < 1.5) speedupClass = 'fast';
+                else if (speedup < 3) speedupClass = 'medium';
+                else speedupClass = 'slow';
+            }
+
+            // Cell renderers keyed by column key
+            const cellRenderers = {
+                benchmark: () => `<td class="benchmark-name">${b.config}</td>`,
+                series: () => `<td>${b.series}</td>`,
+                nodes: () => `<td>${b.node_count}</td>`,
+                scale_factor: () => `<td>${b.scale_factor !== null ? 'SF' + b.scale_factor : '-'}</td>`,
+                streams: () => `<td>${b.stream_count}</td>`,
+                systems: () => {
+                    const badges = b.systems
+                        .filter(s => this.filters.systems.has(s.name))
+                        .map(s => `<span class="system-badge">${s.name}</span>`)
+                        .join('');
+                    return `<td class="systems-list">${badges}</td>`;
+                },
+                winner: () => winner
+                    ? `<td><span class="winner-badge">${winner.name}</span></td>`
+                    : '<td>-</td>',
+                speedup: () => winner
+                    ? `<td><span class="speedup-value ${speedupClass}">${speedup.toFixed(1)}x</span></td>`
+                    : '<td>-</td>',
+                report: () => b.report_url
+                    ? `<td><a href="${b.report_url}" class="report-link" target="_blank">View</a></td>`
+                    : '<td>-</td>',
+            };
+
+            columns.forEach(col => {
+                const renderer = cellRenderers[col.key];
+                tr.innerHTML += renderer ? renderer() : '<td>-</td>';
+            });
+
+            tbody.appendChild(tr);
+        });
+    }
+
+    // ==================== Stats Update ====================
+
+    updateStats() {
+        const benchmarks = this.getFilteredBenchmarks();
+
+        // Total benchmarks
+        const statBenchmarks = document.getElementById('stat-benchmarks');
+        if (statBenchmarks) {
+            statBenchmarks.textContent = benchmarks.length;
+        }
+
+        // Total query executions
+        const statQueries = document.getElementById('stat-queries');
+        if (statQueries) {
+            let totalQueries = 0;
+            benchmarks.forEach(b => {
+                b.systems.forEach(s => {
+                    if (this.filters.systems.has(s.name)) {
+                        totalQueries += s.query_count;
+                    }
+                });
+            });
+            statQueries.textContent = totalQueries.toLocaleString();
+        }
+
+        // Derive metric key from selected metric
+        const metricKey = this.metric === 'avg' ? 'avg_ms'
+            : this.metric === 'geomean' ? 'geomean_ms'
+            : this.metric === 'total' ? 'total_ms'
+            : 'median_ms';
+
+        // Fastest system overall
+        const statFastest = document.getElementById('stat-fastest');
+        if (statFastest) {
+            const systemTotals = {};
+            benchmarks.forEach(b => {
+                b.systems.forEach(s => {
+                    if (!this.filters.systems.has(s.name)) return;
+                    if (!systemTotals[s.name]) {
+                        systemTotals[s.name] = { total: 0, count: 0 };
+                    }
+                    systemTotals[s.name].total += s[metricKey];
+                    systemTotals[s.name].count += 1;
+                });
+            });
+
+            let fastest = null;
+            let fastestAvg = Infinity;
+            Object.entries(systemTotals).forEach(([name, data]) => {
+                const avg = data.total / data.count;
+                if (avg < fastestAvg) {
+                    fastestAvg = avg;
+                    fastest = name;
+                }
+            });
+
+            statFastest.textContent = fastest || '-';
+        }
+
+        // Max speedup
+        const statSpeedup = document.getElementById('stat-speedup');
+        if (statSpeedup) {
+            let maxSpeedup = 1;
+            benchmarks.forEach(b => {
+                const filteredSystems = b.systems.filter(s => this.filters.systems.has(s.name));
+                if (filteredSystems.length >= 2) {
+                    const sorted = [...filteredSystems].sort((a, b) => a[metricKey] - b[metricKey]);
+                    const speedup = sorted[sorted.length - 1][metricKey] / sorted[0][metricKey];
+                    if (speedup > maxSpeedup) {
+                        maxSpeedup = speedup;
+                    }
+                }
+            });
+            statSpeedup.textContent = maxSpeedup > 1 ? `${maxSpeedup.toFixed(1)}x` : '-';
+        }
+    }
+}
+
+// Initialize on DOM ready
+document.addEventListener('DOMContentLoaded', () => {
+    const dataEl = document.getElementById('benchmark-data');
+    if (!dataEl) {
+        console.error('Benchmark data not found');
+        return;
+    }
+
+    try {
+        const data = JSON.parse(dataEl.textContent);
+        window.dashboard = new BenchmarkDashboard(data);
+    } catch (e) {
+        console.error('Failed to parse benchmark data:', e);
+    }
+});

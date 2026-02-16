@@ -1,0 +1,850 @@
+{
+  "systems": {
+    "exasol_1n": {
+      "timestamp": 1770725651.318275,
+      "hostname": "ip-10-0-1-73",
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz",
+      "cpu_vendor": "GenuineIntel",
+      "cpu_count_logical": 32,
+      "cpu_count_physical": 1,
+      "cpu_mhz": 2899.954,
+      "memory_total_kb": 129798672,
+      "memory_total_gb": 123.8,
+      "system_info": {
+        "hostname": "ip-10-0-1-73",
+        "system": "Linux",
+        "release": "6.8.0-1044-aws",
+        "version": "#46~22.04.1-Ubuntu SMP Tue Dec  2 12:52:18 UTC 2025",
+        "machine": "x86_64",
+        "processor": "x86_64",
+        "uptime_seconds": 123.89,
+        "load_average": [
+          0.5595703125,
+          0.2763671875,
+          0.10498046875
+        ]
+      },
+      "cpu_info": {
+        "architecture": "x86_64",
+        "vendor_id": "GenuineIntel",
+        "cpu_family": 6,
+        "model": 106,
+        "model_name": "Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz",
+        "stepping": 6,
+        "microcode": "0xd000404",
+        "cpu_mhz": 2899.954,
+        "cache_size": "55296 KB",
+        "count_logical": 32,
+        "count_physical": 1
+      },
+      "memory_info": {
+        "total_kb": 129798672,
+        "total_gb": 123.8,
+        "free_kb": 127077216,
+        "available_kb": 128112044,
+        "buffers_kb": 68380,
+        "cached_kb": 1962332
+      },
+      "disk_info": {
+        "root_filesystem": {
+          "total": "49G",
+          "used": "7.0G",
+          "available": "42G",
+          "usage_percent": "15%"
+        },
+        "block_devices": {
+          "blockdevices": [
+            {
+              "name": "loop0",
+              "maj:min": "7:0",
+              "rm": false,
+              "size": "27.6M",
+              "ro": true,
+              "type": "loop",
+              "mountpoints": [
+                "/snap/amazon-ssm-agent/11797"
+              ]
+            },
+            {
+              "name": "loop1",
+              "maj:min": "7:1",
+              "rm": false,
+              "size": "74M",
+              "ro": true,
+              "type": "loop",
+              "mountpoints": [
+                "/snap/core22/2163"
+              ]
+            },
+            {
+              "name": "loop2",
+              "maj:min": "7:2",
+              "rm": false,
+              "size": "63.8M",
+              "ro": true,
+              "type": "loop",
+              "mountpoints": [
+                "/snap/core20/2682"
+              ]
+            },
+            {
+              "name": "loop3",
+              "maj:min": "7:3",
+              "rm": false,
+              "size": "91.4M",
+              "ro": true,
+              "type": "loop",
+              "mountpoints": [
+                "/snap/lxd/36918"
+              ]
+            },
+            {
+              "name": "loop4",
+              "maj:min": "7:4",
+              "rm": false,
+              "size": "50.9M",
+              "ro": true,
+              "type": "loop",
+              "mountpoints": [
+                "/snap/snapd/25577"
+              ]
+            },
+            {
+              "name": "nvme0n1",
+              "maj:min": "259:0",
+              "rm": false,
+              "size": "50G",
+              "ro": false,
+              "type": "disk",
+              "mountpoints": [
+                null
+              ],
+              "children": [
+                {
+                  "name": "nvme0n1p1",
+                  "maj:min": "259:1",
+                  "rm": false,
+                  "size": "49.9G",
+                  "ro": false,
+                  "type": "part",
+                  "mountpoints": [
+                    "/"
+                  ]
+                },
+                {
+                  "name": "nvme0n1p14",
+                  "maj:min": "259:2",
+                  "rm": false,
+                  "size": "4M",
+                  "ro": false,
+                  "type": "part",
+                  "mountpoints": [
+                    null
+                  ]
+                },
+                {
+                  "name": "nvme0n1p15",
+                  "maj:min": "259:3",
+                  "rm": false,
+                  "size": "106M",
+                  "ro": false,
+                  "type": "part",
+                  "mountpoints": [
+                    "/boot/efi"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "nvme1n1",
+              "maj:min": "259:4",
+              "rm": false,
+              "size": "500G",
+              "ro": false,
+              "type": "disk",
+              "mountpoints": [
+                null
+              ]
+            }
+          ]
+        }
+      },
+      "network_info": {
+        "interfaces": [
+          {
+            "ifindex": 1,
+            "ifname": "lo",
+            "flags": [
+              "LOOPBACK",
+              "UP",
+              "LOWER_UP"
+            ],
+            "mtu": 65536,
+            "qdisc": "noqueue",
+            "operstate": "UNKNOWN",
+            "group": "default",
+            "txqlen": 1000,
+            "link_type": "loopback",
+            "address": "00:00:00:00:00:00",
+            "broadcast": "00:00:00:00:00:00",
+            "addr_info": [
+              {
+                "family": "inet",
+                "local": "127.0.0.1",
+                "prefixlen": 8,
+                "scope": "host",
+                "label": "lo",
+                "valid_life_time": 4294967295,
+                "preferred_life_time": 4294967295
+              },
+              {
+                "family": "inet6",
+                "local": "::1",
+                "prefixlen": 128,
+                "scope": "host",
+                "valid_life_time": 4294967295,
+                "preferred_life_time": 4294967295
+              }
+            ]
+          },
+          {
+            "ifindex": 2,
+            "ifname": "ens5",
+            "flags": [
+              "BROADCAST",
+              "MULTICAST",
+              "UP",
+              "LOWER_UP"
+            ],
+            "mtu": 9001,
+            "qdisc": "mq",
+            "operstate": "UP",
+            "group": "default",
+            "txqlen": 1000,
+            "link_type": "ether",
+            "address": "02:1c:73:25:58:61",
+            "broadcast": "ff:ff:ff:ff:ff:ff",
+            "altnames": [
+              "enp0s5"
+            ],
+            "addr_info": [
+              {
+                "family": "inet",
+                "local": "10.0.1.73",
+                "prefixlen": 24,
+                "metric": 100,
+                "broadcast": "10.0.1.255",
+                "scope": "global",
+                "dynamic": true,
+                "label": "ens5",
+                "valid_life_time": 3482,
+                "preferred_life_time": 3482
+              },
+              {
+                "family": "inet6",
+                "local": "fe80::1c:73ff:fe25:5861",
+                "prefixlen": 64,
+                "scope": "link",
+                "valid_life_time": 4294967295,
+                "preferred_life_time": 4294967295
+              }
+            ]
+          },
+          {
+            "ifindex": 3,
+            "ifname": "docker0",
+            "flags": [
+              "NO-CARRIER",
+              "BROADCAST",
+              "MULTICAST",
+              "UP"
+            ],
+            "mtu": 1500,
+            "qdisc": "noqueue",
+            "operstate": "DOWN",
+            "group": "default",
+            "link_type": "ether",
+            "address": "76:2f:58:25:97:22",
+            "broadcast": "ff:ff:ff:ff:ff:ff",
+            "addr_info": [
+              {
+                "family": "inet",
+                "local": "172.17.0.1",
+                "prefixlen": 16,
+                "broadcast": "172.17.255.255",
+                "scope": "global",
+                "label": "docker0",
+                "valid_life_time": 4294967295,
+                "preferred_life_time": 4294967295
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "exasol_2n-node0": {
+      "timestamp": 1770725652.740618,
+      "hostname": "ip-10-0-1-18",
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz",
+      "cpu_vendor": "GenuineIntel",
+      "cpu_count_logical": 32,
+      "cpu_count_physical": 1,
+      "cpu_mhz": 2899.966,
+      "memory_total_kb": 129798664,
+      "memory_total_gb": 123.8,
+      "system_info": {
+        "hostname": "ip-10-0-1-18",
+        "system": "Linux",
+        "release": "6.8.0-1044-aws",
+        "version": "#46~22.04.1-Ubuntu SMP Tue Dec  2 12:52:18 UTC 2025",
+        "machine": "x86_64",
+        "processor": "x86_64",
+        "uptime_seconds": 125.06,
+        "load_average": [
+          0.736328125,
+          0.3671875,
+          0.140625
+        ]
+      },
+      "cpu_info": {
+        "architecture": "x86_64",
+        "vendor_id": "GenuineIntel",
+        "cpu_family": 6,
+        "model": 106,
+        "model_name": "Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz",
+        "stepping": 6,
+        "microcode": "0xd000404",
+        "cpu_mhz": 2899.966,
+        "cache_size": "55296 KB",
+        "count_logical": 32,
+        "count_physical": 1
+      },
+      "memory_info": {
+        "total_kb": 129798664,
+        "total_gb": 123.8,
+        "free_kb": 127105388,
+        "available_kb": 128144244,
+        "buffers_kb": 68600,
+        "cached_kb": 1966208
+      },
+      "disk_info": {
+        "root_filesystem": {
+          "total": "49G",
+          "used": "7.0G",
+          "available": "42G",
+          "usage_percent": "15%"
+        },
+        "block_devices": {
+          "blockdevices": [
+            {
+              "name": "loop0",
+              "maj:min": "7:0",
+              "rm": false,
+              "size": "91.4M",
+              "ro": true,
+              "type": "loop",
+              "mountpoints": [
+                "/snap/lxd/36918"
+              ]
+            },
+            {
+              "name": "loop1",
+              "maj:min": "7:1",
+              "rm": false,
+              "size": "63.8M",
+              "ro": true,
+              "type": "loop",
+              "mountpoints": [
+                "/snap/core20/2682"
+              ]
+            },
+            {
+              "name": "loop2",
+              "maj:min": "7:2",
+              "rm": false,
+              "size": "74M",
+              "ro": true,
+              "type": "loop",
+              "mountpoints": [
+                "/snap/core22/2163"
+              ]
+            },
+            {
+              "name": "loop3",
+              "maj:min": "7:3",
+              "rm": false,
+              "size": "27.6M",
+              "ro": true,
+              "type": "loop",
+              "mountpoints": [
+                "/snap/amazon-ssm-agent/11797"
+              ]
+            },
+            {
+              "name": "loop4",
+              "maj:min": "7:4",
+              "rm": false,
+              "size": "50.9M",
+              "ro": true,
+              "type": "loop",
+              "mountpoints": [
+                "/snap/snapd/25577"
+              ]
+            },
+            {
+              "name": "nvme0n1",
+              "maj:min": "259:0",
+              "rm": false,
+              "size": "50G",
+              "ro": false,
+              "type": "disk",
+              "mountpoints": [
+                null
+              ],
+              "children": [
+                {
+                  "name": "nvme0n1p1",
+                  "maj:min": "259:1",
+                  "rm": false,
+                  "size": "49.9G",
+                  "ro": false,
+                  "type": "part",
+                  "mountpoints": [
+                    "/"
+                  ]
+                },
+                {
+                  "name": "nvme0n1p14",
+                  "maj:min": "259:2",
+                  "rm": false,
+                  "size": "4M",
+                  "ro": false,
+                  "type": "part",
+                  "mountpoints": [
+                    null
+                  ]
+                },
+                {
+                  "name": "nvme0n1p15",
+                  "maj:min": "259:3",
+                  "rm": false,
+                  "size": "106M",
+                  "ro": false,
+                  "type": "part",
+                  "mountpoints": [
+                    "/boot/efi"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "nvme1n1",
+              "maj:min": "259:4",
+              "rm": false,
+              "size": "500G",
+              "ro": false,
+              "type": "disk",
+              "mountpoints": [
+                null
+              ]
+            }
+          ]
+        }
+      },
+      "network_info": {
+        "interfaces": [
+          {
+            "ifindex": 1,
+            "ifname": "lo",
+            "flags": [
+              "LOOPBACK",
+              "UP",
+              "LOWER_UP"
+            ],
+            "mtu": 65536,
+            "qdisc": "noqueue",
+            "operstate": "UNKNOWN",
+            "group": "default",
+            "txqlen": 1000,
+            "link_type": "loopback",
+            "address": "00:00:00:00:00:00",
+            "broadcast": "00:00:00:00:00:00",
+            "addr_info": [
+              {
+                "family": "inet",
+                "local": "127.0.0.1",
+                "prefixlen": 8,
+                "scope": "host",
+                "label": "lo",
+                "valid_life_time": 4294967295,
+                "preferred_life_time": 4294967295
+              },
+              {
+                "family": "inet6",
+                "local": "::1",
+                "prefixlen": 128,
+                "scope": "host",
+                "valid_life_time": 4294967295,
+                "preferred_life_time": 4294967295
+              }
+            ]
+          },
+          {
+            "ifindex": 2,
+            "ifname": "ens5",
+            "flags": [
+              "BROADCAST",
+              "MULTICAST",
+              "UP",
+              "LOWER_UP"
+            ],
+            "mtu": 9001,
+            "qdisc": "mq",
+            "operstate": "UP",
+            "group": "default",
+            "txqlen": 1000,
+            "link_type": "ether",
+            "address": "02:c4:22:5b:af:03",
+            "broadcast": "ff:ff:ff:ff:ff:ff",
+            "altnames": [
+              "enp0s5"
+            ],
+            "addr_info": [
+              {
+                "family": "inet",
+                "local": "10.0.1.18",
+                "prefixlen": 24,
+                "metric": 100,
+                "broadcast": "10.0.1.255",
+                "scope": "global",
+                "dynamic": true,
+                "label": "ens5",
+                "valid_life_time": 3482,
+                "preferred_life_time": 3482
+              },
+              {
+                "family": "inet6",
+                "local": "fe80::c4:22ff:fe5b:af03",
+                "prefixlen": 64,
+                "scope": "link",
+                "valid_life_time": 4294967295,
+                "preferred_life_time": 4294967295
+              }
+            ]
+          },
+          {
+            "ifindex": 3,
+            "ifname": "docker0",
+            "flags": [
+              "NO-CARRIER",
+              "BROADCAST",
+              "MULTICAST",
+              "UP"
+            ],
+            "mtu": 1500,
+            "qdisc": "noqueue",
+            "operstate": "DOWN",
+            "group": "default",
+            "link_type": "ether",
+            "address": "52:43:47:29:f2:be",
+            "broadcast": "ff:ff:ff:ff:ff:ff",
+            "addr_info": [
+              {
+                "family": "inet",
+                "local": "172.17.0.1",
+                "prefixlen": 16,
+                "broadcast": "172.17.255.255",
+                "scope": "global",
+                "label": "docker0",
+                "valid_life_time": 4294967295,
+                "preferred_life_time": 4294967295
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "exasol_2n-node1": {
+      "timestamp": 1770725654.2154918,
+      "hostname": "ip-10-0-1-197",
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz",
+      "cpu_vendor": "GenuineIntel",
+      "cpu_count_logical": 32,
+      "cpu_count_physical": 1,
+      "cpu_mhz": 2899.99,
+      "memory_total_kb": 129798664,
+      "memory_total_gb": 123.8,
+      "system_info": {
+        "hostname": "ip-10-0-1-197",
+        "system": "Linux",
+        "release": "6.8.0-1044-aws",
+        "version": "#46~22.04.1-Ubuntu SMP Tue Dec  2 12:52:18 UTC 2025",
+        "machine": "x86_64",
+        "processor": "x86_64",
+        "uptime_seconds": 127.56,
+        "load_average": [
+          0.326171875,
+          0.2197265625,
+          0.08740234375
+        ]
+      },
+      "cpu_info": {
+        "architecture": "x86_64",
+        "vendor_id": "GenuineIntel",
+        "cpu_family": 6,
+        "model": 106,
+        "model_name": "Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz",
+        "stepping": 6,
+        "microcode": "0xd000404",
+        "cpu_mhz": 2899.99,
+        "cache_size": "55296 KB",
+        "count_logical": 32,
+        "count_physical": 1
+      },
+      "memory_info": {
+        "total_kb": 129798664,
+        "total_gb": 123.8,
+        "free_kb": 126997532,
+        "available_kb": 128032660,
+        "buffers_kb": 68636,
+        "cached_kb": 1962352
+      },
+      "disk_info": {
+        "root_filesystem": {
+          "total": "49G",
+          "used": "7.0G",
+          "available": "42G",
+          "usage_percent": "15%"
+        },
+        "block_devices": {
+          "blockdevices": [
+            {
+              "name": "loop0",
+              "maj:min": "7:0",
+              "rm": false,
+              "size": "27.6M",
+              "ro": true,
+              "type": "loop",
+              "mountpoints": [
+                "/snap/amazon-ssm-agent/11797"
+              ]
+            },
+            {
+              "name": "loop1",
+              "maj:min": "7:1",
+              "rm": false,
+              "size": "74M",
+              "ro": true,
+              "type": "loop",
+              "mountpoints": [
+                "/snap/core22/2163"
+              ]
+            },
+            {
+              "name": "loop2",
+              "maj:min": "7:2",
+              "rm": false,
+              "size": "63.8M",
+              "ro": true,
+              "type": "loop",
+              "mountpoints": [
+                "/snap/core20/2682"
+              ]
+            },
+            {
+              "name": "loop3",
+              "maj:min": "7:3",
+              "rm": false,
+              "size": "91.4M",
+              "ro": true,
+              "type": "loop",
+              "mountpoints": [
+                "/snap/lxd/36918"
+              ]
+            },
+            {
+              "name": "loop4",
+              "maj:min": "7:4",
+              "rm": false,
+              "size": "50.9M",
+              "ro": true,
+              "type": "loop",
+              "mountpoints": [
+                "/snap/snapd/25577"
+              ]
+            },
+            {
+              "name": "nvme0n1",
+              "maj:min": "259:0",
+              "rm": false,
+              "size": "50G",
+              "ro": false,
+              "type": "disk",
+              "mountpoints": [
+                null
+              ],
+              "children": [
+                {
+                  "name": "nvme0n1p1",
+                  "maj:min": "259:1",
+                  "rm": false,
+                  "size": "49.9G",
+                  "ro": false,
+                  "type": "part",
+                  "mountpoints": [
+                    "/"
+                  ]
+                },
+                {
+                  "name": "nvme0n1p14",
+                  "maj:min": "259:2",
+                  "rm": false,
+                  "size": "4M",
+                  "ro": false,
+                  "type": "part",
+                  "mountpoints": [
+                    null
+                  ]
+                },
+                {
+                  "name": "nvme0n1p15",
+                  "maj:min": "259:3",
+                  "rm": false,
+                  "size": "106M",
+                  "ro": false,
+                  "type": "part",
+                  "mountpoints": [
+                    "/boot/efi"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "nvme1n1",
+              "maj:min": "259:4",
+              "rm": false,
+              "size": "500G",
+              "ro": false,
+              "type": "disk",
+              "mountpoints": [
+                null
+              ]
+            }
+          ]
+        }
+      },
+      "network_info": {
+        "interfaces": [
+          {
+            "ifindex": 1,
+            "ifname": "lo",
+            "flags": [
+              "LOOPBACK",
+              "UP",
+              "LOWER_UP"
+            ],
+            "mtu": 65536,
+            "qdisc": "noqueue",
+            "operstate": "UNKNOWN",
+            "group": "default",
+            "txqlen": 1000,
+            "link_type": "loopback",
+            "address": "00:00:00:00:00:00",
+            "broadcast": "00:00:00:00:00:00",
+            "addr_info": [
+              {
+                "family": "inet",
+                "local": "127.0.0.1",
+                "prefixlen": 8,
+                "scope": "host",
+                "label": "lo",
+                "valid_life_time": 4294967295,
+                "preferred_life_time": 4294967295
+              },
+              {
+                "family": "inet6",
+                "local": "::1",
+                "prefixlen": 128,
+                "scope": "host",
+                "valid_life_time": 4294967295,
+                "preferred_life_time": 4294967295
+              }
+            ]
+          },
+          {
+            "ifindex": 2,
+            "ifname": "ens5",
+            "flags": [
+              "BROADCAST",
+              "MULTICAST",
+              "UP",
+              "LOWER_UP"
+            ],
+            "mtu": 9001,
+            "qdisc": "mq",
+            "operstate": "UP",
+            "group": "default",
+            "txqlen": 1000,
+            "link_type": "ether",
+            "address": "02:dd:eb:c5:91:8b",
+            "broadcast": "ff:ff:ff:ff:ff:ff",
+            "altnames": [
+              "enp0s5"
+            ],
+            "addr_info": [
+              {
+                "family": "inet",
+                "local": "10.0.1.197",
+                "prefixlen": 24,
+                "metric": 100,
+                "broadcast": "10.0.1.255",
+                "scope": "global",
+                "dynamic": true,
+                "label": "ens5",
+                "valid_life_time": 3478,
+                "preferred_life_time": 3478
+              },
+              {
+                "family": "inet6",
+                "local": "fe80::dd:ebff:fec5:918b",
+                "prefixlen": 64,
+                "scope": "link",
+                "valid_life_time": 4294967295,
+                "preferred_life_time": 4294967295
+              }
+            ]
+          },
+          {
+            "ifindex": 3,
+            "ifname": "docker0",
+            "flags": [
+              "NO-CARRIER",
+              "BROADCAST",
+              "MULTICAST",
+              "UP"
+            ],
+            "mtu": 1500,
+            "qdisc": "noqueue",
+            "operstate": "DOWN",
+            "group": "default",
+            "link_type": "ether",
+            "address": "4e:dd:5a:dc:8e:25",
+            "broadcast": "ff:ff:ff:ff:ff:ff",
+            "addr_info": [
+              {
+                "family": "inet",
+                "local": "172.17.0.1",
+                "prefixlen": 16,
+                "broadcast": "172.17.255.255",
+                "scope": "global",
+                "label": "docker0",
+                "valid_life_time": 4294967295,
+                "preferred_life_time": 4294967295
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,108 @@
+# Exasol 1N vs 2N: TPC-H SF100 with Replication Border
+# Hardware: m6i.8xlarge (32 vCPU, 128GB RAM per node)
+# Replication border: 1100000 (SF100 * 11000) - replicates supplier (1M rows)
+#
+# RESULTS AVAILABLE: Copy from results/exasol_1n_vs_2n_rep/
+# (Same config as configs/exasol_1n_vs_2n_rep.yaml)
+
+project_id: "exa_1n2n_sf100"
+title: "Exasol 1N vs 2N: TPC-H SF100 with Replication Border"
+author: "Benchmark Team"
+
+execution:
+  parallel: true
+  max_workers: 2
+
+env:
+  mode: "aws"
+  region: "eu-west-1"
+  allow_external_database_access: true
+  instances:
+    exasol_1n:
+      instance_type: "m6i.8xlarge"  # 32 vCPUs, 128GB RAM
+      disk:
+        type: "ebs"
+        size_gb: 500
+        iops: 16000
+        throughput: 1000
+      label: "exa-1n2n-sf100-1n"
+    exasol_2n:
+      instance_type: "m6i.8xlarge"  # 32 vCPUs, 128GB RAM
+      disk:
+        type: "ebs"
+        size_gb: 500
+        iops: 16000
+        throughput: 1000
+      label: "exa-1n2n-sf100-2n"
+  os_image: "ubuntu-22.04"
+  ssh_key_name: "ok-work3"
+  ssh_private_key_path: "~/.ssh/ok-work3.pem"
+
+systems:
+  - name: "exasol_1n"
+    kind: "exasol"
+    version: "2025.2.0"
+    setup:
+      method: "installer"
+      node_count: 1
+      use_additional_disk: true
+      c4_version: "4.28.5"
+      host_addrs: "$EXASOL_1N_PRIVATE_IP"
+      host_external_addrs: "$EXASOL_1N_PUBLIC_IP"
+      image_password: "exasol123"
+      db_password: "exasol456"
+      admin_password: "exasol789"
+      license_file: "configs/exasol.license"
+      db_mem_size: 96000
+      db_redundancy: 1
+      extra:
+        optimizer_mode: "analytical"
+        db_params:
+          - "-writeTouchInit=1"
+          - "-cacheMonitorLimit=0"
+          - "-maxOverallSlbUsageRatio=0.95"
+          - "-useQueryCache=0"
+          - "-query_log_timeout=0"
+          - "-joinOrderMethod=0"
+          - "-etlCheckCertsDefault=0"
+
+  - name: "exasol_2n"
+    kind: "exasol"
+    version: "2025.2.0"
+    setup:
+      method: "installer"
+      node_count: 2
+      use_additional_disk: true
+      c4_version: "4.28.5"
+      host_addrs: "$EXASOL_2N_PRIVATE_IP"
+      host_external_addrs: "$EXASOL_2N_PUBLIC_IP"
+      image_password: "exasol123"
+      db_password: "exasol456"
+      admin_password: "exasol789"
+      license_file: "configs/exasol.license"
+      db_mem_size: 96000
+      db_redundancy: 1
+      extra:
+        optimizer_mode: "analytical"
+        db_params:
+          - "-writeTouchInit=1"
+          - "-cacheMonitorLimit=0"
+          - "-maxOverallSlbUsageRatio=0.95"
+          - "-useQueryCache=0"
+          - "-query_log_timeout=0"
+          - "-joinOrderMethod=0"
+          - "-etlCheckCertsDefault=0"
+          - "-replicationborder=1100000"  # SF100 * 11000
+
+workload:
+  name: "tpch"
+  scale_factor: 100
+  runs_per_query: 5
+  warmup_runs: 1
+  data_format: "csv"
+  generator: "dbgen"
+
+report:
+  show_boxplots: true
+  show_bar_chart: true
+  show_heatmap: true

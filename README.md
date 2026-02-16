@@ -27,7 +27,7 @@ collect detailed system information, run benchmark workloads, and generate repor
 > You might have to set up a python virtual environment for installing python packages.
 
 > [!CAUTION]
-> The sample benchmark uses AWS cloud infrastructure. See [Getting Started Guide](user-docs/GETTING_STARTED.md)
+> The sample benchmark uses AWS cloud infrastructure. See [Getting Started Guide](docs/GETTING_STARTED.md)
 > for detailed cloud setup instructions.
 > Note that AWS infrastructure is usually not free to use.
 
@@ -98,19 +98,23 @@ benchkit suite publish ./my-benchmark-suite/
 - Cloud infrastructure details (IPs, connection strings)
 - Multiple config support and smart project lookup
 
-📖 **See [Getting Started Guide](user-docs/GETTING_STARTED.md) for comprehensive CLI documentation and examples.**
+📖 **See [Getting Started Guide](docs/GETTING_STARTED.md) for comprehensive CLI documentation and examples.**
 
 ## Repository Structure (User Version)
 
 ```
 benchkit/
 ├── benchkit/                  # Core framework
-├── configs/                   # Benchmark configurations
-│   └── extended_scalability/  # Example benchmark suite
+├── public/                    # Published suites and community contributions
+│   ├── performance/           # Primary community contribution suite
+│   ├── extended_scalability/  # Extended scalability study
+│   └── ...                    # Other benchmark suites
+├── configs/                   # Operational/dev benchmark configurations
+├── docs/                      # Documentation
 └── results/                   # Generated results (auto-created)
 ```
 
-See [Developer Guide](dev-docs/DEVELOPERS.md) for a more detailed structure definition.
+See [Developer Guide](docs/DEVELOPERS.md) for a more detailed structure definition.
 
 ## Defining Your Own Benchmarks
 
@@ -120,7 +124,7 @@ You can easily create your own benchmark by creating a yaml configuration file c
 - One workload (benchmark type) to be executed
 - Multiple systems (software) to be tested
 
-📖 **See [Getting Started Guide](user-docs/GETTING_STARTED.md) for information on how to create
+📖 **See [Getting Started Guide](docs/GETTING_STARTED.md) for information on how to create
 benchmark configurations using supported modules.**
 
 ## Support Matrix
@@ -170,7 +174,7 @@ benchkit suite run ./my-suite
 benchkit suite status ./my-suite
 
 # Generate static comparison dashboard
-benchkit suite publish ./my-suite --output docs/
+benchkit suite publish ./my-suite
 ```
 
 **Suite Structure**:
@@ -188,18 +192,18 @@ my-suite/
 └── .benchkit/              # State directory (auto-managed)
 ```
 
-See [configs/extended_scalability/](configs/extended_scalability/) for a comprehensive example
+See [public/extended_scalability/](public/extended_scalability/) for a comprehensive example
 comparing 5 database systems across node scaling, data volume, and concurrency dimensions.
 
 ## Documentation
 
 ### For Users
 
-- 📖 [Getting Started Guide](user-docs/GETTING_STARTED.md) - Installation, usage, and examples
+- 📖 [Getting Started Guide](docs/GETTING_STARTED.md) - Installation, usage, and examples
 
 ### For Developers
 
-- 🔧 [Extending the Framework](dev-docs/EXTENDING.md) - Adding systems, workloads, and features
+- 🔧 [Extending the Framework](docs/EXTENDING.md) - Adding systems, workloads, and features
 
 ## License
 

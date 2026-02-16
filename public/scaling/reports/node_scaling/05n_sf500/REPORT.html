@@ -1,0 +1,1611 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Exasol Node Scaling: 5N SF500 - Database Performance Benchmark">
+    <title>Exasol Node Scaling: 5N SF500 | Benchmark Results</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-badge">📊 Benchmark Report</div>
+            <h1>Exasol Node Scaling: 5N SF500</h1>
+            <div class="metadata">
+                <span class="meta-item">
+                    <strong>Author:</strong> Benchmark Team
+                </span>
+                <span class="meta-item">
+                    <strong>Date:</strong> 2026-02-11 17:41:52
+                </span>
+                
+                <span class="meta-item">
+                    <strong>Environment:</strong>
+                    <span class="badge badge-cloud">AWS</span>
+                    eu-west-1
+                </span>
+                
+            </div>
+
+            <div class="notice notice-security">
+                <strong>🔒 Security Note:</strong> Sensitive information (passwords, IP addresses) has been sanitized.
+                Placeholders like <code>&lt;EXASOL_DB_PASSWORD&gt;</code>, <code>&lt;PRIVATE_IP&gt;</code>, and <code>&lt;PUBLIC_IP&gt;</code>
+                are used throughout. Substitute with your actual credentials when reproducing.
+            </div>
+        </header>
+
+        <!-- Overview -->
+        <section class="section">
+            <h2>Overview</h2>
+            <p>This comprehensive benchmark report provides complete reproduction details for performance testing of <strong>1 database systems</strong> using the TPC-H benchmark at scale factor 500. All installation steps, configuration parameters, and a self-contained benchmark package are included for independent verification.</p>
+        </section>
+
+        <!-- Executive Summary -->
+        <section class="section">
+            <h2>Executive Summary</h2>
+
+            
+            <div class="summary-intro">
+                <p>We compared <strong>1 database systems</strong>:</p>
+            </div>
+
+            <!-- Performance Cards -->
+            <div class="summary-cards">
+                
+                <div class="summary-card">
+                    <h3>Exasol</h3>
+                    <div class="card-metrics">
+                        <div class="metric">
+                            <span class="metric-label">Median Runtime</span>
+                            <span class="metric-value">818.5ms</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Average Runtime</span>
+                            <span class="metric-value">1060.3ms</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Fastest Query</span>
+                            <span class="metric-value metric-fast">98.7ms</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Slowest Query</span>
+                            <span class="metric-value metric-slow">6882.4ms</span>
+                        </div>
+                    </div>
+                </div>
+                
+            </div>
+
+            
+            
+        </section>
+
+        <!-- Performance Visualizations -->
+        
+        <section class="section">
+            <h2>Performance Visualizations</h2>
+
+            <div class="chart-container">
+                <iframe src="attachments/figures/system_performance_overview.html" width="100%" height="500" frameborder="0"></iframe>
+            </div>
+            <div class="chart-container">
+                <iframe src="attachments/figures/performance_heatmap.html" width="100%" height="450" frameborder="0"></iframe>
+            </div>
+            <div class="chart-container">
+                <iframe src="attachments/figures/all_systems_comparison.html" width="100%" height="550" frameborder="0"></iframe>
+            </div>
+        </section>
+        
+
+        <!-- Systems Under Test -->
+        <section class="section">
+            <h2>Systems Under Test</h2>
+
+            <div class="systems-grid">
+                
+                <div class="system-card">
+                    <h3>Exasol 2025.2.0</h3>
+
+                    <div class="system-info">
+                        <h4>Software Configuration</h4>
+                        <table class="info-table">
+                            <tr><td>Database</td><td><strong>exasol 2025.2.0</strong></td></tr>
+                            <tr><td>Setup Method</td><td>installer</td></tr>
+                            
+                            
+                            <tr><td>Data Device</td><td><code>/dev/exasol.storage</code></td></tr>
+                            
+                            
+                            <tr><td>Cluster Configuration</td><td><span class="badge badge-success">5-node cluster</span></td></tr>
+                            
+                        </table>
+                    </div>
+
+                    
+                    
+                    
+                    
+                      
+                        
+                      
+                    
+                      
+                        
+                      
+                    
+                      
+                        
+                      
+                    
+                      
+                        
+                      
+                    
+                      
+                        
+                      
+                    
+
+                    
+                    
+                    <div class="system-info">
+                        <h4>Hardware Specifications</h4>
+                        <table class="info-table">
+                            
+                            <tr><td>Cloud Provider</td><td><span class="badge badge-cloud">AWS</span></td></tr>
+                            <tr><td>Region</td><td>eu-west-1</td></tr>
+                            
+                            <tr><td>Instance Type</td><td><strong>r6id.4xlarge</strong></td></tr>
+                            
+                            
+                            
+                            <tr><td>Node Count</td><td><strong>5 nodes</strong></td></tr>
+                            
+                            
+                            <tr><td>CPU</td><td>Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz</td></tr>
+                            
+                            
+                            
+                            <tr><td>CPU Cores per node</td><td>16 vCPUs <span class="secondary">(80 total vCPUs)</span></td></tr>
+                            
+                            
+                            
+                            
+                            <tr><td>Memory per node</td><td>123.8GB RAM <span class="secondary">(619.0GB total RAM)</span></td></tr>
+                            
+                            
+                            
+                            <tr><td>Hostnames</td><td><code>ip-10-0-1-117</code>, <code>ip-10-0-1-38</code>, <code>ip-10-0-1-112</code>, <code>ip-10-0-1-18</code>, <code>ip-10-0-1-101</code></td></tr>
+                            
+                        </table>
+                    </div>
+                    
+                    
+                </div>
+                
+            </div>
+        </section>
+
+        <!-- Workload Details Section -->
+        
+        <section class="section">
+            <h2>Workload: TPCH (Scale Factor 500)</h2>
+
+            <!-- Full Description -->
+            <div class="workload-description">
+                <p>TPC-H is a decision support benchmark that consists of a suite of business-oriented ad-hoc queries
+            and concurrent data modifications. The queries and data are chosen to have broad industry-wide relevance.
+            This benchmark illustrates decision support systems that examine large volumes of data, execute queries with
+            a high degree of complexity, and give answers to critical business questions. The benchmark models a wholesale
+            supplier with a distribution network across multiple regions.</p>
+
+                
+                <h3>Key Characteristics</h3>
+                <ul class="characteristics-list">
+                    
+                    <li>22 complex analytical queries</li>
+                    
+                    <li>8 tables with varying cardinality</li>
+                    
+                    <li>Queries involve multi-table joins, aggregations, and subqueries</li>
+                    
+                    <li>Simulates real-world business intelligence workloads</li>
+                    
+                </ul>
+                
+            </div>
+
+            <!-- Table Overview -->
+            
+            <h3>Database Schema (8 Tables)</h3>
+            <div class="tables-grid">
+                
+                <div class="table-card">
+                    <h4>Nation</h4>
+                    <p class="table-description">Nations/countries (25 rows)</p>
+                    
+                    <p class="table-cardinality">
+                        <strong>Rows:</strong>
+                        ~12500
+                    </p>
+                    
+                    <details>
+                        <summary>Columns (4)</summary>
+                        <ul class="columns-list">
+                            
+                            <li><code>n_nationkey</code></li>
+                            
+                            <li><code>n_name</code></li>
+                            
+                            <li><code>n_regionkey</code></li>
+                            
+                            <li><code>n_comment</code></li>
+                            
+                        </ul>
+                    </details>
+                    
+                    <p class="table-relationships"><em>Foreign key to region</em></p>
+                    
+                </div>
+                
+                <div class="table-card">
+                    <h4>Region</h4>
+                    <p class="table-description">Geographic regions (5 rows)</p>
+                    
+                    <p class="table-cardinality">
+                        <strong>Rows:</strong>
+                        ~2500
+                    </p>
+                    
+                    <details>
+                        <summary>Columns (3)</summary>
+                        <ul class="columns-list">
+                            
+                            <li><code>r_regionkey</code></li>
+                            
+                            <li><code>r_name</code></li>
+                            
+                            <li><code>r_comment</code></li>
+                            
+                        </ul>
+                    </details>
+                    
+                </div>
+                
+                <div class="table-card">
+                    <h4>Part</h4>
+                    <p class="table-description">Parts/products catalog</p>
+                    
+                    <p class="table-cardinality">
+                        <strong>Rows:</strong>
+                        ~100000000
+                    </p>
+                    
+                    <details>
+                        <summary>Columns (9)</summary>
+                        <ul class="columns-list">
+                            
+                            <li><code>p_partkey</code></li>
+                            
+                            <li><code>p_name</code></li>
+                            
+                            <li><code>p_mfgr</code></li>
+                            
+                            <li><code>p_brand</code></li>
+                            
+                            <li><code>p_type</code></li>
+                            
+                            <li><code>p_size</code></li>
+                            
+                            <li><code>p_container</code></li>
+                            
+                            <li><code>p_retailprice</code></li>
+                            
+                            <li><code>p_comment</code></li>
+                            
+                        </ul>
+                    </details>
+                    
+                </div>
+                
+                <div class="table-card">
+                    <h4>Supplier</h4>
+                    <p class="table-description">Suppliers/vendors</p>
+                    
+                    <p class="table-cardinality">
+                        <strong>Rows:</strong>
+                        ~5000000
+                    </p>
+                    
+                    <details>
+                        <summary>Columns (7)</summary>
+                        <ul class="columns-list">
+                            
+                            <li><code>s_suppkey</code></li>
+                            
+                            <li><code>s_name</code></li>
+                            
+                            <li><code>s_address</code></li>
+                            
+                            <li><code>s_nationkey</code></li>
+                            
+                            <li><code>s_phone</code></li>
+                            
+                            <li><code>s_acctbal</code></li>
+                            
+                            <li><code>s_comment</code></li>
+                            
+                        </ul>
+                    </details>
+                    
+                    <p class="table-relationships"><em>Foreign key to nation</em></p>
+                    
+                </div>
+                
+                <div class="table-card">
+                    <h4>Partsupp</h4>
+                    <p class="table-description">Parts supplied by suppliers (association table)</p>
+                    
+                    <p class="table-cardinality">
+                        <strong>Rows:</strong>
+                        ~400000000
+                    </p>
+                    
+                    <details>
+                        <summary>Columns (5)</summary>
+                        <ul class="columns-list">
+                            
+                            <li><code>ps_partkey</code></li>
+                            
+                            <li><code>ps_suppkey</code></li>
+                            
+                            <li><code>ps_availqty</code></li>
+                            
+                            <li><code>ps_supplycost</code></li>
+                            
+                            <li><code>ps_comment</code></li>
+                            
+                        </ul>
+                    </details>
+                    
+                    <p class="table-relationships"><em>Foreign keys to part and supplier</em></p>
+                    
+                </div>
+                
+                <div class="table-card">
+                    <h4>Customer</h4>
+                    <p class="table-description">Customers/buyers</p>
+                    
+                    <p class="table-cardinality">
+                        <strong>Rows:</strong>
+                        ~75000000
+                    </p>
+                    
+                    <details>
+                        <summary>Columns (8)</summary>
+                        <ul class="columns-list">
+                            
+                            <li><code>c_custkey</code></li>
+                            
+                            <li><code>c_name</code></li>
+                            
+                            <li><code>c_address</code></li>
+                            
+                            <li><code>c_nationkey</code></li>
+                            
+                            <li><code>c_phone</code></li>
+                            
+                            <li><code>c_acctbal</code></li>
+                            
+                            <li><code>c_mktsegment</code></li>
+                            
+                            <li><code>c_comment</code></li>
+                            
+                        </ul>
+                    </details>
+                    
+                    <p class="table-relationships"><em>Foreign key to nation</em></p>
+                    
+                </div>
+                
+                <div class="table-card">
+                    <h4>Orders</h4>
+                    <p class="table-description">Customer orders</p>
+                    
+                    <p class="table-cardinality">
+                        <strong>Rows:</strong>
+                        ~750000000
+                    </p>
+                    
+                    <details>
+                        <summary>Columns (9)</summary>
+                        <ul class="columns-list">
+                            
+                            <li><code>o_orderkey</code></li>
+                            
+                            <li><code>o_custkey</code></li>
+                            
+                            <li><code>o_orderstatus</code></li>
+                            
+                            <li><code>o_totalprice</code></li>
+                            
+                            <li><code>o_orderdate</code></li>
+                            
+                            <li><code>o_orderpriority</code></li>
+                            
+                            <li><code>o_clerk</code></li>
+                            
+                            <li><code>o_shippriority</code></li>
+                            
+                            <li><code>o_comment</code></li>
+                            
+                        </ul>
+                    </details>
+                    
+                    <p class="table-relationships"><em>Foreign key to customer</em></p>
+                    
+                </div>
+                
+                <div class="table-card">
+                    <h4>Lineitem</h4>
+                    <p class="table-description">Order line items (largest table)</p>
+                    
+                    <p class="table-cardinality">
+                        <strong>Rows:</strong>
+                        ~3000607500
+                    </p>
+                    
+                    <details>
+                        <summary>Columns (16)</summary>
+                        <ul class="columns-list">
+                            
+                            <li><code>l_orderkey</code></li>
+                            
+                            <li><code>l_partkey</code></li>
+                            
+                            <li><code>l_suppkey</code></li>
+                            
+                            <li><code>l_linenumber</code></li>
+                            
+                            <li><code>l_quantity</code></li>
+                            
+                            <li><code>l_extendedprice</code></li>
+                            
+                            <li><code>l_discount</code></li>
+                            
+                            <li><code>l_tax</code></li>
+                            
+                            <li><code>l_returnflag</code></li>
+                            
+                            <li><code>l_linestatus</code></li>
+                            
+                            <li><code>l_shipdate</code></li>
+                            
+                            <li><code>l_commitdate</code></li>
+                            
+                            <li><code>l_receiptdate</code></li>
+                            
+                            <li><code>l_shipinstruct</code></li>
+                            
+                            <li><code>l_shipmode</code></li>
+                            
+                            <li><code>l_comment</code></li>
+                            
+                        </ul>
+                    </details>
+                    
+                    <p class="table-relationships"><em>Foreign keys to orders, part, supplier, partsupp</em></p>
+                    
+                </div>
+                
+            </div>
+            
+
+            <!-- System-Specific DDL & Optimizations -->
+            
+            <h3>Table Definitions & Optimizations</h3>
+            <p>Each database system uses optimized DDL tailored to its architecture and query optimizer.</p>
+
+            
+            <details class="ddl-details">
+                <summary>
+                    <h4>Exasol - DDL & Optimization</h4>
+                </summary>
+
+                
+                <div class="code-section">
+                    <h5>📋 Table Creation</h5>
+                    <p class="code-description">Create 8 TPC-H tables with system-optimized data types</p>
+                    <pre><code class="language-sql">-- Exasol TPC-H Table Creation
+-- Creates all 8 TPC-H tables with Exasol-specific data types and distribution
+
+-- Drop tables in reverse FK dependency order for clean re-runs
+-- (keeps schema intact so the active connection remains valid)
+DROP TABLE IF EXISTS benchmark.lineitem;
+DROP TABLE IF EXISTS benchmark.orders;
+DROP TABLE IF EXISTS benchmark.partsupp;
+DROP TABLE IF EXISTS benchmark.customer;
+DROP TABLE IF EXISTS benchmark.supplier;
+DROP TABLE IF EXISTS benchmark.part;
+DROP TABLE IF EXISTS benchmark.nation;
+DROP TABLE IF EXISTS benchmark.region;
+
+-- Nation table
+CREATE OR REPLACE TABLE benchmark.nation (
+    n_nationkey DEC(11),
+    n_name CHAR(25) CHARACTER SET ASCII,
+    n_regionkey DEC(11),
+    n_comment VARCHAR(152) CHARACTER SET ASCII
+);
+
+-- Region table
+CREATE OR REPLACE TABLE benchmark.region (
+    r_regionkey DEC(11),
+    r_name CHAR(25) CHARACTER SET ASCII,
+    r_comment VARCHAR(152) CHARACTER SET ASCII
+);
+
+-- Part table
+CREATE OR REPLACE TABLE benchmark.part (
+    p_partkey DEC(11),
+    p_name VARCHAR(55) CHARACTER SET ASCII,
+    p_mfgr CHAR(25) CHARACTER SET ASCII,
+    p_brand CHAR(10) CHARACTER SET ASCII,
+    p_type VARCHAR(25) CHARACTER SET ASCII,
+    p_size DEC(10),
+    p_container CHAR(10) CHARACTER SET ASCII,
+    p_retailprice DECIMAL(12,2),
+    p_comment VARCHAR(23) CHARACTER SET ASCII,
+    DISTRIBUTE BY p_partkey
+);
+
+-- Supplier table
+CREATE OR REPLACE TABLE benchmark.supplier (
+    s_suppkey DEC(11),
+    s_name CHAR(25) CHARACTER SET ASCII,
+    s_address VARCHAR(40) CHARACTER SET ASCII,
+    s_nationkey DEC(11),
+    s_phone CHAR(15) CHARACTER SET ASCII,
+    s_acctbal DECIMAL(12,2),
+    s_comment VARCHAR(101) CHARACTER SET ASCII,
+    DISTRIBUTE BY s_suppkey
+);
+
+-- Partsupp table
+CREATE OR REPLACE TABLE benchmark.partsupp (
+    ps_partkey DEC(11),
+    ps_suppkey DEC(11),
+    ps_availqty DEC(10),
+    ps_supplycost DECIMAL(12,2),
+    ps_comment VARCHAR(199) CHARACTER SET ASCII,
+    DISTRIBUTE BY ps_partkey
+);
+
+-- Customer table
+CREATE OR REPLACE TABLE benchmark.customer (
+    c_custkey DEC(11),
+    c_name VARCHAR(25) CHARACTER SET ASCII,
+    c_address VARCHAR(40) CHARACTER SET ASCII,
+    c_nationkey DEC(11),
+    c_phone CHAR(15) CHARACTER SET ASCII,
+    c_acctbal DECIMAL(12,2),
+    c_mktsegment CHAR(10) CHARACTER SET ASCII,
+    c_comment VARCHAR(117) CHARACTER SET ASCII,
+    DISTRIBUTE BY c_custkey
+);
+
+-- Orders table
+CREATE OR REPLACE TABLE benchmark.orders (
+    o_orderkey DEC(12),
+    o_custkey DEC(11),
+    o_orderstatus CHAR(1) CHARACTER SET ASCII,
+    o_totalprice DECIMAL(12,2),
+    o_orderdate DATE,
+    o_orderpriority CHAR(15) CHARACTER SET ASCII,
+    o_clerk CHAR(15) CHARACTER SET ASCII,
+    o_shippriority DEC(10),
+    o_comment VARCHAR(79) CHARACTER SET ASCII,
+    DISTRIBUTE BY o_custkey
+);
+
+-- Lineitem table
+CREATE OR REPLACE TABLE benchmark.lineitem (
+    l_orderkey DEC(12),
+    l_partkey DEC(11),
+    l_suppkey DEC(11),
+    l_linenumber DEC(10),
+    l_quantity DECIMAL(12,2),
+    l_extendedprice DECIMAL(12,2),
+    l_discount DECIMAL(12,2),
+    l_tax DECIMAL(12,2),
+    l_returnflag CHAR(1) CHARACTER SET ASCII,
+    l_linestatus CHAR(1) CHARACTER SET ASCII,
+    l_shipdate DATE,
+    l_commitdate DATE,
+    l_receiptdate DATE,
+    l_shipinstruct CHAR(25) CHARACTER SET ASCII,
+    l_shipmode CHAR(10) CHARACTER SET ASCII,
+    l_comment VARCHAR(44) CHARACTER SET ASCII,
+    DISTRIBUTE BY l_orderkey
+);</code></pre>
+                </div>
+                
+
+                
+                <div class="code-section">
+                    <h5>🔍 Index Creation</h5>
+                    <p class="code-description">Create indexes on foreign keys and join columns</p>
+                    <pre><code class="language-sql">-- Exasol TPC-H Index Creation
+-- Creates indexes to optimize query performance
+
+-- MULTINODE CLUSTER: Create indices optimized for distributed execution
+-- Mix of LOCAL indices (intra-node performance) and GLOBAL indices (cross-node joins)
+
+-- Lineitem: Mix of local and global indices for distributed joins
+ENFORCE LOCAL INDEX ON benchmark.lineitem (l_suppkey);
+ENFORCE GLOBAL INDEX ON benchmark.lineitem (l_partkey, l_suppkey);
+ENFORCE GLOBAL INDEX ON benchmark.lineitem (l_partkey);
+ENFORCE LOCAL INDEX ON benchmark.lineitem (l_orderkey);
+
+-- Dimension tables: Regular indices (replicated across nodes)
+ENFORCE INDEX ON benchmark.nation (n_nationkey);
+ENFORCE INDEX ON benchmark.region (r_regionkey);
+ENFORCE INDEX ON benchmark.supplier (s_suppkey);
+ENFORCE INDEX ON benchmark.supplier (s_nationkey);
+
+-- Large fact tables: Local indices for intra-node performance
+ENFORCE LOCAL INDEX ON benchmark.customer (c_custkey);
+ENFORCE LOCAL INDEX ON benchmark.customer (c_nationkey);
+ENFORCE LOCAL INDEX ON benchmark.part (p_partkey);
+ENFORCE LOCAL INDEX ON benchmark.partsupp (ps_partkey, ps_suppkey);
+ENFORCE LOCAL INDEX ON benchmark.partsupp (ps_partkey);
+ENFORCE LOCAL INDEX ON benchmark.partsupp (ps_suppkey);
+
+-- Orders: Both local and global for distributed queries
+ENFORCE LOCAL INDEX ON benchmark.orders (o_orderkey);
+ENFORCE GLOBAL INDEX ON benchmark.orders (o_orderkey);
+ENFORCE LOCAL INDEX ON benchmark.orders (o_custkey);
+
+COMMIT;
+</code></pre>
+                </div>
+                
+
+                
+                <div class="code-section">
+                    <h5>📊 Table Analysis & Optimization</h5>
+                    <p class="code-description">Update database statistics for query optimizer</p>
+                    <pre><code class="language-sql">-- Exasol TPC-H Table Analysis
+-- Analyzes tables and updates statistics for optimal query performance
+
+ANALYZE DATABASE ESTIMATE STATISTICS;
+COMMIT;</code></pre>
+                </div>
+                
+            </details>
+            
+            
+        </section>
+        
+
+        <!-- Performance Results -->
+        <section class="section">
+            <h2>Performance Results</h2>
+
+            <!-- Interactive Charts -->
+            <div class="charts-section">
+                
+                <div class="chart-card">
+                    <h3>Query Runtime Distribution</h3>
+                    <iframe src="attachments/figures/query_runtime_boxplot.html" class="chart-iframe"></iframe>
+                    <p class="chart-caption">
+                        Box plot showing the distribution of query runtimes. The box shows the interquartile range (25th to 75th percentile),
+                        with the median marked by the line inside the box.
+                    </p>
+                </div>
+                
+
+                
+                <div class="chart-card">
+                    <h3>Median Query Runtimes</h3>
+                    <iframe src="attachments/figures/median_runtime_bar.html" class="chart-iframe"></iframe>
+                    <p class="chart-caption">
+                        Bar chart comparing median query runtimes across systems. Lower bars indicate better performance.
+                    </p>
+                </div>
+                
+
+                
+                <div class="chart-card">
+                    <h3>Performance Heatmap</h3>
+                    <iframe src="attachments/figures/performance_heatmap.html" class="chart-iframe"></iframe>
+                    <p class="chart-caption">
+                        Heatmap showing relative performance across queries and systems. Values are normalized so that 1.0 represents
+                        the fastest system for each query.
+                    </p>
+                </div>
+                
+            </div>
+
+            <!-- Performance Summary Table -->
+            
+            <div class="table-container">
+                <h3>Detailed Performance Summary</h3>
+                <div class="table-wrapper">
+                    <table  class="summary-table">
+<thead><tr>
+<th>query</th>
+<th>system</th>
+<th>warmup</th>
+<th>runs</th>
+<th>median_ms</th>
+<th>mean_ms</th>
+<th>std_ms</th>
+<th>min_ms</th>
+<th>max_ms</th>
+</tr></thead>
+<tbody>
+<tr data-query-start="true" data-query-group="odd" data-query="Q01" data-system="exasol">
+<td>Q01</td>
+<td>exasol</td>
+<td class="perf-poor">1,602.20</td>
+<td>5</td>
+<td class="perf-poor">1,604.80</td>
+<td class="perf-poor">1,629.70</td>
+<td class="perf-poor">38.80</td>
+<td class="perf-poor">1,598.00</td>
+<td class="perf-poor">1,676.70</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q02" data-system="exasol">
+<td>Q02</td>
+<td>exasol</td>
+<td class="perf-average">988.60</td>
+<td>5</td>
+<td class="perf-excellent">212.60</td>
+<td class="perf-excellent">213.90</td>
+<td class="perf-good">3.70</td>
+<td class="perf-excellent">210.20</td>
+<td class="perf-excellent">219.70</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q03" data-system="exasol">
+<td>Q03</td>
+<td>exasol</td>
+<td class="perf-poor">1,405.20</td>
+<td>5</td>
+<td class="perf-poor">1,388.50</td>
+<td class="perf-poor">1,388.30</td>
+<td class="perf-average">7.60</td>
+<td class="perf-poor">1,376.80</td>
+<td class="perf-poor">1,396.20</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q04" data-system="exasol">
+<td>Q04</td>
+<td>exasol</td>
+<td class="perf-excellent">393.70</td>
+<td>5</td>
+<td class="perf-good">386.60</td>
+<td class="perf-good">387.00</td>
+<td class="perf-excellent">1.70</td>
+<td class="perf-good">385.10</td>
+<td class="perf-good">388.80</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q05" data-system="exasol">
+<td>Q05</td>
+<td>exasol</td>
+<td class="perf-average">1,310.20</td>
+<td>5</td>
+<td class="perf-average">1,024.40</td>
+<td class="perf-average">1,044.30</td>
+<td class="perf-average">30.40</td>
+<td class="perf-average">1,022.40</td>
+<td class="perf-average">1,090.60</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q06" data-system="exasol">
+<td>Q06</td>
+<td>exasol</td>
+<td class="perf-excellent">99.30</td>
+<td>5</td>
+<td class="perf-excellent">99.80</td>
+<td class="perf-excellent">99.60</td>
+<td class="perf-excellent">0.70</td>
+<td class="perf-excellent">98.70</td>
+<td class="perf-excellent">100.30</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q07" data-system="exasol">
+<td>Q07</td>
+<td>exasol</td>
+<td class="perf-poor">2,013.60</td>
+<td>5</td>
+<td class="perf-poor">1,995.60</td>
+<td class="perf-poor">2,005.70</td>
+<td class="perf-poor">50.00</td>
+<td class="perf-poor">1,952.40</td>
+<td class="perf-poor">2,088.50</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q08" data-system="exasol">
+<td>Q08</td>
+<td>exasol</td>
+<td class="perf-good">751.50</td>
+<td>5</td>
+<td class="perf-good">648.50</td>
+<td class="perf-good">648.80</td>
+<td class="perf-good">5.00</td>
+<td class="perf-good">643.90</td>
+<td class="perf-good">657.10</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q09" data-system="exasol">
+<td>Q09</td>
+<td>exasol</td>
+<td class="perf-poor">6,071.30</td>
+<td>5</td>
+<td class="perf-poor">6,266.70</td>
+<td class="perf-poor">6,358.00</td>
+<td class="perf-poor">353.90</td>
+<td class="perf-poor">5,977.10</td>
+<td class="perf-poor">6,882.40</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q10" data-system="exasol">
+<td>Q10</td>
+<td>exasol</td>
+<td class="perf-poor">1,405.60</td>
+<td>5</td>
+<td class="perf-poor">1,404.60</td>
+<td class="perf-poor">1,419.60</td>
+<td class="perf-poor">46.30</td>
+<td class="perf-poor">1,370.20</td>
+<td class="perf-poor">1,481.70</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q11" data-system="exasol">
+<td>Q11</td>
+<td>exasol</td>
+<td class="perf-excellent">294.90</td>
+<td>5</td>
+<td class="perf-excellent">271.30</td>
+<td class="perf-excellent">271.30</td>
+<td class="perf-good">5.10</td>
+<td class="perf-excellent">264.40</td>
+<td class="perf-excellent">278.70</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q12" data-system="exasol">
+<td>Q12</td>
+<td>exasol</td>
+<td class="perf-good">440.60</td>
+<td>5</td>
+<td class="perf-good">347.60</td>
+<td class="perf-good">347.90</td>
+<td class="perf-excellent">2.70</td>
+<td class="perf-good">345.00</td>
+<td class="perf-good">351.80</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q13" data-system="exasol">
+<td>Q13</td>
+<td>exasol</td>
+<td class="perf-poor">1,721.60</td>
+<td>5</td>
+<td class="perf-poor">1,644.80</td>
+<td class="perf-poor">1,649.90</td>
+<td class="perf-average">13.50</td>
+<td class="perf-poor">1,642.10</td>
+<td class="perf-poor">1,673.90</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q14" data-system="exasol">
+<td>Q14</td>
+<td>exasol</td>
+<td class="perf-good">605.50</td>
+<td>5</td>
+<td class="perf-good">591.10</td>
+<td class="perf-good">590.20</td>
+<td class="perf-good">4.70</td>
+<td class="perf-good">585.10</td>
+<td class="perf-good">595.70</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q15" data-system="exasol">
+<td>Q15</td>
+<td>exasol</td>
+<td class="perf-good">750.20</td>
+<td>5</td>
+<td class="perf-good">786.30</td>
+<td class="perf-good">798.10</td>
+<td class="perf-poor">36.30</td>
+<td class="perf-good">753.70</td>
+<td class="perf-average">848.30</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q16" data-system="exasol">
+<td>Q16</td>
+<td>exasol</td>
+<td class="perf-good">826.50</td>
+<td>5</td>
+<td class="perf-average">832.40</td>
+<td class="perf-average">839.90</td>
+<td class="perf-average">15.40</td>
+<td class="perf-average">824.80</td>
+<td class="perf-average">861.90</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q17" data-system="exasol">
+<td>Q17</td>
+<td>exasol</td>
+<td class="perf-excellent">144.30</td>
+<td>5</td>
+<td class="perf-excellent">143.00</td>
+<td class="perf-excellent">143.40</td>
+<td class="perf-excellent">2.50</td>
+<td class="perf-excellent">140.50</td>
+<td class="perf-excellent">147.00</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q18" data-system="exasol">
+<td>Q18</td>
+<td>exasol</td>
+<td class="perf-average">1,173.90</td>
+<td>5</td>
+<td class="perf-average">1,170.60</td>
+<td class="perf-average">1,171.60</td>
+<td class="perf-average">7.90</td>
+<td class="perf-average">1,163.50</td>
+<td class="perf-average">1,184.70</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q19" data-system="exasol">
+<td>Q19</td>
+<td>exasol</td>
+<td class="perf-excellent">182.90</td>
+<td>5</td>
+<td class="perf-excellent">174.20</td>
+<td class="perf-excellent">174.90</td>
+<td class="perf-excellent">2.20</td>
+<td class="perf-excellent">172.80</td>
+<td class="perf-excellent">177.50</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q20" data-system="exasol">
+<td>Q20</td>
+<td>exasol</td>
+<td class="perf-average">829.00</td>
+<td>5</td>
+<td class="perf-average">819.10</td>
+<td class="perf-average">819.60</td>
+<td class="perf-good">4.10</td>
+<td class="perf-average">813.80</td>
+<td class="perf-good">824.10</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q21" data-system="exasol">
+<td>Q21</td>
+<td>exasol</td>
+<td class="perf-average">1,064.30</td>
+<td>5</td>
+<td class="perf-average">1,093.90</td>
+<td class="perf-average">1,104.10</td>
+<td class="perf-poor">63.80</td>
+<td class="perf-average">1,040.60</td>
+<td class="perf-average">1,211.10</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q22" data-system="exasol">
+<td>Q22</td>
+<td>exasol</td>
+<td class="perf-excellent">249.60</td>
+<td>5</td>
+<td class="perf-excellent">218.60</td>
+<td class="perf-excellent">219.80</td>
+<td class="perf-excellent">3.00</td>
+<td class="perf-excellent">217.30</td>
+<td class="perf-excellent">224.60</td>
+</tr>
+</tbody>
+</table>
+                </div>
+            </div>
+            
+        </section>
+
+        <!-- Infrastructure Setup Timings -->
+        
+
+        <!-- Configuration & Setup -->
+        <section class="section">
+            <h2>Configuration & Setup</h2>
+
+            
+            
+            <details class="setup-details">
+                <summary>
+                    <h3>Exasol 2025.2.0 Setup</h3>
+                </summary>
+
+                
+                
+
+    
+    
+    
+    
+    
+    
+        
+            
+            
+<div class="code-section">
+    <h4>Storage Setup</h4>
+    <pre><code class="language-bash"># [All 5 Nodes] Create GPT partition table
+sudo parted -s /dev/nvme1n1 mklabel gpt
+# [All 5 Nodes] Create 0GB partition for data generation
+sudo parted -s /dev/nvme1n1 mkpart primary ext4 1MiB 0GiB
+# Using additional disk: /dev/nvme1n1 (via /dev/exasol.storage)
+lsblk /dev/nvme1n1
+</code></pre>
+</div>
+
+        
+    
+        
+            
+            
+<div class="code-section">
+    <h4>User Setup</h4>
+    <pre><code class="language-bash"># [All 5 Nodes] Create Exasol system user
+sudo useradd -m -s /bin/bash exasol || true
+# [All 5 Nodes] Add exasol user to sudo group
+sudo usermod -aG sudo exasol || true
+# Set password for exasol user (interactive)
+sudo passwd exasol
+</code></pre>
+</div>
+
+        
+    
+        
+            
+            
+<div class="code-section">
+    <h4>Setup</h4>
+    <pre><code class="language-bash"># [All 5 Nodes] Configuring passwordless sudo on all nodes
+sudo sed -i &#34;/%sudo/s/) ALL$/) NOPASSWD: ALL/&#34; /etc/sudoers
+</code></pre>
+</div>
+
+        
+    
+        
+            
+            
+<div class="code-section">
+    <h4>Tool Setup</h4>
+    <pre><code class="language-bash"># Download c4 cluster management tool v4.28.5
+wget -q --tries=3 --retry-connrefused --waitretry=5 https://x-up.s3.amazonaws.com/releases/c4/linux/x86_64/4.28.5/c4 -O c4 &amp;&amp; chmod +x c4
+</code></pre>
+</div>
+
+        
+    
+        
+            
+            
+<div class="code-section">
+    <h4>Ssh Setup</h4>
+    <pre><code class="language-bash"># Generate SSH key pair for cluster communication
+ssh-keygen -t rsa -b 2048 -f ~/.ssh/id_rsa -N &#34;&#34;
+# [All 5 Nodes] Distribute ubuntu SSH key to exasol user
+sudo mkdir -p ~exasol/.ssh &amp;&amp; echo &#39;ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDik0tV0zv8M125uWjG5wyncBRUQbaB1NWSfSMOeHcJ2nWHCJtxpNyZjy5DqzrzzGk2xm8Al/tSDXrQ7arBC64hKbY3mBrO6zd6I4mr3DO7uyV4sMthUfJx8aBRjVbJRMhvT226g6Ga24yWkcpvs2SJH3BZF8K+dcJqfPF7muG3e0NNVEgaU14i0nKXqxf4+FxoMzoD765CNlmuVEXIkaDif1PoatTRiqsHCpvb2PPz2/pOsGnym10h9oHwmWKF+YtbbXGZ48iz/L3Cj/OG2fdxkSepwM4OJFjoUQspj0YThJtQlYjBRwvXitGNrexwmP4syie7Uhkahl/1ouLu8p2J ubuntu@ip-10-0-1-112&#39; | sudo tee ~exasol/.ssh/authorized_keys &gt; /dev/null &amp;&amp; sudo chown -R exasol:exasol ~exasol/.ssh &amp;&amp; sudo chmod 700 ~exasol/.ssh &amp;&amp; sudo chmod 600 ~exasol/.ssh/authorized_keys
+# [All 5 Nodes] Configure localhost SSH access to exasol user
+ssh-keyscan -H localhost &gt;&gt; ~/.ssh/known_hosts 2&gt;/dev/null || true
+ssh-keyscan -H 127.0.0.1 &gt;&gt; ~/.ssh/known_hosts 2&gt;/dev/null || true
+mkdir -p ~/.ssh
+touch ~/.ssh/config
+grep -q &#34;Host localhost&#34; ~/.ssh/config 2&gt;/dev/null || cat &gt;&gt; ~/.ssh/config &lt;&lt; &#39;SSHEOF&#39;
+
+Host localhost 127.0.0.1
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+    LogLevel ERROR
+SSHEOF
+chmod 600 ~/.ssh/config
+# [All 5 Nodes] Generate SSH key pair for exasol user
+sudo -u exasol bash -c &#39;mkdir -p ~/.ssh &amp;&amp; chmod 700 ~/.ssh &amp;&amp; if [ ! -f ~/.ssh/id_rsa ]; then ssh-keygen -t rsa -b 2048 -f ~/.ssh/id_rsa -N &#34;&#34; -q; fi&#39;
+# [All 5 Nodes] Cross-distribute exasol SSH keys for cluster communication
+# Collect exasol public keys from all nodes, distribute to all authorized_keys
+sudo cat ~exasol/.ssh/id_rsa.pub  # on each node
+echo &#39;&lt;KEY&gt;&#39; | sudo tee -a ~exasol/.ssh/authorized_keys &gt; /dev/null
+sudo chown exasol:exasol ~exasol/.ssh/authorized_keys &amp;&amp; sudo chmod 600 ~exasol/.ssh/authorized_keys
+# [All 5 Nodes] Configure exasol SSH config for cluster nodes
+sudo -u exasol bash -c &#39;
+mkdir -p ~/.ssh &amp;&amp; chmod 700 ~/.ssh
+touch ~/.ssh/config &amp;&amp; chmod 600 ~/.ssh/config
+grep -q &#34;Host localhost&#34; ~/.ssh/config 2&gt;/dev/null || cat &gt;&gt; ~/.ssh/config &lt;&lt; SSHEOF
+
+Host localhost 127.0.0.1 &lt;PRIVATE_IP&gt; &lt;PRIVATE_IP&gt; &lt;PRIVATE_IP&gt; &lt;PRIVATE_IP&gt; &lt;PRIVATE_IP&gt; &lt;PUBLIC_IP&gt; &lt;PUBLIC_IP&gt; &lt;PUBLIC_IP&gt; &lt;PUBLIC_IP&gt; &lt;PUBLIC_IP&gt;
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+    LogLevel ERROR
+SSHEOF
+&#39;
+</code></pre>
+</div>
+
+        
+    
+        
+            
+            
+<div class="code-section">
+    <h4>Configuration</h4>
+    <pre><code class="language-bash"># Create c4 configuration file on remote system
+echo &#34;CCC_HOST_ADDRS=\&#34;&lt;PRIVATE_IP&gt; &lt;PRIVATE_IP&gt; &lt;PRIVATE_IP&gt; &lt;PRIVATE_IP&gt; &lt;PRIVATE_IP&gt;\&#34;
+CCC_HOST_EXTERNAL_ADDRS=\&#34;&lt;PUBLIC_IP&gt; &lt;PUBLIC_IP&gt; &lt;PUBLIC_IP&gt; &lt;PUBLIC_IP&gt; &lt;PUBLIC_IP&gt;\&#34;
+CCC_HOST_DATADISK=/dev/exasol.storage
+CCC_HOST_IMAGE_USER=exasol
+CCC_HOST_IMAGE_PASSWORD=&lt;EXASOL_IMAGE_PASSWORD&gt;
+CCC_HOST_KEY_PAIR_FILE=id_rsa
+CCC_PLAY_RESERVE_NODES=0
+CCC_PLAY_WORKING_COPY=@exasol-2025.2.0
+CCC_PLAY_DB_PASSWORD=&lt;EXASOL_DB_PASSWORD&gt;
+CCC_PLAY_ADMIN_PASSWORD=&lt;EXASOL_ADMIN_PASSWORD&gt;
+CCC_PLAY_DB_MEM_SIZE=480000
+CCC_ADMINUI_START_SERVER=true&#34; | tee /tmp/exasol_c4.conf &gt; /dev/null
+</code></pre>
+</div>
+
+        
+    
+        
+            
+            
+<div class="code-section">
+    <h4>Cluster Deployment</h4>
+    <pre><code class="language-bash"># Deploy Exasol cluster using c4
+./c4 host play -i /tmp/exasol_c4.conf
+</code></pre>
+</div>
+
+        
+    
+        
+            
+            
+<div class="code-section">
+    <h4>Cluster Management</h4>
+    <pre><code class="language-bash"># Get cluster play ID for confd_client operations
+c4 ps
+</code></pre>
+</div>
+
+        
+    
+        
+            
+            
+<div class="code-section">
+    <h4>License Setup</h4>
+    <pre><code class="language-bash"># Install Exasol license file
+confd_client license_upload license: &lt;LICENSE_CONTENT&gt;
+</code></pre>
+</div>
+
+        
+    
+        
+            
+            
+<div class="code-section">
+    <h4>Redundancy</h4>
+    <pre><code class="language-bash"># Stop database for redundancy change
+confd_client db_stop db_name: Exasol
+# Decrease volume redundancy to 1
+confd_client st_volume_decrease_redundancy vname: DataVolume1 delta: 1
+# Restart database after redundancy change
+confd_client db_start db_name: Exasol
+</code></pre>
+</div>
+
+        
+    
+        
+            
+            
+<div class="code-section">
+    <h4>Database Tuning</h4>
+    <pre><code class="language-bash"># Stop Exasol database for parameter configuration
+confd_client db_stop db_name: Exasol
+# Configure Exasol database parameters for analytical workload optimization
+confd_client db_configure db_name: Exasol params_add: &#34;[&#39;-writeTouchInit=1&#39;,&#39;-cacheMonitorLimit=0&#39;,&#39;-maxOverallSlbUsageRatio=0.95&#39;,&#39;-useQueryCache=0&#39;,&#39;-query_log_timeout=0&#39;,&#39;-joinOrderMethod=0&#39;,&#39;-etlCheckCertsDefault=0&#39;,&#39;-replicationborder=5500000&#39;]&#34;
+# Starting database with new parameters
+confd_client db_start db_name: Exasol
+</code></pre>
+</div>
+
+        
+    
+
+
+
+    
+    
+    <div class="tuning-parameters">
+        <h4>Tuning Parameters</h4>
+        <ul>
+            
+            <li><code>optimizer_mode</code>: analytical</li>
+            
+            <li>Database parameters:
+                <ul>
+                    
+                    <li><code>-writeTouchInit=1</code></li>
+                    
+                    <li><code>-cacheMonitorLimit=0</code></li>
+                    
+                    <li><code>-maxOverallSlbUsageRatio=0.95</code></li>
+                    
+                    <li><code>-useQueryCache=0</code></li>
+                    
+                    <li><code>-query_log_timeout=0</code></li>
+                    
+                    <li><code>-joinOrderMethod=0</code></li>
+                    
+                    <li><code>-etlCheckCertsDefault=0</code></li>
+                    
+                    <li><code>-replicationborder=5500000</code></li>
+                    
+                </ul>
+            </li>
+            
+            
+            
+            
+        </ul>
+    </div>
+    
+
+
+
+<div class="data-directory">
+    <strong>Data Directory:</strong> <code>None</code>
+</div>
+
+
+                
+            </details>
+            
+            
+        </section>
+
+        <!-- Download Section -->
+        <section class="section">
+            <h2>Download Data</h2>
+            <div class="download-grid">
+                
+<div class="download-card">
+    <div class="download-icon">📊</div>
+    <h4>Query Results</h4>
+    <p>Raw benchmark results (CSV format)</p>
+    <a href="attachments/runs.csv" class="btn btn-download" download>Download</a>
+</div>
+
+                
+<div class="download-card">
+    <div class="download-icon">📈</div>
+    <h4>Summary Statistics</h4>
+    <p>Aggregated performance metrics (JSON)</p>
+    <a href="attachments/summary.json" class="btn btn-download" download>Download</a>
+</div>
+
+
+                
+                    
+                    
+<div class="download-card">
+    <div class="download-icon">💻</div>
+    <h4>Exasol-Node3 System Information</h4>
+    <p>Hardware specifications captured during the benchmark (JSON)</p>
+    <a href="attachments/system_exasol-node3.json" class="btn btn-download" download>Download</a>
+</div>
+
+                    
+                    
+<div class="download-card">
+    <div class="download-icon">💻</div>
+    <h4>Exasol-Node4 System Information</h4>
+    <p>Hardware specifications captured during the benchmark (JSON)</p>
+    <a href="attachments/system_exasol-node4.json" class="btn btn-download" download>Download</a>
+</div>
+
+                    
+                    
+<div class="download-card">
+    <div class="download-icon">💻</div>
+    <h4>Exasol-Node0 System Information</h4>
+    <p>Hardware specifications captured during the benchmark (JSON)</p>
+    <a href="attachments/system_exasol-node0.json" class="btn btn-download" download>Download</a>
+</div>
+
+                    
+                    
+<div class="download-card">
+    <div class="download-icon">💻</div>
+    <h4>Exasol-Node1 System Information</h4>
+    <p>Hardware specifications captured during the benchmark (JSON)</p>
+    <a href="attachments/system_exasol-node1.json" class="btn btn-download" download>Download</a>
+</div>
+
+                    
+                    
+<div class="download-card">
+    <div class="download-icon">💻</div>
+    <h4>Exasol-Node2 System Information</h4>
+    <p>Hardware specifications captured during the benchmark (JSON)</p>
+    <a href="attachments/system_exasol-node2.json" class="btn btn-download" download>Download</a>
+</div>
+
+                    
+                
+
+                
+                
+<div class="download-card">
+    <div class="download-icon">📦</div>
+    <h4>Benchmark Package</h4>
+    <p>Self-contained reproduction package</p>
+    <a href="exa_node_scaling_5n-workload.zip" class="btn btn-download" download>Download</a>
+</div>
+
+                
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Generated by BenchKit | 2026-02-11 17:41:52</p>
+        </footer>
+    </div>
+
+    <!-- Query Modal -->
+    <div id="queryModal" class="query-modal">
+        <div class="query-modal-content">
+            <div class="query-modal-header">
+                <h3 id="modalTitle">Query Details</h3>
+                <button class="query-modal-close" onclick="closeQueryModal()">&times;</button>
+            </div>
+            <div id="modalBody">
+                <pre><code id="queryCode" class="language-sql"></code></pre>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+
+    <script>
+        // Query data embedded from workload
+        const queryData = {
+            
+            
+            "Q01": {
+                
+                "exasol": "attachments/queries/exasol/Q01.sql"
+                
+            },
+            
+            "Q02": {
+                
+                "exasol": "attachments/queries/exasol/Q02.sql"
+                
+            },
+            
+            "Q03": {
+                
+                "exasol": "attachments/queries/exasol/Q03.sql"
+                
+            },
+            
+            "Q04": {
+                
+                "exasol": "attachments/queries/exasol/Q04.sql"
+                
+            },
+            
+            "Q05": {
+                
+                "exasol": "attachments/queries/exasol/Q05.sql"
+                
+            },
+            
+            "Q06": {
+                
+                "exasol": "attachments/queries/exasol/Q06.sql"
+                
+            },
+            
+            "Q07": {
+                
+                "exasol": "attachments/queries/exasol/Q07.sql"
+                
+            },
+            
+            "Q08": {
+                
+                "exasol": "attachments/queries/exasol/Q08.sql"
+                
+            },
+            
+            "Q09": {
+                
+                "exasol": "attachments/queries/exasol/Q09.sql"
+                
+            },
+            
+            "Q10": {
+                
+                "exasol": "attachments/queries/exasol/Q10.sql"
+                
+            },
+            
+            "Q11": {
+                
+                "exasol": "attachments/queries/exasol/Q11.sql"
+                
+            },
+            
+            "Q12": {
+                
+                "exasol": "attachments/queries/exasol/Q12.sql"
+                
+            },
+            
+            "Q13": {
+                
+                "exasol": "attachments/queries/exasol/Q13.sql"
+                
+            },
+            
+            "Q14": {
+                
+                "exasol": "attachments/queries/exasol/Q14.sql"
+                
+            },
+            
+            "Q15": {
+                
+                "exasol": "attachments/queries/exasol/Q15.sql"
+                
+            },
+            
+            "Q16": {
+                
+                "exasol": "attachments/queries/exasol/Q16.sql"
+                
+            },
+            
+            "Q17": {
+                
+                "exasol": "attachments/queries/exasol/Q17.sql"
+                
+            },
+            
+            "Q18": {
+                
+                "exasol": "attachments/queries/exasol/Q18.sql"
+                
+            },
+            
+            "Q19": {
+                
+                "exasol": "attachments/queries/exasol/Q19.sql"
+                
+            },
+            
+            "Q20": {
+                
+                "exasol": "attachments/queries/exasol/Q20.sql"
+                
+            },
+            
+            "Q21": {
+                
+                "exasol": "attachments/queries/exasol/Q21.sql"
+                
+            },
+            
+            "Q22": {
+                
+                "exasol": "attachments/queries/exasol/Q22.sql"
+                
+            }
+            
+            
+        };
+
+        // Add click handlers to summary table rows
+        document.addEventListener('DOMContentLoaded', function() {
+            const summaryTable = document.querySelector('.summary-table');
+            if (summaryTable) {
+                const rows = summaryTable.querySelectorAll('tbody tr[data-query]');
+                rows.forEach(row => {
+                    row.addEventListener('click', function() {
+                        const query = this.dataset.query;
+                        const system = this.dataset.system;
+                        showQueryModal(query, system);
+                    });
+                });
+            }
+        });
+
+        function showQueryModal(query, system) {
+            const modal = document.getElementById('queryModal');
+            const title = document.getElementById('modalTitle');
+            const code = document.getElementById('queryCode');
+
+            title.textContent = `${query} - ${system}`;
+
+            // Load query from file
+            if (queryData[query] && queryData[query][system]) {
+                fetch(queryData[query][system])
+                    .then(response => response.text())
+                    .then(sql => {
+                        code.textContent = sql;
+                        Prism.highlightElement(code);
+                        modal.classList.add('active');
+                    })
+                    .catch(error => {
+                        code.textContent = `Error loading query: ${error}`;
+                        modal.classList.add('active');
+                    });
+            } else {
+                code.textContent = `Query ${query} not found for system ${system}`;
+                modal.classList.add('active');
+            }
+        }
+
+        function closeQueryModal() {
+            const modal = document.getElementById('queryModal');
+            modal.classList.remove('active');
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('queryModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeQueryModal();
+            }
+        });
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeQueryModal();
+            }
+        });
+
+        // Auto-resize iframes to match content height
+        function resizeIframe(iframe) {
+            try {
+                const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                if (iframeDoc && iframeDoc.body) {
+                    // Get the full height of the iframe content
+                    const height = iframeDoc.body.scrollHeight;
+                    // Set iframe height to match content (add small padding)
+                    iframe.style.height = (height + 20) + 'px';
+                }
+            } catch (e) {
+                // Cross-origin or access issues - keep default height
+                console.warn('Could not resize iframe:', e);
+            }
+        }
+
+        // Resize all iframes on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            const iframes = document.querySelectorAll('iframe');
+            iframes.forEach(function(iframe) {
+                // Resize on load
+                iframe.addEventListener('load', function() {
+                    resizeIframe(iframe);
+                });
+                // Also try to resize immediately in case already loaded
+                if (iframe.contentDocument && iframe.contentDocument.readyState === 'complete') {
+                    resizeIframe(iframe);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
