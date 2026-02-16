@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Extended Scalability Benchmark - Benchmark Suite Results Dashboard">
-    <title>Extended Scalability Benchmark | Benchmark Dashboard</title>
+    <meta name="description" content="Extended Scalability Study Results - Benchmark Suite Results Dashboard">
+    <title>Extended Scalability Study Results | Benchmark Dashboard</title>
     <link rel="stylesheet" href="assets/styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -17,7 +17,7 @@
         <header class="header">
             <div class="header-content">
                 <div class="header-title">
-                    <h1>Extended Scalability Benchmark</h1>
+                    <h1>Extended Scalability Study Results</h1>
                     <p class="header-description">Comprehensive scalability testing across node count, data volume, and concurrency</p>
                 </div>
                 <div class="header-meta">
@@ -28,7 +28,7 @@
                         v1.0.0
                     </span>
                     <span class="meta-badge meta-date">
-                        Generated: <time datetime="2026-01-31T18:40:50.571271+00:00">2026-01-31</time>
+                        Generated: <time datetime="2026-02-11T12:30:37.445400+00:00">2026-02-11</time>
                     </span>
                 </div>
             </div>
@@ -45,9 +45,9 @@
                 <div class="filter-group" data-dimension="series">
                     <label>Series</label>
                     <div class="filter-chips" id="series-chips">
-                        <button class="chip active" data-value="series_1_nodes">series_1_nodes</button>
-                        <button class="chip active" data-value="series_2_sf">series_2_sf</button>
-                        <button class="chip active" data-value="series_4_streams_single">series_4_streams_single</button>
+                        <button class="chip active" data-value="Node Scaling">Node Scaling</button>
+                        <button class="chip active" data-value="Scale Factor Scaling">Scale Factor Scaling</button>
+                        <button class="chip active" data-value="Single Node Stream Scaling">Single Node Stream Scaling</button>
                     </div>
                 </div>
 
@@ -95,23 +95,21 @@
                     </div>
                 </div>
 
-                <!-- Metric Selector -->
-                <div class="filter-group" data-dimension="metric">
-                    <label>Metric</label>
-                    <div class="metric-toggles" id="metric-toggles">
-                        <button class="toggle active" data-metric="median">Median</button>
-                        <button class="toggle" data-metric="avg">Average</button>
-                        <button class="toggle" data-metric="total">Total</button>
+                <!-- Metric & Scale -->
+                <div class="filter-group filter-group-metric-scale" data-dimension="metric">
+                    <label>Metric / Scale</label>
+                    <div class="metric-scale-row">
+                        <div class="metric-toggles" id="metric-toggles">
+                            <button class="toggle" data-metric="median">Median</button>
+                            <button class="toggle" data-metric="avg">Average</button>
+                            <button class="toggle active" data-metric="geomean">Geomean</button>
+                            <button class="toggle" data-metric="total">Total</button>
+                        </div>
+                        <button class="scale-toggle" id="scale-toggle" data-log="true">
+                            <span class="scale-log">Log</span>
+                            <span class="scale-linear">Linear</span>
+                        </button>
                     </div>
-                </div>
-
-                <!-- Scale Toggle -->
-                <div class="filter-group">
-                    <label>Scale</label>
-                    <button class="scale-toggle" id="scale-toggle" data-log="true">
-                        <span class="scale-log">Log</span>
-                        <span class="scale-linear">Linear</span>
-                    </button>
                 </div>
             </div>
         </section>
@@ -140,7 +138,7 @@
 
         <!-- Charts Section -->
         <section class="charts-section">
-            <!-- Scaling Charts (3-column) -->
+            <!-- Scaling Charts — only render visible ones -->
             <div class="chart-row chart-row-3">
                 <div class="chart-container">
                     <div class="chart-header">
@@ -176,8 +174,8 @@
                 <div id="comparison-chart" class="chart"></div>
             </div>
 
-            <!-- Secondary Charts (2-column) -->
-            <div class="chart-row">
+            <!-- Secondary Charts -->
+            <div class="chart-row ">
                 <div class="chart-container">
                     <div class="chart-header">
                         <h3>Performance Heatmap</h3>
@@ -200,7 +198,7 @@
             </div>
 
             <!-- Tertiary Charts -->
-            <div class="chart-row">
+            <div class="chart-row ">
                 <div class="chart-container">
                     <div class="chart-header">
                         <h3>Query Performance by Query</h3>
@@ -233,6 +231,7 @@
                             <th>Series</th>
                             <th>Nodes</th>
                             <th>Scale Factor</th>
+                            <th>Streams</th>
                             <th>Systems</th>
                             <th>Winner</th>
                             <th>Speedup</th>
@@ -249,7 +248,7 @@
         <!-- Footer -->
         <footer class="footer">
             <p>Generated by <a href="https://github.com/exasol/benchkit" target="_blank">BenchKit</a></p>
-            <p class="footer-date">2026-01-31T18:40:50.571271+00:00</p>
+            <p class="footer-date">2026-02-11T12:30:37.445400+00:00</p>
         </footer>
     </div>
 
@@ -260,14 +259,14 @@
     "suite_name": "Extended Scalability Benchmark",
     "suite_version": "1.0.0",
     "suite_description": "Comprehensive scalability testing across node count, data volume, and concurrency",
-    "generated_at": "2026-01-31T18:40:50.571271+00:00",
+    "generated_at": "2026-02-11T12:30:37.445400+00:00",
     "total_benchmarks": 11
   },
   "filters": {
     "series": [
-      "series_1_nodes",
-      "series_2_sf",
-      "series_4_streams_single"
+      "Node Scaling",
+      "Scale Factor Scaling",
+      "Single Node Stream Scaling"
     ],
     "systems": [
       "clickhouse",
@@ -300,7 +299,7 @@
   "benchmarks": [
     {
       "id": "series_1_nodes/nodes_1",
-      "series": "series_1_nodes",
+      "series": "Node Scaling",
       "config": "nodes_1",
       "project_id": "ext_scalability_nodes_1",
       "workload": "tpch",
@@ -318,6 +317,7 @@
           "version": "2025.2.0",
           "median_ms": 758.0,
           "avg_ms": 1732.03,
+          "geomean_ms": 917.85,
           "total_ms": 190523.1,
           "min_ms": 55.2,
           "max_ms": 8576.5,
@@ -330,6 +330,7 @@
           "version": "25.10.2.65",
           "median_ms": 11652.9,
           "avg_ms": 14852.06,
+          "geomean_ms": 10566.34,
           "total_ms": 1262425.4,
           "min_ms": 1349.6,
           "max_ms": 53067.5,
@@ -342,6 +343,7 @@
           "version": "479",
           "median_ms": 28703.45,
           "avg_ms": 34897.39,
+          "geomean_ms": 25854.76,
           "total_ms": 3838712.8,
           "min_ms": 2335.9,
           "max_ms": 112315.2,
@@ -354,6 +356,7 @@
           "version": "4.0.4",
           "median_ms": 4227.2,
           "avg_ms": 7160.12,
+          "geomean_ms": 4474.55,
           "total_ms": 787612.8,
           "min_ms": 559.2,
           "max_ms": 51670.9,
@@ -1157,7 +1160,7 @@
     },
     {
       "id": "series_1_nodes/nodes_16",
-      "series": "series_1_nodes",
+      "series": "Node Scaling",
       "config": "nodes_16",
       "project_id": "ext_scalability_nodes_16",
       "workload": "tpch",
@@ -1175,6 +1178,7 @@
           "version": "2025.2.0",
           "median_ms": 1086.45,
           "avg_ms": 1830.31,
+          "geomean_ms": 1107.32,
           "total_ms": 201334.5,
           "min_ms": 48.6,
           "max_ms": 14486.5,
@@ -1187,6 +1191,7 @@
           "version": "25.10.2.65",
           "median_ms": 6066.7,
           "avg_ms": 26209.42,
+          "geomean_ms": 7269.38,
           "total_ms": 707654.3,
           "min_ms": 175.6,
           "max_ms": 215496.3,
@@ -1199,6 +1204,7 @@
           "version": "479",
           "median_ms": 28785.45,
           "avg_ms": 29921.88,
+          "geomean_ms": 27680.82,
           "total_ms": 3291406.9,
           "min_ms": 6890.0,
           "max_ms": 59625.1,
@@ -1211,6 +1217,7 @@
           "version": "4.0.4",
           "median_ms": 19951.3,
           "avg_ms": 35258.99,
+          "geomean_ms": 22893.05,
           "total_ms": 3596417.4,
           "min_ms": 2891.5,
           "max_ms": 288260.1,
@@ -1924,7 +1931,7 @@
     },
     {
       "id": "series_1_nodes/nodes_4",
-      "series": "series_1_nodes",
+      "series": "Node Scaling",
       "config": "nodes_4",
       "project_id": "ext_scalability_nodes_4",
       "workload": "tpch",
@@ -1942,6 +1949,7 @@
           "version": "2025.2.0",
           "median_ms": 2297.15,
           "avg_ms": 3717.16,
+          "geomean_ms": 2040.63,
           "total_ms": 408887.8,
           "min_ms": 166.8,
           "max_ms": 24571.5,
@@ -1954,6 +1962,7 @@
           "version": "25.10.2.65",
           "median_ms": 12114.5,
           "avg_ms": 27143.65,
+          "geomean_ms": 14053.89,
           "total_ms": 1438613.3,
           "min_ms": 611.3,
           "max_ms": 135470.1,
@@ -1966,6 +1975,7 @@
           "version": "479",
           "median_ms": 141394.2,
           "avg_ms": 137703.13,
+          "geomean_ms": 125017.99,
           "total_ms": 15147344.7,
           "min_ms": 34571.4,
           "max_ms": 259343.1,
@@ -1978,6 +1988,7 @@
           "version": "4.0.4",
           "median_ms": 13111.35,
           "avg_ms": 32367.59,
+          "geomean_ms": 16105.56,
           "total_ms": 3560435.0,
           "min_ms": 1832.0,
           "max_ms": 195553.4,
@@ -2727,7 +2738,7 @@
     },
     {
       "id": "series_1_nodes/nodes_8",
-      "series": "series_1_nodes",
+      "series": "Node Scaling",
       "config": "nodes_8",
       "project_id": "ext_scalability_nodes_8",
       "workload": "tpch",
@@ -2745,6 +2756,7 @@
           "version": "2025.2.0",
           "median_ms": 1390.15,
           "avg_ms": 2523.04,
+          "geomean_ms": 1489.94,
           "total_ms": 277534.6,
           "min_ms": 95.1,
           "max_ms": 18410.4,
@@ -2757,6 +2769,7 @@
           "version": "25.10.2.65",
           "median_ms": 6204.2,
           "avg_ms": 17486.44,
+          "geomean_ms": 8117.25,
           "total_ms": 664484.9,
           "min_ms": 333.4,
           "max_ms": 128493.7,
@@ -2769,6 +2782,7 @@
           "version": "479",
           "median_ms": 57924.5,
           "avg_ms": 58365.41,
+          "geomean_ms": 52978.74,
           "total_ms": 6420195.0,
           "min_ms": 12461.4,
           "max_ms": 178986.3,
@@ -2781,6 +2795,7 @@
           "version": "4.0.4",
           "median_ms": 19746.9,
           "avg_ms": 33582.85,
+          "geomean_ms": 19133.62,
           "total_ms": 3526198.8,
           "min_ms": 2247.8,
           "max_ms": 227538.6,
@@ -3503,7 +3518,7 @@
     },
     {
       "id": "series_2_sf/sf_100",
-      "series": "series_2_sf",
+      "series": "Scale Factor Scaling",
       "config": "sf_100",
       "project_id": "ext_scalability_sf_100",
       "workload": "tpch",
@@ -3521,6 +3536,7 @@
           "version": "2025.2.0",
           "median_ms": 702.3,
           "avg_ms": 1688.17,
+          "geomean_ms": 930.74,
           "total_ms": 185698.2,
           "min_ms": 65.1,
           "max_ms": 8280.5,
@@ -3533,6 +3549,7 @@
           "version": "25.10.2.65",
           "median_ms": 13659.9,
           "avg_ms": 15968.19,
+          "geomean_ms": 11068.88,
           "total_ms": 1357296.3,
           "min_ms": 1573.5,
           "max_ms": 66562.7,
@@ -3545,6 +3562,7 @@
           "version": "479",
           "median_ms": 30733.35,
           "avg_ms": 42640.62,
+          "geomean_ms": 27454.97,
           "total_ms": 4690467.8,
           "min_ms": 2665.8,
           "max_ms": 218968.8,
@@ -3557,6 +3575,7 @@
           "version": "4.0.4",
           "median_ms": 3888.0,
           "avg_ms": 8456.92,
+          "geomean_ms": 4294.9,
           "total_ms": 930261.7,
           "min_ms": 444.3,
           "max_ms": 64083.4,
@@ -3569,6 +3588,7 @@
           "version": "1.4.4",
           "median_ms": 7349.6,
           "avg_ms": 7556.7,
+          "geomean_ms": 6580.2,
           "total_ms": 831237.5,
           "min_ms": 1663.7,
           "max_ms": 16221.0,
@@ -4570,7 +4590,7 @@
     },
     {
       "id": "series_2_sf/sf_25",
-      "series": "series_2_sf",
+      "series": "Scale Factor Scaling",
       "config": "sf_25",
       "project_id": "ext_scalability_sf_25",
       "workload": "tpch",
@@ -4588,6 +4608,7 @@
           "version": "2025.2.0",
           "median_ms": 819.0,
           "avg_ms": 1522.71,
+          "geomean_ms": 817.88,
           "total_ms": 167497.8,
           "min_ms": 48.5,
           "max_ms": 8816.9,
@@ -4600,6 +4621,7 @@
           "version": "25.10.2.65",
           "median_ms": 9365.15,
           "avg_ms": 12847.85,
+          "geomean_ms": 8867.26,
           "total_ms": 1027828.0,
           "min_ms": 1251.0,
           "max_ms": 44123.7,
@@ -4612,6 +4634,7 @@
           "version": "479",
           "median_ms": 36943.3,
           "avg_ms": 42428.78,
+          "geomean_ms": 34774.23,
           "total_ms": 4667165.4,
           "min_ms": 3243.6,
           "max_ms": 207986.8,
@@ -4624,6 +4647,7 @@
           "version": "4.0.4",
           "median_ms": 2907.0,
           "avg_ms": 6706.33,
+          "geomean_ms": 3683.24,
           "total_ms": 737696.4,
           "min_ms": 510.6,
           "max_ms": 41622.9,
@@ -4636,6 +4660,7 @@
           "version": "1.4.4",
           "median_ms": 6314.55,
           "avg_ms": 6696.09,
+          "geomean_ms": 6202.2,
           "total_ms": 736570.3,
           "min_ms": 906.3,
           "max_ms": 15266.6,
@@ -5628,7 +5653,7 @@
     },
     {
       "id": "series_2_sf/sf_50",
-      "series": "series_2_sf",
+      "series": "Scale Factor Scaling",
       "config": "sf_50",
       "project_id": "ext_scalability_sf_50",
       "workload": "tpch",
@@ -5646,6 +5671,7 @@
           "version": "2025.2.0",
           "median_ms": 847.85,
           "avg_ms": 1720.07,
+          "geomean_ms": 920.01,
           "total_ms": 189208.2,
           "min_ms": 50.2,
           "max_ms": 8500.3,
@@ -5658,6 +5684,7 @@
           "version": "25.10.2.65",
           "median_ms": 10952.2,
           "avg_ms": 13902.68,
+          "geomean_ms": 10295.49,
           "total_ms": 1181727.6,
           "min_ms": 1333.4,
           "max_ms": 45367.3,
@@ -5670,6 +5697,7 @@
           "version": "479",
           "median_ms": 34649.6,
           "avg_ms": 38008.89,
+          "geomean_ms": 31425.21,
           "total_ms": 4180977.6,
           "min_ms": 2218.8,
           "max_ms": 121734.2,
@@ -5682,6 +5710,7 @@
           "version": "4.0.4",
           "median_ms": 4272.7,
           "avg_ms": 6894.36,
+          "geomean_ms": 4478.5,
           "total_ms": 758380.0,
           "min_ms": 537.8,
           "max_ms": 40353.8,
@@ -5694,6 +5723,7 @@
           "version": "1.4.4",
           "median_ms": 6796.4,
           "avg_ms": 7212.98,
+          "geomean_ms": 6400.58,
           "total_ms": 793427.3,
           "min_ms": 1325.5,
           "max_ms": 19508.5,
@@ -6695,7 +6725,7 @@
     },
     {
       "id": "series_4_streams_single/streams_1",
-      "series": "series_4_streams_single",
+      "series": "Single Node Stream Scaling",
       "config": "streams_1",
       "project_id": "ext_scalability_single_streams_1",
       "workload": "tpch",
@@ -6713,6 +6743,7 @@
           "version": "2025.2.0",
           "median_ms": 650.9,
           "avg_ms": 1022.55,
+          "geomean_ms": 531.9,
           "total_ms": 112481.0,
           "min_ms": 37.3,
           "max_ms": 4035.9,
@@ -6725,6 +6756,7 @@
           "version": "25.10.2.65",
           "median_ms": 3365.6,
           "avg_ms": 6332.83,
+          "geomean_ms": 3531.02,
           "total_ms": 538290.6,
           "min_ms": 456.1,
           "max_ms": 24385.3,
@@ -6737,6 +6769,7 @@
           "version": "479",
           "median_ms": 19234.65,
           "avg_ms": 21787.34,
+          "geomean_ms": 16671.05,
           "total_ms": 2396607.7,
           "min_ms": 2905.0,
           "max_ms": 67001.2,
@@ -6749,6 +6782,7 @@
           "version": "4.0.4",
           "median_ms": 3335.4,
           "avg_ms": 4470.87,
+          "geomean_ms": 3015.84,
           "total_ms": 491795.2,
           "min_ms": 340.2,
           "max_ms": 15145.9,
@@ -6761,6 +6795,7 @@
           "version": "1.4.4",
           "median_ms": 2686.55,
           "avg_ms": 3494.86,
+          "geomean_ms": 2593.98,
           "total_ms": 384434.4,
           "min_ms": 384.4,
           "max_ms": 13345.4,
@@ -7762,7 +7797,7 @@
     },
     {
       "id": "series_4_streams_single/streams_16",
-      "series": "series_4_streams_single",
+      "series": "Single Node Stream Scaling",
       "config": "streams_16",
       "project_id": "ext_scalability_single_streams_16",
       "workload": "tpch",
@@ -7780,6 +7815,7 @@
           "version": "2025.2.0",
           "median_ms": 1697.65,
           "avg_ms": 2864.56,
+          "geomean_ms": 1473.4,
           "total_ms": 315101.4,
           "min_ms": 64.5,
           "max_ms": 15644.2,
@@ -7792,6 +7828,7 @@
           "version": "25.10.2.65",
           "median_ms": 16213.4,
           "avg_ms": 16889.87,
+          "geomean_ms": 15453.9,
           "total_ms": 1013392.0,
           "min_ms": 2402.6,
           "max_ms": 44121.5,
@@ -7804,6 +7841,7 @@
           "version": "479",
           "median_ms": 53586.8,
           "avg_ms": 68886.65,
+          "geomean_ms": 63220.3,
           "total_ms": 7577531.6,
           "min_ms": 6367.1,
           "max_ms": 238474.5,
@@ -7816,6 +7854,7 @@
           "version": "4.0.4",
           "median_ms": 7832.9,
           "avg_ms": 11446.85,
+          "geomean_ms": 7671.84,
           "total_ms": 1259153.0,
           "min_ms": 482.7,
           "max_ms": 89654.4,
@@ -7828,6 +7867,7 @@
           "version": "1.4.4",
           "median_ms": 14313.35,
           "avg_ms": 13785.3,
+          "geomean_ms": 14231.94,
           "total_ms": 1516382.9,
           "min_ms": 704.3,
           "max_ms": 25551.1,
@@ -8784,7 +8824,7 @@
     },
     {
       "id": "series_4_streams_single/streams_4",
-      "series": "series_4_streams_single",
+      "series": "Single Node Stream Scaling",
       "config": "streams_4",
       "project_id": "ext_scalability_single_streams_4",
       "workload": "tpch",
@@ -8802,6 +8842,7 @@
           "version": "2025.2.0",
           "median_ms": 2073.3,
           "avg_ms": 3749.51,
+          "geomean_ms": 1878.25,
           "total_ms": 412445.6,
           "min_ms": 62.2,
           "max_ms": 19401.0,
@@ -8814,6 +8855,7 @@
           "version": "25.10.2.65",
           "median_ms": 14902.3,
           "avg_ms": 18151.41,
+          "geomean_ms": 14455.08,
           "total_ms": 1089084.6,
           "min_ms": 1140.8,
           "max_ms": 64993.2,
@@ -8826,6 +8868,7 @@
           "version": "479",
           "median_ms": 85946.85,
           "avg_ms": 95448.84,
+          "geomean_ms": 78763.8,
           "total_ms": 10499372.8,
           "min_ms": 15003.8,
           "max_ms": 239359.6,
@@ -8838,6 +8881,7 @@
           "version": "4.0.4",
           "median_ms": 5693.9,
           "avg_ms": 15679.23,
+          "geomean_ms": 7181.41,
           "total_ms": 1724715.5,
           "min_ms": 943.3,
           "max_ms": 109060.3,
@@ -8850,6 +8894,7 @@
           "version": "1.4.4",
           "median_ms": 13751.45,
           "avg_ms": 14182.65,
+          "geomean_ms": 12921.59,
           "total_ms": 1560091.6,
           "min_ms": 1326.4,
           "max_ms": 25643.1,
@@ -9806,7 +9851,7 @@
     },
     {
       "id": "series_4_streams_single/streams_8",
-      "series": "series_4_streams_single",
+      "series": "Single Node Stream Scaling",
       "config": "streams_8",
       "project_id": "ext_scalability_single_streams_8",
       "workload": "tpch",
@@ -9824,6 +9869,7 @@
           "version": "2025.2.0",
           "median_ms": 1815.4,
           "avg_ms": 3541.62,
+          "geomean_ms": 2107.55,
           "total_ms": 389577.8,
           "min_ms": 100.8,
           "max_ms": 18991.8,
@@ -9836,6 +9882,7 @@
           "version": "25.10.2.65",
           "median_ms": 15177.25,
           "avg_ms": 17071.45,
+          "geomean_ms": 14396.25,
           "total_ms": 1024287.1,
           "min_ms": 3767.6,
           "max_ms": 49858.7,
@@ -9848,6 +9895,7 @@
           "version": "479",
           "median_ms": 67063.95,
           "avg_ms": 76148.07,
+          "geomean_ms": 68662.47,
           "total_ms": 8376287.6,
           "min_ms": 10257.6,
           "max_ms": 201605.8,
@@ -9860,6 +9908,7 @@
           "version": "4.0.4",
           "median_ms": 5387.95,
           "avg_ms": 11952.43,
+          "geomean_ms": 5892.27,
           "total_ms": 1314767.3,
           "min_ms": 454.8,
           "max_ms": 82807.2,
@@ -9872,6 +9921,7 @@
           "version": "1.4.4",
           "median_ms": 13974.8,
           "avg_ms": 13229.86,
+          "geomean_ms": 13459.31,
           "total_ms": 1455284.9,
           "min_ms": 619.3,
           "max_ms": 28835.0,
@@ -10825,6 +10875,44 @@
           }
         }
       }
+    }
+  ],
+  "table_columns": [
+    {
+      "key": "benchmark",
+      "label": "Benchmark"
+    },
+    {
+      "key": "series",
+      "label": "Series"
+    },
+    {
+      "key": "nodes",
+      "label": "Nodes"
+    },
+    {
+      "key": "scale_factor",
+      "label": "Scale Factor"
+    },
+    {
+      "key": "streams",
+      "label": "Streams"
+    },
+    {
+      "key": "systems",
+      "label": "Systems"
+    },
+    {
+      "key": "winner",
+      "label": "Winner"
+    },
+    {
+      "key": "speedup",
+      "label": "Speedup"
+    },
+    {
+      "key": "report",
+      "label": "Report"
     }
   ]
 }

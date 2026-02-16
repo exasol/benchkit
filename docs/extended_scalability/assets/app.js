@@ -28,7 +28,7 @@ class BenchmarkDashboard {
         };
 
         // Display settings
-        this.metric = 'median';  // 'median', 'avg', 'total'
+        this.metric = 'geomean';  // 'median', 'avg', 'geomean', 'total'
         this.logScale = true;  // Log scale by default
 
         this.init();
@@ -134,7 +134,7 @@ class BenchmarkDashboard {
             streamCount: new Set(this.data.filters.stream_counts || []),
             scaleFactor: new Set(this.data.filters.scale_factors),
         };
-        this.metric = 'median';
+        this.metric = 'geomean';
         this.logScale = true;
 
         this.syncFilterUI();
@@ -268,6 +268,7 @@ class BenchmarkDashboard {
 
         switch (this.metric) {
             case 'avg': return system.avg_ms;
+            case 'geomean': return system.geomean_ms;
             case 'total': return system.total_ms;
             default: return system.median_ms;
         }
@@ -276,6 +277,7 @@ class BenchmarkDashboard {
     getMetricLabel() {
         switch (this.metric) {
             case 'avg': return 'Average';
+            case 'geomean': return 'Geomean';
             case 'total': return 'Total';
             default: return 'Median';
         }
@@ -767,6 +769,7 @@ class BenchmarkDashboard {
         if (!tbody) return;
 
         const benchmarks = this.getFilteredBenchmarks();
+        const columns = this.data.table_columns || [];
 
         if (countSpan) {
             countSpan.textContent = `Showing ${benchmarks.length} of ${this.data.benchmarks.length} benchmarks`;
@@ -777,51 +780,54 @@ class BenchmarkDashboard {
         benchmarks.forEach(b => {
             const tr = document.createElement('tr');
 
-            // Benchmark name
-            tr.innerHTML += `<td class="benchmark-name">${b.config}</td>`;
-
-            // Series
-            tr.innerHTML += `<td>${b.series}</td>`;
-
-            // Nodes
-            tr.innerHTML += `<td>${b.node_count}</td>`;
-
-            // Scale Factor
-            tr.innerHTML += `<td>${b.scale_factor !== null ? 'SF' + b.scale_factor : '-'}</td>`;
-
-            // Systems
-            const systemBadges = b.systems
-                .filter(s => this.filters.systems.has(s.name))
-                .map(s => `<span class="system-badge">${s.name}</span>`)
-                .join('');
-            tr.innerHTML += `<td class="systems-list">${systemBadges}</td>`;
-
-            // Winner & Speedup
+            // Pre-compute winner/speedup for this benchmark using selected metric
             const filteredSystems = b.systems.filter(s => this.filters.systems.has(s.name));
+            let winner = null;
+            let speedup = 1;
+            let speedupClass = 'fast';
             if (filteredSystems.length > 0) {
-                const sorted = [...filteredSystems].sort((a, b) => a.median_ms - b.median_ms);
-                const winner = sorted[0];
+                const metricKey = this.metric === 'avg' ? 'avg_ms'
+                    : this.metric === 'geomean' ? 'geomean_ms'
+                    : this.metric === 'total' ? 'total_ms'
+                    : 'median_ms';
+                const sorted = [...filteredSystems].sort((a, b) => a[metricKey] - b[metricKey]);
+                winner = sorted[0];
                 const slowest = sorted[sorted.length - 1];
-                const speedup = slowest.median_ms / winner.median_ms;
-
-                tr.innerHTML += `<td><span class="winner-badge">${winner.name}</span></td>`;
-
-                let speedupClass = 'fast';
+                speedup = slowest[metricKey] / winner[metricKey];
                 if (speedup < 1.5) speedupClass = 'fast';
                 else if (speedup < 3) speedupClass = 'medium';
                 else speedupClass = 'slow';
-
-                tr.innerHTML += `<td><span class="speedup-value ${speedupClass}">${speedup.toFixed(1)}x</span></td>`;
-            } else {
-                tr.innerHTML += '<td>-</td><td>-</td>';
             }
 
-            // Report link
-            if (b.report_url) {
-                tr.innerHTML += `<td><a href="${b.report_url}" class="report-link" target="_blank">View</a></td>`;
-            } else {
-                tr.innerHTML += '<td>-</td>';
-            }
+            // Cell renderers keyed by column key
+            const cellRenderers = {
+                benchmark: () => `<td class="benchmark-name">${b.config}</td>`,
+                series: () => `<td>${b.series}</td>`,
+                nodes: () => `<td>${b.node_count}</td>`,
+                scale_factor: () => `<td>${b.scale_factor !== null ? 'SF' + b.scale_factor : '-'}</td>`,
+                streams: () => `<td>${b.stream_count}</td>`,
+                systems: () => {
+                    const badges = b.systems
+                        .filter(s => this.filters.systems.has(s.name))
+                        .map(s => `<span class="system-badge">${s.name}</span>`)
+                        .join('');
+                    return `<td class="systems-list">${badges}</td>`;
+                },
+                winner: () => winner
+                    ? `<td><span class="winner-badge">${winner.name}</span></td>`
+                    : '<td>-</td>',
+                speedup: () => winner
+                    ? `<td><span class="speedup-value ${speedupClass}">${speedup.toFixed(1)}x</span></td>`
+                    : '<td>-</td>',
+                report: () => b.report_url
+                    ? `<td><a href="${b.report_url}" class="report-link" target="_blank">View</a></td>`
+                    : '<td>-</td>',
+            };
+
+            columns.forEach(col => {
+                const renderer = cellRenderers[col.key];
+                tr.innerHTML += renderer ? renderer() : '<td>-</td>';
+            });
 
             tbody.appendChild(tr);
         });
@@ -852,6 +858,12 @@ class BenchmarkDashboard {
             statQueries.textContent = totalQueries.toLocaleString();
         }
 
+        // Derive metric key from selected metric
+        const metricKey = this.metric === 'avg' ? 'avg_ms'
+            : this.metric === 'geomean' ? 'geomean_ms'
+            : this.metric === 'total' ? 'total_ms'
+            : 'median_ms';
+
         // Fastest system overall
         const statFastest = document.getElementById('stat-fastest');
         if (statFastest) {
@@ -862,7 +874,7 @@ class BenchmarkDashboard {
                     if (!systemTotals[s.name]) {
                         systemTotals[s.name] = { total: 0, count: 0 };
                     }
-                    systemTotals[s.name].total += s.median_ms;
+                    systemTotals[s.name].total += s[metricKey];
                     systemTotals[s.name].count += 1;
                 });
             });
@@ -887,8 +899,8 @@ class BenchmarkDashboard {
             benchmarks.forEach(b => {
                 const filteredSystems = b.systems.filter(s => this.filters.systems.has(s.name));
                 if (filteredSystems.length >= 2) {
-                    const sorted = [...filteredSystems].sort((a, b) => a.median_ms - b.median_ms);
-                    const speedup = sorted[sorted.length - 1].median_ms / sorted[0].median_ms;
+                    const sorted = [...filteredSystems].sort((a, b) => a[metricKey] - b[metricKey]);
+                    const speedup = sorted[sorted.length - 1][metricKey] / sorted[0][metricKey];
                     if (speedup > maxSpeedup) {
                         maxSpeedup = speedup;
                     }
