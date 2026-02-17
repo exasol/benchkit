@@ -1,10 +1,10 @@
-# Series 3: Stream Scaling - 16 Streams
-# Purpose: Measure single-node performance with high concurrency
-# Variable: Streams (16)
+# Series 3: Stream Scaling - 1 Stream
+# Purpose: Establish single-stream baseline for concurrency scaling comparison
+# Variable: Streams (1)
 # Fixed: Nodes=1, SF=50, 4 vCPU/stream, ~24GB usable/stream
 # Systems: All 5 (Exasol, ClickHouse, Trino, StarRocks, DuckDB)
-project_id: "extscal_streams_16"
-title: "Streamlined Scalability - Stream Scaling (16 Streams)"
+project_id: "extscal_streams_1"
+title: "Streamlined Scalability - Stream Scaling (1 Stream)"
 author: "Benchmark Team"
 
 execution:
@@ -18,36 +18,36 @@ env:
   allow_external_database_access: true
   instances:
     exasol:
-      instance_type: "r6id.16xlarge"  # 64 vCPUs, 512GB RAM (4 vCPU/stream)
+      instance_type: "r6id.xlarge"  # 4 vCPUs, 32GB RAM (4 vCPU/stream)
       disk:
         type: "local"
-      label: "extscal-exa-s16"
+      label: "extscal-exa-s1"
     clickhouse:
-      instance_type: "r6id.16xlarge"  # 64 vCPUs, 512GB RAM (4 vCPU/stream)
+      instance_type: "r6id.xlarge"  # 4 vCPUs, 32GB RAM (4 vCPU/stream)
       disk:
         type: "local"
-      label: "extscal-ch-s16"
+      label: "extscal-ch-s1"
     trino:
-      instance_type: "r6id.16xlarge"  # 64 vCPUs, 512GB RAM (4 vCPU/stream)
+      instance_type: "r6id.xlarge"  # 4 vCPUs, 32GB RAM (4 vCPU/stream)
       disk:
         type: "local"
-      label: "extscal-trino-s16"
+      label: "extscal-trino-s1"
     starrocks:
-      instance_type: "r6id.16xlarge"  # 64 vCPUs, 512GB RAM (4 vCPU/stream)
+      instance_type: "r6id.xlarge"  # 4 vCPUs, 32GB RAM (4 vCPU/stream)
       disk:
         type: "local"
-      label: "extscal-sr-s16"
+      label: "extscal-sr-s1"
     duckdb:
-      instance_type: "r6id.16xlarge"  # 64 vCPUs, 512GB RAM (4 vCPU/stream)
+      instance_type: "r6id.xlarge"  # 4 vCPUs, 32GB RAM (4 vCPU/stream)
       disk:
         type: "local"
-      label: "extscal-duck-s16"
+      label: "extscal-duck-s1"
   os_image: "ubuntu-22.04"
   ssh_key_name: "ok-work3"
   ssh_private_key_path: "~/.ssh/ok-work3.pem"
 
 systems:
-  # Exasol - single node, 16 streams (~24GB per stream)
+  # Exasol - single node, 1 stream (~24GB usable)
   - name: "exasol"
     kind: "exasol"
     version: "2025.2.0"
@@ -62,7 +62,7 @@ systems:
       db_password: "exasol456"
       admin_password: "exasol789"
       license_file: "configs/exasol.license"
-      db_mem_size: 384000  # ~75% of 512GB
+      db_mem_size: 24000  # ~75% of 32GB
       extra:
         optimizer_mode: "analytical"
         db_params:
@@ -74,7 +74,7 @@ systems:
           - "-joinOrderMethod=0"
           - "-etlCheckCertsDefault=0"
 
-  # ClickHouse - single node, 16 streams
+  # ClickHouse - single node, 1 stream
   - name: "clickhouse"
     kind: "clickhouse"
     version: "25.10.2.65"
@@ -88,16 +88,16 @@ systems:
       username: "default"
       password: "clickhouse123"
       extra:
-        memory_limit: "384g"
-        max_threads: "64"
-        # 512GB instance, 16 streams: 24GB/query, grace_hash spills to disk
+        memory_limit: "24g"
+        max_threads: "4"
+        # 32GB instance, 1 stream: full 24GB/query budget, grace_hash spills to disk
         max_memory_usage: "24000000000"
         max_bytes_before_external_group_by: "8000000000"
         max_bytes_before_external_sort: "8000000000"
         join_algorithm: "grace_hash"
         max_bytes_in_join: "16000000000"
 
-  # Trino - single node, 16 streams (no S3 needed)
+  # Trino - single node, 1 stream (no S3 needed)
   - name: "trino"
     kind: "trino"
     version: "479"
@@ -111,11 +111,11 @@ systems:
       catalog: "hive"
       schema: "tpch_views"
       extra:
-        # 512GB RAM: heap=409GB, safe query memory = 409*0.7 = 286GB
-        query_max_memory: "286GB"
-        query_max_memory_per_node: "286GB"
+        # 32GB RAM: heap=25.6GB, safe query memory = 25.6*0.7 = 18GB
+        query_max_memory: "18GB"
+        query_max_memory_per_node: "18GB"
 
-  # StarRocks - single node, 16 streams
+  # StarRocks - single node, 1 stream
   - name: "starrocks"
     kind: "starrocks"
     version: "4.0.4"
@@ -131,7 +131,7 @@ systems:
         bucket_count: 4
         replication_num: 1
 
-  # DuckDB - embedded single node, 16 streams
+  # DuckDB - embedded single node, 1 stream
   - name: "duckdb"
     kind: "duckdb"
     version: "1.4.4"
@@ -141,8 +141,8 @@ systems:
       data_dir: "/data/duckdb"
       database_path: "/data/duckdb/benchmark.duckdb"
       extra:
-        memory_limit: "384GB"  # ~75% of 512GB
-        threads: 64
+        memory_limit: "24GB"  # ~75% of 32GB
+        threads: 4
 
 workload:
   name: "tpch"
@@ -155,7 +155,7 @@ workload:
     clickhouse: "tuned"
   multiuser:
     enabled: true
-    num_streams: 16
+    num_streams: 1
     randomize: true
     random_seed: 42
 

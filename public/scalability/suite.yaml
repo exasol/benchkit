@@ -9,7 +9,7 @@ keywords: ["scalability", "tpc-h", "analytical", "multinode"]
 series:
   series_1_nodes:
     name: "Node Scaling"
-    description: "Test horizontal scaling with 1, 2, 4, 8 nodes at constant 128GB total RAM"
+    description: "Test horizontal scaling with 1, 2, 4, 8, 16 nodes at constant 128GB total RAM"
     enabled: true
 
   series_2_sf:
@@ -19,7 +19,7 @@ series:
 
   series_3_streams:
     name: "Stream Scaling"
-    description: "Test concurrent query streams 2-16 with constant 2 vCPU/stream"
+    description: "Test concurrent query streams 1-16 with constant 4 vCPU/stream"
     enabled: true
 
 publish:
