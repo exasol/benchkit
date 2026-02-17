@@ -1,0 +1,44 @@
+project_id: "tpch_sf1_doris"
+title: "TPC-H SF1 - Doris Validation"
+author: "Benchmark Team"
+
+execution:
+  parallel: true
+
+env:
+  mode: "aws"
+  region: "eu-west-1"
+  allow_external_database_access: true
+  instances:
+    doris:
+      instance_type: "r6id.large"
+      disk:
+        type: "local"
+      label: "tpch-sf1-doris"
+  os_image: "ubuntu-22.04"
+  ssh_key_name: "ok-work3"
+  ssh_private_key_path: "~/.ssh/ok-work3.pem"
+
+systems:
+  - name: "doris"
+    kind: "doris"
+    version: "3.0.3"
+    setup:
+      method: "native"
+      use_additional_disk: true
+      host: "$DORIS_PUBLIC_IP"
+      port: 9030
+      username: "root"
+      password: ""
+
+workload:
+  name: "tpch"
+  scale_factor: 1
+  runs_per_query: 3
+  warmup_runs: 1
+  data_format: "csv"
+  generator: "dbgen"
+
+report:
+  show_boxplots: true
+  show_bar_chart: true

@@ -1,0 +1,33 @@
+project_id: "tpch_sf1_duckdb"
+title: "TPC-H SF1 - DuckDB Validation"
+author: "Benchmark Team"
+
+execution:
+  parallel: true
+
+env:
+  mode: "local"
+
+systems:
+  - name: "duckdb"
+    kind: "duckdb"
+    version: "1.0.0"
+    setup:
+      method: "native"
+      database_path: "/tmp/duckdb_tpch_sf1.duckdb"
+      data_dir: "/tmp/duckdb_tpch_data"
+      extra:
+        memory_limit: "8GB"
+        threads: 8
+
+workload:
+  name: "tpch"
+  scale_factor: 1
+  runs_per_query: 3
+  warmup_runs: 1
+  data_format: "csv"
+  generator: "dbgen"
+
+report:
+  show_boxplots: true
+  show_bar_chart: true

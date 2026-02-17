@@ -1,0 +1,51 @@
+project_id: "tpch_sf1_clickhouse"
+title: "TPC-H SF1 - ClickHouse Validation"
+author: "Benchmark Team"
+
+execution:
+  parallel: true
+
+env:
+  mode: "aws"
+  region: "eu-west-1"
+  allow_external_database_access: true
+  instances:
+    clickhouse:
+      instance_type: "r6id.large"
+      disk:
+        type: "local"
+      label: "tpch-sf1-ch"
+  os_image: "ubuntu-22.04"
+  ssh_key_name: "ok-work3"
+  ssh_private_key_path: "~/.ssh/ok-work3.pem"
+
+systems:
+  - name: "clickhouse"
+    kind: "clickhouse"
+    version: "25.10.2.65"
+    setup:
+      method: "native"
+      use_additional_disk: true
+      data_dir: "/data/clickhouse"
+      host: "$CLICKHOUSE_PUBLIC_IP"
+      port: 8123
+      username: "default"
+      password: "clickhouse123"
+      extra:
+        memory_limit: "12g"
+        max_threads: "2"
+        max_memory_usage: "10000000000"
+
+workload:
+  name: "tpch"
+  scale_factor: 1
+  runs_per_query: 3
+  warmup_runs: 1
+  data_format: "csv"
+  generator: "dbgen"
+  system_variants:
+    clickhouse: "tuned"
+
+report:
+  show_boxplots: true
+  show_bar_chart: true

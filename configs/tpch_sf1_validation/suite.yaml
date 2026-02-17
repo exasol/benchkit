@@ -1,0 +1,32 @@
+name: "TPC-H SF1 Validation Suite"
+version: "1.0.0"
+description: "Single-database validation tests using TPC-H at 1GB scale factor"
+author: "Benchmark Team"
+license: "MIT"
+keywords: ["tpc-h", "validation", "sf1", "analytical"]
+
+series:
+  series_aws:
+    name: "AWS Single-Database Tests"
+    description: "All 6 databases validated on AWS r6id.large instances"
+    enabled: true
+
+  series_local:
+    name: "Local Embedded Database Tests"
+    description: "DuckDB validation on local machine (quick test, no cloud costs)"
+    enabled: false
+
+execution:
+  mode: parallel
+  max_parallel: 6
+  continue_on_failure: true
+  pause_between: 0
+
+infrastructure:
+  cleanup_after_each: true
+  cleanup_on_failure: true
+
+timeouts:
+  infrastructure: 1800
+  benchmark: 3600
+  cleanup: 600

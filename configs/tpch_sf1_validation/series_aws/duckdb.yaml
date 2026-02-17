@@ -1,0 +1,45 @@
+project_id: "tpch_sf1_duckdb_aws"
+title: "TPC-H SF1 - DuckDB Validation (AWS)"
+author: "Benchmark Team"
+
+execution:
+  parallel: true
+
+env:
+  mode: "aws"
+  region: "eu-west-1"
+  allow_external_database_access: true
+  instances:
+    duckdb:
+      instance_type: "r6id.large"
+      disk:
+        type: "local"
+      label: "tpch-sf1-duckdb"
+  os_image: "ubuntu-22.04"
+  ssh_key_name: "ok-work3"
+  ssh_private_key_path: "~/.ssh/ok-work3.pem"
+
+systems:
+  - name: "duckdb"
+    kind: "duckdb"
+    version: "1.0.0"
+    setup:
+      method: "native"
+      use_additional_disk: true
+      database_path: "/data/duckdb/tpch_sf1.duckdb"
+      data_dir: "/data/duckdb"
+      extra:
+        memory_limit: "12GB"
+        threads: 2
+
+workload:
+  name: "tpch"
+  scale_factor: 1
+  runs_per_query: 3
+  warmup_runs: 1
+  data_format: "csv"
+  generator: "dbgen"
+
+report:
+  show_boxplots: true
+  show_bar_chart: true

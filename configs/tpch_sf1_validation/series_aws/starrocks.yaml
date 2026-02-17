@@ -1,0 +1,47 @@
+project_id: "tpch_sf1_starrocks"
+title: "TPC-H SF1 - StarRocks Validation"
+author: "Benchmark Team"
+
+execution:
+  parallel: true
+
+env:
+  mode: "aws"
+  region: "eu-west-1"
+  allow_external_database_access: true
+  instances:
+    starrocks:
+      instance_type: "r6id.large"
+      disk:
+        type: "local"
+      label: "tpch-sf1-sr"
+  os_image: "ubuntu-22.04"
+  ssh_key_name: "ok-work3"
+  ssh_private_key_path: "~/.ssh/ok-work3.pem"
+
+systems:
+  - name: "starrocks"
+    kind: "starrocks"
+    version: "4.0.5"
+    setup:
+      method: "native"
+      use_additional_disk: true
+      host: "$STARROCKS_PUBLIC_IP"
+      port: 9030
+      username: "root"
+      password: ""
+      extra:
+        bucket_count: 4
+        replication_num: 1
+
+workload:
+  name: "tpch"
+  scale_factor: 1
+  runs_per_query: 3
+  warmup_runs: 1
+  data_format: "csv"
+  generator: "dbgen"
+
+report:
+  show_boxplots: true
+  show_bar_chart: true

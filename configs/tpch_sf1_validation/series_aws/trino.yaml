@@ -1,0 +1,48 @@
+project_id: "tpch_sf1_trino"
+title: "TPC-H SF1 - Trino Validation"
+author: "Benchmark Team"
+
+execution:
+  parallel: true
+
+env:
+  mode: "aws"
+  region: "eu-west-1"
+  allow_external_database_access: true
+  instances:
+    trino:
+      instance_type: "r6id.large"
+      disk:
+        type: "local"
+      label: "tpch-sf1-trino"
+  os_image: "ubuntu-22.04"
+  ssh_key_name: "ok-work3"
+  ssh_private_key_path: "~/.ssh/ok-work3.pem"
+
+systems:
+  - name: "trino"
+    kind: "trino"
+    version: "479"
+    setup:
+      method: "native"
+      use_additional_disk: true
+      host: "$TRINO_PUBLIC_IP"
+      port: 8080
+      username: "admin"
+      catalog: "hive"
+      schema: "tpch_views"
+      extra:
+        query_max_memory: "10GB"
+        query_max_memory_per_node: "10GB"
+
+workload:
+  name: "tpch"
+  scale_factor: 1
+  runs_per_query: 3
+  warmup_runs: 1
+  data_format: "csv"
+  generator: "dbgen"
+
+report:
+  show_boxplots: true
+  show_bar_chart: true
