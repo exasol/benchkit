@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="{{ theme }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="{{ title }} - Performance Benchmark Leaderboard">
+    <title>{{ title }} | Benchmark Leaderboard</title>
+    <link rel="stylesheet" href="assets/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="leaderboard">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="header-title">
+                    <h1>{{ title }}</h1>
+                    {% if data.meta.suite_name %}
+                    <p class="header-description">{{ data.meta.suite_name }}</p>
+                    {% endif %}
+                </div>
+                <div class="header-meta">
+                    <span class="meta-badge">
+                        <strong id="entry-count">{{ data.meta.total_entries }}</strong> entries
+                    </span>
+                    <span class="meta-badge meta-date">
+                        Generated: <time datetime="{{ data.meta.generated_at }}">{{ data.meta.generated_at[:10] }}</time>
+                    </span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Disclaimer -->
+        <div class="disclaimer">
+            <strong>BenchScore</strong> = &radic;(Speed &times; Scale), where
+            Speed = SF / geomean<sub>s</sub>,
+            Scale = SF &times; S &times; Q / &Sigma;medians<sub>s</sub>.
+            Higher is better.
+            This is <em>not</em> an official TPC-H metric and should not be compared to audited results.
+        </div>
+
+        <!-- Workload Tabs -->
+        <nav class="tab-bar" id="tab-bar">
+            <!-- Populated by JavaScript -->
+        </nav>
+
+        <!-- Filter Bar -->
+        <div class="filter-bar" id="filter-bar">
+            <div class="filter-group">
+                <label for="filter-sf">Scale Factor</label>
+                <select id="filter-sf" class="filter-select">
+                    <option value="all">All</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="filter-streams">Streams</label>
+                <select id="filter-streams" class="filter-select">
+                    <option value="all">All</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="filter-nodes">Nodes</label>
+                <select id="filter-nodes" class="filter-select">
+                    <option value="all">All</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Leaderboard Table -->
+        <section class="table-section">
+            <div class="table-wrapper">
+                <table class="leaderboard-table" id="leaderboard-table">
+                    <thead>
+                        <tr>
+                            <th class="col-rank">#</th>
+                            <th class="col-system">System</th>
+                            <th class="col-version">Version</th>
+                            <th class="col-score">BenchScore</th>
+                            <th class="col-speed">Speed</th>
+                            <th class="col-scale">Scale</th>
+                            <th class="col-geomean">Geomean</th>
+                            <th class="col-queries">Queries</th>
+                            <th class="col-sf">SF</th>
+                            <th class="col-streams">Streams</th>
+                            <th class="col-instance">Instance</th>
+                            <th class="col-nodes">Nodes</th>
+                            <th class="col-date">Date</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leaderboard-tbody">
+                        <!-- Populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Per-Query Chart -->
+        <section class="query-chart-section" id="query-chart-section">
+            <div class="query-chart-header">
+                <h2>Query Performance by Query</h2>
+                <div class="chart-controls">
+                    <label class="toggle-label">
+                        <input type="checkbox" id="log-scale-toggle" checked>
+                        Log scale
+                    </label>
+                </div>
+            </div>
+            <p class="query-chart-description">
+                Individual query runtimes (median) per system. Hover for details.
+            </p>
+            <div id="query-chart" style="width:100%;height:600px;"></div>
+        </section>
+
+        <!-- Per-Query Detail Grid -->
+        <section class="query-grid-section" id="query-grid-section">
+            <div class="query-grid-header">
+                <h2>Per-Query Performance</h2>
+                <div class="stat-mode-controls">
+                    <label for="stat-mode-select">Show:</label>
+                    <select id="stat-mode-select" class="stat-mode-select">
+                        <option value="median" selected>Median</option>
+                        <option value="warmup">Warmup</option>
+                        <option value="min">Min</option>
+                        <option value="max">Max</option>
+                        <option value="avg">Average</option>
+                    </select>
+                </div>
+            </div>
+            <p class="query-grid-description">
+                Times in seconds. Background color indicates relative performance:
+                <span class="legend-best">best</span>
+                <span class="legend-2x">&le;2x</span>
+                <span class="legend-5x">&le;5x</span>
+                <span class="legend-slow">&gt;5x</span>
+            </p>
+            <div class="query-grid-wrapper">
+                <table class="query-grid" id="query-grid">
+                    <!-- Populated by JavaScript -->
+                </table>
+            </div>
+        </section>
+
+        <!-- Detail Modal Overlay -->
+        <div class="modal-overlay" id="modal-overlay">
+            <div class="modal-card" id="modal-card">
+                <button class="modal-close" id="modal-close">&times;</button>
+                <div class="modal-body" id="modal-body">
+                    <!-- Populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Query SQL Modal Overlay -->
+        <div class="modal-overlay" id="query-modal-overlay">
+            <div class="modal-card query-modal-card">
+                <button class="modal-close" id="query-modal-close">&times;</button>
+                <div class="modal-body" id="query-modal-body">
+                    <!-- Populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Generated by <a href="https://github.com/exasol/benchkit" target="_blank">BenchKit</a></p>
+            <p class="footer-date">{{ data.meta.generated_at }}</p>
+        </footer>
+    </div>
+
+    <!-- Embedded Data -->
+    <script type="application/json" id="leaderboard-data">
+    {{ data_json | safe }}
+    </script>
+
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+    <script src="assets/app.js"></script>
+</body>
+</html>

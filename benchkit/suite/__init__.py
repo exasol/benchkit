@@ -104,6 +104,7 @@ class SuitePublishConfig(BaseModel):
     theme: str = "auto"
     base_url: str = "./"
     include_reports: bool = True
+    template: str = "dashboard"  # "dashboard" (existing) or "leaderboard" (new)
     charts: SuitePublishChartsConfig = SuitePublishChartsConfig()
 
 
@@ -469,6 +470,12 @@ class SuiteRunner:
                 if self.config.series and series_name not in self.config.series:
                     continue
 
+                # Skip disabled series (they were intentionally skipped above)
+                if self.config.series and series_name in self.config.series:
+                    series_cfg = self.config.series[series_name]
+                    if not series_cfg.enabled and not include_disabled:
+                        continue
+
                 # Find yaml configs in series directory
                 configs = sorted(entry.glob("*.yaml"))
                 if configs:
@@ -667,7 +674,7 @@ class SuiteRunner:
                     workload = cfg.get("workload", {})
                     workload_name = workload.get("name", "?")
                     sf = workload.get("scale_factor", "?")
-                    streams = workload.get("multiuser", {}).get("num_streams", 1)
+                    streams = (workload.get("multiuser") or {}).get("num_streams", 1)
                     node_count = 1
                     if systems_list:
                         node_count = (
@@ -822,6 +829,11 @@ class SuiteRunner:
     ) -> SuiteState:
         """Initialize or load suite state.
 
+        Always loads existing state to preserve entries for series not being
+        run.  The ``resume`` flag controls only whether *discovered* benchmarks
+        keep their previous status (resume=True → skip completed) or are reset
+        to pending (resume=False → re-run).
+
         Args:
             discovered: Discovered configurations
             resume: Whether to resume from existing state
@@ -830,15 +842,15 @@ class SuiteRunner:
         Returns:
             SuiteState object
         """
-        existing_state = self.state_manager.load_state() if resume else None
+        # Always try to load existing state to preserve other series
+        existing_state = self.state_manager.load_state()
 
         if existing_state:
-            # Update with any newly discovered benchmarks
+            # Merge discovered benchmarks into the existing state
             for series_name, configs in discovered.items():
                 for config_path in configs:
                     benchmark_id = self.get_benchmark_id(series_name, config_path)
                     if benchmark_id not in existing_state.benchmarks:
-                        # Load config to get project_id
                         try:
                             cfg = load_config(str(config_path))
                             project_id = cfg.get("project_id", config_path.stem)
@@ -851,9 +863,19 @@ class SuiteRunner:
                             project_id=project_id,
                             status="pending",
                         )
+                    elif not resume:
+                        # Not resuming: reset discovered benchmarks to pending
+                        existing_state.benchmarks[benchmark_id].status = "pending"
+                        existing_state.benchmarks[benchmark_id].started_at = None
+                        existing_state.benchmarks[benchmark_id].completed_at = None
+                        existing_state.benchmarks[benchmark_id].duration_seconds = None
+                        existing_state.benchmarks[benchmark_id].error = None
+
+            if tag:
+                existing_state.run_tag = tag
             return existing_state
 
-        # Create new state
+        # No existing state — create new (first run)
         state = SuiteState(
             suite_name=self.config.name,
             suite_version=self.config.version,
@@ -972,7 +994,7 @@ class SuiteRunner:
                 workload = cfg.get("workload", {})
                 workload_name = workload.get("name", "?")
                 sf = workload.get("scale_factor", "?")
-                streams = workload.get("multiuser", {}).get("num_streams", 1)
+                streams = (workload.get("multiuser") or {}).get("num_streams", 1)
                 node_count = 1
                 if systems_list:
                     node_count = systems_list[0].get("setup", {}).get("node_count", 1)
@@ -1408,6 +1430,30 @@ class SuiteRunner:
             outdir.mkdir(parents=True, exist_ok=True)
 
             runner = BenchmarkRunner(cfg, outdir, log_callback=log_callback)
+
+            # Check if config uses sequential (per-system lifecycle) mode
+            exec_config = cfg.get("execution", {})
+            is_sequential = exec_config.get("sequential", False)
+
+            if is_sequential:
+                is_parallel_exec = exec_config.get("parallel", False)
+
+                try:
+                    from ..cli.workflows import run_probe_for_full
+
+                    probe_fn = run_probe_for_full
+                except ImportError:
+                    probe_fn = None
+
+                if is_parallel_exec:
+                    benchmark_success = runner.run_parallel_sequential(
+                        run_probe_fn=probe_fn,
+                    )
+                else:
+                    benchmark_success = runner.run_sequential(
+                        run_probe_fn=probe_fn,
+                    )
+                return benchmark_success
 
             has_cloud = is_any_system_cloud_mode(cfg)
             has_managed = is_any_system_managed_mode(cfg)
@@ -2043,7 +2089,7 @@ class SuiteRunner:
                     workload = cfg.get("workload", {})
                     workload_name = workload.get("name", "?")
                     sf = workload.get("scale_factor", "?")
-                    streams = workload.get("multiuser", {}).get("num_streams", 1)
+                    streams = (workload.get("multiuser") or {}).get("num_streams", 1)
 
                     # Get node_count from first system (typically all same in a config)
                     node_count = 1
