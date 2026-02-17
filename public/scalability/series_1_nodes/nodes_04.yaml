@@ -1,7 +1,7 @@
 # Series 1: Node Scaling - 4 Nodes (128GB total)
 # Purpose: Measure 4-node cluster performance
 # Variable: Nodes (4)
-# Fixed: SF=50, Streams=4, 128GB total RAM, 16 total vCPU
+# Fixed: SF=100, Streams=4, 128GB total RAM, 16 total vCPU
 # Systems: Exasol, ClickHouse, Trino, StarRocks (4 cluster-capable systems)
 project_id: "extscal_nodes_4"
 title: "Streamlined Scalability - Node Scaling (4 Nodes)"
@@ -9,6 +9,7 @@ author: "Benchmark Team"
 
 execution:
   parallel: true
+  sequential: true
   max_workers: 4
 
 env:
@@ -131,7 +132,7 @@ systems:
 
 workload:
   name: "tpch"
-  scale_factor: 50
+  scale_factor: 100
   runs_per_query: 5
   warmup_runs: 1
   data_format: "csv"

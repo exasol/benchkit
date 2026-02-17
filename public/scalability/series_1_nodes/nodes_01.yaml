@@ -1,7 +1,7 @@
 # Series 1: Node Scaling - Single Node (128GB total)
 # Purpose: Establish single-node baseline for horizontal scalability comparison
 # Variable: Nodes (1)
-# Fixed: SF=50, Streams=4, 128GB total RAM, 16 total vCPU
+# Fixed: SF=100, Streams=4, 128GB total RAM, 16 total vCPU
 # Systems: Exasol, ClickHouse, Trino, StarRocks (4 cluster-capable systems)
 project_id: "extscal_nodes_1"
 title: "Streamlined Scalability - Node Scaling (1 Node)"
@@ -9,6 +9,7 @@ author: "Benchmark Team"
 
 execution:
   parallel: true
+  sequential: true
   max_workers: 4
 
 env:
@@ -127,7 +128,7 @@ systems:
 
 workload:
   name: "tpch"
-  scale_factor: 50
+  scale_factor: 100
   runs_per_query: 5
   warmup_runs: 1
   data_format: "csv"
