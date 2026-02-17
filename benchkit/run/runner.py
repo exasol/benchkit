@@ -2332,6 +2332,12 @@ def _filter_config_to_system(
                     env_name: filtered["environments"][env_name]
                 }
 
+    # Enable per-system terraform state isolation.
+    # Each system gets its own state dir: results/{project_id}/terraform/{system_name}/
+    # This prevents concurrent terraform commands from corrupting shared state when
+    # multiple systems run in parallel (run_parallel_sequential mode).
+    filtered["_terraform_state_subdir"] = system_name
+
     return filtered
 
 

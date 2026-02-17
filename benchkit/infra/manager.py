@@ -20,6 +20,22 @@ from ..common.cli_helpers import (
 from ..common.enums import EnvironmentMode
 from ..util import Timer, ensure_directory, safe_command
 
+# Per-directory terraform lock registry.
+# Prevents concurrent terraform commands on the same state directory,
+# which would corrupt state or cause one thread to destroy another's resources.
+_terraform_dir_locks: dict[str, threading.Lock] = {}
+_terraform_dir_locks_guard = threading.Lock()
+
+
+def _get_terraform_lock(state_dir: Path) -> threading.Lock:
+    """Get or create a lock for a specific terraform state directory."""
+    key = str(state_dir.resolve())
+    if key not in _terraform_dir_locks:
+        with _terraform_dir_locks_guard:
+            if key not in _terraform_dir_locks:
+                _terraform_dir_locks[key] = threading.Lock()
+    return _terraform_dir_locks[key]
+
 
 @dataclass
 class InfraResult:
@@ -53,7 +69,15 @@ class InfraManager:
         # Per-project state directory for complete isolation
         # This allows multiple benchmarks to run in parallel without conflicts
         project_id = config.get("project_id", "default")
-        self.project_state_dir = PROJECT_ROOT / "results" / project_id / "terraform"
+        state_subdir = config.get("_terraform_state_subdir")
+        if state_subdir:
+            # Per-system isolation: each system gets its own terraform state dir
+            # to prevent concurrent terraform commands from corrupting shared state
+            self.project_state_dir = (
+                PROJECT_ROOT / "results" / project_id / "terraform" / state_subdir
+            )
+        else:
+            self.project_state_dir = PROJECT_ROOT / "results" / project_id / "terraform"
 
         # Legacy compatibility: keep infra_dir for any code that might reference it
         self.infra_dir = self.tf_source_dir
@@ -69,6 +93,10 @@ class InfraManager:
             self._log_callback(message)
         else:
             print(message)
+
+    def _get_state_lock(self) -> threading.Lock:
+        """Get the terraform lock for this manager's state directory."""
+        return _get_terraform_lock(self.project_state_dir)
 
     def plan(self) -> InfraResult:
         """Plan infrastructure changes."""
@@ -317,55 +345,56 @@ class InfraManager:
         """
         args = args or []
 
-        try:
-            # Ensure Terraform files are copied to project state directory
-            self._ensure_terraform_files_copied()
+        with self._get_state_lock():
+            try:
+                # Ensure Terraform files are copied to project state directory
+                self._ensure_terraform_files_copied()
 
-            # Use -chdir to run terraform in project directory (thread-safe)
-            # This avoids os.chdir() which affects all threads in the process
-            chdir_arg = f"-chdir={self.project_state_dir}"
+                # Use -chdir to run terraform in project directory (thread-safe)
+                # This avoids os.chdir() which affects all threads in the process
+                chdir_arg = f"-chdir={self.project_state_dir}"
 
-            # Initialize terraform if needed (uses project-local .terraform/)
-            tf_dir = self.project_state_dir / ".terraform"
-            if not tf_dir.exists():
-                init_result = safe_command(
-                    f"terraform {chdir_arg} init -no-color", timeout=300
+                # Initialize terraform if needed (uses project-local .terraform/)
+                tf_dir = self.project_state_dir / ".terraform"
+                if not tf_dir.exists():
+                    init_result = safe_command(
+                        f"terraform {chdir_arg} init -no-color", timeout=300
+                    )
+                    if not init_result["success"]:
+                        return init_result
+
+                # Prepare terraform variables from config
+                var_args = []
+                if command == "destroy":
+                    # For destroy, only provide minimal required variables
+                    tf_vars = self._prepare_minimal_terraform_vars()
+                else:
+                    # For plan/apply, provide full configuration
+                    tf_vars = self._prepare_terraform_vars()
+
+                # Add variables as command line arguments
+                for key, value in tf_vars.items():
+                    quoted_value = shlex.quote(str(value))
+                    var_args.extend(["-var", f"{key}={quoted_value}"])
+
+                # Run terraform command with no-color flag to avoid ANSI escape sequences
+                full_command = (
+                    ["terraform", chdir_arg, command, "-no-color"] + var_args + args
                 )
-                if not init_result["success"]:
-                    return init_result
+                result = safe_command(
+                    " ".join(full_command),
+                    timeout=3600,  # 1 hour timeout for infrastructure operations
+                )
+                return result
 
-            # Prepare terraform variables from config
-            var_args = []
-            if command == "destroy":
-                # For destroy, only provide minimal required variables
-                tf_vars = self._prepare_minimal_terraform_vars()
-            else:
-                # For plan/apply, provide full configuration
-                tf_vars = self._prepare_terraform_vars()
-
-            # Add variables as command line arguments
-            for key, value in tf_vars.items():
-                quoted_value = shlex.quote(str(value))
-                var_args.extend(["-var", f"{key}={quoted_value}"])
-
-            # Run terraform command with no-color flag to avoid ANSI escape sequences
-            full_command = (
-                ["terraform", chdir_arg, command, "-no-color"] + var_args + args
-            )
-            result = safe_command(
-                " ".join(full_command),
-                timeout=3600,  # 1 hour timeout for infrastructure operations
-            )
-            return result
-
-        except Exception as e:
-            return {
-                "success": False,
-                "stdout": "",
-                "stderr": str(e),
-                "returncode": 1,
-                "elapsed_s": 0.0,
-            }
+            except Exception as e:
+                return {
+                    "success": False,
+                    "stdout": "",
+                    "stderr": str(e),
+                    "returncode": 1,
+                    "elapsed_s": 0.0,
+                }
 
     def _run_terraform_command(
         self, command: str, args: list[Any] | None = None
@@ -378,72 +407,75 @@ class InfraManager:
         """
         args = args or []
 
-        try:
-            # Ensure Terraform files are copied to project state directory
-            self._ensure_terraform_files_copied()
+        with self._get_state_lock():
+            try:
+                # Ensure Terraform files are copied to project state directory
+                self._ensure_terraform_files_copied()
 
-            # Use -chdir to run terraform in project directory (thread-safe)
-            # This avoids os.chdir() which affects all threads in the process
-            chdir_arg = f"-chdir={self.project_state_dir}"
+                # Use -chdir to run terraform in project directory (thread-safe)
+                # This avoids os.chdir() which affects all threads in the process
+                chdir_arg = f"-chdir={self.project_state_dir}"
 
-            # Initialize terraform if needed (uses project-local .terraform/)
-            tf_dir = self.project_state_dir / ".terraform"
-            if not tf_dir.exists():
-                init_result = safe_command(
-                    f"terraform {chdir_arg} init -no-color", timeout=300
+                # Initialize terraform if needed (uses project-local .terraform/)
+                tf_dir = self.project_state_dir / ".terraform"
+                if not tf_dir.exists():
+                    init_result = safe_command(
+                        f"terraform {chdir_arg} init -no-color", timeout=300
+                    )
+                    if not init_result["success"]:
+                        return InfraResult(
+                            success=False,
+                            message="Terraform init failed",
+                            error=init_result["stderr"],
+                        )
+
+                # Prepare terraform variables from config (except for output command)
+                var_args = []
+                if command not in [
+                    "output",
+                    "show",
+                    "state",
+                ]:  # Commands that don't accept -var
+                    if command == "destroy":
+                        # For destroy, only provide minimal required variables
+                        tf_vars = self._prepare_minimal_terraform_vars()
+                    else:
+                        # For plan/apply, provide full configuration
+                        tf_vars = self._prepare_terraform_vars()
+
+                    for key, value in tf_vars.items():
+                        # Properly quote values that contain spaces or special characters
+                        quoted_value = shlex.quote(str(value))
+                        var_args.extend(["-var", f"{key}={quoted_value}"])
+
+                # Run terraform command with no-color flag to avoid ANSI escape sequences
+                full_command = (
+                    ["terraform", chdir_arg, command, "-no-color"] + var_args + args
                 )
-                if not init_result["success"]:
+                result = safe_command(
+                    " ".join(full_command),
+                    timeout=3600,  # 1 hour timeout for infrastructure operations
+                )
+
+                if result["success"]:
+                    return InfraResult(
+                        success=True,
+                        message=f"Terraform {command} completed successfully",
+                        outputs=self._parse_terraform_outputs(result["stdout"]),
+                    )
+                else:
                     return InfraResult(
                         success=False,
-                        message="Terraform init failed",
-                        error=init_result["stderr"],
+                        message=f"Terraform {command} failed",
+                        error=result["stderr"],
                     )
 
-            # Prepare terraform variables from config (except for output command)
-            var_args = []
-            if command not in [
-                "output",
-                "show",
-                "state",
-            ]:  # Commands that don't accept -var
-                if command == "destroy":
-                    # For destroy, only provide minimal required variables
-                    tf_vars = self._prepare_minimal_terraform_vars()
-                else:
-                    # For plan/apply, provide full configuration
-                    tf_vars = self._prepare_terraform_vars()
-
-                for key, value in tf_vars.items():
-                    # Properly quote values that contain spaces or special characters
-                    quoted_value = shlex.quote(str(value))
-                    var_args.extend(["-var", f"{key}={quoted_value}"])
-
-            # Run terraform command with no-color flag to avoid ANSI escape sequences
-            full_command = (
-                ["terraform", chdir_arg, command, "-no-color"] + var_args + args
-            )
-            result = safe_command(
-                " ".join(full_command),
-                timeout=3600,  # 1 hour timeout for infrastructure operations
-            )
-
-            if result["success"]:
-                return InfraResult(
-                    success=True,
-                    message=f"Terraform {command} completed successfully",
-                    outputs=self._parse_terraform_outputs(result["stdout"]),
-                )
-            else:
+            except Exception as e:
                 return InfraResult(
                     success=False,
-                    message=f"Terraform {command} failed",
-                    error=result["stderr"],
+                    message="Infrastructure operation failed",
+                    error=str(e),
                 )
-
-        except Exception as e:
-            return InfraResult(
-                success=False, message="Infrastructure operation failed", error=str(e)
-            )
 
     def _prepare_terraform_vars(self) -> dict[str, str]:
         """Prepare terraform variables from configuration."""
@@ -752,103 +784,106 @@ class InfraManager:
         import json
         import time
 
-        # Ensure Terraform files exist in project state directory
-        self._ensure_terraform_files_copied()
+        with self._get_state_lock():
+            # Ensure Terraform files exist in project state directory
+            self._ensure_terraform_files_copied()
 
-        # Ensure terraform is initialized (may be needed if state dir is fresh)
-        chdir_arg = f"-chdir={self.project_state_dir}"
-        tf_dir = self.project_state_dir / ".terraform"
-        if not tf_dir.exists():
-            init_result = safe_command(
-                f"terraform {chdir_arg} init -no-color", timeout=300
-            )
-            if not init_result["success"]:
-                stderr = init_result.get("stderr", "").strip()
-                return {"error": f"Terraform init failed: {stderr}"}
+            # Ensure terraform is initialized (may be needed if state dir is fresh)
+            chdir_arg = f"-chdir={self.project_state_dir}"
+            tf_dir = self.project_state_dir / ".terraform"
+            if not tf_dir.exists():
+                init_result = safe_command(
+                    f"terraform {chdir_arg} init -no-color", timeout=300
+                )
+                if not init_result["success"]:
+                    stderr = init_result.get("stderr", "").strip()
+                    return {"error": f"Terraform init failed: {stderr}"}
 
-        # Retry terraform output with backoff — parallel runs can cause contention
-        max_attempts = 3
-        last_error = ""
-        for attempt in range(1, max_attempts + 1):
-            result = safe_command(
-                f"terraform {chdir_arg} output -json -no-color", timeout=120
-            )
+            # Retry terraform output with backoff — parallel runs can cause contention
+            max_attempts = 3
+            last_error = ""
+            for attempt in range(1, max_attempts + 1):
+                result = safe_command(
+                    f"terraform {chdir_arg} output -json -no-color", timeout=120
+                )
 
-            if result["success"]:
-                try:
-                    outputs = json.loads(result["stdout"])
-                except json.JSONDecodeError:
-                    return {"error": "Failed to parse terraform outputs"}
+                if result["success"]:
+                    try:
+                        outputs = json.loads(result["stdout"])
+                    except json.JSONDecodeError:
+                        return {"error": "Failed to parse terraform outputs"}
 
-                # Extract generic system information from Terraform outputs
-                system_data = {}
+                    # Extract generic system information from Terraform outputs
+                    system_data = {}
 
-                instance_ids = outputs.get("system_instance_ids", {}).get("value", {})
-                public_ips = outputs.get("system_public_ips", {}).get("value", {})
-                private_ips = outputs.get("system_private_ips", {}).get("value", {})
+                    instance_ids = outputs.get("system_instance_ids", {}).get(
+                        "value", {}
+                    )
+                    public_ips = outputs.get("system_public_ips", {}).get("value", {})
+                    private_ips = outputs.get("system_private_ips", {}).get("value", {})
 
-                for system_name in instance_ids.keys():
-                    instance_id = instance_ids.get(system_name)
-                    public_ip = public_ips.get(system_name)
-                    private_ip = private_ips.get(system_name)
+                    for system_name in instance_ids.keys():
+                        instance_id = instance_ids.get(system_name)
+                        public_ip = public_ips.get(system_name)
+                        private_ip = private_ips.get(system_name)
 
-                    # IPs are always lists now (Terraform outputs are consistent)
-                    # Single-node: [ip], Multinode: [ip1, ip2, ...]
-                    if isinstance(public_ip, list) and len(public_ip) > 1:
-                        # Multinode system: create list of node info
-                        system_data[system_name] = {
-                            "multinode": True,
-                            "node_count": len(public_ip),
-                            "nodes": [
-                                {
-                                    "instance_id": (
-                                        instance_id[i]
-                                        if isinstance(instance_id, list)
-                                        else instance_id
-                                    ),
-                                    "public_ip": public_ip[i],
-                                    "private_ip": private_ip[i],
-                                    "node_idx": i,
-                                }
-                                for i in range(len(public_ip))
-                            ],
-                        }
-                    elif isinstance(public_ip, list) and len(public_ip) == 1:
-                        # Single node system (list with one element) - extract values
-                        system_data[system_name] = {
-                            "multinode": False,
-                            "instance_id": (
-                                instance_id[0]
-                                if isinstance(instance_id, list)
-                                else instance_id
-                            ),
-                            "public_ip": public_ip[0],
-                            "private_ip": (
-                                private_ip[0]
-                                if isinstance(private_ip, list)
-                                else private_ip
-                            ),
-                        }
-                    else:
-                        # Backward compatibility: non-list (single node)
-                        system_data[system_name] = {
-                            "multinode": False,
-                            "instance_id": instance_id,
-                            "public_ip": public_ip,
-                            "private_ip": private_ip,
-                        }
+                        # IPs are always lists now (Terraform outputs are consistent)
+                        # Single-node: [ip], Multinode: [ip1, ip2, ...]
+                        if isinstance(public_ip, list) and len(public_ip) > 1:
+                            # Multinode system: create list of node info
+                            system_data[system_name] = {
+                                "multinode": True,
+                                "node_count": len(public_ip),
+                                "nodes": [
+                                    {
+                                        "instance_id": (
+                                            instance_id[i]
+                                            if isinstance(instance_id, list)
+                                            else instance_id
+                                        ),
+                                        "public_ip": public_ip[i],
+                                        "private_ip": private_ip[i],
+                                        "node_idx": i,
+                                    }
+                                    for i in range(len(public_ip))
+                                ],
+                            }
+                        elif isinstance(public_ip, list) and len(public_ip) == 1:
+                            # Single node system (list with one element) - extract values
+                            system_data[system_name] = {
+                                "multinode": False,
+                                "instance_id": (
+                                    instance_id[0]
+                                    if isinstance(instance_id, list)
+                                    else instance_id
+                                ),
+                                "public_ip": public_ip[0],
+                                "private_ip": (
+                                    private_ip[0]
+                                    if isinstance(private_ip, list)
+                                    else private_ip
+                                ),
+                            }
+                        else:
+                            # Backward compatibility: non-list (single node)
+                            system_data[system_name] = {
+                                "multinode": False,
+                                "instance_id": instance_id,
+                                "public_ip": public_ip,
+                                "private_ip": private_ip,
+                            }
 
-                return system_data
+                    return system_data
 
-            # Capture error for diagnostics
-            stderr = result.get("stderr", "").strip()
-            stdout = result.get("stdout", "").strip()
-            last_error = stderr or stdout or "no output"
+                # Capture error for diagnostics
+                stderr = result.get("stderr", "").strip()
+                stdout = result.get("stdout", "").strip()
+                last_error = stderr or stdout or "no output"
 
-            if attempt < max_attempts:
-                time.sleep(5 * attempt)  # 5s, 10s backoff
+                if attempt < max_attempts:
+                    time.sleep(5 * attempt)  # 5s, 10s backoff
 
-        return {"error": f"Failed to get terraform outputs: {last_error}"}
+            return {"error": f"Failed to get terraform outputs: {last_error}"}
 
     def _get_gcp_instance_info(self) -> dict[str, Any]:
         """Get GCP instance information."""
@@ -883,7 +918,14 @@ class InfraManager:
             return None
 
         state_locations = [
-            Path("results") / project_id / "terraform" / "terraform.tfstate"
+            # Per-system state subdir (used in sequential+parallel mode)
+            Path("results")
+            / project_id
+            / "terraform"
+            / system_name
+            / "terraform.tfstate",
+            # Shared state dir (used in non-sequential mode)
+            Path("results") / project_id / "terraform" / "terraform.tfstate",
         ]
 
         for state_file in state_locations:
