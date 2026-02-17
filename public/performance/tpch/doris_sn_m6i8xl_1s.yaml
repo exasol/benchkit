@@ -1,0 +1,33 @@
+project_id: perf_tpch_1user_doris_sn_m6i8xl
+title: 'Combined benchmark: perf_tpch_1user_doris_sn_m6i8xl'
+author: Combined
+systems:
+- name: doris
+  kind: doris
+  version: 3.0.3
+  setup:
+    method: preinstalled
+    node_count: 1
+    use_additional_disk: true
+    host: $DORIS_PUBLIC_IP
+    port: 9030
+    username: root
+    password: ''
+    extra:
+      bucket_count: 32
+      replication_num: 1
+workload:
+  name: tpch
+  scale_factor: 100
+  runs_per_query: 5
+  warmup_runs: 1
+  data_format: csv
+  generator: dbgen
+env:
+  mode: local
+  instances:
+    doris:
+      instance_type: m6i.8xlarge
+report:
+  output_path: results/perf_tpch_1user_doris_sn_m6i8xl/reports
+  figures_dir: results/perf_tpch_1user_doris_sn_m6i8xl/figures

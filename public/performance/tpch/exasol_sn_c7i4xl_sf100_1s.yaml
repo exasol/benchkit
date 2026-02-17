@@ -1,0 +1,20 @@
+project_id: perf_tpch_exasol_sn_c7i4xl_sf100
+title: 'Combined benchmark: perf_tpch_exasol_sn_c7i4xl_sf100'
+author: Combined
+systems:
+- name: exasol
+  kind: exasol
+  version: 2025.2.0
+  setup:
+    method: preinstalled
+workload:
+  name: tpch
+  scale_factor: 100
+  runs_per_query: 5
+  warmup_runs: 1
+env:
+  mode: local
+  instance_type: c7i.4xlarge
+report:
+  output_path: results/perf_tpch_exasol_sn_c7i4xl_sf100/reports
+  figures_dir: results/perf_tpch_exasol_sn_c7i4xl_sf100/figures

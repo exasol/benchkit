@@ -1,19 +1,22 @@
 name: "Performance Benchmarks"
-version: "1.0.0"
+version: "2.0.0"
 description: "Community-contributed database performance benchmarks"
 author: "Benchkit Community"
 
 series:
-  single_node:
-    name: "Single Node"
-    description: "Single-node database performance comparisons"
-  multi_node:
-    name: "Multi Node"
-    description: "Multi-node cluster performance comparisons"
-  multi_user:
-    name: "Multi User"
-    description: "Concurrent multi-user performance comparisons"
+  tpch:
+    name: "TPC-H"
+    description: "TPC-H benchmark across all scale factors, streams, and node counts"
+  clickbench:
+    name: "ClickBench"
+    description: "ClickBench web analytics benchmark (100M rows)"
+    enabled: false
+  estuary:
+    name: "Estuary"
+    description: "Estuary warehouse benchmark"
+    enabled: false
 
 publish:
-  title: "Performance Benchmark Results"
-  include_reports: true
+  title: "Performance Benchmark Leaderboard"
+  template: "leaderboard"
+  include_reports: false

@@ -1,0 +1,812 @@
+/**
+ * LeaderboardApp — client-side logic for the performance leaderboard.
+ *
+ * Reads embedded JSON data and renders:
+ *  - Workload tab bar
+ *  - Ranked leaderboard table
+ *  - Per-query color-coded grid (with stat mode switching and column sorting)
+ *  - Detail modal on row click (with DDL, setup commands, config params)
+ *  - Query SQL modal on grid cell click
+ */
+class LeaderboardApp {
+    constructor() {
+        this.data = JSON.parse(
+            document.getElementById('leaderboard-data').textContent
+        );
+        this.activeTab = null;
+        this.entries = this.data.entries || [];
+        this.tabs = this.data.workload_tabs || [];
+
+        this.logScale = true;
+        this.statMode = 'median';
+        this.gridSortColumn = null;
+        this.gridSortAsc = true;
+        this._currentGridEntries = [];
+
+        // Filter state
+        this.filterSF = 'all';
+        this.filterStreams = 'all';
+        this.filterNodes = 'all';
+
+        this._initTabs();
+        this._initFilters();
+        this._initModal();
+        this._initQueryModal();
+        this._initChartControls();
+        this._initStatModeControl();
+        this._applyHashState();
+    }
+
+    /* ── Tab Bar ──────────────────────────────────────── */
+
+    _initTabs() {
+        const bar = document.getElementById('tab-bar');
+        this.tabs.forEach((tab, i) => {
+            const btn = document.createElement('button');
+            btn.className = 'tab-btn';
+            btn.textContent = tab;
+            btn.dataset.tab = tab;
+            btn.addEventListener('click', () => this._switchTab(tab));
+            bar.appendChild(btn);
+        });
+    }
+
+    _switchTab(tab) {
+        this.activeTab = tab;
+        document.querySelectorAll('.tab-btn').forEach(b => {
+            b.classList.toggle('active', b.dataset.tab === tab);
+        });
+        window.location.hash = 'tab=' + encodeURIComponent(tab);
+        this.gridSortColumn = null;
+        this.gridSortAsc = true;
+        // Reset filters on tab switch
+        this.filterSF = 'all';
+        this.filterStreams = 'all';
+        this.filterNodes = 'all';
+        this._populateFilters();
+        this._render();
+    }
+
+    /* ── Filters ─────────────────────────────────────── */
+
+    _initFilters() {
+        const sfSelect = document.getElementById('filter-sf');
+        const streamsSelect = document.getElementById('filter-streams');
+        const nodesSelect = document.getElementById('filter-nodes');
+
+        if (sfSelect) sfSelect.addEventListener('change', () => {
+            this.filterSF = sfSelect.value;
+            this._render();
+        });
+        if (streamsSelect) streamsSelect.addEventListener('change', () => {
+            this.filterStreams = streamsSelect.value;
+            this._render();
+        });
+        if (nodesSelect) nodesSelect.addEventListener('change', () => {
+            this.filterNodes = nodesSelect.value;
+            this._render();
+        });
+    }
+
+    _populateFilters() {
+        const tabEntries = this.entries.filter(e => e.workload_tab === this.activeTab);
+
+        const sfValues = [...new Set(tabEntries.map(e => e.scale_factor).filter(v => v != null))].sort((a, b) => a - b);
+        const streamsValues = [...new Set(tabEntries.map(e => e.stream_count))].sort((a, b) => a - b);
+        const nodesValues = [...new Set(tabEntries.map(e => e.node_count))].sort((a, b) => a - b);
+
+        const populate = (selectId, values, currentFilter) => {
+            const select = document.getElementById(selectId);
+            if (!select) return;
+            select.innerHTML = '<option value="all">All</option>';
+            values.forEach(v => {
+                const opt = document.createElement('option');
+                opt.value = String(v);
+                opt.textContent = String(v);
+                if (String(v) === currentFilter) opt.selected = true;
+                select.appendChild(opt);
+            });
+        };
+
+        populate('filter-sf', sfValues, this.filterSF);
+        populate('filter-streams', streamsValues, this.filterStreams);
+        populate('filter-nodes', nodesValues, this.filterNodes);
+    }
+
+    _applyHashState() {
+        const hash = window.location.hash.replace('#', '');
+        const params = new URLSearchParams(hash);
+        const tab = params.get('tab');
+        if (tab && this.tabs.includes(tab)) {
+            this._switchTab(tab);
+        } else if (this.tabs.length > 0) {
+            this._switchTab(this.tabs[0]);
+        }
+    }
+
+    /* ── Render ───────────────────────────────────────── */
+
+    _render() {
+        let filtered = this.entries
+            .filter(e => e.workload_tab === this.activeTab);
+
+        // Apply filters
+        if (this.filterSF !== 'all') {
+            const sfVal = parseFloat(this.filterSF);
+            filtered = filtered.filter(e => e.scale_factor === sfVal);
+        }
+        if (this.filterStreams !== 'all') {
+            const sVal = parseInt(this.filterStreams, 10);
+            filtered = filtered.filter(e => e.stream_count === sVal);
+        }
+        if (this.filterNodes !== 'all') {
+            const nVal = parseInt(this.filterNodes, 10);
+            filtered = filtered.filter(e => e.node_count === nVal);
+        }
+
+        filtered.sort((a, b) => b.bench_score - a.bench_score);
+
+        this._renderTable(filtered);
+        this._renderQueryChart(filtered);
+        this._renderQueryGrid(filtered);
+
+        // Update entry count
+        const countEl = document.getElementById('entry-count');
+        if (countEl) countEl.textContent = filtered.length;
+    }
+
+    /* ── Chart Controls ─────────────────────────────────── */
+
+    _initChartControls() {
+        const toggle = document.getElementById('log-scale-toggle');
+        if (toggle) {
+            toggle.addEventListener('change', () => {
+                this.logScale = toggle.checked;
+                if (this.activeTab) this._render();
+            });
+        }
+    }
+
+    _initStatModeControl() {
+        const select = document.getElementById('stat-mode-select');
+        if (select) {
+            select.addEventListener('change', () => {
+                this.statMode = select.value;
+                if (this._currentGridEntries.length > 0) {
+                    this._renderQueryGrid(this._currentGridEntries);
+                }
+            });
+        }
+    }
+
+    /* ── Leaderboard Table ────────────────────────────── */
+
+    _renderTable(entries) {
+        const tbody = document.getElementById('leaderboard-tbody');
+        tbody.innerHTML = '';
+
+        const maxScore = entries.length > 0
+            ? Math.max(...entries.map(e => e.bench_score))
+            : 1;
+
+        entries.forEach((entry, idx) => {
+            const rank = idx + 1;
+            const tr = document.createElement('tr');
+            tr.addEventListener('click', () => this._openModal(entry));
+
+            const failedQueries = entry.query_count < (this._expectedQueries(entry) || entry.query_count);
+            const failBadge = failedQueries
+                ? `<span class="fail-badge" title="${entry.query_count}/${this._expectedQueries(entry)} queries passed (${entry.success_rate.toFixed(0)}%)">${entry.query_count}/${this._expectedQueries(entry)}</span>`
+                : '';
+
+            tr.innerHTML = `
+                <td class="col-rank">
+                    <span class="rank-badge ${rank <= 3 ? 'rank-' + rank : 'rank-other'}">${rank}</span>
+                </td>
+                <td>
+                    <span class="system-name">${this._esc(entry.system_name)}</span>
+                    <span class="system-kind">${this._esc(entry.system_kind)}</span>
+                    ${failBadge}
+                </td>
+                <td>${this._esc(entry.system_version)}</td>
+                <td class="col-score">
+                    <div class="score-cell">
+                        <span class="score-value">${entry.bench_score.toFixed(1)}</span>
+                        <span class="score-bar" style="width:${Math.round(entry.bench_score / maxScore * 120)}px"></span>
+                    </div>
+                </td>
+                <td class="col-speed">${entry.speed_score.toFixed(1)}</td>
+                <td class="col-scale">${entry.scale_score.toFixed(1)}</td>
+                <td class="col-geomean">${this._fmtDuration(entry.geomean_ms)}</td>
+                <td>${entry.query_count}</td>
+                <td class="col-sf">${entry.scale_factor != null ? entry.scale_factor : '-'}</td>
+                <td class="col-streams">${entry.stream_count}</td>
+                <td>${this._esc(entry.instance_type || '-')}</td>
+                <td>${entry.node_count}</td>
+                <td>${this._esc(entry.run_date || '-')}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    /* ── Per-Query Chart ────────────────────────────────── */
+
+    _renderQueryChart(entries) {
+        const section = document.getElementById('query-chart-section');
+        const chartDiv = document.getElementById('query-chart');
+
+        if (entries.length === 0) {
+            section.style.display = 'none';
+            return;
+        }
+
+        // Collect and sort all query names
+        const querySet = new Set();
+        entries.forEach(e => {
+            Object.keys(e.query_times || {}).forEach(q => querySet.add(q));
+            Object.keys(e.query_errors || {}).forEach(q => querySet.add(q));
+        });
+        const queries = Array.from(querySet).sort((a, b) => {
+            const na = parseInt(a.replace(/\D/g, ''), 10);
+            const nb = parseInt(b.replace(/\D/g, ''), 10);
+            if (!isNaN(na) && !isNaN(nb)) return na - nb;
+            return a.localeCompare(b);
+        });
+
+        if (queries.length === 0) {
+            section.style.display = 'none';
+            return;
+        }
+        section.style.display = '';
+
+        // System color palette
+        const palette = [
+            '#2E86AB', '#E63946', '#6A994E', '#F4A261',
+            '#9B5DE5', '#00BBF9', '#00F5D4', '#FEE440',
+            '#A23B72', '#F18F01', '#073B4C', '#FFD166'
+        ];
+
+        // Build one scatter trace per system entry
+        const traces = [];
+        entries.forEach((entry, i) => {
+            const color = palette[i % palette.length];
+            const x = [];
+            const y = [];
+            const text = [];
+
+            queries.forEach(q => {
+                const t = entry.query_times?.[q];
+                if (t && t.median > 0) {
+                    x.push(q);
+                    y.push(t.median / 1000);  // ms to seconds
+                    text.push(
+                        `${q}<br>${entry.system_name}` +
+                        (entry.instance_type ? ` (${entry.instance_type})` : '') +
+                        `<br>${(t.median / 1000).toFixed(2)}s`
+                    );
+                }
+            });
+
+            if (x.length > 0) {
+                traces.push({
+                    name: entry.system_name + (entry.instance_type ? ` (${entry.instance_type})` : ''),
+                    type: 'scatter',
+                    mode: 'markers',
+                    x: x,
+                    y: y,
+                    text: text,
+                    hovertemplate: '%{text}<extra></extra>',
+                    marker: {
+                        size: 8,
+                        color: color,
+                        opacity: 0.7,
+                    },
+                });
+            }
+        });
+
+        if (traces.length === 0) {
+            section.style.display = 'none';
+            return;
+        }
+
+        const layout = {
+            xaxis: {
+                title: '',
+                tickangle: -90,
+                tickfont: { family: 'JetBrains Mono, monospace', size: 9 },
+            },
+            yaxis: {
+                title: 'Query Runtime (s)',
+                type: this.logScale ? 'log' : 'linear',
+                tickfont: { family: 'JetBrains Mono, monospace', size: 11 },
+            },
+            legend: {
+                orientation: 'h',
+                yanchor: 'bottom',
+                y: 1.02,
+                xanchor: 'right',
+                x: 1,
+                font: { size: 11 },
+            },
+            margin: { t: 40, r: 20, b: 100, l: 80 },
+            hovermode: 'closest',
+            plot_bgcolor: 'rgba(0,0,0,0)',
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            font: { family: 'Inter, sans-serif', color: getComputedStyle(document.documentElement).getPropertyValue('--color-text').trim() || '#1a1a1a' },
+        };
+
+        const config = {
+            responsive: true,
+            displaylogo: false,
+            modeBarButtonsToRemove: ['lasso2d', 'select2d'],
+        };
+
+        Plotly.newPlot(chartDiv, traces, layout, config);
+    }
+
+    /* ── Per-Query Grid ───────────────────────────────── */
+
+    _getGridValue(entry, q) {
+        if (this.statMode === 'warmup') {
+            return entry.warmup_times?.[q]?.median;
+        }
+        return entry.query_times?.[q]?.[this.statMode];
+    }
+
+    _renderQueryGrid(entries) {
+        const section = document.getElementById('query-grid-section');
+        const table = document.getElementById('query-grid');
+        table.innerHTML = '';
+
+        this._currentGridEntries = entries;
+
+        if (entries.length === 0) {
+            section.style.display = 'none';
+            return;
+        }
+        section.style.display = '';
+
+        // Collect all query names across entries and sort them
+        const querySet = new Set();
+        entries.forEach(e => {
+            Object.keys(e.query_times || {}).forEach(q => querySet.add(q));
+            Object.keys(e.query_errors || {}).forEach(q => querySet.add(q));
+        });
+        const queries = Array.from(querySet).sort((a, b) => {
+            // Natural sort: Q01, Q02, ..., Q10, Q11
+            const na = parseInt(a.replace(/\D/g, ''), 10);
+            const nb = parseInt(b.replace(/\D/g, ''), 10);
+            if (!isNaN(na) && !isNaN(nb)) return na - nb;
+            return a.localeCompare(b);
+        });
+
+        if (queries.length === 0) {
+            section.style.display = 'none';
+            return;
+        }
+
+        // Sort entries if a sort column is active
+        let sorted = [...entries];
+        if (this.gridSortColumn === 'system') {
+            sorted.sort((a, b) => this.gridSortAsc
+                ? a.system_name.localeCompare(b.system_name)
+                : b.system_name.localeCompare(a.system_name));
+        } else if (this.gridSortColumn) {
+            sorted.sort((a, b) => {
+                const va = this._getGridValue(a, this.gridSortColumn) ?? Infinity;
+                const vb = this._getGridValue(b, this.gridSortColumn) ?? Infinity;
+                return this.gridSortAsc ? va - vb : vb - va;
+            });
+        }
+
+        // Find min time per query across all entries (for color coding)
+        const minTimes = {};
+        queries.forEach(q => {
+            let minVal = Infinity;
+            sorted.forEach(e => {
+                const t = this._getGridValue(e, q);
+                if (t != null && t > 0 && t < minVal) minVal = t;
+            });
+            minTimes[q] = minVal === Infinity ? 1 : minVal;
+        });
+
+        // Header row
+        const thead = document.createElement('thead');
+        const headerRow = document.createElement('tr');
+
+        const sysTh = document.createElement('th');
+        sysTh.className = 'system-header sortable-header';
+        sysTh.textContent = 'System' + (this.gridSortColumn === 'system' ? (this.gridSortAsc ? ' \u25B2' : ' \u25BC') : '');
+        sysTh.addEventListener('click', () => {
+            if (this.gridSortColumn === 'system') this.gridSortAsc = !this.gridSortAsc;
+            else { this.gridSortColumn = 'system'; this.gridSortAsc = true; }
+            this._renderQueryGrid(this._currentGridEntries);
+        });
+        headerRow.appendChild(sysTh);
+
+        queries.forEach(q => {
+            const th = document.createElement('th');
+            th.className = 'sortable-header';
+            th.textContent = q + (this.gridSortColumn === q ? (this.gridSortAsc ? ' \u25B2' : ' \u25BC') : '');
+            th.addEventListener('click', () => {
+                if (this.gridSortColumn === q) this.gridSortAsc = !this.gridSortAsc;
+                else { this.gridSortColumn = q; this.gridSortAsc = true; }
+                this._renderQueryGrid(this._currentGridEntries);
+            });
+            headerRow.appendChild(th);
+        });
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+
+        // Body rows
+        const tbody = document.createElement('tbody');
+        sorted.forEach(entry => {
+            const tr = document.createElement('tr');
+            const sysCell = document.createElement('td');
+            sysCell.className = 'system-cell';
+            sysCell.textContent = entry.system_name;
+            tr.appendChild(sysCell);
+
+            queries.forEach(q => {
+                const td = document.createElement('td');
+                const t = this._getGridValue(entry, q);
+                if (t != null) {
+                    const ratio = t / minTimes[q];
+                    const color = this._ratioColor(ratio);
+                    const textColor = this._ratioTextColor(ratio);
+                    const span = document.createElement('span');
+                    span.className = 'query-cell';
+                    span.style.background = color;
+                    span.style.color = textColor;
+                    span.textContent = (t / 1000).toFixed(2);
+                    span.title = 'Click for SQL';
+                    span.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this._openQueryModal(q, entry);
+                    });
+                    td.appendChild(span);
+                } else {
+                    const hasError = entry.query_errors?.[q];
+                    if (hasError) {
+                        const span = document.createElement('span');
+                        span.className = 'query-cell query-cell-failed';
+                        span.textContent = '\u2717';
+                        span.title = 'Click for error details';
+                        span.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            this._openQueryModal(q, entry);
+                        });
+                        td.appendChild(span);
+                    } else {
+                        td.textContent = '-';
+                    }
+                }
+                tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+    }
+
+    _ratioColor(ratio) {
+        // 1.0 = green, 2.0 = yellow, 5.0+ = deep red
+        if (ratio <= 1.0) return '#dcfce7';
+        if (ratio <= 2.0) {
+            const t = (ratio - 1.0);
+            return this._lerpColor('#dcfce7', '#fef9c3', t);
+        }
+        if (ratio <= 5.0) {
+            const t = (ratio - 2.0) / 3.0;
+            return this._lerpColor('#fef9c3', '#fee2e2', t);
+        }
+        return '#fecaca';
+    }
+
+    _ratioTextColor(ratio) {
+        if (ratio <= 1.0) return '#166534';
+        if (ratio <= 2.0) return '#854d0e';
+        if (ratio <= 5.0) return '#991b1b';
+        return '#7f1d1d';
+    }
+
+    _lerpColor(a, b, t) {
+        const parse = c => [
+            parseInt(c.slice(1, 3), 16),
+            parseInt(c.slice(3, 5), 16),
+            parseInt(c.slice(5, 7), 16)
+        ];
+        const ca = parse(a), cb = parse(b);
+        const r = Math.round(ca[0] + (cb[0] - ca[0]) * t);
+        const g = Math.round(ca[1] + (cb[1] - ca[1]) * t);
+        const bl = Math.round(ca[2] + (cb[2] - ca[2]) * t);
+        return `rgb(${r},${g},${bl})`;
+    }
+
+    /* ── Detail Modal ────────────────────────────────── */
+
+    _initModal() {
+        const overlay = document.getElementById('modal-overlay');
+        const close = document.getElementById('modal-close');
+        close.addEventListener('click', () => this._closeModal());
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) this._closeModal();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                if (document.getElementById('query-modal-overlay').classList.contains('visible')) {
+                    this._closeQueryModal();
+                } else {
+                    this._closeModal();
+                }
+            }
+        });
+    }
+
+    _formatScriptName(name) {
+        return name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    }
+
+    _formatConfigValue(v) {
+        if (Array.isArray(v)) {
+            return v.map(item => `<code class="config-item">${this._esc(String(item))}</code>`).join('');
+        }
+        if (v != null && typeof v === 'object') {
+            return Object.entries(v).map(([k, val]) =>
+                `<span class="config-kv">${this._esc(k)}: ${this._esc(String(val))}</span>`
+            ).join('');
+        }
+        return this._esc(String(v));
+    }
+
+    _buildSetupScript(setupCommands) {
+        const lines = [];
+        for (const [category, cmds] of Object.entries(setupCommands)) {
+            const deduped = this._deduplicateCommands(cmds);
+            if (deduped.length === 0) continue;
+            if (lines.length > 0) lines.push('');
+            lines.push(`# ${this._formatScriptName(category)}`);
+            for (const c of deduped) {
+                if (c.description) lines.push(`# ${c.description}`);
+                lines.push(c.command);
+            }
+        }
+        return this._esc(lines.join('\n'));
+    }
+
+    _deduplicateCommands(cmds) {
+        // Normalize a command string for comparison: collapse whitespace,
+        // strip common silent/non-interactive flags that create near-duplicates
+        const normalize = (cmd) => cmd.replace(/\s+-s\b/g, '').replace(/\s+/g, ' ').trim();
+        const isGenericDesc = (d) => /^Execute \S+ command/.test(d || '');
+
+        // Group by normalized command — keep the entry with a descriptive description
+        const best = new Map();
+        for (const c of cmds) {
+            const key = normalize(c.command);
+            const existing = best.get(key);
+            if (!existing) {
+                best.set(key, c);
+            } else if (isGenericDesc(existing.description) && !isGenericDesc(c.description)) {
+                best.set(key, c);
+            }
+        }
+        return [...best.values()];
+    }
+
+    _openModal(entry) {
+        const body = document.getElementById('modal-body');
+        const info = entry.system_info || {};
+        const queryTimes = entry.query_times || {};
+        const queries = Object.keys(queryTimes).sort((a, b) => {
+            const na = parseInt(a.replace(/\D/g, ''), 10);
+            const nb = parseInt(b.replace(/\D/g, ''), 10);
+            if (!isNaN(na) && !isNaN(nb)) return na - nb;
+            return a.localeCompare(b);
+        });
+
+        // Compute min/max query times
+        const medians = queries.map(q => queryTimes[q].median).filter(v => v > 0);
+        const minQuery = medians.length > 0 ? Math.min(...medians) : 0;
+        const maxQuery = medians.length > 0 ? Math.max(...medians) : 0;
+
+        body.innerHTML = `
+            <h2>${this._esc(entry.system_name)}</h2>
+
+            <div class="modal-section">
+                <h3>Score</h3>
+                <div class="modal-score">${entry.bench_score.toFixed(1)}</div>
+                <p style="font-size:0.85rem;color:var(--color-text-secondary);margin-top:4px;">
+                    &radic;(${entry.speed_score.toFixed(1)} &times; ${entry.scale_score.toFixed(1)}) = ${entry.bench_score.toFixed(1)}
+                </p>
+                <div class="modal-grid" style="margin-top:8px;">
+                    <div class="modal-field"><span class="label">Speed Score</span><span class="value">${entry.speed_score.toFixed(1)}</span></div>
+                    <div class="modal-field"><span class="label">Scale Score</span><span class="value">${entry.scale_score.toFixed(1)}</span></div>
+                    <div class="modal-field"><span class="label">Scale Factor</span><span class="value">${entry.scale_factor != null ? entry.scale_factor : '-'}</span></div>
+                    <div class="modal-field"><span class="label">Streams</span><span class="value">${entry.stream_count}</span></div>
+                </div>
+            </div>
+
+            <div class="modal-section">
+                <h3>System</h3>
+                <div class="modal-grid">
+                    <div class="modal-field"><span class="label">Kind</span><span class="value">${this._esc(entry.system_kind)}</span></div>
+                    <div class="modal-field"><span class="label">Version</span><span class="value">${this._esc(entry.system_version)}</span></div>
+                    <div class="modal-field"><span class="label">Nodes</span><span class="value">${entry.node_count}</span></div>
+                    <div class="modal-field"><span class="label">Environment</span><span class="value">${this._esc(entry.environment)}</span></div>
+                    <div class="modal-field"><span class="label">Run Date</span><span class="value">${this._esc(entry.run_date || 'Not recorded')}</span></div>
+                </div>
+            </div>
+
+            <div class="modal-section">
+                <h3>Hardware</h3>
+                <div class="modal-grid">
+                    <div class="modal-field"><span class="label">Instance</span><span class="value">${this._esc(entry.instance_type || '-')}</span></div>
+                    <div class="modal-field"><span class="label">CPU</span><span class="value">${this._esc(info.cpu_model || '-')}</span></div>
+                    <div class="modal-field"><span class="label">vCPUs</span><span class="value">${info.cpu_count_logical || '-'}</span></div>
+                    <div class="modal-field"><span class="label">Memory</span><span class="value">${info.memory_total_gb ? info.memory_total_gb + ' GB' : '-'}</span></div>
+                </div>
+            </div>
+
+            <div class="modal-section">
+                <h3>Workload</h3>
+                <div class="modal-grid">
+                    <div class="modal-field"><span class="label">Workload</span><span class="value">${this._esc(entry.workload_name)}</span></div>
+                    <div class="modal-field"><span class="label">Scale Factor</span><span class="value">${entry.scale_factor != null ? entry.scale_factor : '-'}</span></div>
+                    <div class="modal-field"><span class="label">Streams</span><span class="value">${entry.stream_count}</span></div>
+                    <div class="modal-field"><span class="label">Queries</span><span class="value">${entry.query_count}</span></div>
+                </div>
+            </div>
+
+            <div class="modal-section">
+                <h3>Timing Summary</h3>
+                <div class="modal-grid">
+                    <div class="modal-field"><span class="label">Geomean</span><span class="value">${this._fmtDuration(entry.geomean_ms)}</span></div>
+                    <div class="modal-field"><span class="label">Total</span><span class="value">${this._fmtDuration(entry.total_ms)}</span></div>
+                    <div class="modal-field"><span class="label">Fastest Query</span><span class="value">${this._fmtDuration(minQuery)}</span></div>
+                    <div class="modal-field"><span class="label">Slowest Query</span><span class="value">${this._fmtDuration(maxQuery)}</span></div>
+                </div>
+            </div>
+
+            ${queries.length > 0 ? `
+            <div class="modal-section">
+                <h3>Per-Query Breakdown</h3>
+                <div style="max-height:300px;overflow-y:auto;">
+                    <table class="modal-query-table">
+                        <thead><tr><th>Query</th><th>Median</th><th>Min</th><th>Max</th></tr></thead>
+                        <tbody>
+                            ${queries.map(q => {
+                                const qt = queryTimes[q];
+                                return `<tr>
+                                    <td style="font-family:var(--font-body);font-weight:500">${this._esc(q)}</td>
+                                    <td>${this._fmtDuration(qt.median)}</td>
+                                    <td>${this._fmtDuration(qt.min)}</td>
+                                    <td>${this._fmtDuration(qt.max)}</td>
+                                </tr>`;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            ` : ''}
+
+            ${Object.keys(entry.ddl_scripts || {}).length > 0 ? `
+            <div class="modal-section">
+                <h3>Database Schema (DDL)</h3>
+                ${Object.entries(entry.ddl_scripts).map(([name, sql]) => `
+                    <details class="collapsible-section">
+                        <summary>${this._formatScriptName(name)}</summary>
+                        <pre class="sql-code"><code>${this._esc(sql)}</code></pre>
+                    </details>
+                `).join('')}
+            </div>` : ''}
+
+            ${Object.keys(entry.setup_commands || {}).length > 0 ? `
+            <div class="modal-section">
+                <h3>Setup</h3>
+                <details class="collapsible-section">
+                    <summary>Setup Script</summary>
+                    <pre class="sql-code"><code>${this._buildSetupScript(entry.setup_commands)}</code></pre>
+                </details>
+            </div>` : ''}
+
+            ${entry.config_parameters && entry.config_parameters.extra ? `
+            <div class="modal-section">
+                <h3>Configuration</h3>
+                <details class="collapsible-section">
+                    <summary>Database Parameters</summary>
+                    <div class="config-grid">
+                        ${Object.entries(entry.config_parameters.extra).map(([k, v]) =>
+                            `<div class="modal-field"><span class="label">${this._esc(k)}</span><span class="value">${this._formatConfigValue(v)}</span></div>`
+                        ).join('')}
+                    </div>
+                </details>
+            </div>` : ''}
+
+            ${entry.package_url ? `
+            <div class="modal-section">
+                <h3>Reproduction Package</h3>
+                <a href="${this._esc(entry.package_url)}" class="btn-download" download>
+                    Download Package (.zip)
+                </a>
+                <p style="font-size:0.75rem;color:var(--color-text-secondary);margin-top:4px;">
+                    Self-contained reproduction package with queries, setup scripts, and minimal framework.
+                </p>
+            </div>` : ''}
+        `;
+
+        document.getElementById('modal-overlay').classList.add('visible');
+    }
+
+    _closeModal() {
+        document.getElementById('modal-overlay').classList.remove('visible');
+    }
+
+    /* ── Query SQL Modal ─────────────────────────────── */
+
+    _initQueryModal() {
+        const overlay = document.getElementById('query-modal-overlay');
+        const close = document.getElementById('query-modal-close');
+        if (!overlay || !close) return;
+
+        close.addEventListener('click', () => this._closeQueryModal());
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) this._closeQueryModal();
+        });
+    }
+
+    _openQueryModal(queryName, entry) {
+        const body = document.getElementById('query-modal-body');
+        if (!body) return;
+
+        const sql = entry.query_sql?.[queryName];
+        const error = entry.query_errors?.[queryName];
+
+        let html = `<h2>${this._esc(queryName)} &mdash; ${this._esc(entry.system_name)}</h2>`;
+        if (error) {
+            html += `<div class="query-error-section"><h3>Error</h3>
+                <pre class="error-code"><code>${this._esc(error)}</code></pre></div>`;
+        }
+        if (sql) {
+            html += `<div class="query-sql-section"><h3>SQL</h3>
+                <pre class="sql-code"><code>${this._esc(sql.trim())}</code></pre></div>`;
+        } else if (!error) {
+            html += `<p style="color:var(--color-text-secondary)">No SQL available for this query.</p>`;
+        }
+        body.innerHTML = html;
+
+        document.getElementById('query-modal-overlay').classList.add('visible');
+    }
+
+    _closeQueryModal() {
+        document.getElementById('query-modal-overlay').classList.remove('visible');
+    }
+
+    /* ── Helpers ───────────────────────────────────────── */
+
+    _expectedQueries(entry) {
+        const counts = { 'tpch': 22, 'clickbench': 43 };
+        return counts[entry.workload_name] || entry.query_count;
+    }
+
+    _fmtDuration(ms) {
+        if (ms == null || ms === 0) return '-';
+        if (ms < 1000) return ms.toFixed(1) + 'ms';
+        if (ms < 60000) return (ms / 1000).toFixed(2) + 's';
+        const min = Math.floor(ms / 60000);
+        const sec = ((ms % 60000) / 1000).toFixed(1);
+        return min + 'm ' + sec + 's';
+    }
+
+    _esc(str) {
+        if (str == null) return '';
+        const div = document.createElement('div');
+        div.textContent = String(str);
+        return div.innerHTML;
+    }
+}
+
+/* ── Boot ──────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', () => {
+    new LeaderboardApp();
+});
