@@ -298,16 +298,18 @@ class BenchmarkDashboard {
         }
 
         // Group by the specified dimension
+        // For node_count, use per-system node_count (systems may have different node counts)
+        const useSystemDim = (dimension === 'node_count');
         const groups = {};
         benchmarks.forEach(b => {
-            const dimValue = b[dimension];
-            if (dimValue === undefined || dimValue === null) return;
-
-            if (!groups[dimValue]) {
-                groups[dimValue] = {};
-            }
             b.systems.forEach(s => {
                 if (!this.filters.systems.has(s.name)) return;
+                const dimValue = useSystemDim ? (s.node_count || b[dimension]) : b[dimension];
+                if (dimValue === undefined || dimValue === null) return;
+
+                if (!groups[dimValue]) {
+                    groups[dimValue] = {};
+                }
                 if (!groups[dimValue][s.name]) {
                     groups[dimValue][s.name] = [];
                 }
@@ -524,12 +526,22 @@ class BenchmarkDashboard {
         // so ideal = same time (ratio 1.0), below 1.0 = super scaling, above 1.0 = degraded
 
         // Find minimum node count in filtered data (baseline for comparison)
-        const minNodeCount = Math.min(...benchmarks.map(b => b.node_count));
-
-        const baselineData = {};
-        benchmarks.filter(b => b.node_count === minNodeCount).forEach(b => {
+        // Use per-system node_count when available
+        const allNodeCounts = [];
+        benchmarks.forEach(b => {
             b.systems.forEach(s => {
                 if (!this.filters.systems.has(s.name)) return;
+                allNodeCounts.push(s.node_count || b.node_count);
+            });
+        });
+        const minNodeCount = Math.min(...allNodeCounts);
+
+        const baselineData = {};
+        benchmarks.forEach(b => {
+            b.systems.forEach(s => {
+                if (!this.filters.systems.has(s.name)) return;
+                const nc = s.node_count || b.node_count;
+                if (nc !== minNodeCount) return;
                 if (!baselineData[s.name]) {
                     baselineData[s.name] = [];
                 }
@@ -548,20 +560,21 @@ class BenchmarkDashboard {
             }
         });
 
-        // Group multi-node data
+        // Group multi-node data (use per-system node_count)
         const nodeGroups = {};
         benchmarks.forEach(b => {
-            if (!nodeGroups[b.node_count]) {
-                nodeGroups[b.node_count] = {};
-            }
             b.systems.forEach(s => {
                 if (!this.filters.systems.has(s.name)) return;
-                if (!nodeGroups[b.node_count][s.name]) {
-                    nodeGroups[b.node_count][s.name] = [];
+                const nc = s.node_count || b.node_count;
+                if (!nodeGroups[nc]) {
+                    nodeGroups[nc] = {};
+                }
+                if (!nodeGroups[nc][s.name]) {
+                    nodeGroups[nc][s.name] = [];
                 }
                 const value = this.getSystemMetric(b, s.name);
                 if (value !== null) {
-                    nodeGroups[b.node_count][s.name].push(value);
+                    nodeGroups[nc][s.name].push(value);
                 }
             });
         });
