@@ -506,6 +506,30 @@ class BenchmarkCombiner:
                         }
                     )
 
+        # Build env that preserves metadata from sources
+        env_config: dict[str, Any] = {"mode": "local"}
+        instances: dict[str, Any] = {}
+        for source in self.sources:
+            source_env = source.config.get("env", {})
+            # Preserve mode from first source that has a non-local mode
+            if (
+                env_config["mode"] == "local"
+                and source_env.get("mode", "local") != "local"
+            ):
+                env_config["mode"] = source_env["mode"]
+            # Preserve region
+            if "region" not in env_config and "region" in source_env:
+                env_config["region"] = source_env["region"]
+            # Merge instance metadata (instance_type per system)
+            for sys_name, sys_inst in source_env.get("instances", {}).items():
+                if isinstance(sys_inst, dict) and "instance_type" in sys_inst:
+                    instances[sys_name] = {"instance_type": sys_inst["instance_type"]}
+            # Also check direct env.instance_type
+            if "instance_type" in source_env and "instance_type" not in env_config:
+                env_config["instance_type"] = source_env["instance_type"]
+        if instances:
+            env_config["instances"] = instances
+
         # Build combined config
         combined_config = {
             "project_id": self.output_project_id,
@@ -513,7 +537,7 @@ class BenchmarkCombiner:
             "author": self.author or "Combined",
             "systems": combined_systems,
             "workload": self._workload,
-            "env": {"mode": "local"},
+            "env": env_config,
             "report": {
                 "output_path": f"results/{self.output_project_id}/reports",
                 "figures_dir": f"results/{self.output_project_id}/figures",
