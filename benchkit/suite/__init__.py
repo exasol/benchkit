@@ -1880,24 +1880,37 @@ class SuiteRunner:
             has_managed = is_any_system_managed_mode(cfg)
 
             if has_cloud:
-                tfstate_path = (
-                    PROJECT_ROOT
-                    / "results"
-                    / project_id
-                    / "terraform"
-                    / "terraform.tfstate"
-                )
-                if tfstate_path.exists():
-                    try:
-                        with open(tfstate_path, encoding="utf-8") as f:
-                            tfstate = json.load(f)
-                        resources = tfstate.get("resources", [])
-                        if resources:
-                            result["infra_cell"] = "[green]✓[/green]"
-                        else:
-                            result["infra_cell"] = "[dim]✗[/dim]"
-                    except (json.JSONDecodeError, OSError):
+                tf_base = PROJECT_ROOT / "results" / project_id / "terraform"
+
+                # Collect all terraform state files:
+                # - Shared state: terraform/terraform.tfstate (non-sequential mode)
+                # - Per-system state: terraform/{system}/terraform.tfstate (sequential mode)
+                tfstate_paths = []
+                shared_state = tf_base / "terraform.tfstate"
+                if shared_state.exists():
+                    tfstate_paths.append(shared_state)
+                for sname in system_names:
+                    per_system_state = tf_base / sname / "terraform.tfstate"
+                    if per_system_state.exists():
+                        tfstate_paths.append(per_system_state)
+
+                if tfstate_paths:
+                    total_resources = 0
+                    parse_error = False
+                    for tfstate_path in tfstate_paths:
+                        try:
+                            with open(tfstate_path, encoding="utf-8") as f:
+                                tfstate = json.load(f)
+                            total_resources += len(tfstate.get("resources", []))
+                        except (json.JSONDecodeError, OSError):
+                            parse_error = True
+
+                    if parse_error:
                         result["infra_cell"] = "[yellow]?[/yellow]"
+                    elif total_resources > 0:
+                        result["infra_cell"] = "[green]✓[/green]"
+                    else:
+                        result["infra_cell"] = "[dim]✗[/dim]"
             elif has_managed:
                 result["infra_cell"] = "[dim]mgd[/dim]"
         except Exception:
