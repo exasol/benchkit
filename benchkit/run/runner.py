@@ -123,6 +123,11 @@ class BenchmarkRunner:
         self._cloud_instance_managers: dict[str, Any] = {}
         self.infrastructure_provisioning_time: float = 0.0
 
+        # Config used for package creation. Defaults to self.config but can be
+        # overridden to the unfiltered config so parallel per-system runners
+        # share a single cached package instead of each rebuilding their own.
+        self.package_config: dict[str, Any] = config
+
         # Suite-level log callback for parallel execution
         # When set, output is routed through this callback instead of console.print()
         self._log_callback = log_callback
@@ -269,7 +274,14 @@ class BenchmarkRunner:
         # Validate that marker IP matches current infrastructure IP
         try:
             marker_data = load_json(marker_path)
-            marker_ip = marker_data.get("connection_info", {}).get("public_ip")
+            conn_info = marker_data.get("connection_info", {})
+
+            # Support both formats: "public_ip" (single) and "public_ips" (list)
+            marker_ip = conn_info.get("public_ip")
+            if not marker_ip:
+                public_ips = conn_info.get("public_ips", [])
+                if public_ips:
+                    marker_ip = public_ips[0]
 
             # Early exit: no cloud managers to validate against
             if not self._cloud_instance_managers:
@@ -1580,10 +1592,11 @@ class BenchmarkRunner:
             self._log(f"\n🔧 Preparing storage for: [bold]{system_name}[/bold]")
 
             try:
-                # Inject project_id so system can access it
-                system_config["project_id"] = self.project_id
+                # Pass project_id without mutating the original config dict
+                # (mutation would change the config hash and break package caching)
+                sys_cfg = {**system_config, "project_id": self.project_id}
                 system = create_system(
-                    system_config, workload_config=self.config.get("workload", {})
+                    sys_cfg, workload_config=self.config.get("workload", {})
                 )
                 instance_manager = self._cloud_instance_managers.get(system_name)
 
@@ -1785,11 +1798,15 @@ class BenchmarkRunner:
         return calculator.get_data_loading_timeout(system_kind)
 
     def _create_package(self) -> Path | None:
-        """Create a package containing workload execution components."""
+        """Create a package containing workload execution components.
+
+        Uses self.package_config (the unfiltered config) so that all parallel
+        per-system runners share the same cached package.
+        """
         try:
             from ..package.creator import create_workload_zip
 
-            return create_workload_zip(self.config)
+            return create_workload_zip(self.package_config)
         except Exception as e:
             self._log(f"[red]Package creation failed: {e}[/red]")
             return None
@@ -1835,6 +1852,7 @@ class BenchmarkRunner:
         self,
         run_probe_fn: Callable[[dict[str, Any], Path], bool] | None = None,
         run_report_fn: Callable[[dict[str, Any], Any], bool] | None = None,
+        force: bool = False,
     ) -> bool:
         """Run benchmark with per-system infrastructure lifecycle.
 
@@ -1865,6 +1883,10 @@ class BenchmarkRunner:
         total = len(self.config["systems"])
         original_config = self.config
 
+        # Preserve the unfiltered config for package creation so each
+        # system iteration reuses the same cached package.
+        self.package_config = original_config
+
         for idx, system_config in enumerate(original_config["systems"], 1):
             system_name = system_config["name"]
 
@@ -1878,7 +1900,11 @@ class BenchmarkRunner:
 
             try:
                 success = self._run_single_system_lifecycle(
-                    system_name, run_probe_fn, all_results, all_warmup
+                    system_name,
+                    run_probe_fn,
+                    all_results,
+                    all_warmup,
+                    force=force,
                 )
 
                 if not success:
@@ -1924,6 +1950,7 @@ class BenchmarkRunner:
         run_probe_fn: Callable[[dict[str, Any], Path], bool] | None,
         all_results: list[dict[str, Any]],
         all_warmup: list[dict[str, Any]],
+        force: bool = False,
     ) -> bool:
         """Run complete benchmark lifecycle for a single system.
 
@@ -1934,6 +1961,7 @@ class BenchmarkRunner:
             run_probe_fn: Optional callback for probe phase
             all_results: List to accumulate measured results
             all_warmup: List to accumulate warmup results
+            force: If True, force reinstall/reload even if already complete
 
         Returns:
             True if all phases succeeded
@@ -1959,12 +1987,12 @@ class BenchmarkRunner:
 
         # Phase 2: Setup (reuse existing)
         self._log("\n[bold]Phase 2: Setup[/bold]")
-        if not self.run_setup():
+        if not self.run_setup(force=force):
             return False
 
         # Phase 3: Load (reuse existing)
         self._log("\n[bold]Phase 3: Load[/bold]")
-        if not self.run_load():
+        if not self.run_load(force=force):
             return False
 
         # Phase 4: Queries (reuse existing)
@@ -2005,14 +2033,37 @@ class BenchmarkRunner:
     def _save_aggregated_results(
         self, results: list[dict[str, Any]], warmup: list[dict[str, Any]]
     ) -> None:
-        """Aggregate per-system results into final runs.csv."""
+        """Aggregate per-system results into final runs.csv.
+
+        Rebuilds from all per-system CSV files (runs_{system}.csv) on disk,
+        so re-running a single system merges with existing results from
+        other systems rather than overwriting them.
+        """
+        # Collect all per-system result files (exclude warmup files)
+        per_system_files = sorted(self.output_dir.glob("runs_*.csv"))
+        per_system_files = [f for f in per_system_files if "_warmup" not in f.name]
+
+        if per_system_files:
+            # Rebuild from all per-system files on disk
+            from .parsers import read_benchmark_csv
+
+            dfs = [read_benchmark_csv(f) for f in per_system_files]
+            df = pd.concat(dfs, ignore_index=True)
+        else:
+            # Fallback: use in-memory results (non-sequential mode)
+            df = pd.DataFrame(results)
+
         runs_file = self.output_dir / "runs.csv"
-        df = pd.DataFrame(results)
         df.to_csv(runs_file, index=False)
 
-        if warmup:
-            warmup_file = self.output_dir / "warmup.csv"
-            pd.DataFrame(warmup).to_csv(warmup_file, index=False)
+        # Same for warmup
+        warmup_files = sorted(self.output_dir.glob("runs_*_warmup.csv"))
+        if warmup_files:
+            warmup_dfs = [read_benchmark_csv(f) for f in warmup_files]
+            warmup_df = pd.concat(warmup_dfs, ignore_index=True)
+            warmup_df.to_csv(self.output_dir / "warmup.csv", index=False)
+        elif warmup:
+            pd.DataFrame(warmup).to_csv(self.output_dir / "warmup.csv", index=False)
 
         self._log(f"[green]✓ Aggregated results: {runs_file}[/green]")
 
@@ -2055,6 +2106,7 @@ class BenchmarkRunner:
         self,
         run_probe_fn: Callable[[dict[str, Any], Path], bool] | None = None,
         run_report_fn: Callable[[dict[str, Any], Any], bool] | None = None,
+        force: bool = False,
     ) -> bool:
         """Run per-system lifecycles in parallel with file-based logging.
 
@@ -2087,6 +2139,16 @@ class BenchmarkRunner:
         system_names = [s["name"] for s in self.config["systems"]]
         original_config = self.config
 
+        # Pre-build workload package before parallel threads to avoid race conditions.
+        # Each thread's _create_package() will hit the reuse path.
+        from ..package.creator import create_workload_zip
+
+        try:
+            pkg_path = create_workload_zip(original_config)
+            self._log(f"[dim]Pre-built workload package: {pkg_path}[/dim]")
+        except Exception as e:
+            self._log(f"[yellow]Warning: Package pre-build failed: {e}[/yellow]")
+
         # Setup file-based logging
         loggers, log_files = self._setup_file_logging(system_names, "lifecycle")
 
@@ -2103,11 +2165,13 @@ class BenchmarkRunner:
             """Run complete lifecycle for a single system with file logging."""
             log = loggers[system_name].write
 
-            # Create single-system config
+            # Create single-system config (for infrastructure provisioning)
             filtered_config = _filter_config_to_system(original_config, system_name)
 
-            # Create a new runner for this system
+            # Create a new runner for this system. Use the original unfiltered
+            # config for package creation so all threads share one cached package.
             runner = BenchmarkRunner(filtered_config, self.output_dir)
+            runner.package_config = original_config
 
             # Capture system-local results
             system_results: list[dict[str, Any]] = []
@@ -2124,6 +2188,7 @@ class BenchmarkRunner:
                     system_results,
                     system_warmup,
                     log,
+                    force=force,
                 )
 
                 # Aggregate results
@@ -2207,6 +2272,7 @@ class BenchmarkRunner:
         all_results: list[dict[str, Any]],
         all_warmup: list[dict[str, Any]],
         log: Callable[[str], None],
+        force: bool = False,
     ) -> bool:
         """Run complete benchmark lifecycle for a single system with logging.
 
@@ -2219,6 +2285,7 @@ class BenchmarkRunner:
             all_results: List to accumulate measured results
             all_warmup: List to accumulate warmup results
             log: Callback to write log messages
+            force: If True, force reinstall/reload even if already complete
 
         Returns:
             True if all phases succeeded
@@ -2246,14 +2313,14 @@ class BenchmarkRunner:
 
         # Phase 2: Setup
         log("Phase 2: Setup")
-        if not self.run_setup():
+        if not self.run_setup(force=force):
             log("ERROR: Setup phase failed")
             return False
         log("Setup complete")
 
         # Phase 3: Load
         log("Phase 3: Load")
-        if not self.run_load():
+        if not self.run_load(force=force):
             log("ERROR: Load phase failed")
             return False
         log("Load complete")

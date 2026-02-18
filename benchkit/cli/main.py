@@ -329,6 +329,7 @@ def run(
             if not runner.run_parallel_sequential(
                 run_probe_fn=run_probe_for_full,
                 run_report_fn=run_report_for_full,
+                force=force,
             ):
                 raise typer.Exit(1)
 
@@ -343,6 +344,7 @@ def run(
             if not runner.run_sequential(
                 run_probe_fn=run_probe_for_full,
                 run_report_fn=run_report_for_full,
+                force=force,
             ):
                 raise typer.Exit(1)
         else:
