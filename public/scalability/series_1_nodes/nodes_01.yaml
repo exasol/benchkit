@@ -128,7 +128,7 @@ systems:
 
 workload:
   name: "tpch"
-  scale_factor: 100
+  scale_factor: 50
   runs_per_query: 5
   warmup_runs: 1
   data_format: "csv"
