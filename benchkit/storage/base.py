@@ -140,6 +140,7 @@ class StorageBackend(ABC):
                 bucket=config["bucket"],
                 prefix=config.get("prefix", ""),
                 region=config.get("region", "us-east-1"),
+                local_temp_dir=config.get("local_temp_dir"),
             )
         else:
             raise ValueError(f"Unknown storage type: {storage_type}")

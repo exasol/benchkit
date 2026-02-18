@@ -26,6 +26,7 @@ class S3Storage(StorageBackend):
         bucket: str,
         prefix: str = "",
         region: str = "us-east-1",
+        local_temp_dir: str | None = None,
     ):
         """Initialize S3 storage backend.
 
@@ -33,10 +34,13 @@ class S3Storage(StorageBackend):
             bucket: S3 bucket name
             prefix: Optional prefix path within the bucket
             region: AWS region (default: us-east-1)
+            local_temp_dir: Local directory for temporary data generation
+                (e.g., NVMe-backed /data path). If None, falls back to system /tmp.
         """
         self.bucket = bucket
         self.prefix = prefix.strip("/")  # Remove leading/trailing slashes
         self.region = region
+        self.local_temp_dir = local_temp_dir
         self._client: Any = None
         self._resource: Any = None
 
@@ -44,6 +48,15 @@ class S3Storage(StorageBackend):
     def get_python_dependencies(cls) -> list[str]:
         """Return Python packages required for S3 storage."""
         return ["boto3>=1.26.0"]
+
+    def get_temp_directory(self) -> str | None:
+        """Return local temp directory for intermediate data generation.
+
+        S3 uploads require generating data locally first. Without a dedicated
+        temp directory, large datasets (e.g., SF100 Parquet ~30GB) overflow
+        the root filesystem's /tmp.
+        """
+        return self.local_temp_dir
 
     def get_location_prefix(self) -> str:
         """Return the s3:// URL prefix for Trino 479+ native S3."""

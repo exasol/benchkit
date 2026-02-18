@@ -160,10 +160,14 @@ class TrinoSystem(SystemUnderTest):
         storage_type = storage_config.get("type", "local")
 
         if storage_type == "s3":
+            # Use the NVMe-backed data directory for temp files during Parquet
+            # generation, avoiding the small root EBS /tmp partition.
+            local_temp = str(self.data_dir) if self.data_dir else None
             return S3Storage(
                 bucket=storage_config["bucket"],
                 prefix=storage_config.get("prefix", ""),
                 region=storage_config.get("region", "us-east-1"),
+                local_temp_dir=local_temp,
             )
         else:
             # Default to local storage
