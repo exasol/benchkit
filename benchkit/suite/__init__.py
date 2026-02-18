@@ -1673,9 +1673,12 @@ class SuiteRunner:
             if series_name in self.config.series and not series_config.enabled:
                 enabled_str = "[yellow][DISABLED][/yellow]"
 
-            console.print(
-                f"\n[bold magenta]{series_config.name}[/bold magenta] {enabled_str}"
-            )
+            # Show display name and series key (for CLI/filesystem reference)
+            series_header = f"\n[bold magenta]{series_config.name}[/bold magenta]"
+            if series_config.name != series_name:
+                series_header += f" [dim]({series_name})[/dim]"
+            series_header += f" {enabled_str}"
+            console.print(series_header)
             if series_config.description:
                 console.print(f"  [dim]{series_config.description}[/dim]")
 
@@ -1703,15 +1706,21 @@ class SuiteRunner:
                 # Try to load config for description
                 try:
                     cfg = load_config(str(config_path))
+                    project_id = cfg.get("project_id", config_path.stem)
                     description = f"{len(cfg.get('systems', []))} systems"
                     workload = cfg.get("workload", {})
                     if workload:
                         description += f" × SF{workload.get('scale_factor', '?')}"
                 except Exception:
+                    project_id = config_path.stem
                     description = ""
 
+                project_suffix = ""
+                if project_id != config_path.stem:
+                    project_suffix = f"  [dim]→ {project_id}[/dim]"
                 console.print(
-                    f"    {status_icon}  {config_path.stem:20s}  {description}"
+                    f"    {status_icon}  {config_path.stem:20s}  "
+                    f"{description}{project_suffix}"
                 )
 
         console.print()
@@ -1766,13 +1775,17 @@ class SuiteRunner:
             if is_disabled:
                 enabled_str = "[yellow][DISABLED][/yellow]"
 
-            console.print(
-                f"\n[bold magenta]{series_config.name}[/bold magenta] {enabled_str}"
-            )
+            # Show display name and series key (for CLI/filesystem reference)
+            series_header = f"\n[bold magenta]{series_config.name}[/bold magenta]"
+            if series_config.name != series_name:
+                series_header += f" [dim]({series_name})[/dim]"
+            series_header += f" {enabled_str}"
+            console.print(series_header)
 
             # Create table for this series
             table = Table(show_header=True, header_style="bold")
             table.add_column("Config", style="cyan", no_wrap=True)
+            table.add_column("Project", style="dim", no_wrap=True)
             table.add_column("State", justify="center")
             table.add_column("Infra", justify="center")
             table.add_column("Setup", justify="center")
@@ -1800,9 +1813,17 @@ class SuiteRunner:
                     else:
                         state_cell = "[dim]○[/dim]"
 
+                # Load config to get project_id
+                try:
+                    cfg = load_config(str(config_path))
+                    project_id = cfg.get("project_id", config_path.stem)
+                except Exception:
+                    project_id = config_path.stem
+
                 if is_disabled:
                     table.add_row(
                         config_name,
+                        project_id,
                         state_cell,
                         "[dim]-[/dim]",
                         "[dim]-[/dim]",
@@ -1814,13 +1835,6 @@ class SuiteRunner:
 
                 # Get actual status from results directory
                 status_info = self._get_benchmark_status(config_path, verbose)
-
-                # Check if runs.csv exists (benchmark ran to completion)
-                try:
-                    cfg = load_config(str(config_path))
-                    project_id = cfg.get("project_id", config_path.stem)
-                except Exception:
-                    project_id = config_path.stem
                 results_dir = Path("results") / project_id
                 has_run_results = (results_dir / "runs.csv").exists()
 
@@ -1838,6 +1852,7 @@ class SuiteRunner:
 
                 table.add_row(
                     config_name,
+                    project_id,
                     state_cell,
                     status_info["infra_cell"],
                     status_info["setup_cell"],
@@ -1851,6 +1866,7 @@ class SuiteRunner:
                     for sys_detail in status_info["system_details"]:
                         table.add_row(
                             f"  └─ {sys_detail['name']}",
+                            "",
                             "",
                             "",
                             sys_detail["setup"],
@@ -2059,13 +2075,64 @@ class SuiteRunner:
             except Exception:
                 result["run_cell"] = "[yellow]?[/yellow]"
         else:
-            # No runs yet, show config info
+            # No runs.csv yet — check for per-system CSV files
+            # (sequential/parallel mode saves runs_{system}.csv incrementally)
             workload = cfg.get("workload", {})
-            result["details"] = (
-                f"{workload.get('name', '?')} | "
-                f"SF{workload.get('scale_factor', '?')} | "
-                f"{total_systems} sys"
-            )
+            workload_name = workload.get("name", "?")
+
+            done_systems = []
+            total_rows = 0
+            for sname in system_names:
+                per_csv = results_dir / f"runs_{sname}.csv"
+                if per_csv.exists():
+                    try:
+                        import pandas as pd
+
+                        df = pd.read_csv(per_csv)
+                        total_rows += len(df)
+                        done_systems.append(sname)
+                    except Exception:
+                        pass
+
+            if done_systems:
+                # Estimate expected total rows
+                workload_query_counts = {"tpch": 22, "clickbench": 43}
+                num_queries = workload_query_counts.get(workload_name)
+
+                queries_cfg = workload.get("queries", {}) or {}
+                if num_queries is not None:
+                    if queries_cfg.get("include"):
+                        num_queries = len(queries_cfg["include"])
+                    elif queries_cfg.get("exclude"):
+                        num_queries -= len(queries_cfg["exclude"])
+
+                runs_per_query = workload.get("runs_per_query", 3)
+
+                if num_queries is not None:
+                    expected = num_queries * runs_per_query * total_systems
+                    result["run_cell"] = (
+                        f"[yellow]~{total_rows}/{expected} "
+                        f"({len(done_systems)}/{total_systems} sys)[/yellow]"
+                    )
+                else:
+                    result["run_cell"] = (
+                        f"[yellow]~{total_rows} "
+                        f"({len(done_systems)}/{total_systems} sys)[/yellow]"
+                    )
+
+                details_parts = [workload_name]
+                details_parts.append(f"SF{workload.get('scale_factor', '?')}")
+                details_parts.append(f"{total_systems} sys")
+                details_parts.append(f"done: {', '.join(done_systems)}")
+                result["details"] = " | ".join(details_parts)
+                result["has_partial_runs"] = True
+            else:
+                # No per-system CSVs either — show config info
+                result["details"] = (
+                    f"{workload_name} | "
+                    f"SF{workload.get('scale_factor', '?')} | "
+                    f"{total_systems} sys"
+                )
 
         return result
 
@@ -2155,12 +2222,17 @@ class SuiteRunner:
             if series_name in self.config.series and not series_config.enabled:
                 enabled_str = "[yellow][DISABLED][/yellow]"
 
-            console.print(f"\n{series_name}/ ({len(configs)} configs) {enabled_str}")
+            list_header = f"\n{series_name}/ ({len(configs)} configs)"
+            if series_config.name != series_name:
+                list_header += f"  [bold magenta]{series_config.name}[/bold magenta]"
+            list_header += f" {enabled_str}"
+            console.print(list_header)
 
             for i, config_path in enumerate(configs):
                 prefix = "└──" if i == len(configs) - 1 else "├──"
                 try:
                     cfg = load_config(str(config_path))
+                    project_id = cfg.get("project_id", config_path.stem)
 
                     # Extract richer config details
                     systems_list = cfg.get("systems", [])
@@ -2184,7 +2256,13 @@ class SuiteRunner:
                     if streams > 1:
                         description += f" × {streams} streams"
 
-                    console.print(f"  {prefix} {config_path.name:<20s}  {description}")
+                    project_suffix = ""
+                    if project_id != config_path.stem:
+                        project_suffix = f"  [dim]→ {project_id}[/dim]"
+                    console.print(
+                        f"  {prefix} {config_path.name:<20s}  "
+                        f"{description}{project_suffix}"
+                    )
 
                     # Verbose mode: show environment, system kinds, and instance types
                     if verbose and systems_list:
@@ -2324,6 +2402,9 @@ class SuiteRunner:
                     if has_run_results:
                         # Run phase completed (even if some queries failed)
                         new_status = "completed"
+                    elif actual_status.get("has_partial_runs"):
+                        # Per-system CSVs exist but no final runs.csv — run in progress
+                        new_status = "running"
                     elif actual_status["has_any_progress"]:
                         # Has results dir but no runs.csv - setup/load in progress
                         new_status = "pending"
