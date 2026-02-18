@@ -1129,6 +1129,9 @@ class SuitePublisher:
                         "warmup_times": warmup_times,
                         "system_info": system_info,
                         "setup_info": setup_json,
+                        "expected_query_count": WORKLOAD_EXPECTED_QUERIES.get(
+                            benchmark.workload, system.query_count
+                        ),
                     }
                 )
 

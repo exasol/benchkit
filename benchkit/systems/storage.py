@@ -685,7 +685,7 @@ class StorageManager:
         self._log(f"Creating system subdirectory: {subdir} with owner {owner}")
 
         system.execute_command(
-            f"sudo mkdir -p {subdir}",
+            f"sudo mkdir -p {subdir} && sudo chmod 1777 {subdir}",
             description=f"Create {system.kind} data directory",
             category="storage_setup",
         )
@@ -722,9 +722,10 @@ class StorageManager:
         # Get system-specific ownership from hook
         _, owner = system.get_storage_config()
 
-        # Create directory
+        # Create directory with 1777 mode so both the system user and the
+        # benchmark load script (running as ubuntu) can write to it.
         result = system.execute_command(
-            f"sudo mkdir -p {system.data_dir}",
+            f"sudo mkdir -p {system.data_dir} && sudo chmod 1777 {system.data_dir}",
             description=f"Create data directory {system.data_dir}",
             category="storage_setup",
         )
