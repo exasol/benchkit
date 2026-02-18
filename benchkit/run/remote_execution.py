@@ -6,7 +6,6 @@ This module handles deploying packages and executing workloads on remote instanc
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import pandas as pd
 from rich.console import Console
 
 from benchkit.common import exclude_from_package
@@ -425,7 +424,9 @@ class RemoteExecutor:
 
             if instance_manager.copy_file_from_instance(remote_results, local_results):
                 # Load CSV results and convert to list of dicts
-                df = pd.read_csv(local_results)
+                from .parsers import read_benchmark_csv
+
+                df = read_benchmark_csv(local_results)
                 results = []
                 for res in df.to_dict("records"):
                     dat = {}
@@ -438,7 +439,7 @@ class RemoteExecutor:
                 if instance_manager.copy_file_from_instance(
                     remote_warmup, local_warmup
                 ):
-                    warmup_df = pd.read_csv(local_warmup)
+                    warmup_df = read_benchmark_csv(local_warmup)
                     for rec in warmup_df.to_dict("records"):
                         warmup_records.append({str(k): v for k, v in rec.items()})
 

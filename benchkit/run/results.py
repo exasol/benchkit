@@ -56,7 +56,9 @@ class ResultsManager:
             return None
 
         try:
-            df = pd.read_csv(csv_path)
+            from .parsers import read_benchmark_csv
+
+            df = read_benchmark_csv(csv_path)
             required_columns = {"system", "query", "run", "elapsed_s", "elapsed_ms"}
             if not required_columns.issubset(df.columns):
                 console.print(

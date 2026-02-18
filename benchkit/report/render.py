@@ -377,7 +377,9 @@ class ReportRenderer:
         # Load CSV results
         runs_file = results_dir / "runs.csv"
         if runs_file.exists():
-            data["runs_df"] = pd.read_csv(runs_file)
+            from benchkit.run.parsers import read_benchmark_csv
+
+            data["runs_df"] = read_benchmark_csv(runs_file)
         else:
             data["runs_df"] = pd.DataFrame()
 
@@ -1064,7 +1066,9 @@ class ReportRenderer:
             # Filter and copy runs.csv
             runs_file = results_dir / "runs.csv"
             if runs_file.exists():
-                runs_df = pd.read_csv(runs_file)
+                from benchkit.run.parsers import read_benchmark_csv
+
+                runs_df = read_benchmark_csv(runs_file)
                 filtered_runs = runs_df[runs_df["system"].isin(system_names)]
                 filtered_runs.to_csv(attachments_dir / "runs.csv", index=False)
 
@@ -1257,7 +1261,9 @@ class ReportRenderer:
         warmup_file = results_dir / "warmup_runs.csv"
         if warmup_file.exists():
             try:
-                return pd.read_csv(warmup_file)
+                from benchkit.run.parsers import read_benchmark_csv
+
+                return read_benchmark_csv(warmup_file)
             except Exception:
                 pass
 

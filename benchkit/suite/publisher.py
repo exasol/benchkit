@@ -303,7 +303,9 @@ class SuitePublisher:
 
         # Load runs data
         try:
-            runs_df = pd.read_csv(runs_csv)
+            from benchkit.run.parsers import read_benchmark_csv
+
+            runs_df = read_benchmark_csv(runs_csv)
         except Exception:
             return None
 
@@ -473,7 +475,9 @@ class SuitePublisher:
         warmup_csv = results_dir / "runs_warmup.csv"
         if warmup_csv.exists():
             try:
-                warmup_df = pd.read_csv(warmup_csv)
+                from benchkit.run.parsers import read_benchmark_csv
+
+                warmup_df = read_benchmark_csv(warmup_csv)
                 if not warmup_df.empty and "query" in warmup_df.columns:
                     warmup_df["base_query"] = warmup_df["query"].str.replace(
                         r"_warmup_\d+$", "", regex=True

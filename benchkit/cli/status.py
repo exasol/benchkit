@@ -155,14 +155,14 @@ def get_deployment_timing(results_dir: Path, system_name: str) -> float | None:
 
 def load_runs_data(results_dir: Path) -> "pd.DataFrame | None":
     """Load runs.csv and return as DataFrame, or None if not found."""
-    import pandas as pd
-
     runs_csv = results_dir / "runs.csv"
     if not runs_csv.exists():
         return None
 
     try:
-        return pd.read_csv(runs_csv)
+        from benchkit.run.parsers import read_benchmark_csv
+
+        return read_benchmark_csv(runs_csv)
     except Exception:
         return None
 

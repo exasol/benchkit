@@ -1,10 +1,24 @@
 """Result parsing and normalization utilities."""
 
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
 from ..common.markers import exclude_from_package
+
+
+def read_benchmark_csv(path: Path) -> pd.DataFrame:
+    """Read a benchmark CSV and ensure elapsed_ms column exists.
+
+    The runner writes CSVs with elapsed_s only. Downstream code expects
+    elapsed_ms. This function derives it when missing so every consumer
+    gets a consistent DataFrame.
+    """
+    df = pd.read_csv(path)
+    if "elapsed_ms" not in df.columns and "elapsed_s" in df.columns:
+        df["elapsed_ms"] = (df["elapsed_s"] * 1000).round(1)
+    return df
 
 
 @exclude_from_package
