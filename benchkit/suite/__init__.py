@@ -569,6 +569,14 @@ class SuiteRunner:
         # Initialize or load state
         state = self._init_state(discovered, resume, tag)
 
+        # Auto-sync state from results on disk when resuming
+        if resume and not dry_run:
+            synced = self._sync_state_from_results(state, discovered)
+            if synced > 0:
+                console.print(
+                    f"[green]Auto-synced {synced} benchmark(s) from results[/green]\n"
+                )
+
         # Parse systems filter once for reuse
         system_names_filter: list[str] | None = None
         if systems:
@@ -900,6 +908,59 @@ class SuiteRunner:
                 )
 
         return state
+
+    def _sync_state_from_results(
+        self,
+        state: SuiteState,
+        discovered: dict[str, list[Path]],
+    ) -> int:
+        """Auto-sync benchmark states from results on disk.
+
+        Checks each non-terminal benchmark for a runs.csv in its results
+        directory. If found, upgrades the state to "completed" so that
+        resume runs skip it and status displays reflect reality.
+
+        Args:
+            state: Current suite state (modified in place)
+            discovered: Discovered configurations by series name
+
+        Returns:
+            Number of benchmarks that were upgraded to completed
+        """
+        synced = 0
+
+        for series_name, configs in discovered.items():
+            for config_path in configs:
+                benchmark_id = self.get_benchmark_id(series_name, config_path)
+                bench_state = state.benchmarks.get(benchmark_id)
+                if bench_state is None:
+                    continue
+
+                # Only sync non-terminal states
+                if bench_state.status in ("completed", "skipped"):
+                    continue
+
+                # Get project_id (already stored in state, fallback to config)
+                project_id = bench_state.project_id
+                if not project_id:
+                    try:
+                        cfg = load_config(str(config_path))
+                        project_id = cfg.get("project_id", config_path.stem)
+                    except Exception:
+                        project_id = config_path.stem
+
+                runs_csv = Path("results") / project_id / "runs.csv"
+                if runs_csv.exists():
+                    bench_state.status = "completed"
+                    bench_state.error = None
+                    bench_state.completed_at = time.strftime("%Y-%m-%dT%H:%M:%SZ")
+                    console.print(f"  Auto-synced (results found): {benchmark_id}")
+                    synced += 1
+
+        if synced > 0:
+            self.state_manager.save_state(state)
+
+        return synced
 
     def _run_single_benchmark(
         self,
@@ -1673,6 +1734,11 @@ class SuiteRunner:
         # Check suite state for run info
         state = self.state_manager.load_state()
         if state:
+            synced = self._sync_state_from_results(state, discovered)
+            if synced > 0:
+                console.print(
+                    f"[dim]Auto-synced {synced} benchmark(s) from results[/dim]"
+                )
             console.print(f"[dim]Suite status: {state.status}[/dim]")
             if state.run_tag:
                 console.print(f"[dim]Tag: {state.run_tag}[/dim]")
