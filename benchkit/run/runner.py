@@ -5,7 +5,7 @@ import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import pandas as pd
 from rich.console import Console
@@ -2045,10 +2045,14 @@ class BenchmarkRunner:
 
         if per_system_files:
             # Rebuild from all per-system files on disk
-            from .parsers import read_benchmark_csv
+            from .parsers import normalize_runs, read_benchmark_csv
 
             dfs = [read_benchmark_csv(f) for f in per_system_files]
-            df = pd.concat(dfs, ignore_index=True)
+            records = cast(
+                list[dict[str, Any]],
+                pd.concat(dfs, ignore_index=True).to_dict("records"),
+            )
+            df = normalize_runs(records)
         else:
             # Fallback: use in-memory results (non-sequential mode)
             df = pd.DataFrame(results)
@@ -2059,8 +2063,14 @@ class BenchmarkRunner:
         # Same for warmup
         warmup_files = sorted(self.output_dir.glob("runs_*_warmup.csv"))
         if warmup_files:
+            from .parsers import normalize_runs, read_benchmark_csv
+
             warmup_dfs = [read_benchmark_csv(f) for f in warmup_files]
-            warmup_df = pd.concat(warmup_dfs, ignore_index=True)
+            warmup_records = cast(
+                list[dict[str, Any]],
+                pd.concat(warmup_dfs, ignore_index=True).to_dict("records"),
+            )
+            warmup_df = normalize_runs(warmup_records)
             warmup_df.to_csv(self.output_dir / "warmup.csv", index=False)
         elif warmup:
             pd.DataFrame(warmup).to_csv(self.output_dir / "warmup.csv", index=False)
