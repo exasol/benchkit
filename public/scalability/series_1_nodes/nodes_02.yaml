@@ -68,6 +68,7 @@ systems:
           - "-query_log_timeout=0"
           - "-joinOrderMethod=0"
           - "-etlCheckCertsDefault=0"
+          - "-replicationborder=550000"  # SF50 * 11000
 
   # ClickHouse - 2-node sharded cluster (128GB total)
   - name: "clickhouse"
