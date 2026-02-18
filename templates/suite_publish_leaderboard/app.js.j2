@@ -23,15 +23,15 @@ class LeaderboardApp {
         this.gridSortAsc = true;
         this._currentGridEntries = [];
 
-        // Filter state
-        this.filterSF = 'all';
-        this.filterStreams = 'all';
-        this.filterNodes = 'all';
+        // Tag filter state
+        this.activeTags = [];
+        this.tagSearchQuery = '';
 
         this._initTabs();
-        this._initFilters();
+        this._initTagFilter();
         this._initModal();
         this._initQueryModal();
+        this._initScoreModal();
         this._initChartControls();
         this._initStatModeControl();
         this._applyHashState();
@@ -59,58 +59,283 @@ class LeaderboardApp {
         window.location.hash = 'tab=' + encodeURIComponent(tab);
         this.gridSortColumn = null;
         this.gridSortAsc = true;
-        // Reset filters on tab switch
-        this.filterSF = 'all';
-        this.filterStreams = 'all';
-        this.filterNodes = 'all';
-        this._populateFilters();
+        // Reset tag filters on tab switch
+        this.activeTags = [];
+        this.tagSearchQuery = '';
+        const searchInput = document.getElementById('tag-search-input');
+        if (searchInput) searchInput.value = '';
         this._render();
     }
 
-    /* ── Filters ─────────────────────────────────────── */
+    /* ── Tag Filter ─────────────────────────────────── */
 
-    _initFilters() {
-        const sfSelect = document.getElementById('filter-sf');
-        const streamsSelect = document.getElementById('filter-streams');
-        const nodesSelect = document.getElementById('filter-nodes');
+    _initTagFilter() {
+        const inputArea = document.getElementById('tag-input-area');
+        const searchInput = document.getElementById('tag-search-input');
+        if (!inputArea || !searchInput) return;
 
-        if (sfSelect) sfSelect.addEventListener('change', () => {
-            this.filterSF = sfSelect.value;
-            this._render();
+        // Click input area to focus the text input
+        inputArea.addEventListener('click', () => searchInput.focus());
+
+        // Live search as user types
+        searchInput.addEventListener('input', () => {
+            this.tagSearchQuery = searchInput.value;
+            this._renderAvailableTags();
         });
-        if (streamsSelect) streamsSelect.addEventListener('change', () => {
-            this.filterStreams = streamsSelect.value;
-            this._render();
+
+        // Keyboard handling
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Backspace' && searchInput.value === '' && this.activeTags.length > 0) {
+                // Remove last chip
+                const last = this.activeTags[this.activeTags.length - 1];
+                this._removeTag(last.dim, last.value, last.negated);
+            } else if (e.key === 'Escape') {
+                searchInput.value = '';
+                this.tagSearchQuery = '';
+                this._renderAvailableTags();
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                const parsed = this._parseTagInput(searchInput.value.trim());
+                if (parsed) {
+                    this._addTag(parsed.dim, parsed.value, parsed.negated);
+                    searchInput.value = '';
+                    this.tagSearchQuery = '';
+                }
+            }
         });
-        if (nodesSelect) nodesSelect.addEventListener('change', () => {
-            this.filterNodes = nodesSelect.value;
-            this._render();
+
+        // Delegated clicks on available tags and chip remove buttons
+        const suggestions = document.getElementById('tag-suggestions');
+        if (suggestions) {
+            suggestions.addEventListener('click', (e) => {
+                const btn = e.target.closest('.tag-available');
+                if (!btn || btn.classList.contains('disabled')) return;
+                const dim = btn.dataset.dim;
+                const value = btn.dataset.value;
+                const isShift = e.shiftKey;
+
+                // Check if already active as positive or negated
+                const existingPositive = this.activeTags.find(t => t.dim === dim && t.value === value && !t.negated);
+                const existingNegated = this.activeTags.find(t => t.dim === dim && t.value === value && t.negated);
+
+                if (isShift) {
+                    // Shift+Click: toggle negated
+                    if (existingPositive) {
+                        // Remove positive, add negated
+                        this._removeTag(dim, value, false);
+                        this._addTag(dim, value, true);
+                    } else {
+                        this._addTag(dim, value, true);
+                    }
+                } else {
+                    // Normal click: toggle positive
+                    if (existingNegated) {
+                        // Remove negated, add positive
+                        this._removeTag(dim, value, true);
+                        this._addTag(dim, value, false);
+                    } else {
+                        this._addTag(dim, value, false);
+                    }
+                }
+            });
+        }
+
+        const chipsContainer = document.getElementById('tag-chips');
+        if (chipsContainer) {
+            chipsContainer.addEventListener('click', (e) => {
+                const removeBtn = e.target.closest('.tag-chip-remove');
+                if (!removeBtn) return;
+                const chip = removeBtn.closest('.tag-chip');
+                if (!chip) return;
+                this._removeTag(chip.dataset.dim, chip.dataset.value, chip.dataset.negated === 'true');
+            });
+        }
+    }
+
+    _addTag(dim, value, negated) {
+        // Toggle off if already present with same negation
+        const idx = this.activeTags.findIndex(t => t.dim === dim && t.value === value && t.negated === negated);
+        if (idx !== -1) {
+            this.activeTags.splice(idx, 1);
+        } else {
+            this.activeTags.push({ dim, value, negated });
+        }
+        this._renderTagChips();
+        this._renderAvailableTags();
+        this._render();
+    }
+
+    _removeTag(dim, value, negated) {
+        this.activeTags = this.activeTags.filter(
+            t => !(t.dim === dim && t.value === value && t.negated === negated)
+        );
+        this._renderTagChips();
+        this._renderAvailableTags();
+        this._render();
+    }
+
+    _renderTagChips() {
+        const container = document.getElementById('tag-chips');
+        if (!container) return;
+        container.innerHTML = this.activeTags.map(tag => {
+            const dimDef = LeaderboardApp.TAG_DIMENSIONS.find(d => d.key === tag.dim);
+            const label = dimDef ? dimDef.label : tag.dim;
+            const prefix = tag.negated ? '!' : '';
+            return `<span class="tag-chip${tag.negated ? ' negated' : ''}" data-dim="${this._esc(tag.dim)}" data-value="${this._esc(tag.value)}" data-negated="${tag.negated}">
+                <span class="tag-chip-label">${prefix}${this._esc(label)}:</span>
+                <span class="tag-chip-value">${this._esc(tag.value)}</span>
+                <button class="tag-chip-remove" type="button">&times;</button>
+            </span>`;
+        }).join('');
+    }
+
+    _renderAvailableTags() {
+        const container = document.getElementById('tag-suggestions');
+        if (!container) return;
+
+        const tabEntries = this.entries.filter(e => e.workload_tab === this.activeTab);
+        if (tabEntries.length === 0) { container.innerHTML = ''; return; }
+
+        const search = this.tagSearchQuery.toLowerCase();
+        let html = '';
+
+        for (const dim of LeaderboardApp.TAG_DIMENSIONS) {
+            // Collect unique values for this dimension
+            const valuesSet = new Set();
+            tabEntries.forEach(entry => {
+                const v = dim.extract(entry);
+                if (v != null && v !== '') valuesSet.add(String(v));
+            });
+
+            const values = [...valuesSet].sort((a, b) => {
+                // Numeric sort if possible
+                const na = parseFloat(a), nb = parseFloat(b);
+                if (!isNaN(na) && !isNaN(nb)) return na - nb;
+                return a.localeCompare(b);
+            });
+
+            // Check if there are active tags for this dimension
+            const hasActiveTags = this.activeTags.some(t => t.dim === dim.key);
+
+            // Hide dimensions with <=1 value unless they have active tags
+            if (values.length <= 1 && !hasActiveTags) continue;
+
+            // Compute faceted counts: for each value in this dimension,
+            // count entries matching all OTHER dimensions' filters
+            const otherFiltered = this._applyTagFiltersExcluding(tabEntries, dim.key);
+
+            // Filter by search query
+            const filteredValues = search
+                ? values.filter(v => {
+                    const lv = v.toLowerCase();
+                    const ll = dim.label.toLowerCase();
+                    return lv.includes(search)
+                        || ll.includes(search)
+                        || (ll + ': ' + lv).includes(search)
+                        || (dim.key + ':' + lv).includes(search);
+                })
+                : values;
+
+            if (filteredValues.length === 0 && !hasActiveTags) continue;
+
+            let items = '';
+            filteredValues.forEach(val => {
+                const count = otherFiltered.filter(e => String(dim.extract(e)) === val).length;
+                const isActive = this.activeTags.some(t => t.dim === dim.key && t.value === val && !t.negated);
+                const isNegated = this.activeTags.some(t => t.dim === dim.key && t.value === val && t.negated);
+                const cls = isActive ? ' active' : isNegated ? ' negated' : count === 0 ? ' disabled' : '';
+                items += `<button class="tag-available${cls}" data-dim="${this._esc(dim.key)}" data-value="${this._esc(val)}" type="button" title="Shift+Click to exclude">
+                    ${this._esc(val)}<span class="tag-count">${count}</span>
+                </button>`;
+            });
+
+            if (items) {
+                html += `<div class="tag-group">
+                    <span class="tag-group-label">${this._esc(dim.label)}</span>
+                    <div class="tag-group-items">${items}</div>
+                </div>`;
+            }
+        }
+
+        container.innerHTML = html;
+    }
+
+    _applyTagFilters(entries) {
+        if (this.activeTags.length === 0) return entries;
+
+        // Group tags by dimension
+        const byDim = {};
+        this.activeTags.forEach(tag => {
+            if (!byDim[tag.dim]) byDim[tag.dim] = { positive: [], negated: [] };
+            if (tag.negated) byDim[tag.dim].negated.push(tag.value);
+            else byDim[tag.dim].positive.push(tag.value);
+        });
+
+        return entries.filter(entry => {
+            for (const [dimKey, tags] of Object.entries(byDim)) {
+                const dimDef = LeaderboardApp.TAG_DIMENSIONS.find(d => d.key === dimKey);
+                if (!dimDef) continue;
+                const entryValue = String(dimDef.extract(entry) ?? '');
+
+                // Positive tags: OR — entry must match at least one
+                if (tags.positive.length > 0 && !tags.positive.includes(entryValue)) {
+                    return false;
+                }
+                // Negated tags: AND-NOT — entry must not match any
+                if (tags.negated.includes(entryValue)) {
+                    return false;
+                }
+            }
+            return true;
         });
     }
 
-    _populateFilters() {
-        const tabEntries = this.entries.filter(e => e.workload_tab === this.activeTab);
+    _applyTagFiltersExcluding(entries, excludeDim) {
+        // Apply all tag filters EXCEPT positive tags for excludeDim
+        // (negated tags for excludeDim still apply)
+        if (this.activeTags.length === 0) return entries;
 
-        const sfValues = [...new Set(tabEntries.map(e => e.scale_factor).filter(v => v != null))].sort((a, b) => a - b);
-        const streamsValues = [...new Set(tabEntries.map(e => e.stream_count))].sort((a, b) => a - b);
-        const nodesValues = [...new Set(tabEntries.map(e => e.node_count))].sort((a, b) => a - b);
+        const byDim = {};
+        this.activeTags.forEach(tag => {
+            if (!byDim[tag.dim]) byDim[tag.dim] = { positive: [], negated: [] };
+            if (tag.negated) byDim[tag.dim].negated.push(tag.value);
+            else byDim[tag.dim].positive.push(tag.value);
+        });
 
-        const populate = (selectId, values, currentFilter) => {
-            const select = document.getElementById(selectId);
-            if (!select) return;
-            select.innerHTML = '<option value="all">All</option>';
-            values.forEach(v => {
-                const opt = document.createElement('option');
-                opt.value = String(v);
-                opt.textContent = String(v);
-                if (String(v) === currentFilter) opt.selected = true;
-                select.appendChild(opt);
-            });
-        };
+        return entries.filter(entry => {
+            for (const [dimKey, tags] of Object.entries(byDim)) {
+                const dimDef = LeaderboardApp.TAG_DIMENSIONS.find(d => d.key === dimKey);
+                if (!dimDef) continue;
+                const entryValue = String(dimDef.extract(entry) ?? '');
 
-        populate('filter-sf', sfValues, this.filterSF);
-        populate('filter-streams', streamsValues, this.filterStreams);
-        populate('filter-nodes', nodesValues, this.filterNodes);
+                // Skip positive tags for the excluded dimension
+                if (dimKey !== excludeDim && tags.positive.length > 0 && !tags.positive.includes(entryValue)) {
+                    return false;
+                }
+                // Negated tags always apply
+                if (tags.negated.includes(entryValue)) {
+                    return false;
+                }
+            }
+            return true;
+        });
+    }
+
+    _parseTagInput(text) {
+        if (!text) return null;
+        // Match [!]key:value
+        const match = text.match(/^(!?)(\w+):(.+)$/);
+        if (!match) return null;
+        const negated = match[1] === '!';
+        const rawKey = match[2].toLowerCase();
+        const value = match[3].trim();
+
+        // Find dimension by key or label
+        const dim = LeaderboardApp.TAG_DIMENSIONS.find(
+            d => d.key === rawKey || d.label.toLowerCase() === rawKey
+        );
+        if (!dim) return null;
+        return { dim: dim.key, value, negated };
     }
 
     _applyHashState() {
@@ -130,21 +355,14 @@ class LeaderboardApp {
         let filtered = this.entries
             .filter(e => e.workload_tab === this.activeTab);
 
-        // Apply filters
-        if (this.filterSF !== 'all') {
-            const sfVal = parseFloat(this.filterSF);
-            filtered = filtered.filter(e => e.scale_factor === sfVal);
-        }
-        if (this.filterStreams !== 'all') {
-            const sVal = parseInt(this.filterStreams, 10);
-            filtered = filtered.filter(e => e.stream_count === sVal);
-        }
-        if (this.filterNodes !== 'all') {
-            const nVal = parseInt(this.filterNodes, 10);
-            filtered = filtered.filter(e => e.node_count === nVal);
-        }
+        // Apply tag filters
+        filtered = this._applyTagFilters(filtered);
 
         filtered.sort((a, b) => b.bench_score - a.bench_score);
+
+        // Render available tags (counts depend on filtered state)
+        this._renderTagChips();
+        this._renderAvailableTags();
 
         this._renderTable(filtered);
         this._renderQueryChart(filtered);
@@ -314,12 +532,12 @@ class LeaderboardApp {
             xaxis: {
                 title: '',
                 tickangle: -90,
-                tickfont: { family: 'JetBrains Mono, monospace', size: 9 },
+                tickfont: { family: 'JetBrains Mono, monospace', size: 12 },
             },
             yaxis: {
                 title: 'Query Runtime (s)',
                 type: this.logScale ? 'log' : 'linear',
-                tickfont: { family: 'JetBrains Mono, monospace', size: 11 },
+                tickfont: { family: 'JetBrains Mono, monospace', size: 13 },
             },
             legend: {
                 orientation: 'h',
@@ -386,18 +604,24 @@ class LeaderboardApp {
             return;
         }
 
-        // Sort entries if a sort column is active
+        // Sort entries: by clicked column, or by bench_score descending (default)
         let sorted = [...entries];
         if (this.gridSortColumn === 'system') {
             sorted.sort((a, b) => this.gridSortAsc
                 ? a.system_name.localeCompare(b.system_name)
                 : b.system_name.localeCompare(a.system_name));
+        } else if (this.gridSortColumn === 'score') {
+            sorted.sort((a, b) => this.gridSortAsc
+                ? a.bench_score - b.bench_score
+                : b.bench_score - a.bench_score);
         } else if (this.gridSortColumn) {
             sorted.sort((a, b) => {
                 const va = this._getGridValue(a, this.gridSortColumn) ?? Infinity;
                 const vb = this._getGridValue(b, this.gridSortColumn) ?? Infinity;
                 return this.gridSortAsc ? va - vb : vb - va;
             });
+        } else {
+            sorted.sort((a, b) => b.bench_score - a.bench_score);
         }
 
         // Find min time per query across all entries (for color coding)
@@ -425,6 +649,16 @@ class LeaderboardApp {
         });
         headerRow.appendChild(sysTh);
 
+        const scoreTh = document.createElement('th');
+        scoreTh.className = 'score-header sortable-header';
+        scoreTh.textContent = 'Score' + (this.gridSortColumn === 'score' ? (this.gridSortAsc ? ' \u25B2' : ' \u25BC') : '');
+        scoreTh.addEventListener('click', () => {
+            if (this.gridSortColumn === 'score') this.gridSortAsc = !this.gridSortAsc;
+            else { this.gridSortColumn = 'score'; this.gridSortAsc = false; }
+            this._renderQueryGrid(this._currentGridEntries);
+        });
+        headerRow.appendChild(scoreTh);
+
         queries.forEach(q => {
             const th = document.createElement('th');
             th.className = 'sortable-header';
@@ -446,7 +680,14 @@ class LeaderboardApp {
             const sysCell = document.createElement('td');
             sysCell.className = 'system-cell';
             sysCell.textContent = entry.system_name;
+            sysCell.title = 'Click for details';
+            sysCell.addEventListener('click', () => this._openModal(entry));
             tr.appendChild(sysCell);
+
+            const scoreCell = document.createElement('td');
+            scoreCell.className = 'score-cell';
+            scoreCell.textContent = entry.bench_score != null ? entry.bench_score.toFixed(1) : '-';
+            tr.appendChild(scoreCell);
 
             queries.forEach(q => {
                 const td = document.createElement('td');
@@ -490,24 +731,44 @@ class LeaderboardApp {
     }
 
     _ratioColor(ratio) {
-        // 1.0 = green, 2.0 = yellow, 5.0+ = deep red
         if (ratio <= 1.0) return '#dcfce7';
         if (ratio <= 2.0) {
             const t = (ratio - 1.0);
             return this._lerpColor('#dcfce7', '#fef9c3', t);
         }
-        if (ratio <= 5.0) {
-            const t = (ratio - 2.0) / 3.0;
-            return this._lerpColor('#fef9c3', '#fee2e2', t);
+        if (ratio <= 3.0) {
+            const t = (ratio - 2.0);
+            return this._lerpColor('#fef9c3', '#fed7aa', t);
         }
-        return '#fecaca';
+        if (ratio <= 5.0) {
+            const t = (ratio - 3.0) / 2.0;
+            return this._lerpColor('#fed7aa', '#fdba74', t);
+        }
+        if (ratio <= 7.0) {
+            const t = (ratio - 5.0) / 2.0;
+            return this._lerpColor('#fdba74', '#fee2e2', t);
+        }
+        if (ratio <= 10.0) {
+            const t = (ratio - 7.0) / 3.0;
+            return this._lerpColor('#fee2e2', '#fecaca', t);
+        }
+        if (ratio <= 100.0) {
+            const t = (ratio - 10.0) / 90.0;
+            return this._lerpColor('#fecaca', '#ef4444', t);
+        }
+        return '#dc2626';
     }
 
     _ratioTextColor(ratio) {
         if (ratio <= 1.0) return '#166534';
         if (ratio <= 2.0) return '#854d0e';
-        if (ratio <= 5.0) return '#991b1b';
-        return '#7f1d1d';
+        if (ratio <= 3.0) return '#9a3412';
+        if (ratio <= 5.0) return '#9a3412';
+        if (ratio <= 7.0) return '#991b1b';
+        if (ratio <= 10.0) return '#7f1d1d';
+        if (ratio <= 40.0) return '#7f1d1d';
+        if (ratio <= 100.0) return '#ffffff';
+        return '#ffffff';
     }
 
     _lerpColor(a, b, t) {
@@ -534,7 +795,9 @@ class LeaderboardApp {
         });
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
-                if (document.getElementById('query-modal-overlay').classList.contains('visible')) {
+                if (document.getElementById('score-modal-overlay').classList.contains('visible')) {
+                    this._closeScoreModal();
+                } else if (document.getElementById('query-modal-overlay').classList.contains('visible')) {
                     this._closeQueryModal();
                 } else {
                     this._closeModal();
@@ -595,6 +858,7 @@ class LeaderboardApp {
     }
 
     _openModal(entry) {
+        this._lastModalEntry = entry;
         const body = document.getElementById('modal-body');
         const info = entry.system_info || {};
         const queryTimes = entry.query_times || {};
@@ -618,6 +882,7 @@ class LeaderboardApp {
                 <div class="modal-score">${entry.bench_score.toFixed(1)}</div>
                 <p style="font-size:0.85rem;color:var(--color-text-secondary);margin-top:4px;">
                     &radic;(${entry.speed_score.toFixed(1)} &times; ${entry.scale_score.toFixed(1)}) = ${entry.bench_score.toFixed(1)}
+                    &mdash; <a href="#" class="explain-score-link">Explain score</a>
                 </p>
                 <div class="modal-grid" style="margin-top:8px;">
                     <div class="modal-field"><span class="label">Speed Score</span><span class="value">${entry.speed_score.toFixed(1)}</span></div>
@@ -735,6 +1000,14 @@ class LeaderboardApp {
             </div>` : ''}
         `;
 
+        const explainLink = body.querySelector('.explain-score-link');
+        if (explainLink) {
+            explainLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                this._openScoreModal(entry);
+            });
+        }
+
         document.getElementById('modal-overlay').classList.add('visible');
     }
 
@@ -782,9 +1055,249 @@ class LeaderboardApp {
         document.getElementById('query-modal-overlay').classList.remove('visible');
     }
 
+    /* ── BenchScore Explanation Modal ─────────────────── */
+
+    _initScoreModal() {
+        const overlay = document.getElementById('score-modal-overlay');
+        const close = document.getElementById('score-modal-close');
+        const disclaimer = document.getElementById('benchscore-disclaimer');
+
+        if (close) close.addEventListener('click', () => this._closeScoreModal());
+        if (overlay) overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) this._closeScoreModal();
+        });
+        if (disclaimer) disclaimer.addEventListener('click', () => this._openScoreModal(null));
+    }
+
+    _openScoreModal(entry) {
+        const body = document.getElementById('score-modal-body');
+        if (!body) return;
+        body.innerHTML = this._buildScoreModalContent(entry);
+
+        // Wire up entry picker change handler
+        const picker = body.querySelector('#score-entry-picker');
+        if (picker) {
+            picker.addEventListener('change', () => {
+                const idx = parseInt(picker.value, 10);
+                const selected = idx >= 0 ? this._currentGridEntries[idx] : null;
+                const breakdown = body.querySelector('#score-breakdown-container');
+                if (breakdown) {
+                    breakdown.innerHTML = selected
+                        ? this._buildEntryBreakdown(selected)
+                        : '<p style="color:var(--color-text-secondary);font-size:0.85rem;">Select an entry above to see its score breakdown.</p>';
+                }
+            });
+        }
+
+        document.getElementById('score-modal-overlay').classList.add('visible');
+    }
+
+    _closeScoreModal() {
+        document.getElementById('score-modal-overlay').classList.remove('visible');
+    }
+
+    _buildScoreModalContent(entry) {
+        const entries = this._currentGridEntries || [];
+
+        // Build entry picker options
+        let pickerHtml = '';
+        if (entries.length === 0) {
+            pickerHtml = '<option value="-1">No entries available</option>';
+        } else {
+            pickerHtml = '<option value="-1">— Select an entry —</option>';
+            entries.forEach((e, i) => {
+                const selected = entry && e.system_name === entry.system_name
+                    && e.system_version === entry.system_version
+                    && e.instance_type === entry.instance_type
+                    && e.node_count === entry.node_count
+                    && e.scale_factor === entry.scale_factor
+                    ? ' selected' : '';
+                const label = `${e.system_name} ${e.system_version}` +
+                    (e.instance_type ? ` (${e.instance_type})` : '') +
+                    ` — Score: ${e.bench_score.toFixed(1)}`;
+                pickerHtml += `<option value="${i}"${selected}>${this._esc(label)}</option>`;
+            });
+        }
+
+        const breakdownHtml = entry
+            ? this._buildEntryBreakdown(entry)
+            : '<p style="color:var(--color-text-secondary);font-size:0.85rem;">Select an entry above to see its score breakdown.</p>';
+
+        return `
+            <h2>BenchScore Explained</h2>
+            ${this._buildGenericExplanation()}
+            <div class="modal-section">
+                <h3>Entry Breakdown</h3>
+                <div class="score-entry-picker">
+                    <label for="score-entry-picker">Choose entry:</label>
+                    <select id="score-entry-picker" class="filter-select" style="min-width:300px;">
+                        ${pickerHtml}
+                    </select>
+                </div>
+                <div id="score-breakdown-container" style="margin-top:var(--spacing-md);">
+                    ${breakdownHtml}
+                </div>
+            </div>
+        `;
+    }
+
+    _buildGenericExplanation() {
+        return `
+            <div class="modal-section score-explain-section">
+                <h3>Formula</h3>
+                <div class="score-formula-main">
+                    BenchScore = &radic;(<span class="score-hl">SpeedScore</span> &times; <span class="score-hl">ScaleScore</span>)
+                </div>
+                <div class="score-formula">
+                    <strong>SpeedScore</strong> = SF / geomean<sub>s</sub>
+                </div>
+                <div class="score-formula">
+                    <strong>ScaleScore</strong> = SF &times; S &times; Q / &Sigma;medians<sub>s</sub>
+                </div>
+                <div class="score-vars">
+                    <div class="score-var-item"><strong>SF</strong> — Scale Factor (e.g., 10, 100). Larger datasets yield higher scores.</div>
+                    <div class="score-var-item"><strong>S</strong> — Number of concurrent query streams (default 1).</div>
+                    <div class="score-var-item"><strong>Q</strong> — Expected number of queries in the workload (22 for TPC-H, 43 for ClickBench).</div>
+                    <div class="score-var-item"><strong>geomean<sub>s</sub></strong> — Geometric mean of per-query median runtimes (in seconds). Balances fast and slow queries equally.</div>
+                    <div class="score-var-item"><strong>&Sigma;medians<sub>s</sub></strong> — Sum of all per-query median runtimes (in seconds). Rewards consistent speed across all queries.</div>
+                </div>
+                <details class="collapsible-section" style="margin-top:var(--spacing-sm);">
+                    <summary>Why this formula?</summary>
+                    <div style="padding:var(--spacing-sm) var(--spacing-md);font-size:0.85rem;line-height:1.6;">
+                        <p><strong>SpeedScore</strong> uses the geometric mean, which prevents a single fast query from masking slow ones. It answers: "how fast is this system on a <em>typical</em> query?"</p>
+                        <p style="margin-top:var(--spacing-sm);"><strong>ScaleScore</strong> uses the arithmetic sum, rewarding systems that are fast across <em>all</em> queries. Multiplying by Q normalizes for workload size.</p>
+                        <p style="margin-top:var(--spacing-sm);">The final <strong>geometric mean</strong> of the two sub-scores balances both perspectives. A system must be both typically fast (SpeedScore) and broadly efficient (ScaleScore) to rank highly.</p>
+                    </div>
+                </details>
+            </div>
+        `;
+    }
+
+    _buildEntryBreakdown(entry) {
+        const queryTimes = entry.query_times || {};
+        const queries = Object.keys(queryTimes).sort((a, b) => {
+            const na = parseInt(a.replace(/\D/g, ''), 10);
+            const nb = parseInt(b.replace(/\D/g, ''), 10);
+            if (!isNaN(na) && !isNaN(nb)) return na - nb;
+            return a.localeCompare(b);
+        });
+
+        // Get per-query medians in ms, filtering to successful queries with positive times
+        const medians = [];
+        const queryRows = [];
+        queries.forEach(q => {
+            const t = queryTimes[q];
+            if (t && t.median > 0) {
+                medians.push({ name: q, ms: t.median });
+                queryRows.push({ name: q, ms: t.median });
+            }
+        });
+
+        if (medians.length === 0) {
+            return '<p style="color:var(--color-text-secondary);">No successful queries — cannot compute breakdown.</p>';
+        }
+
+        const sf = entry.scale_factor != null ? entry.scale_factor : 1;
+        const s = Math.max(entry.stream_count || 1, 1);
+        const q = this._expectedQueries(entry);
+
+        // Recompute from raw medians
+        const mediansSec = medians.map(m => m.ms / 1000);
+        const lnValues = mediansSec.map(v => Math.log(v));
+        const sumLn = lnValues.reduce((a, b) => a + b, 0);
+        const meanLn = sumLn / medians.length;
+        const geomeanS = Math.exp(meanLn);
+        const sumMediansSec = mediansSec.reduce((a, b) => a + b, 0);
+
+        const speedScore = sf / geomeanS;
+        const scaleScore = (sf * s * q) / sumMediansSec;
+        const benchScore = Math.sqrt(speedScore * scaleScore);
+
+        // Build per-query table
+        const queryTableRows = queryRows.map(qr => {
+            const sec = (qr.ms / 1000).toFixed(4);
+            const ln = Math.log(qr.ms / 1000).toFixed(4);
+            return `<tr><td>${this._esc(qr.name)}</td><td>${qr.ms.toFixed(1)}</td><td>${sec}</td><td>${ln}</td></tr>`;
+        }).join('');
+
+        const sumInline = mediansSec.length <= 10
+            ? mediansSec.map(v => v.toFixed(3)).join(' + ')
+            : mediansSec.slice(0, 5).map(v => v.toFixed(3)).join(' + ') + ' + ... + ' + mediansSec.slice(-2).map(v => v.toFixed(3)).join(' + ');
+
+        return `
+        <div class="score-tree-root">
+            <div class="score-tree-node">
+                <div class="score-tree-formula">
+                    <strong>BenchScore</strong> = &radic;(SpeedScore &times; ScaleScore)
+                    = &radic;(${speedScore.toFixed(4)} &times; ${scaleScore.toFixed(4)})
+                    = <span class="score-result">${benchScore.toFixed(1)}</span>
+                    ${Math.abs(benchScore - entry.bench_score) > 0.2
+                        ? `<span class="score-note">(Python-side: ${entry.bench_score.toFixed(1)})</span>` : ''}
+                </div>
+                <div class="score-tree-children">
+                    <details class="score-tree-node" open>
+                        <summary class="score-tree-formula">
+                            <strong>SpeedScore</strong> = SF / geomean<sub>s</sub>
+                            = ${sf} / ${geomeanS.toFixed(4)}
+                            = <span class="score-result">${speedScore.toFixed(1)}</span>
+                        </summary>
+                        <div class="score-tree-children">
+                            <div class="score-tree-leaf">SF (Scale Factor) = ${sf}</div>
+                            <details class="score-tree-node">
+                                <summary class="score-tree-formula">
+                                    geomean<sub>s</sub> = exp(mean(ln(medians)))
+                                    = exp(${meanLn.toFixed(4)})
+                                    = <span class="score-result">${geomeanS.toFixed(4)}s</span>
+                                </summary>
+                                <div class="score-tree-children">
+                                    <div class="score-tree-leaf">
+                                        mean(ln) = sum(ln) / n = ${sumLn.toFixed(4)} / ${medians.length} = ${meanLn.toFixed(4)}
+                                    </div>
+                                    <details class="score-tree-node">
+                                        <summary>Per-query medians (${medians.length} queries)</summary>
+                                        <div class="query-breakdown-table-wrapper">
+                                            <table class="query-breakdown-table">
+                                                <thead><tr><th>Query</th><th>Median (ms)</th><th>Seconds</th><th>ln(s)</th></tr></thead>
+                                                <tbody>${queryTableRows}</tbody>
+                                            </table>
+                                        </div>
+                                    </details>
+                                </div>
+                            </details>
+                        </div>
+                    </details>
+                    <details class="score-tree-node" open>
+                        <summary class="score-tree-formula">
+                            <strong>ScaleScore</strong> = SF &times; S &times; Q / &Sigma;medians<sub>s</sub>
+                            = ${sf} &times; ${s} &times; ${q} / ${sumMediansSec.toFixed(4)}
+                            = <span class="score-result">${scaleScore.toFixed(1)}</span>
+                        </summary>
+                        <div class="score-tree-children">
+                            <div class="score-tree-leaf">SF = ${sf}, S = ${s}, Q = ${q}</div>
+                            <details class="score-tree-node">
+                                <summary class="score-tree-formula">
+                                    &Sigma;medians<sub>s</sub> = sum of medians
+                                    = ${(sumMediansSec * 1000).toFixed(1)}ms
+                                    = <span class="score-result">${sumMediansSec.toFixed(4)}s</span>
+                                </summary>
+                                <div class="score-tree-children">
+                                    <div class="score-tree-leaf" style="font-size:0.75rem;word-break:break-all;">
+                                        ${sumInline}
+                                    </div>
+                                </div>
+                            </details>
+                        </div>
+                    </details>
+                </div>
+            </div>
+        </div>
+        `;
+    }
+
     /* ── Helpers ───────────────────────────────────────── */
 
     _expectedQueries(entry) {
+        if (entry.expected_query_count) return entry.expected_query_count;
         const counts = { 'tpch': 22, 'clickbench': 43 };
         return counts[entry.workload_name] || entry.query_count;
     }
@@ -806,7 +1319,25 @@ class LeaderboardApp {
     }
 }
 
+/* ── Tag Dimensions ────────────────────────────────── */
+LeaderboardApp.TAG_DIMENSIONS = [
+    { key: 'system',   label: 'System',   extract: e => e.system_kind },
+    { key: 'version',  label: 'Version',  extract: e => e.system_version },
+    { key: 'sf',       label: 'SF',       extract: e => e.scale_factor },
+    { key: 'streams',  label: 'Streams',  extract: e => e.stream_count },
+    { key: 'nodes',    label: 'Nodes',    extract: e => e.node_count },
+    { key: 'instance', label: 'Instance', extract: e => e.instance_type },
+    { key: 'env',      label: 'Env',      extract: e => e.environment },
+    { key: 'year',     label: 'Year',     extract: e => e.run_date ? e.run_date.slice(0, 4) : null },
+    { key: 'status',   label: 'Status',   extract: e => {
+        const expected = e.expected_query_count
+            || ({ tpch: 22, clickbench: 43 }[e.workload_name])
+            || e.query_count;
+        return e.query_count >= expected ? 'all passed' : 'has failures';
+    }},
+];
+
 /* ── Boot ──────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
-    new LeaderboardApp();
+    window.app = new LeaderboardApp();
 });

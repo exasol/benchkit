@@ -33,12 +33,13 @@
         </header>
 
         <!-- Disclaimer -->
-        <div class="disclaimer">
+        <div class="disclaimer benchscore-explainer" id="benchscore-disclaimer">
             <strong>BenchScore</strong> = &radic;(Speed &times; Scale), where
             Speed = SF / geomean<sub>s</sub>,
             Scale = SF &times; S &times; Q / &Sigma;medians<sub>s</sub>.
             Higher is better.
             This is <em>not</em> an official TPC-H metric and should not be compared to audited results.
+            <span class="explain-hint">Click to learn more</span>
         </div>
 
         <!-- Workload Tabs -->
@@ -46,26 +47,15 @@
             <!-- Populated by JavaScript -->
         </nav>
 
-        <!-- Filter Bar -->
-        <div class="filter-bar" id="filter-bar">
-            <div class="filter-group">
-                <label for="filter-sf">Scale Factor</label>
-                <select id="filter-sf" class="filter-select">
-                    <option value="all">All</option>
-                </select>
+        <!-- Tag Filter Bar -->
+        <div class="tag-filter-bar" id="tag-filter-bar">
+            <div class="tag-input-area" id="tag-input-area">
+                <div class="tag-chips" id="tag-chips"></div>
+                <input type="text" class="tag-search-input" id="tag-search-input"
+                       placeholder="Filter: click tags or type system:exasol, !sf:10 ..."
+                       autocomplete="off" spellcheck="false">
             </div>
-            <div class="filter-group">
-                <label for="filter-streams">Streams</label>
-                <select id="filter-streams" class="filter-select">
-                    <option value="all">All</option>
-                </select>
-            </div>
-            <div class="filter-group">
-                <label for="filter-nodes">Nodes</label>
-                <select id="filter-nodes" class="filter-select">
-                    <option value="all">All</option>
-                </select>
-            </div>
+            <div class="tag-suggestions" id="tag-suggestions"></div>
         </div>
 
         <!-- Leaderboard Table -->
@@ -132,8 +122,12 @@
                 Times in seconds. Background color indicates relative performance:
                 <span class="legend-best">best</span>
                 <span class="legend-2x">&le;2x</span>
+                <span class="legend-3x">&le;3x</span>
                 <span class="legend-5x">&le;5x</span>
-                <span class="legend-slow">&gt;5x</span>
+                <span class="legend-7x">&le;7x</span>
+                <span class="legend-10x">&le;10x</span>
+                <span class="legend-100x">&le;100x</span>
+                <span class="legend-slow">&gt;100x</span>
             </p>
             <div class="query-grid-wrapper">
                 <table class="query-grid" id="query-grid">
@@ -157,6 +151,16 @@
             <div class="modal-card query-modal-card">
                 <button class="modal-close" id="query-modal-close">&times;</button>
                 <div class="modal-body" id="query-modal-body">
+                    <!-- Populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+
+        <!-- BenchScore Explanation Modal Overlay -->
+        <div class="modal-overlay" id="score-modal-overlay">
+            <div class="modal-card score-modal-card">
+                <button class="modal-close" id="score-modal-close">&times;</button>
+                <div class="modal-body" id="score-modal-body">
                     <!-- Populated by JavaScript -->
                 </div>
             </div>
