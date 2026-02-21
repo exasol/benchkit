@@ -1,0 +1,81 @@
+{
+  "system_name": "clickhouse",
+  "system_kind": "clickhouse",
+  "system_version": "26.1.3.52",
+  "commands": {
+    "storage_setup": [
+      {
+        "command": "sudo mkfs.ext4 -F /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS67B334FCA71B7BCE5",
+        "success": true,
+        "description": "Format /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS67B334FCA71B7BCE5 with ext4 filesystem",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mkdir -p /data",
+        "success": true,
+        "description": "Create mount point /data",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS67B334FCA71B7BCE5 /data",
+        "success": true,
+        "description": "Mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS67B334FCA71B7BCE5 to /data",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo chown -R ubuntu:ubuntu /data",
+        "success": true,
+        "description": "Set ownership of /data to ubuntu:ubuntu",
+        "category": "storage_setup"
+      },
+      {
+        "command": "sudo mkdir -p /data/clickhouse && sudo chmod 1777 /data/clickhouse",
+        "success": true,
+        "description": "Create clickhouse data directory",
+        "category": "storage_setup"
+      }
+    ]
+  },
+  "installation_notes": [
+    "Storage device /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS67B334FCA71B7BCE5 mounted at /data",
+    "clickhouse data directory: /data/clickhouse",
+    "Installing ClickHouse using official APT repository",
+    "ClickHouse configuration file created: /etc/clickhouse-server/config.d/benchmark.xml",
+    "ClickHouse user profile configured with optimized settings",
+    "Waiting for ClickHouse server to be ready for connections...",
+    "ClickHouse server is ready and accepting connections",
+    "ClickHouse configuration applied:",
+    "  Hardware-detected settings (CPU cores: 4, RAM: 30.8GB)",
+    "  max_threads: 4",
+    "  max_memory_usage: 24.0GB",
+    "  max_bytes_before_external_sort: 8.0GB",
+    "  max_bytes_before_external_group_by: 8.0GB",
+    "  max_server_memory_usage: 26.5GB",
+    "  max_concurrent_queries: 4",
+    "  background_pool_size: 16",
+    "  background_schedule_pool_size: 4",
+    "  max_table_size_to_drop: 50.0GB",
+    "  memory_limit: 24g",
+    "  join_algorithm: grace_hash",
+    "  max_bytes_in_join: 16000000000"
+  ],
+  "config_parameters": {
+    "node_count": 1,
+    "use_additional_disk": true,
+    "data_dir": "/data/clickhouse",
+    "host": "$CLICKHOUSE_PUBLIC_IP",
+    "port": 8123,
+    "username": "default",
+    "password": "<DATABASE_PASSWORD>",
+    "extra": {
+      "memory_limit": "24g",
+      "max_threads": "4",
+      "max_memory_usage": "24000000000",
+      "max_bytes_before_external_group_by": "8000000000",
+      "max_bytes_before_external_sort": "8000000000",
+      "join_algorithm": "grace_hash",
+      "max_bytes_in_join": "16000000000"
+    }
+  },
+  "data_directory": "/data/clickhouse"
+}

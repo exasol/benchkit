@@ -9,7 +9,7 @@ keywords: ["scalability", "tpc-h", "analytical", "multinode"]
 series:
   series_1_nodes:
     name: "Node Scaling"
-    description: "Test horizontal scaling with 1, 2, 4, 8, 16 nodes at constant 128GB total RAM"
+    description: "Test horizontal scaling with 1, 2, 4, 8 nodes at constant 128GB total RAM"
     enabled: true
 
   series_2_sf:

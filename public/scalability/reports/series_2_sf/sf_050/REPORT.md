@@ -2,7 +2,7 @@
 
 **Author:** Benchmark Team
 **Environment:** aws / eu-west-1 / r6id.2xlarge
-**Date:** 2026-02-10 10:28:40
+**Date:** 2026-02-19 20:14:51
 
 > **Note:** Sensitive information (passwords, IP addresses) has been sanitized for security reasons. Placeholders like `<EXASOL_DB_PASSWORD>`, `<PRIVATE_IP>`, and `<PUBLIC_IP>` are used throughout this document. When reproducing this benchmark, substitute these with your actual credentials and addresses.
 
@@ -11,10 +11,10 @@ This document shows exactly how the benchmark was run so it can be reproduced.
 ## Executive Summary
 
 We compared 5 database systems:
-- **exasol**
-- **duckdb**
-- **starrocks**
 - **clickhouse**
+- **duckdb**
+- **exasol**
+- **starrocks**
 - **trino**
 
 **Key Findings:**
@@ -31,12 +31,23 @@ We compared 5 database systems:
 - **Setup method:** installer
 - **Data device:** /dev/exasol.storage
 
-### Clickhouse 25.10.2.65
+
+### Clickhouse 26.1.3.52
 
 **Software Configuration:**
-- **Database:** clickhouse 25.10.2.65
+- **Database:** clickhouse 26.1.3.52
 - **Setup method:** native
 - **Data directory:** /data/clickhouse
+
+
+**Hardware Specifications:**
+- **Cloud Provider:** AWS
+- **Region:** eu-west-1
+- **Instance Type:** r6id.2xlarge
+- **CPU:** Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+- **CPU Cores:** 8 vCPUs
+- **Memory:** 61.8GB RAM
+- **Hostname:** ip-10-0-1-85
 
 ### Trino 479
 
@@ -44,11 +55,22 @@ We compared 5 database systems:
 - **Database:** trino 479
 - **Setup method:** native
 
-### Starrocks 4.0.4
+
+### Starrocks 4.0.6
 
 **Software Configuration:**
-- **Database:** starrocks 4.0.4
+- **Database:** starrocks 4.0.6
 - **Setup method:** native
+
+
+**Hardware Specifications:**
+- **Cloud Provider:** AWS
+- **Region:** eu-west-1
+- **Instance Type:** r6id.2xlarge
+- **CPU:** Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+- **CPU Cores:** 8 vCPUs
+- **Memory:** 61.8GB RAM
+- **Hostname:** ip-10-0-1-146
 
 ### Duckdb 1.4.4
 
@@ -56,6 +78,7 @@ We compared 5 database systems:
 - **Database:** duckdb 1.4.4
 - **Setup method:** native
 - **Data directory:** /data/duckdb
+
 
 
 **Detailed system information:** See attachments for complete system specifications
@@ -204,24 +227,24 @@ sudo mkdir -p /var/trino/data /etc/trino /var/log/trino
 
 
 
-#### Starrocks 4.0.4 Setup
+#### Starrocks 4.0.6 Setup
 
 **Storage Configuration:**
 ```bash
-# Format /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS6657678C6B71B85DD with ext4 filesystem
-sudo mkfs.ext4 -F /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS6657678C6B71B85DD
+# Format /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS654399FF054FC8426 with ext4 filesystem
+sudo mkfs.ext4 -F /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS654399FF054FC8426
 
 # Create mount point /data
 sudo mkdir -p /data
 
-# Mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS6657678C6B71B85DD to /data
-sudo mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS6657678C6B71B85DD /data
+# Mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS654399FF054FC8426 to /data
+sudo mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS654399FF054FC8426 /data
 
 # Set ownership of /data to ubuntu:ubuntu
 sudo chown -R ubuntu:ubuntu /data
 
 # Create starrocks data directory
-sudo mkdir -p /data/starrocks
+sudo mkdir -p /data/starrocks &amp;&amp; sudo chmod 1777 /data/starrocks
 
 # Set ownership of /data/starrocks to ubuntu:ubuntu
 sudo chown -R ubuntu:ubuntu /data/starrocks
@@ -235,24 +258,24 @@ sudo chown -R ubuntu:ubuntu /data/starrocks
 
 
 
-#### Clickhouse 25.10.2.65 Setup
+#### Clickhouse 26.1.3.52 Setup
 
 **Storage Configuration:**
 ```bash
-# Format /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS24EAEA92F99E3A8A0 with ext4 filesystem
-sudo mkfs.ext4 -F /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS24EAEA92F99E3A8A0
+# Format /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS24FF0C2552849F532 with ext4 filesystem
+sudo mkfs.ext4 -F /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS24FF0C2552849F532
 
 # Create mount point /data
 sudo mkdir -p /data
 
-# Mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS24EAEA92F99E3A8A0 to /data
-sudo mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS24EAEA92F99E3A8A0 /data
+# Mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS24FF0C2552849F532 to /data
+sudo mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS24FF0C2552849F532 /data
 
 # Set ownership of /data to ubuntu:ubuntu
 sudo chown -R ubuntu:ubuntu /data
 
 # Create clickhouse data directory
-sudo mkdir -p /data/clickhouse
+sudo mkdir -p /data/clickhouse &amp;&amp; sudo chmod 1777 /data/clickhouse
 
 ```
 
@@ -356,135 +379,157 @@ The following table shows the time taken for data generation, schema creation, a
 
 | System | Data Generation | Schema Creation | Data Loading | Total Preparation | Raw Size | Stored Size | Compression |
 |--------|----------------|-----------------|--------------|-------------------|----------|-------------|-------------|
-| Clickhouse | 543.84s | 0.12s | 262.66s | 1008.95s | 44.6 GB | 20.0 GB | 2.2x |
-| Starrocks | 549.95s | 0.13s | 349.06s | 1057.55s | 15.0 GB | 15.0 GB | 1.0x |
+| Clickhouse | 542.63s | 0.11s | 264.22s | 1025.62s | 57.2 GB | 21.9 GB | 2.6x |
+| Starrocks | 553.96s | 0.11s | 342.35s | 1057.83s | 6.0 GB | 6.0 GB | 1.0x |
 | Trino | 139.66s | 0.37s | 0.00s | 202.16s | N/A | N/A | N/A |
 | Duckdb | 547.87s | 0.04s | 207.47s | 781.43s | 412.9 MB | N/A | N/A |
 | Exasol | 273.66s | 1.92s | 304.07s | 721.87s | 47.9 GB | 10.5 GB | 4.6x |
 
 **Key Observations:**
 - Trino had the fastest preparation time at 202.16s
-- Starrocks took 1057.55s (5.2x slower)
+- Starrocks took 1057.83s (5.2x slower)
 
 ### Performance Summary
 
 | query   | system     |   warmup |   runs |   median_ms |   mean_ms |   std_ms |   min_ms |   max_ms |
 |---------|------------|----------|--------|-------------|-----------|----------|----------|----------|
-| Q01     | clickhouse |   4575.9 |      5 |     18051.5 |   16958.7 |   3500.7 |  10802.3 |  19187.2 |
+| Q01     | clickhouse |   4534.9 |      5 |     12989.7 |   14136.2 |   3325.9 |  11184.1 |  19293.2 |
 | Q01     | duckdb     |   2245.6 |      5 |      5734.7 |    6348.9 |   2432.5 |   4341.1 |  10552.1 |
 | Q01     | exasol     |   1605.5 |      5 |      5644.7 |    4746.8 |   1383.2 |   2577.3 |   5727.9 |
-| Q01     | starrocks  |   6764.7 |      5 |     18733.1 |   19934.5 |   6684.6 |  11790.6 |  29827.1 |
+| Q01     | starrocks  |   6891.4 |      5 |     20850.6 |   21152.1 |   6149   |  13512.9 |  30365.1 |
 | Q01     | trino      |  10257.2 |      5 |     35021.5 |   34422.1 |  14827   |  17632.7 |  49082.6 |
-| Q02     | clickhouse |   2006.1 |      5 |     10425.7 |   10453.2 |   4676.1 |   4167.5 |  16081.4 |
+| Q02     | clickhouse |   2796.5 |      5 |      8467.9 |    7086.7 |   2327.5 |   3608.8 |   8825.1 |
 | Q02     | duckdb     |    464.2 |      5 |      4677.1 |    5392.4 |   1745.3 |   3676.7 |   7479.2 |
 | Q02     | exasol     |    243.9 |      5 |       206   |     216.6 |     24   |    189.6 |    243   |
-| Q02     | starrocks  |    473.2 |      5 |       921.6 |     966.8 |    238.2 |    761.7 |   1357.4 |
+| Q02     | starrocks  |    500.3 |      5 |       988.7 |     993.3 |    267.8 |    678.5 |   1405.4 |
 | Q02     | trino      |   5484.1 |      5 |     16333.7 |   22020.4 |  11679.2 |   9160.7 |  34456.4 |
-| Q03     | clickhouse |   7356   |      5 |     20297.5 |   18450.9 |   8561.3 |   6177.6 |  27872.7 |
+| Q03     | clickhouse |   2382.3 |      5 |      6989.8 |    7200.5 |   2891.5 |   3554.6 |  10082.7 |
 | Q03     | duckdb     |   1406.8 |      5 |      2989.5 |    3711.8 |   2693   |   1239.2 |   6921.2 |
 | Q03     | exasol     |    616.8 |      5 |       668.3 |    1623.8 |   1367.7 |    610.7 |   3338.4 |
-| Q03     | starrocks  |   1580.7 |      5 |      1695.5 |    2677.8 |   1868.3 |   1263.2 |   5538.1 |
+| Q03     | starrocks  |   1550.7 |      5 |      1827.1 |    2398.5 |   1270.2 |   1292   |   3975.7 |
 | Q03     | trino      |  13539.6 |      5 |     34667.6 |   30873.7 |  13760.1 |  14688.8 |  49395.9 |
-| Q04     | clickhouse |   8934.6 |      5 |     22509.9 |   22948.8 |   3349.8 |  19179.2 |  27224.4 |
+| Q04     | clickhouse |   8457.4 |      5 |     18583.7 |   17169.8 |   4712.5 |   9003.9 |  21181.5 |
 | Q04     | duckdb     |   1327.9 |      5 |      8639.1 |    8798.2 |   2762.8 |   4858.2 |  12309.1 |
 | Q04     | exasol     |    111.3 |      5 |       426.6 |     502.6 |    226   |    223.1 |    744.3 |
-| Q04     | starrocks  |   1301.2 |      5 |      4192.5 |    4172.5 |    803.8 |   2937.9 |   5156.7 |
+| Q04     | starrocks  |   1264.8 |      5 |      3931   |    4019.6 |   1283.4 |   2036.9 |   5333   |
 | Q04     | trino      |   9734.6 |      5 |     31584.3 |   28450   |   9873   |  16706.5 |  39360.5 |
-| Q05     | clickhouse |   5997   |      5 |     23636.2 |   23220.5 |   3009.5 |  19783.8 |  27276.3 |
+| Q05     | clickhouse |   6138.3 |      5 |     20315.6 |   23061.5 |   4539.3 |  19327   |  28120   |
 | Q05     | duckdb     |   1476.2 |      5 |      5476.7 |    7124.4 |   3913.6 |   3582.4 |  13689.4 |
 | Q05     | exasol     |    486   |      5 |      1999   |    1763.7 |    522.4 |    845.9 |   2125.1 |
-| Q05     | starrocks  |   2594   |      5 |      9436   |    8800.5 |   2269.1 |   6293.6 |  11086.5 |
+| Q05     | starrocks  |   2633.8 |      5 |      8479.8 |    8715.2 |   1507.8 |   6598.4 |  10511.6 |
 | Q05     | trino      |  12575.5 |      5 |     73210.8 |   80098.9 |  20794.9 |  64145.1 | 116624   |
-| Q06     | clickhouse |    301.1 |      5 |      2554   |    2532.4 |    563.8 |   1867.2 |   3380.3 |
+| Q06     | clickhouse |    294   |      5 |      2571   |    2997.3 |   1416.7 |   1784.1 |   5419.3 |
 | Q06     | duckdb     |    406.5 |      5 |      3106.2 |    3850.3 |   3505.2 |    415.2 |   9728.2 |
 | Q06     | exasol     |     72.2 |      5 |       272.9 |     287   |    179.6 |    139.2 |    579.1 |
-| Q06     | starrocks  |    205.8 |      5 |       416.4 |     499.5 |    241.1 |    282.2 |    836.2 |
+| Q06     | starrocks  |    205.3 |      5 |       479.3 |     433.3 |    175.7 |    169.7 |    628.9 |
 | Q06     | trino      |   4519.6 |      5 |     16573.2 |   15802.4 |   7303   |   7066.6 |  23624   |
-| Q07     | clickhouse |  13957   |      5 |     37609.9 |   35049   |  13895.1 |  12426.2 |  50654.7 |
+| Q07     | clickhouse |   5930.8 |      5 |      6757   |    8503.6 |   5705.5 |   3063.6 |  18172.2 |
 | Q07     | duckdb     |   1318.8 |      5 |      5109.2 |    6779.1 |   2595.6 |   4799.3 |  10579.3 |
 | Q07     | exasol     |    605   |      5 |      2384.7 |    2101.2 |    832.2 |    632.2 |   2646.4 |
-| Q07     | starrocks  |   1498.6 |      5 |      4089   |    3516.6 |   1290.2 |   1466.5 |   4660.6 |
+| Q07     | starrocks  |   1503.5 |      5 |      4191.6 |    3681.5 |   1377.7 |   1471.7 |   4796.6 |
 | Q07     | trino      |   9676.2 |      5 |     35129   |   37250.6 |  13530.7 |  18061.9 |  55190.8 |
-| Q08     | clickhouse |   7545.2 |      5 |     28943.4 |   27673.8 |   5063.9 |  19422.4 |  33231.2 |
+| Q08     | clickhouse |   6345.8 |      5 |     27866.9 |   27346.9 |   1596   |  25394.8 |  29216.7 |
 | Q08     | duckdb     |   1441.1 |      5 |      4825.3 |    6287.3 |   2727.3 |   4082.3 |  10700.9 |
 | Q08     | exasol     |    181.2 |      5 |       584.3 |     550   |    199.2 |    222.2 |    712.1 |
-| Q08     | starrocks  |   2133.5 |      5 |      7509   |    7703.2 |   1678.6 |   5422.1 |   9630.2 |
+| Q08     | starrocks  |   2147.4 |      5 |      6262.1 |    6767.8 |   1504.2 |   5187   |   9081.2 |
 | Q08     | trino      |  13247.1 |      5 |     34271.2 |   45315.2 |  20282   |  27778.1 |  69250.6 |
-| Q09     | clickhouse |   4162.8 |      5 |     19604.7 |   19012.3 |   3063.2 |  14083.2 |  21569.4 |
+| Q09     | clickhouse |   3897.6 |      5 |     12148.1 |   15380.9 |   6479.7 |  11182   |  26724.7 |
 | Q09     | duckdb     |   4415.3 |      5 |      9689.4 |   10006   |   3018.8 |   6892.2 |  13703.7 |
 | Q09     | exasol     |   2009.4 |      5 |      9734.9 |    8984.1 |   1540.5 |   6368.3 |  10064.5 |
-| Q09     | starrocks  |   5893.5 |      5 |     11476.5 |   11296   |    631.9 |  10389.9 |  11980.9 |
+| Q09     | starrocks  |   6261.4 |      5 |     11933.7 |   12028.6 |   1216.7 |  10708.6 |  13487.2 |
 | Q09     | trino      |  31214.9 |      5 |    120219   |  110067   |  18182.5 |  87697.6 | 125860   |
-| Q10     | clickhouse |   8793.2 |      5 |     30491.9 |   32065.8 |   4212.3 |  28466.2 |  38028   |
+| Q10     | clickhouse |   5377.3 |      5 |     17541.9 |   18946.9 |   3902   |  14080.8 |  23144.9 |
 | Q10     | duckdb     |   2129.6 |      5 |      8865   |    8041.2 |   2115.8 |   4275.8 |   9260   |
 | Q10     | exasol     |    720.8 |      5 |      2419.4 |    2117.1 |    708.1 |   1343.7 |   2739.7 |
-| Q10     | starrocks  |   2095   |      5 |      4487.6 |    4520.2 |    373.3 |   4205.2 |   5121   |
+| Q10     | starrocks  |   2080.6 |      5 |      4274.2 |    4230.8 |    374.9 |   3739.4 |   4685.9 |
 | Q10     | trino      |  13559.3 |      5 |     76438.7 |   72973.5 |  31800.8 |  36600.7 | 114536   |
-| Q11     | clickhouse |   1054.1 |      5 |      8719   |    8622   |   2780.7 |   4460.8 |  12003.3 |
+| Q11     | clickhouse |   1307.6 |      5 |      3855.4 |    3789   |   2131.9 |   1278.2 |   6254.3 |
 | Q11     | duckdb     |    199.2 |      5 |      6597.3 |    7618.2 |   1814.2 |   6202.4 |  10340.9 |
 | Q11     | exasol     |    149.1 |      5 |       453   |     451.3 |    113.6 |    275.7 |    586.4 |
-| Q11     | starrocks  |    316.8 |      5 |       550.1 |     585.3 |     58.4 |    542.2 |    678.4 |
+| Q11     | starrocks  |    396.8 |      5 |       527.1 |     569.9 |     89.2 |    493.4 |    704.1 |
 | Q11     | trino      |   1937.2 |      5 |      5305.6 |    4858.8 |   1797.9 |   1937.1 |   6510.6 |
-| Q12     | clickhouse |   3387.2 |      5 |      5732.8 |    7690.5 |   5427.5 |   4056.8 |  17314.9 |
+| Q12     | clickhouse |   3192.2 |      5 |      5112.3 |    6293.4 |   2417.3 |   3870.3 |   8968.4 |
 | Q12     | duckdb     |   1497.7 |      5 |      7662.3 |    7104.6 |   4112.4 |   1497.9 |  11845.2 |
 | Q12     | exasol     |    149.5 |      5 |       553.9 |     668.2 |    226.4 |    421.1 |    926   |
-| Q12     | starrocks  |    618.3 |      5 |      1612.1 |    1611.8 |     98.8 |   1482.6 |   1737.8 |
+| Q12     | starrocks  |    643.6 |      5 |      1656.1 |    1655.4 |    140.8 |   1441.4 |   1827   |
 | Q12     | trino      |   6686.8 |      5 |     26922.9 |   22777   |   8808.5 |   8963   |  29919.2 |
-| Q13     | clickhouse |   4470.9 |      5 |     12259.2 |   13579.6 |   4312.2 |   9570.4 |  20934.8 |
+| Q13     | clickhouse |   3550.9 |      5 |     12307   |   13368.1 |   3298.3 |  10041.1 |  17742.7 |
 | Q13     | duckdb     |   3680.4 |      5 |      7437.3 |    8380.2 |   4013   |   3687.5 |  14635.3 |
 | Q13     | exasol     |   1492.5 |      5 |      5691.6 |    5269.2 |   1391.9 |   2846.9 |   6383.1 |
-| Q13     | starrocks  |   3221.8 |      5 |      9341.4 |    8659.5 |   3281.1 |   3354.2 |  11597.1 |
+| Q13     | starrocks  |   3426.3 |      5 |      9107.1 |    8345.3 |   3019.8 |   3511.8 |  11653.8 |
 | Q13     | trino      |  16145.1 |      5 |     64388.9 |   63578   |  22442.8 |  32870.9 |  87992.4 |
-| Q14     | clickhouse |    329.4 |      5 |      3278   |    3625.3 |   1692.9 |   1512.1 |   6141.7 |
+| Q14     | clickhouse |    321.1 |      5 |      6128.2 |    4947.6 |   2237.6 |   1637.3 |   7105.7 |
 | Q14     | duckdb     |   1066.7 |      5 |      4391.9 |    6262.2 |   3632.2 |   2358.2 |  10637.8 |
 | Q14     | exasol     |    144.8 |      5 |       678.5 |     740.9 |    146   |    629.3 |    981.5 |
-| Q14     | starrocks  |    220.7 |      5 |       650   |     662.7 |    219.9 |    446.8 |    961.4 |
+| Q14     | starrocks  |    242.9 |      5 |       706.3 |     639.1 |    115.4 |    450.7 |    720.5 |
 | Q14     | trino      |   6422.2 |      5 |     23396.3 |   30303.7 |  14438.4 |  21282.6 |  55626.3 |
-| Q15     | clickhouse |    345.2 |      5 |      2515.7 |    3317.3 |   1998.9 |    960.6 |   6059.5 |
+| Q15     | clickhouse |    288.4 |      5 |      2777.1 |    2884.3 |   1428.9 |    849.9 |   4510.9 |
 | Q15     | duckdb     |    898.1 |      5 |      4887.4 |    4922.2 |   2935.3 |    903   |   7834.4 |
 | Q15     | exasol     |    389.5 |      5 |      1415.2 |    1475.9 |    150   |   1378.9 |   1742   |
-| Q15     | starrocks  |    218.6 |      5 |       477.4 |     537   |    210.2 |    377.8 |    905   |
+| Q15     | starrocks  |    252.7 |      5 |       673.6 |     682.5 |    221.9 |    444.7 |   1032.6 |
 | Q15     | trino      |  11644.9 |      5 |     30504.4 |   32096.7 |   7372   |  22389.4 |  42672.5 |
-| Q16     | clickhouse |    977.7 |      5 |      6183.1 |    7000.4 |   3841.4 |   3927.2 |  13309   |
+| Q16     | clickhouse |    938.3 |      5 |      6202.8 |    7511.9 |   3450.4 |   4797.5 |  13280.4 |
 | Q16     | duckdb     |    662.4 |      5 |      4192.6 |    4585.4 |   3193.3 |    660.1 |   9578   |
 | Q16     | exasol     |    600.6 |      5 |      2091.2 |    2077.8 |     53.9 |   1999   |   2133.2 |
-| Q16     | starrocks  |    736.5 |      5 |      1384.3 |    1499   |    485.8 |    909.2 |   2230.6 |
+| Q16     | starrocks  |    707.4 |      5 |      1444.1 |    1460.2 |    269.7 |   1171.1 |   1876   |
 | Q16     | trino      |   3632.1 |      5 |     14959.6 |   20882.6 |  12061.6 |   9932.5 |  34930.9 |
-| Q17     | clickhouse |   1900.7 |      5 |      6723.9 |    9493.4 |   4718.4 |   6188.4 |  17309.8 |
+| Q17     | clickhouse |   1825.3 |      5 |      8350.8 |    9272.8 |   3261.1 |   5184.5 |  12611   |
 | Q17     | duckdb     |   1598.8 |      5 |      6880.7 |    7131   |    780.6 |   6369.9 |   8445.7 |
 | Q17     | exasol     |     28.4 |      5 |       109.5 |     103.9 |     26.7 |     66.9 |    135.2 |
-| Q17     | starrocks  |   1460.2 |      5 |      3374.6 |    3671.5 |    780.3 |   3044.1 |   4937.9 |
+| Q17     | starrocks  |   1538.4 |      5 |      3765.1 |    3769   |    780.3 |   2925.2 |   4854.6 |
 | Q17     | trino      |  13920.2 |      5 |     47057.4 |   44999.9 |   8531.5 |  31651.3 |  54841.6 |
-| Q18     | clickhouse |   6660.3 |      5 |     32306.6 |   32255.5 |   8271.2 |  23362.4 |  44594.5 |
+| Q18     | clickhouse |   6744.1 |      5 |     23702.5 |   25575.4 |   3341.7 |  22472.8 |  30111.8 |
 | Q18     | duckdb     |   3034.3 |      5 |      8302   |    8601.5 |   2208.1 |   6326.2 |  11329.1 |
 | Q18     | exasol     |    987.4 |      5 |      3457.2 |    3145.2 |    833   |   1666.4 |   3692   |
-| Q18     | starrocks  |   6231.8 |      5 |     33087.6 |   32760   |  10386.2 |  21746   |  49133.6 |
+| Q18     | starrocks  |   6559   |      5 |     31560.9 |   33415.5 |   8754.8 |  25432.7 |  48325.3 |
 | Q18     | trino      |  12395.4 |      5 |     56273.5 |   48672   |  15486.8 |  22293.6 |  59591.1 |
-| Q19     | clickhouse |   9692.1 |      5 |     28247.5 |   29010.9 |   2523.1 |  27137   |  33312.4 |
+| Q19     | clickhouse |   9429.5 |      5 |     31075.4 |   27426.5 |  10278.8 |   9127.5 |  33275.9 |
 | Q19     | duckdb     |   1517.7 |      5 |      5174.9 |    5299.4 |   2516.4 |   1515.4 |   8495.4 |
 | Q19     | exasol     |     59.4 |      5 |       161.7 |     147   |     36.8 |     90.9 |    186.7 |
-| Q19     | starrocks  |   2083.3 |      5 |      3778.7 |    4026.8 |    740.8 |   3181.7 |   4930.3 |
+| Q19     | starrocks  |   2055.5 |      5 |      4114.5 |    3986.7 |   1044.9 |   2746.3 |   5415.5 |
 | Q19     | trino      |   7417.7 |      5 |     17316.7 |   15111.3 |   4727.8 |   9479.4 |  20266.4 |
-| Q20     | clickhouse |   2621.5 |      5 |     11487   |   10594.6 |   2543.1 |   7634.1 |  13690.5 |
+| Q20     | clickhouse |   2482.7 |      5 |      7337.9 |    8362.6 |   2294.3 |   6173.7 |  11186.7 |
 | Q20     | duckdb     |   1383.7 |      5 |      6750.6 |    6465.9 |   3480.7 |   3117.4 |  11721.8 |
 | Q20     | exasol     |    343.3 |      5 |      1056.1 |     966.2 |    397   |    463.7 |   1419.4 |
-| Q20     | starrocks  |    472.9 |      5 |      1283.1 |    1286.4 |    187.7 |   1038.3 |   1564.8 |
+| Q20     | starrocks  |    508.2 |      5 |      1057.4 |     952.1 |    287.8 |    631.9 |   1208.5 |
 | Q20     | trino      |   7171   |      5 |     15463.6 |   21529.7 |  12141.2 |  10328.7 |  40777   |
-| Q21     | clickhouse |   4881.6 |      5 |     15034.4 |   16219.8 |   2394.8 |  14540.9 |  20209   |
+| Q21     | clickhouse |   4681.2 |      5 |     16485.2 |   16353.9 |   2916.6 |  12881.5 |  19220.8 |
 | Q21     | duckdb     |   6844.9 |      5 |      9398.9 |    9462.8 |   1877.9 |   6893.5 |  12134.7 |
 | Q21     | exasol     |    837.8 |      5 |      2140.8 |    2522.3 |   1017.3 |   1321.1 |   3735.3 |
-| Q21     | starrocks  |   7664.9 |      5 |     23400   |   20661.8 |   5364.8 |  12587.4 |  25829.9 |
+| Q21     | starrocks  |   7903.9 |      5 |     23430.2 |   20967.5 |   5453.2 |  12176.4 |  26112.5 |
 | Q21     | trino      |  32423.3 |      5 |     78350.6 |   77411.7 |  23709   |  51651.2 | 109018   |
-| Q22     | clickhouse |    863   |      5 |      8155.7 |    6485.3 |   2803.4 |   3135.5 |   8726.4 |
+| Q22     | clickhouse |    916.4 |      5 |      8749.2 |    9286.8 |   2649.5 |   6395.4 |  13491.1 |
 | Q22     | duckdb     |    783.6 |      5 |      8028.2 |    9930.1 |   4735.1 |   4260.9 |  15396.9 |
 | Q22     | exasol     |    178   |      5 |       684.8 |     620   |    187   |    293.1 |    757.1 |
-| Q22     | starrocks  |    641   |      5 |      1486   |    1389.5 |    500.6 |    539.3 |   1851.5 |
+| Q22     | starrocks  |    645   |      5 |      1635.4 |    1487   |    562.6 |    561.2 |   2029.4 |
 | Q22     | trino      |   4674.6 |      5 |     12187.5 |   14928.5 |   6016.3 |  10508.3 |  24865.7 |
 
 ### System Comparison
 
 | query   | baseline_system   | comparison_system   |   baseline_ms |   comparison_ms |   ratio |   speedup | faster   |
 |---------|-------------------|---------------------|---------------|-----------------|---------|-----------|----------|
+| Q01     | exasol            | clickhouse          |        5644.7 |         12989.7 |    2.3  |      0.43 | False    |
+| Q02     | exasol            | clickhouse          |         206   |          8467.9 |   41.11 |      0.02 | False    |
+| Q03     | exasol            | clickhouse          |         668.3 |          6989.8 |   10.46 |      0.1  | False    |
+| Q04     | exasol            | clickhouse          |         426.6 |         18583.7 |   43.56 |      0.02 | False    |
+| Q05     | exasol            | clickhouse          |        1999   |         20315.6 |   10.16 |      0.1  | False    |
+| Q06     | exasol            | clickhouse          |         272.9 |          2571   |    9.42 |      0.11 | False    |
+| Q07     | exasol            | clickhouse          |        2384.7 |          6757   |    2.83 |      0.35 | False    |
+| Q08     | exasol            | clickhouse          |         584.3 |         27866.9 |   47.69 |      0.02 | False    |
+| Q09     | exasol            | clickhouse          |        9734.9 |         12148.1 |    1.25 |      0.8  | False    |
+| Q10     | exasol            | clickhouse          |        2419.4 |         17541.9 |    7.25 |      0.14 | False    |
+| Q11     | exasol            | clickhouse          |         453   |          3855.4 |    8.51 |      0.12 | False    |
+| Q12     | exasol            | clickhouse          |         553.9 |          5112.3 |    9.23 |      0.11 | False    |
+| Q13     | exasol            | clickhouse          |        5691.6 |         12307   |    2.16 |      0.46 | False    |
+| Q14     | exasol            | clickhouse          |         678.5 |          6128.2 |    9.03 |      0.11 | False    |
+| Q15     | exasol            | clickhouse          |        1415.2 |          2777.1 |    1.96 |      0.51 | False    |
+| Q16     | exasol            | clickhouse          |        2091.2 |          6202.8 |    2.97 |      0.34 | False    |
+| Q17     | exasol            | clickhouse          |         109.5 |          8350.8 |   76.26 |      0.01 | False    |
+| Q18     | exasol            | clickhouse          |        3457.2 |         23702.5 |    6.86 |      0.15 | False    |
+| Q19     | exasol            | clickhouse          |         161.7 |         31075.4 |  192.18 |      0.01 | False    |
+| Q20     | exasol            | clickhouse          |        1056.1 |          7337.9 |    6.95 |      0.14 | False    |
+| Q21     | exasol            | clickhouse          |        2140.8 |         16485.2 |    7.7  |      0.13 | False    |
+| Q22     | exasol            | clickhouse          |         684.8 |          8749.2 |   12.78 |      0.08 | False    |
 | Q01     | exasol            | duckdb              |        5644.7 |          5734.7 |    1.02 |      0.98 | False    |
 | Q02     | exasol            | duckdb              |         206   |          4677.1 |   22.7  |      0.04 | False    |
 | Q03     | exasol            | duckdb              |         668.3 |          2989.5 |    4.47 |      0.22 | False    |
@@ -507,50 +552,28 @@ The following table shows the time taken for data generation, schema creation, a
 | Q20     | exasol            | duckdb              |        1056.1 |          6750.6 |    6.39 |      0.16 | False    |
 | Q21     | exasol            | duckdb              |        2140.8 |          9398.9 |    4.39 |      0.23 | False    |
 | Q22     | exasol            | duckdb              |         684.8 |          8028.2 |   11.72 |      0.09 | False    |
-| Q01     | exasol            | starrocks           |        5644.7 |         18733.1 |    3.32 |      0.3  | False    |
-| Q02     | exasol            | starrocks           |         206   |           921.6 |    4.47 |      0.22 | False    |
-| Q03     | exasol            | starrocks           |         668.3 |          1695.5 |    2.54 |      0.39 | False    |
-| Q04     | exasol            | starrocks           |         426.6 |          4192.5 |    9.83 |      0.1  | False    |
-| Q05     | exasol            | starrocks           |        1999   |          9436   |    4.72 |      0.21 | False    |
-| Q06     | exasol            | starrocks           |         272.9 |           416.4 |    1.53 |      0.66 | False    |
-| Q07     | exasol            | starrocks           |        2384.7 |          4089   |    1.71 |      0.58 | False    |
-| Q08     | exasol            | starrocks           |         584.3 |          7509   |   12.85 |      0.08 | False    |
-| Q09     | exasol            | starrocks           |        9734.9 |         11476.5 |    1.18 |      0.85 | False    |
-| Q10     | exasol            | starrocks           |        2419.4 |          4487.6 |    1.85 |      0.54 | False    |
-| Q11     | exasol            | starrocks           |         453   |           550.1 |    1.21 |      0.82 | False    |
-| Q12     | exasol            | starrocks           |         553.9 |          1612.1 |    2.91 |      0.34 | False    |
-| Q13     | exasol            | starrocks           |        5691.6 |          9341.4 |    1.64 |      0.61 | False    |
-| Q14     | exasol            | starrocks           |         678.5 |           650   |    0.96 |      1.04 | True     |
-| Q15     | exasol            | starrocks           |        1415.2 |           477.4 |    0.34 |      2.96 | True     |
-| Q16     | exasol            | starrocks           |        2091.2 |          1384.3 |    0.66 |      1.51 | True     |
-| Q17     | exasol            | starrocks           |         109.5 |          3374.6 |   30.82 |      0.03 | False    |
-| Q18     | exasol            | starrocks           |        3457.2 |         33087.6 |    9.57 |      0.1  | False    |
-| Q19     | exasol            | starrocks           |         161.7 |          3778.7 |   23.37 |      0.04 | False    |
-| Q20     | exasol            | starrocks           |        1056.1 |          1283.1 |    1.21 |      0.82 | False    |
-| Q21     | exasol            | starrocks           |        2140.8 |         23400   |   10.93 |      0.09 | False    |
-| Q22     | exasol            | starrocks           |         684.8 |          1486   |    2.17 |      0.46 | False    |
-| Q01     | exasol            | clickhouse          |        5644.7 |         18051.5 |    3.2  |      0.31 | False    |
-| Q02     | exasol            | clickhouse          |         206   |         10425.7 |   50.61 |      0.02 | False    |
-| Q03     | exasol            | clickhouse          |         668.3 |         20297.5 |   30.37 |      0.03 | False    |
-| Q04     | exasol            | clickhouse          |         426.6 |         22509.9 |   52.77 |      0.02 | False    |
-| Q05     | exasol            | clickhouse          |        1999   |         23636.2 |   11.82 |      0.08 | False    |
-| Q06     | exasol            | clickhouse          |         272.9 |          2554   |    9.36 |      0.11 | False    |
-| Q07     | exasol            | clickhouse          |        2384.7 |         37609.9 |   15.77 |      0.06 | False    |
-| Q08     | exasol            | clickhouse          |         584.3 |         28943.4 |   49.54 |      0.02 | False    |
-| Q09     | exasol            | clickhouse          |        9734.9 |         19604.7 |    2.01 |      0.5  | False    |
-| Q10     | exasol            | clickhouse          |        2419.4 |         30491.9 |   12.6  |      0.08 | False    |
-| Q11     | exasol            | clickhouse          |         453   |          8719   |   19.25 |      0.05 | False    |
-| Q12     | exasol            | clickhouse          |         553.9 |          5732.8 |   10.35 |      0.1  | False    |
-| Q13     | exasol            | clickhouse          |        5691.6 |         12259.2 |    2.15 |      0.46 | False    |
-| Q14     | exasol            | clickhouse          |         678.5 |          3278   |    4.83 |      0.21 | False    |
-| Q15     | exasol            | clickhouse          |        1415.2 |          2515.7 |    1.78 |      0.56 | False    |
-| Q16     | exasol            | clickhouse          |        2091.2 |          6183.1 |    2.96 |      0.34 | False    |
-| Q17     | exasol            | clickhouse          |         109.5 |          6723.9 |   61.41 |      0.02 | False    |
-| Q18     | exasol            | clickhouse          |        3457.2 |         32306.6 |    9.34 |      0.11 | False    |
-| Q19     | exasol            | clickhouse          |         161.7 |         28247.5 |  174.69 |      0.01 | False    |
-| Q20     | exasol            | clickhouse          |        1056.1 |         11487   |   10.88 |      0.09 | False    |
-| Q21     | exasol            | clickhouse          |        2140.8 |         15034.4 |    7.02 |      0.14 | False    |
-| Q22     | exasol            | clickhouse          |         684.8 |          8155.7 |   11.91 |      0.08 | False    |
+| Q01     | exasol            | starrocks           |        5644.7 |         20850.6 |    3.69 |      0.27 | False    |
+| Q02     | exasol            | starrocks           |         206   |           988.7 |    4.8  |      0.21 | False    |
+| Q03     | exasol            | starrocks           |         668.3 |          1827.1 |    2.73 |      0.37 | False    |
+| Q04     | exasol            | starrocks           |         426.6 |          3931   |    9.21 |      0.11 | False    |
+| Q05     | exasol            | starrocks           |        1999   |          8479.8 |    4.24 |      0.24 | False    |
+| Q06     | exasol            | starrocks           |         272.9 |           479.3 |    1.76 |      0.57 | False    |
+| Q07     | exasol            | starrocks           |        2384.7 |          4191.6 |    1.76 |      0.57 | False    |
+| Q08     | exasol            | starrocks           |         584.3 |          6262.1 |   10.72 |      0.09 | False    |
+| Q09     | exasol            | starrocks           |        9734.9 |         11933.7 |    1.23 |      0.82 | False    |
+| Q10     | exasol            | starrocks           |        2419.4 |          4274.2 |    1.77 |      0.57 | False    |
+| Q11     | exasol            | starrocks           |         453   |           527.1 |    1.16 |      0.86 | False    |
+| Q12     | exasol            | starrocks           |         553.9 |          1656.1 |    2.99 |      0.33 | False    |
+| Q13     | exasol            | starrocks           |        5691.6 |          9107.1 |    1.6  |      0.62 | False    |
+| Q14     | exasol            | starrocks           |         678.5 |           706.3 |    1.04 |      0.96 | False    |
+| Q15     | exasol            | starrocks           |        1415.2 |           673.6 |    0.48 |      2.1  | True     |
+| Q16     | exasol            | starrocks           |        2091.2 |          1444.1 |    0.69 |      1.45 | True     |
+| Q17     | exasol            | starrocks           |         109.5 |          3765.1 |   34.38 |      0.03 | False    |
+| Q18     | exasol            | starrocks           |        3457.2 |         31560.9 |    9.13 |      0.11 | False    |
+| Q19     | exasol            | starrocks           |         161.7 |          4114.5 |   25.45 |      0.04 | False    |
+| Q20     | exasol            | starrocks           |        1056.1 |          1057.4 |    1    |      1    | False    |
+| Q21     | exasol            | starrocks           |        2140.8 |         23430.2 |   10.94 |      0.09 | False    |
+| Q22     | exasol            | starrocks           |         684.8 |          1635.4 |    2.39 |      0.42 | False    |
 | Q01     | exasol            | trino               |        5644.7 |         35021.5 |    6.2  |      0.16 | False    |
 | Q02     | exasol            | trino               |         206   |         16333.7 |   79.29 |      0.01 | False    |
 | Q03     | exasol            | trino               |         668.3 |         34667.6 |   51.87 |      0.02 | False    |
@@ -582,15 +605,15 @@ This benchmark was executed using **4 concurrent streams** to simulate multi-use
 
 | Stream ID | Queries Executed | Avg Runtime (ms) | Median Runtime (ms) | Min Runtime (ms) | Max Runtime (ms) |
 |-----------|------------------|------------------|---------------------|------------------|------------------|
-| 0 | 28 | 16918.8 | 14787.6 | 2481.4 | 37768.8 |
-| 1 | 28 | 15863.4 | 14854.6 | 960.6 | 38028.0 |
-| 2 | 27 | 16773.1 | 14083.2 | 2219.6 | 44594.5 |
-| 3 | 27 | 15204.7 | 11840.7 | 1867.2 | 50654.7 |
+| 0 | 28 | 12525.0 | 11317.2 | 849.9 | 33275.9 |
+| 1 | 28 | 12024.0 | 8787.2 | 1637.3 | 30111.8 |
+| 2 | 27 | 13443.9 | 11184.1 | 1784.1 | 32695.7 |
+| 3 | 27 | 12376.3 | 8822.1 | 1278.2 | 30957.9 |
 
 **Performance Analysis for Clickhouse:**
-- Fastest stream median: 11840.7ms
-- Slowest stream median: 14854.6ms
-- Stream performance variation: 25.5% difference between fastest and slowest streams
+- Fastest stream median: 8787.2ms
+- Slowest stream median: 11317.2ms
+- Stream performance variation: 28.8% difference between fastest and slowest streams
 - This demonstrates **varying** performance across concurrent streams
 #### Duckdb
 
@@ -624,15 +647,15 @@ This benchmark was executed using **4 concurrent streams** to simulate multi-use
 
 | Stream ID | Queries Executed | Avg Runtime (ms) | Median Runtime (ms) | Min Runtime (ms) | Max Runtime (ms) |
 |-----------|------------------|------------------|---------------------|------------------|------------------|
-| 0 | 28 | 6914.8 | 4040.1 | 282.2 | 33087.6 |
-| 1 | 28 | 6335.7 | 3500.4 | 416.4 | 49133.6 |
-| 2 | 27 | 6718.6 | 4205.2 | 550.1 | 29827.1 |
-| 3 | 27 | 5732.5 | 1851.5 | 302.0 | 23548.1 |
+| 0 | 28 | 6897.0 | 4045.1 | 169.7 | 31560.9 |
+| 1 | 28 | 6236.8 | 3344.2 | 362.5 | 48325.3 |
+| 2 | 27 | 6710.8 | 4429.2 | 507.7 | 30365.1 |
+| 3 | 27 | 6030.2 | 2029.4 | 493.4 | 29421.2 |
 
 **Performance Analysis for Starrocks:**
-- Fastest stream median: 1851.5ms
-- Slowest stream median: 4205.2ms
-- Stream performance variation: 127.1% difference between fastest and slowest streams
+- Fastest stream median: 2029.4ms
+- Slowest stream median: 4429.2ms
+- Stream performance variation: 118.3% difference between fastest and slowest streams
 - This demonstrates **varying** performance across concurrent streams
 #### Trino
 
@@ -696,11 +719,11 @@ This benchmark was executed using **4 concurrent streams** to simulate multi-use
 
 ### Key Observations
 
-**exasol:**
-- Median runtime: 909.0ms
-- Average runtime: 1867.3ms
-- Fastest query: 66.9ms
-- Slowest query: 10064.5ms
+**clickhouse:**
+- Median runtime: 10075.0ms
+- Average runtime: 12586.5ms
+- Fastest query: 849.9ms
+- Slowest query: 33275.9ms
 
 **duckdb:**
 - Median runtime: 6886.4ms
@@ -708,17 +731,17 @@ This benchmark was executed using **4 concurrent streams** to simulate multi-use
 - Fastest query: 415.2ms
 - Slowest query: 15396.9ms
 
-**starrocks:**
-- Median runtime: 3364.4ms
-- Average runtime: 6429.0ms
-- Fastest query: 282.2ms
-- Slowest query: 49133.6ms
+**exasol:**
+- Median runtime: 909.0ms
+- Average runtime: 1867.3ms
+- Fastest query: 66.9ms
+- Slowest query: 10064.5ms
 
-**clickhouse:**
-- Median runtime: 14021.7ms
-- Average runtime: 16193.6ms
-- Fastest query: 960.6ms
-- Slowest query: 50654.7ms
+**starrocks:**
+- Median runtime: 3383.2ms
+- Average runtime: 6470.5ms
+- Fastest query: 169.7ms
+- Slowest query: 48325.3ms
 
 **trino:**
 - Median runtime: 32893.2ms
@@ -741,7 +764,10 @@ The complete dataset is available in the following files:
 
 Based on our testing environment:
 
-- See `attachments/system.json` for detailed system specifications
+- **CPU:** 8 logical cores
+- **Memory:** 61.8GB RAM
+- **Storage:** NVMe SSD recommended for optimal performance
+- **OS:** Linux
 
 ### Configuration Files
 
@@ -757,7 +783,7 @@ The exact configuration used for this benchmark is available at:
   - optimizer_mode: analytical
   - db_params: [&#39;-writeTouchInit=1&#39;, &#39;-cacheMonitorLimit=0&#39;, &#39;-maxOverallSlbUsageRatio=0.95&#39;, &#39;-useQueryCache=0&#39;, &#39;-query_log_timeout=0&#39;, &#39;-joinOrderMethod=0&#39;, &#39;-etlCheckCertsDefault=0&#39;]
 
-**Clickhouse 25.10.2.65:**
+**Clickhouse 26.1.3.52:**
 - **Setup method:** native
 - **Data directory:** /data/clickhouse
 - **Applied configurations:**
@@ -776,7 +802,7 @@ The exact configuration used for this benchmark is available at:
   - query_max_memory: 48GB
   - query_max_memory_per_node: 35GB
 
-**Starrocks 4.0.4:**
+**Starrocks 4.0.6:**
 - **Setup method:** native
 - **Data directory:** 
 - **Applied configurations:**

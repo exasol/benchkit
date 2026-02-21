@@ -1,13 +1,13 @@
 {
   "system_name": "starrocks",
   "system_kind": "starrocks",
-  "system_version": "4.0.4",
+  "system_version": "4.0.6",
   "commands": {
     "storage_setup": [
       {
-        "command": "sudo mkfs.ext4 -F /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS23DC35E40AC69FA72",
+        "command": "sudo mkfs.ext4 -F /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS3AA8F947648AEBF1D",
         "success": true,
-        "description": "Format /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS23DC35E40AC69FA72 with ext4 filesystem",
+        "description": "Format /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS3AA8F947648AEBF1D with ext4 filesystem",
         "category": "storage_setup"
       },
       {
@@ -17,9 +17,9 @@
         "category": "storage_setup"
       },
       {
-        "command": "sudo mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS23DC35E40AC69FA72 /data",
+        "command": "sudo mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS3AA8F947648AEBF1D /data",
         "success": true,
-        "description": "Mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS23DC35E40AC69FA72 to /data",
+        "description": "Mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS3AA8F947648AEBF1D to /data",
         "category": "storage_setup"
       },
       {
@@ -29,7 +29,7 @@
         "category": "storage_setup"
       },
       {
-        "command": "sudo mkdir -p /data/starrocks",
+        "command": "sudo mkdir -p /data/starrocks && sudo chmod 1777 /data/starrocks",
         "success": true,
         "description": "Create starrocks data directory",
         "category": "storage_setup"
@@ -43,14 +43,14 @@
     ]
   },
   "installation_notes": [
-    "Storage device /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS23DC35E40AC69FA72 mounted at /data",
+    "Storage device /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS3AA8F947648AEBF1D mounted at /data",
     "starrocks data directory: /data/starrocks",
     "Installing StarRocks using official tarball"
   ],
   "config_parameters": {
     "node_count": 1,
     "use_additional_disk": true,
-    "host": "<PUBLIC_IP>",
+    "host": "$STARROCKS_PUBLIC_IP",
     "port": 9030,
     "username": "root",
     "password": "",

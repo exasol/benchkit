@@ -1,0 +1,541 @@
+{
+  "total_queries": 110,
+  "systems": [
+    "exasol",
+    "clickhouse",
+    "trino",
+    "starrocks"
+  ],
+  "query_names": [
+    "Q11",
+    "Q01",
+    "Q02",
+    "Q13",
+    "Q14",
+    "Q04",
+    "Q12",
+    "Q21",
+    "Q16",
+    "Q15",
+    "Q06",
+    "Q07",
+    "Q20",
+    "Q17",
+    "Q18",
+    "Q10",
+    "Q05",
+    "Q08",
+    "Q22",
+    "Q09",
+    "Q03",
+    "Q19"
+  ],
+  "run_date": "2026-02-18 12:33:08",
+  "variant": "official",
+  "system_variants": {
+    "clickhouse": "tuned"
+  },
+  "execution_mode": "multiuser",
+  "multiuser": {
+    "num_streams": 4,
+    "randomize": true,
+    "random_seed": 42
+  },
+  "per_system": {
+    "trino": {
+      "total_queries": 110,
+      "avg_runtime_ms": 97123.73545454546,
+      "median_runtime_ms": 89671.05,
+      "min_runtime_ms": 8383.7,
+      "max_runtime_ms": 311007.8
+    }
+  },
+  "per_query": {
+    "Q11": {
+      "systems": [
+        "trino"
+      ],
+      "per_system": {
+        "trino": {
+          "runs": 5,
+          "avg_runtime_ms": 21456.360000000004,
+          "median_runtime_ms": 22889.9,
+          "min_runtime_ms": 13549.6,
+          "max_runtime_ms": 28468.3
+        }
+      }
+    },
+    "Q01": {
+      "systems": [
+        "trino"
+      ],
+      "per_system": {
+        "trino": {
+          "runs": 5,
+          "avg_runtime_ms": 89446.54000000001,
+          "median_runtime_ms": 107853.3,
+          "min_runtime_ms": 46563.0,
+          "max_runtime_ms": 123598.3
+        }
+      }
+    },
+    "Q02": {
+      "systems": [
+        "trino"
+      ],
+      "per_system": {
+        "trino": {
+          "runs": 5,
+          "avg_runtime_ms": 42471.27999999999,
+          "median_runtime_ms": 39270.5,
+          "min_runtime_ms": 23958.8,
+          "max_runtime_ms": 62692.7
+        }
+      }
+    },
+    "Q13": {
+      "systems": [
+        "trino"
+      ],
+      "per_system": {
+        "trino": {
+          "runs": 5,
+          "avg_runtime_ms": 64216.5,
+          "median_runtime_ms": 69694.8,
+          "min_runtime_ms": 38697.1,
+          "max_runtime_ms": 73143.5
+        }
+      }
+    },
+    "Q14": {
+      "systems": [
+        "trino"
+      ],
+      "per_system": {
+        "trino": {
+          "runs": 5,
+          "avg_runtime_ms": 79378.45999999999,
+          "median_runtime_ms": 73728.4,
+          "min_runtime_ms": 36514.8,
+          "max_runtime_ms": 115660.6
+        }
+      }
+    },
+    "Q04": {
+      "systems": [
+        "trino"
+      ],
+      "per_system": {
+        "trino": {
+          "runs": 5,
+          "avg_runtime_ms": 59882.64,
+          "median_runtime_ms": 53488.9,
+          "min_runtime_ms": 30625.0,
+          "max_runtime_ms": 92859.9
+        }
+      }
+    },
+    "Q12": {
+      "systems": [
+        "trino"
+      ],
+      "per_system": {
+        "trino": {
+          "runs": 5,
+          "avg_runtime_ms": 128919.43999999999,
+          "median_runtime_ms": 127121.7,
+          "min_runtime_ms": 107051.5,
+          "max_runtime_ms": 166748.6
+        }
+      }
+    },
+    "Q21": {
+      "systems": [
+        "trino"
+      ],
+      "per_system": {
+        "trino": {
+          "runs": 5,
+          "avg_runtime_ms": 152102.34,
+          "median_runtime_ms": 168463.0,
+          "min_runtime_ms": 79964.7,
+          "max_runtime_ms": 210458.9
+        }
+      }
+    },
+    "Q16": {
+      "systems": [
+        "trino"
+      ],
+      "per_system": {
+        "trino": {
+          "runs": 5,
+          "avg_runtime_ms": 19082.999999999996,
+          "median_runtime_ms": 19314.1,
+          "min_runtime_ms": 8383.7,
+          "max_runtime_ms": 26644.2
+        }
+      }
+    },
+    "Q15": {
+      "systems": [
+        "trino"
+      ],
+      "per_system": {
+        "trino": {
+          "runs": 5,
+          "avg_runtime_ms": 104299.31999999999,
+          "median_runtime_ms": 111121.1,
+          "min_runtime_ms": 76050.4,
+          "max_runtime_ms": 114888.2
+        }
+      }
+    },
+    "Q06": {
+      "systems": [
+        "trino"
+      ],
+      "per_system": {
+        "trino": {
+          "runs": 5,
+          "avg_runtime_ms": 107317.62000000002,
+          "median_runtime_ms": 105185.7,
+          "min_runtime_ms": 43206.6,
+          "max_runtime_ms": 155856.9
+        }
+      }
+    },
+    "Q07": {
+      "systems": [
+        "trino"
+      ],
+      "per_system": {
+        "trino": {
+          "runs": 5,
+          "avg_runtime_ms": 77779.86000000002,
+          "median_runtime_ms": 72829.0,
+          "min_runtime_ms": 48756.0,
+          "max_runtime_ms": 108152.9
+        }
+      }
+    },
+    "Q20": {
+      "systems": [
+        "trino"
+      ],
+      "per_system": {
+        "trino": {
+          "runs": 5,
+          "avg_runtime_ms": 125826.31999999999,
+          "median_runtime_ms": 136431.6,
+          "min_runtime_ms": 70613.9,
+          "max_runtime_ms": 159095.0
+        }
+      }
+    },
+    "Q17": {
+      "systems": [
+        "trino"
+      ],
+      "per_system": {
+        "trino": {
+          "runs": 5,
+          "avg_runtime_ms": 102577.54000000001,
+          "median_runtime_ms": 96692.0,
+          "min_runtime_ms": 71364.9,
+          "max_runtime_ms": 141736.7
+        }
+      }
+    },
+    "Q18": {
+      "systems": [
+        "trino"
+      ],
+      "per_system": {
+        "trino": {
+          "runs": 5,
+          "avg_runtime_ms": 134233.86000000002,
+          "median_runtime_ms": 141377.4,
+          "min_runtime_ms": 79307.8,
+          "max_runtime_ms": 179392.6
+        }
+      }
+    },
+    "Q10": {
+      "systems": [
+        "trino"
+      ],
+      "per_system": {
+        "trino": {
+          "runs": 5,
+          "avg_runtime_ms": 192330.22000000003,
+          "median_runtime_ms": 189656.4,
+          "min_runtime_ms": 68688.8,
+          "max_runtime_ms": 311007.8
+        }
+      }
+    },
+    "Q05": {
+      "systems": [
+        "trino"
+      ],
+      "per_system": {
+        "trino": {
+          "runs": 5,
+          "avg_runtime_ms": 147161.38,
+          "median_runtime_ms": 114789.8,
+          "min_runtime_ms": 101638.5,
+          "max_runtime_ms": 227353.3
+        }
+      }
+    },
+    "Q08": {
+      "systems": [
+        "trino"
+      ],
+      "per_system": {
+        "trino": {
+          "runs": 5,
+          "avg_runtime_ms": 141503.0,
+          "median_runtime_ms": 105971.9,
+          "min_runtime_ms": 48151.4,
+          "max_runtime_ms": 258248.5
+        }
+      }
+    },
+    "Q22": {
+      "systems": [
+        "trino"
+      ],
+      "per_system": {
+        "trino": {
+          "runs": 5,
+          "avg_runtime_ms": 17125.86,
+          "median_runtime_ms": 16479.3,
+          "min_runtime_ms": 13000.8,
+          "max_runtime_ms": 23608.9
+        }
+      }
+    },
+    "Q09": {
+      "systems": [
+        "trino"
+      ],
+      "per_system": {
+        "trino": {
+          "runs": 5,
+          "avg_runtime_ms": 115375.13999999998,
+          "median_runtime_ms": 119136.3,
+          "min_runtime_ms": 50585.2,
+          "max_runtime_ms": 177606.8
+        }
+      }
+    },
+    "Q03": {
+      "systems": [
+        "trino"
+      ],
+      "per_system": {
+        "trino": {
+          "runs": 5,
+          "avg_runtime_ms": 151959.65999999997,
+          "median_runtime_ms": 170842.0,
+          "min_runtime_ms": 84442.7,
+          "max_runtime_ms": 219050.6
+        }
+      }
+    },
+    "Q19": {
+      "systems": [
+        "trino"
+      ],
+      "per_system": {
+        "trino": {
+          "runs": 5,
+          "avg_runtime_ms": 62275.840000000004,
+          "median_runtime_ms": 56232.8,
+          "min_runtime_ms": 31483.3,
+          "max_runtime_ms": 117891.6
+        }
+      }
+    }
+  },
+  "per_stream": {
+    "trino": {
+      "0": {
+        "queries_executed": 28,
+        "avg_runtime_ms": 101838.46428571429,
+        "median_runtime_ms": 86351.2,
+        "min_runtime_ms": 8383.7,
+        "max_runtime_ms": 311007.8
+      },
+      "1": {
+        "queries_executed": 28,
+        "avg_runtime_ms": 92822.1607142857,
+        "median_runtime_ms": 82221.15,
+        "min_runtime_ms": 16479.3,
+        "max_runtime_ms": 219050.6
+      },
+      "2": {
+        "queries_executed": 27,
+        "avg_runtime_ms": 104753.4037037037,
+        "median_runtime_ms": 114789.8,
+        "min_runtime_ms": 13549.6,
+        "max_runtime_ms": 258248.5
+      },
+      "3": {
+        "queries_executed": 27,
+        "avg_runtime_ms": 89065.61111111111,
+        "median_runtime_ms": 92859.9,
+        "min_runtime_ms": 15864.6,
+        "max_runtime_ms": 210458.9
+      }
+    }
+  },
+  "warmup_statistics": {
+    "total_warmup_queries": 22,
+    "per_system": {
+      "trino": {
+        "total_queries": 22,
+        "avg_runtime_ms": 29384.590909090908,
+        "median_runtime_ms": 30160.75,
+        "min_runtime_ms": 5292.6,
+        "max_runtime_ms": 61936.7
+      }
+    },
+    "per_query": {
+      "Q01": {
+        "trino": {
+          "total_runs": 1,
+          "avg_runtime_ms": 22580.1
+        }
+      },
+      "Q02": {
+        "trino": {
+          "total_runs": 1,
+          "avg_runtime_ms": 14228.6
+        }
+      },
+      "Q03": {
+        "trino": {
+          "total_runs": 1,
+          "avg_runtime_ms": 36668.7
+        }
+      },
+      "Q04": {
+        "trino": {
+          "total_runs": 1,
+          "avg_runtime_ms": 20444.9
+        }
+      },
+      "Q05": {
+        "trino": {
+          "total_runs": 1,
+          "avg_runtime_ms": 22957.8
+        }
+      },
+      "Q06": {
+        "trino": {
+          "total_runs": 1,
+          "avg_runtime_ms": 28420.0
+        }
+      },
+      "Q07": {
+        "trino": {
+          "total_runs": 1,
+          "avg_runtime_ms": 32340.7
+        }
+      },
+      "Q08": {
+        "trino": {
+          "total_runs": 1,
+          "avg_runtime_ms": 31901.5
+        }
+      },
+      "Q09": {
+        "trino": {
+          "total_runs": 1,
+          "avg_runtime_ms": 35780.7
+        }
+      },
+      "Q10": {
+        "trino": {
+          "total_runs": 1,
+          "avg_runtime_ms": 61091.3
+        }
+      },
+      "Q11": {
+        "trino": {
+          "total_runs": 1,
+          "avg_runtime_ms": 9563.8
+        }
+      },
+      "Q12": {
+        "trino": {
+          "total_runs": 1,
+          "avg_runtime_ms": 39664.9
+        }
+      },
+      "Q13": {
+        "trino": {
+          "total_runs": 1,
+          "avg_runtime_ms": 16200.6
+        }
+      },
+      "Q14": {
+        "trino": {
+          "total_runs": 1,
+          "avg_runtime_ms": 21875.2
+        }
+      },
+      "Q15": {
+        "trino": {
+          "total_runs": 1,
+          "avg_runtime_ms": 40763.4
+        }
+      },
+      "Q16": {
+        "trino": {
+          "total_runs": 1,
+          "avg_runtime_ms": 5292.6
+        }
+      },
+      "Q17": {
+        "trino": {
+          "total_runs": 1,
+          "avg_runtime_ms": 42482.7
+        }
+      },
+      "Q18": {
+        "trino": {
+          "total_runs": 1,
+          "avg_runtime_ms": 34820.3
+        }
+      },
+      "Q19": {
+        "trino": {
+          "total_runs": 1,
+          "avg_runtime_ms": 27128.1
+        }
+      },
+      "Q20": {
+        "trino": {
+          "total_runs": 1,
+          "avg_runtime_ms": 33604.4
+        }
+      },
+      "Q21": {
+        "trino": {
+          "total_runs": 1,
+          "avg_runtime_ms": 61936.7
+        }
+      },
+      "Q22": {
+        "trino": {
+          "total_runs": 1,
+          "avg_runtime_ms": 6714.0
+        }
+      }
+    }
+  }
+}

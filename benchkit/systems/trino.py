@@ -468,7 +468,7 @@ class TrinoSystem(SystemUnderTest):
                 self._configure_config_properties(
                     is_coordinator=is_coordinator,
                     coordinator_ip=coordinator_ip,
-                    include_coordinator_worker=False,  # Don't include coordinator as worker in multinode
+                    include_coordinator_worker=True,  # Coordinator also serves as worker (fair comparison)
                 )
                 # Configure Hive catalog with file-based metastore (S3 or local)
                 self._configure_hive_catalog()

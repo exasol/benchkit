@@ -1,13 +1,13 @@
 {
   "system_name": "clickhouse",
   "system_kind": "clickhouse",
-  "system_version": "25.10.2.65",
+  "system_version": "26.1.3.52",
   "commands": {
     "storage_setup": [
       {
-        "command": "sudo mkfs.ext4 -F /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS211027B6B825D9A2D",
+        "command": "sudo mkfs.ext4 -F /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS45FCC058CA4532B87",
         "success": true,
-        "description": "Format /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS211027B6B825D9A2D with ext4 filesystem",
+        "description": "Format /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS45FCC058CA4532B87 with ext4 filesystem",
         "category": "storage_setup"
       },
       {
@@ -17,9 +17,9 @@
         "category": "storage_setup"
       },
       {
-        "command": "sudo mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS211027B6B825D9A2D /data",
+        "command": "sudo mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS45FCC058CA4532B87 /data",
         "success": true,
-        "description": "Mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS211027B6B825D9A2D to /data",
+        "description": "Mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS45FCC058CA4532B87 to /data",
         "category": "storage_setup"
       },
       {
@@ -29,7 +29,7 @@
         "category": "storage_setup"
       },
       {
-        "command": "sudo mkdir -p /data/clickhouse",
+        "command": "sudo mkdir -p /data/clickhouse && sudo chmod 1777 /data/clickhouse",
         "success": true,
         "description": "Create clickhouse data directory",
         "category": "storage_setup"
@@ -37,7 +37,7 @@
     ]
   },
   "installation_notes": [
-    "Storage device /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS211027B6B825D9A2D mounted at /data",
+    "Storage device /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS45FCC058CA4532B87 mounted at /data",
     "clickhouse data directory: /data/clickhouse",
     "Installing ClickHouse using official APT repository",
     "ClickHouse configuration file created: /etc/clickhouse-server/config.d/benchmark.xml",
@@ -63,7 +63,7 @@
     "node_count": 1,
     "use_additional_disk": true,
     "data_dir": "/data/clickhouse",
-    "host": "<PUBLIC_IP>",
+    "host": "$CLICKHOUSE_PUBLIC_IP",
     "port": 8123,
     "username": "default",
     "password": "<DATABASE_PASSWORD>",

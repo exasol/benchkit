@@ -1,0 +1,3991 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Streamlined Scalability - Stream Scaling (8 Streams) - Database Performance Benchmark">
+    <title>Streamlined Scalability - Stream Scaling (8 Streams) | Benchmark Results</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-badge">📊 Benchmark Report</div>
+            <h1>Streamlined Scalability - Stream Scaling (8 Streams)</h1>
+            <div class="metadata">
+                <span class="meta-item">
+                    <strong>Author:</strong> Benchmark Team
+                </span>
+                <span class="meta-item">
+                    <strong>Date:</strong> 2026-02-17 17:36:58
+                </span>
+                
+                <span class="meta-item">
+                    <strong>Environment:</strong>
+                    <span class="badge badge-cloud">AWS</span>
+                    eu-west-1
+                </span>
+                
+            </div>
+
+            <div class="notice notice-security">
+                <strong>🔒 Security Note:</strong> Sensitive information (passwords, IP addresses) has been sanitized.
+                Placeholders like <code>&lt;EXASOL_DB_PASSWORD&gt;</code>, <code>&lt;PRIVATE_IP&gt;</code>, and <code>&lt;PUBLIC_IP&gt;</code>
+                are used throughout. Substitute with your actual credentials when reproducing.
+            </div>
+        </header>
+
+        <!-- Overview -->
+        <section class="section">
+            <h2>Overview</h2>
+            <p>This comprehensive benchmark report provides complete reproduction details for performance testing of <strong>5 database systems</strong> using the TPC-H benchmark at scale factor 50. All installation steps, configuration parameters, and a self-contained benchmark package are included for independent verification.</p>
+        </section>
+
+        <!-- Executive Summary -->
+        <section class="section">
+            <h2>Executive Summary</h2>
+
+            
+            <div class="summary-intro">
+                <p>We compared <strong>5 database systems</strong>:</p>
+            </div>
+
+            <!-- Performance Cards -->
+            <div class="summary-cards">
+                
+                <div class="summary-card">
+                    <h3>Exasol</h3>
+                    <div class="card-metrics">
+                        <div class="metric">
+                            <span class="metric-label">Median Runtime</span>
+                            <span class="metric-value">338.8ms</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Average Runtime</span>
+                            <span class="metric-value">742.9ms</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Fastest Query</span>
+                            <span class="metric-value metric-fast">17.4ms</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Slowest Query</span>
+                            <span class="metric-value metric-slow">3242.7ms</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="summary-card">
+                    <h3>Starrocks</h3>
+                    <div class="card-metrics">
+                        <div class="metric">
+                            <span class="metric-label">Median Runtime</span>
+                            <span class="metric-value">2664.8ms</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Average Runtime</span>
+                            <span class="metric-value">3267.1ms</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Fastest Query</span>
+                            <span class="metric-value metric-fast">168.3ms</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Slowest Query</span>
+                            <span class="metric-value metric-slow">12849.7ms</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="summary-card">
+                    <h3>Duckdb</h3>
+                    <div class="card-metrics">
+                        <div class="metric">
+                            <span class="metric-label">Median Runtime</span>
+                            <span class="metric-value">4513.4ms</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Average Runtime</span>
+                            <span class="metric-value">4412.0ms</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Fastest Query</span>
+                            <span class="metric-value metric-fast">173.9ms</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Slowest Query</span>
+                            <span class="metric-value metric-slow">8200.3ms</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="summary-card">
+                    <h3>Clickhouse</h3>
+                    <div class="card-metrics">
+                        <div class="metric">
+                            <span class="metric-label">Median Runtime</span>
+                            <span class="metric-value">8642.6ms</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Average Runtime</span>
+                            <span class="metric-value">11409.3ms</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Fastest Query</span>
+                            <span class="metric-value metric-fast">763.8ms</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Slowest Query</span>
+                            <span class="metric-value metric-slow">27273.1ms</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="summary-card">
+                    <h3>Trino</h3>
+                    <div class="card-metrics">
+                        <div class="metric">
+                            <span class="metric-label">Median Runtime</span>
+                            <span class="metric-value">16407.1ms</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Average Runtime</span>
+                            <span class="metric-value">20615.6ms</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Fastest Query</span>
+                            <span class="metric-value metric-fast">1594.2ms</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Slowest Query</span>
+                            <span class="metric-value metric-slow">98785.2ms</span>
+                        </div>
+                    </div>
+                </div>
+                
+            </div>
+
+            
+            
+            
+            
+            <div class="key-findings">
+                <h3>Key Findings</h3>
+                <ul>
+                    <li><strong>exasol</strong> was the fastest overall with <strong>338.8ms</strong> median runtime</li>
+                    
+                    <li><strong>trino</strong> was <strong>48.4x</strong> slower</li>
+                    
+                    <li>Tested <strong>550</strong> total query executions</li>
+                </ul>
+            </div>
+            
+            
+        </section>
+
+        <!-- Performance Visualizations -->
+        
+        <section class="section">
+            <h2>Performance Visualizations</h2>
+
+            <div class="chart-container">
+                <iframe src="attachments/figures/system_performance_overview.html" width="100%" height="500" frameborder="0"></iframe>
+            </div>
+            <div class="chart-container">
+                <iframe src="attachments/figures/performance_heatmap.html" width="100%" height="450" frameborder="0"></iframe>
+            </div>
+            <div class="chart-container">
+                <iframe src="attachments/figures/all_systems_comparison.html" width="100%" height="550" frameborder="0"></iframe>
+            </div>
+        </section>
+        
+
+        <!-- Systems Under Test -->
+        <section class="section">
+            <h2>Systems Under Test</h2>
+
+            <div class="systems-grid">
+                
+                <div class="system-card">
+                    <h3>Exasol 2025.2.0</h3>
+
+                    <div class="system-info">
+                        <h4>Software Configuration</h4>
+                        <table class="info-table">
+                            <tr><td>Database</td><td><strong>exasol 2025.2.0</strong></td></tr>
+                            <tr><td>Setup Method</td><td>installer</td></tr>
+                            
+                            
+                            <tr><td>Data Device</td><td><code>/dev/exasol.storage</code></td></tr>
+                            
+                            
+                        </table>
+                    </div>
+
+                    
+                    
+                    
+                    
+                      
+                    
+                      
+                    
+                      
+                    
+                      
+                    
+                      
+                        
+                      
+                    
+
+                    
+                    
+                    <div class="system-info">
+                        <h4>Hardware Specifications</h4>
+                        <table class="info-table">
+                            
+                            <tr><td>Cloud Provider</td><td><span class="badge badge-cloud">AWS</span></td></tr>
+                            <tr><td>Region</td><td>eu-west-1</td></tr>
+                            
+                            <tr><td>Instance Type</td><td><strong>r6id.8xlarge</strong></td></tr>
+                            
+                            
+                            
+                            
+                            <tr><td>CPU</td><td>Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz</td></tr>
+                            
+                            
+                            
+                            <tr><td>CPU Cores</td><td>32 vCPUs</td></tr>
+                            
+                            
+                            
+                            
+                            <tr><td>Memory</td><td>247.7GB RAM</td></tr>
+                            
+                            
+                            
+                        </table>
+                    </div>
+                    
+                    
+                </div>
+                
+                <div class="system-card">
+                    <h3>Clickhouse 26.1.3.52</h3>
+
+                    <div class="system-info">
+                        <h4>Software Configuration</h4>
+                        <table class="info-table">
+                            <tr><td>Database</td><td><strong>clickhouse 26.1.3.52</strong></td></tr>
+                            <tr><td>Setup Method</td><td>native</td></tr>
+                            
+                            <tr><td>Data Directory</td><td><code>/data/clickhouse</code></td></tr>
+                            
+                            
+                            
+                        </table>
+                    </div>
+
+                    
+                    
+                    
+                    
+                      
+                    
+                      
+                    
+                      
+                    
+                      
+                        
+                      
+                    
+                      
+                    
+
+                    
+                    
+                    <div class="system-info">
+                        <h4>Hardware Specifications</h4>
+                        <table class="info-table">
+                            
+                            <tr><td>Cloud Provider</td><td><span class="badge badge-cloud">AWS</span></td></tr>
+                            <tr><td>Region</td><td>eu-west-1</td></tr>
+                            
+                            <tr><td>Instance Type</td><td><strong>r6id.8xlarge</strong></td></tr>
+                            
+                            
+                            
+                            
+                            <tr><td>CPU</td><td>Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz</td></tr>
+                            
+                            
+                            
+                            <tr><td>CPU Cores</td><td>32 vCPUs</td></tr>
+                            
+                            
+                            
+                            
+                            <tr><td>Memory</td><td>247.7GB RAM</td></tr>
+                            
+                            
+                            
+                        </table>
+                    </div>
+                    
+                    
+                </div>
+                
+                <div class="system-card">
+                    <h3>Trino 479</h3>
+
+                    <div class="system-info">
+                        <h4>Software Configuration</h4>
+                        <table class="info-table">
+                            <tr><td>Database</td><td><strong>trino 479</strong></td></tr>
+                            <tr><td>Setup Method</td><td>native</td></tr>
+                            
+                            
+                            
+                        </table>
+                    </div>
+
+                    
+                    
+                    
+                    
+                      
+                    
+                      
+                        
+                      
+                    
+                      
+                    
+                      
+                    
+                      
+                    
+
+                    
+                    
+                    <div class="system-info">
+                        <h4>Hardware Specifications</h4>
+                        <table class="info-table">
+                            
+                            <tr><td>Cloud Provider</td><td><span class="badge badge-cloud">AWS</span></td></tr>
+                            <tr><td>Region</td><td>eu-west-1</td></tr>
+                            
+                            <tr><td>Instance Type</td><td><strong>r6id.8xlarge</strong></td></tr>
+                            
+                            
+                            
+                            
+                            <tr><td>CPU</td><td>Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz</td></tr>
+                            
+                            
+                            
+                            <tr><td>CPU Cores</td><td>32 vCPUs</td></tr>
+                            
+                            
+                            
+                            
+                            <tr><td>Memory</td><td>247.7GB RAM</td></tr>
+                            
+                            
+                            
+                        </table>
+                    </div>
+                    
+                    
+                </div>
+                
+                <div class="system-card">
+                    <h3>Starrocks 4.0.6</h3>
+
+                    <div class="system-info">
+                        <h4>Software Configuration</h4>
+                        <table class="info-table">
+                            <tr><td>Database</td><td><strong>starrocks 4.0.6</strong></td></tr>
+                            <tr><td>Setup Method</td><td>native</td></tr>
+                            
+                            
+                            
+                        </table>
+                    </div>
+
+                    
+                    
+                    
+                    
+                      
+                        
+                      
+                    
+                      
+                    
+                      
+                    
+                      
+                    
+                      
+                    
+
+                    
+                    
+                    <div class="system-info">
+                        <h4>Hardware Specifications</h4>
+                        <table class="info-table">
+                            
+                            <tr><td>Cloud Provider</td><td><span class="badge badge-cloud">AWS</span></td></tr>
+                            <tr><td>Region</td><td>eu-west-1</td></tr>
+                            
+                            <tr><td>Instance Type</td><td><strong>r6id.8xlarge</strong></td></tr>
+                            
+                            
+                            
+                            
+                            <tr><td>CPU</td><td>Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz</td></tr>
+                            
+                            
+                            
+                            <tr><td>CPU Cores</td><td>32 vCPUs</td></tr>
+                            
+                            
+                            
+                            
+                            <tr><td>Memory</td><td>247.7GB RAM</td></tr>
+                            
+                            
+                            
+                        </table>
+                    </div>
+                    
+                    
+                </div>
+                
+                <div class="system-card">
+                    <h3>Duckdb 1.4.4</h3>
+
+                    <div class="system-info">
+                        <h4>Software Configuration</h4>
+                        <table class="info-table">
+                            <tr><td>Database</td><td><strong>duckdb 1.4.4</strong></td></tr>
+                            <tr><td>Setup Method</td><td>native</td></tr>
+                            
+                            <tr><td>Data Directory</td><td><code>/data/duckdb</code></td></tr>
+                            
+                            
+                            
+                        </table>
+                    </div>
+
+                    
+                    
+                    
+                    
+                      
+                    
+                      
+                    
+                      
+                        
+                      
+                    
+                      
+                    
+                      
+                    
+
+                    
+                    
+                    <div class="system-info">
+                        <h4>Hardware Specifications</h4>
+                        <table class="info-table">
+                            
+                            <tr><td>Cloud Provider</td><td><span class="badge badge-cloud">AWS</span></td></tr>
+                            <tr><td>Region</td><td>eu-west-1</td></tr>
+                            
+                            <tr><td>Instance Type</td><td><strong>r6id.8xlarge</strong></td></tr>
+                            
+                            
+                            
+                            
+                            <tr><td>CPU</td><td>Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz</td></tr>
+                            
+                            
+                            
+                            <tr><td>CPU Cores</td><td>32 vCPUs</td></tr>
+                            
+                            
+                            
+                            
+                            <tr><td>Memory</td><td>247.7GB RAM</td></tr>
+                            
+                            
+                            
+                        </table>
+                    </div>
+                    
+                    
+                </div>
+                
+            </div>
+        </section>
+
+        <!-- Workload Details Section -->
+        
+        <section class="section">
+            <h2>Workload: TPCH (Scale Factor 50)</h2>
+
+            <!-- Full Description -->
+            <div class="workload-description">
+                <p>TPC-H is a decision support benchmark that consists of a suite of business-oriented ad-hoc queries
+            and concurrent data modifications. The queries and data are chosen to have broad industry-wide relevance.
+            This benchmark illustrates decision support systems that examine large volumes of data, execute queries with
+            a high degree of complexity, and give answers to critical business questions. The benchmark models a wholesale
+            supplier with a distribution network across multiple regions.</p>
+
+                
+                <h3>Key Characteristics</h3>
+                <ul class="characteristics-list">
+                    
+                    <li>22 complex analytical queries</li>
+                    
+                    <li>8 tables with varying cardinality</li>
+                    
+                    <li>Queries involve multi-table joins, aggregations, and subqueries</li>
+                    
+                    <li>Simulates real-world business intelligence workloads</li>
+                    
+                </ul>
+                
+            </div>
+
+            <!-- Table Overview -->
+            
+            <h3>Database Schema (8 Tables)</h3>
+            <div class="tables-grid">
+                
+                <div class="table-card">
+                    <h4>Nation</h4>
+                    <p class="table-description">Nations/countries (25 rows)</p>
+                    
+                    <p class="table-cardinality">
+                        <strong>Rows:</strong>
+                        ~1250
+                    </p>
+                    
+                    <details>
+                        <summary>Columns (4)</summary>
+                        <ul class="columns-list">
+                            
+                            <li><code>n_nationkey</code></li>
+                            
+                            <li><code>n_name</code></li>
+                            
+                            <li><code>n_regionkey</code></li>
+                            
+                            <li><code>n_comment</code></li>
+                            
+                        </ul>
+                    </details>
+                    
+                    <p class="table-relationships"><em>Foreign key to region</em></p>
+                    
+                </div>
+                
+                <div class="table-card">
+                    <h4>Region</h4>
+                    <p class="table-description">Geographic regions (5 rows)</p>
+                    
+                    <p class="table-cardinality">
+                        <strong>Rows:</strong>
+                        ~250
+                    </p>
+                    
+                    <details>
+                        <summary>Columns (3)</summary>
+                        <ul class="columns-list">
+                            
+                            <li><code>r_regionkey</code></li>
+                            
+                            <li><code>r_name</code></li>
+                            
+                            <li><code>r_comment</code></li>
+                            
+                        </ul>
+                    </details>
+                    
+                </div>
+                
+                <div class="table-card">
+                    <h4>Part</h4>
+                    <p class="table-description">Parts/products catalog</p>
+                    
+                    <p class="table-cardinality">
+                        <strong>Rows:</strong>
+                        ~10000000
+                    </p>
+                    
+                    <details>
+                        <summary>Columns (9)</summary>
+                        <ul class="columns-list">
+                            
+                            <li><code>p_partkey</code></li>
+                            
+                            <li><code>p_name</code></li>
+                            
+                            <li><code>p_mfgr</code></li>
+                            
+                            <li><code>p_brand</code></li>
+                            
+                            <li><code>p_type</code></li>
+                            
+                            <li><code>p_size</code></li>
+                            
+                            <li><code>p_container</code></li>
+                            
+                            <li><code>p_retailprice</code></li>
+                            
+                            <li><code>p_comment</code></li>
+                            
+                        </ul>
+                    </details>
+                    
+                </div>
+                
+                <div class="table-card">
+                    <h4>Supplier</h4>
+                    <p class="table-description">Suppliers/vendors</p>
+                    
+                    <p class="table-cardinality">
+                        <strong>Rows:</strong>
+                        ~500000
+                    </p>
+                    
+                    <details>
+                        <summary>Columns (7)</summary>
+                        <ul class="columns-list">
+                            
+                            <li><code>s_suppkey</code></li>
+                            
+                            <li><code>s_name</code></li>
+                            
+                            <li><code>s_address</code></li>
+                            
+                            <li><code>s_nationkey</code></li>
+                            
+                            <li><code>s_phone</code></li>
+                            
+                            <li><code>s_acctbal</code></li>
+                            
+                            <li><code>s_comment</code></li>
+                            
+                        </ul>
+                    </details>
+                    
+                    <p class="table-relationships"><em>Foreign key to nation</em></p>
+                    
+                </div>
+                
+                <div class="table-card">
+                    <h4>Partsupp</h4>
+                    <p class="table-description">Parts supplied by suppliers (association table)</p>
+                    
+                    <p class="table-cardinality">
+                        <strong>Rows:</strong>
+                        ~40000000
+                    </p>
+                    
+                    <details>
+                        <summary>Columns (5)</summary>
+                        <ul class="columns-list">
+                            
+                            <li><code>ps_partkey</code></li>
+                            
+                            <li><code>ps_suppkey</code></li>
+                            
+                            <li><code>ps_availqty</code></li>
+                            
+                            <li><code>ps_supplycost</code></li>
+                            
+                            <li><code>ps_comment</code></li>
+                            
+                        </ul>
+                    </details>
+                    
+                    <p class="table-relationships"><em>Foreign keys to part and supplier</em></p>
+                    
+                </div>
+                
+                <div class="table-card">
+                    <h4>Customer</h4>
+                    <p class="table-description">Customers/buyers</p>
+                    
+                    <p class="table-cardinality">
+                        <strong>Rows:</strong>
+                        ~7500000
+                    </p>
+                    
+                    <details>
+                        <summary>Columns (8)</summary>
+                        <ul class="columns-list">
+                            
+                            <li><code>c_custkey</code></li>
+                            
+                            <li><code>c_name</code></li>
+                            
+                            <li><code>c_address</code></li>
+                            
+                            <li><code>c_nationkey</code></li>
+                            
+                            <li><code>c_phone</code></li>
+                            
+                            <li><code>c_acctbal</code></li>
+                            
+                            <li><code>c_mktsegment</code></li>
+                            
+                            <li><code>c_comment</code></li>
+                            
+                        </ul>
+                    </details>
+                    
+                    <p class="table-relationships"><em>Foreign key to nation</em></p>
+                    
+                </div>
+                
+                <div class="table-card">
+                    <h4>Orders</h4>
+                    <p class="table-description">Customer orders</p>
+                    
+                    <p class="table-cardinality">
+                        <strong>Rows:</strong>
+                        ~75000000
+                    </p>
+                    
+                    <details>
+                        <summary>Columns (9)</summary>
+                        <ul class="columns-list">
+                            
+                            <li><code>o_orderkey</code></li>
+                            
+                            <li><code>o_custkey</code></li>
+                            
+                            <li><code>o_orderstatus</code></li>
+                            
+                            <li><code>o_totalprice</code></li>
+                            
+                            <li><code>o_orderdate</code></li>
+                            
+                            <li><code>o_orderpriority</code></li>
+                            
+                            <li><code>o_clerk</code></li>
+                            
+                            <li><code>o_shippriority</code></li>
+                            
+                            <li><code>o_comment</code></li>
+                            
+                        </ul>
+                    </details>
+                    
+                    <p class="table-relationships"><em>Foreign key to customer</em></p>
+                    
+                </div>
+                
+                <div class="table-card">
+                    <h4>Lineitem</h4>
+                    <p class="table-description">Order line items (largest table)</p>
+                    
+                    <p class="table-cardinality">
+                        <strong>Rows:</strong>
+                        ~300060750
+                    </p>
+                    
+                    <details>
+                        <summary>Columns (16)</summary>
+                        <ul class="columns-list">
+                            
+                            <li><code>l_orderkey</code></li>
+                            
+                            <li><code>l_partkey</code></li>
+                            
+                            <li><code>l_suppkey</code></li>
+                            
+                            <li><code>l_linenumber</code></li>
+                            
+                            <li><code>l_quantity</code></li>
+                            
+                            <li><code>l_extendedprice</code></li>
+                            
+                            <li><code>l_discount</code></li>
+                            
+                            <li><code>l_tax</code></li>
+                            
+                            <li><code>l_returnflag</code></li>
+                            
+                            <li><code>l_linestatus</code></li>
+                            
+                            <li><code>l_shipdate</code></li>
+                            
+                            <li><code>l_commitdate</code></li>
+                            
+                            <li><code>l_receiptdate</code></li>
+                            
+                            <li><code>l_shipinstruct</code></li>
+                            
+                            <li><code>l_shipmode</code></li>
+                            
+                            <li><code>l_comment</code></li>
+                            
+                        </ul>
+                    </details>
+                    
+                    <p class="table-relationships"><em>Foreign keys to orders, part, supplier, partsupp</em></p>
+                    
+                </div>
+                
+            </div>
+            
+
+            <!-- System-Specific DDL & Optimizations -->
+            
+            <h3>Table Definitions & Optimizations</h3>
+            <p>Each database system uses optimized DDL tailored to its architecture and query optimizer.</p>
+
+            
+            <details class="ddl-details">
+                <summary>
+                    <h4>Exasol - DDL & Optimization</h4>
+                </summary>
+
+                
+                <div class="code-section">
+                    <h5>📋 Table Creation</h5>
+                    <p class="code-description">Create 8 TPC-H tables with system-optimized data types</p>
+                    <pre><code class="language-sql">-- Exasol TPC-H Table Creation
+-- Creates all 8 TPC-H tables with Exasol-specific data types and distribution
+
+-- Drop tables in reverse FK dependency order for clean re-runs
+-- (keeps schema intact so the active connection remains valid)
+DROP TABLE IF EXISTS benchmark.lineitem;
+DROP TABLE IF EXISTS benchmark.orders;
+DROP TABLE IF EXISTS benchmark.partsupp;
+DROP TABLE IF EXISTS benchmark.customer;
+DROP TABLE IF EXISTS benchmark.supplier;
+DROP TABLE IF EXISTS benchmark.part;
+DROP TABLE IF EXISTS benchmark.nation;
+DROP TABLE IF EXISTS benchmark.region;
+
+-- Nation table
+CREATE OR REPLACE TABLE benchmark.nation (
+    n_nationkey DEC(11),
+    n_name CHAR(25) CHARACTER SET ASCII,
+    n_regionkey DEC(11),
+    n_comment VARCHAR(152) CHARACTER SET ASCII
+);
+
+-- Region table
+CREATE OR REPLACE TABLE benchmark.region (
+    r_regionkey DEC(11),
+    r_name CHAR(25) CHARACTER SET ASCII,
+    r_comment VARCHAR(152) CHARACTER SET ASCII
+);
+
+-- Part table
+CREATE OR REPLACE TABLE benchmark.part (
+    p_partkey DEC(11),
+    p_name VARCHAR(55) CHARACTER SET ASCII,
+    p_mfgr CHAR(25) CHARACTER SET ASCII,
+    p_brand CHAR(10) CHARACTER SET ASCII,
+    p_type VARCHAR(25) CHARACTER SET ASCII,
+    p_size DEC(10),
+    p_container CHAR(10) CHARACTER SET ASCII,
+    p_retailprice DECIMAL(12,2),
+    p_comment VARCHAR(23) CHARACTER SET ASCII,
+    DISTRIBUTE BY p_partkey
+);
+
+-- Supplier table
+CREATE OR REPLACE TABLE benchmark.supplier (
+    s_suppkey DEC(11),
+    s_name CHAR(25) CHARACTER SET ASCII,
+    s_address VARCHAR(40) CHARACTER SET ASCII,
+    s_nationkey DEC(11),
+    s_phone CHAR(15) CHARACTER SET ASCII,
+    s_acctbal DECIMAL(12,2),
+    s_comment VARCHAR(101) CHARACTER SET ASCII,
+    DISTRIBUTE BY s_suppkey
+);
+
+-- Partsupp table
+CREATE OR REPLACE TABLE benchmark.partsupp (
+    ps_partkey DEC(11),
+    ps_suppkey DEC(11),
+    ps_availqty DEC(10),
+    ps_supplycost DECIMAL(12,2),
+    ps_comment VARCHAR(199) CHARACTER SET ASCII,
+    DISTRIBUTE BY ps_partkey
+);
+
+-- Customer table
+CREATE OR REPLACE TABLE benchmark.customer (
+    c_custkey DEC(11),
+    c_name VARCHAR(25) CHARACTER SET ASCII,
+    c_address VARCHAR(40) CHARACTER SET ASCII,
+    c_nationkey DEC(11),
+    c_phone CHAR(15) CHARACTER SET ASCII,
+    c_acctbal DECIMAL(12,2),
+    c_mktsegment CHAR(10) CHARACTER SET ASCII,
+    c_comment VARCHAR(117) CHARACTER SET ASCII,
+    DISTRIBUTE BY c_custkey
+);
+
+-- Orders table
+CREATE OR REPLACE TABLE benchmark.orders (
+    o_orderkey DEC(12),
+    o_custkey DEC(11),
+    o_orderstatus CHAR(1) CHARACTER SET ASCII,
+    o_totalprice DECIMAL(12,2),
+    o_orderdate DATE,
+    o_orderpriority CHAR(15) CHARACTER SET ASCII,
+    o_clerk CHAR(15) CHARACTER SET ASCII,
+    o_shippriority DEC(10),
+    o_comment VARCHAR(79) CHARACTER SET ASCII,
+    DISTRIBUTE BY o_custkey
+);
+
+-- Lineitem table
+CREATE OR REPLACE TABLE benchmark.lineitem (
+    l_orderkey DEC(12),
+    l_partkey DEC(11),
+    l_suppkey DEC(11),
+    l_linenumber DEC(10),
+    l_quantity DECIMAL(12,2),
+    l_extendedprice DECIMAL(12,2),
+    l_discount DECIMAL(12,2),
+    l_tax DECIMAL(12,2),
+    l_returnflag CHAR(1) CHARACTER SET ASCII,
+    l_linestatus CHAR(1) CHARACTER SET ASCII,
+    l_shipdate DATE,
+    l_commitdate DATE,
+    l_receiptdate DATE,
+    l_shipinstruct CHAR(25) CHARACTER SET ASCII,
+    l_shipmode CHAR(10) CHARACTER SET ASCII,
+    l_comment VARCHAR(44) CHARACTER SET ASCII,
+    DISTRIBUTE BY l_orderkey
+);</code></pre>
+                </div>
+                
+
+                
+                <div class="code-section">
+                    <h5>🔍 Index Creation</h5>
+                    <p class="code-description">Create indexes on foreign keys and join columns</p>
+                    <pre><code class="language-sql">-- Exasol TPC-H Index Creation
+-- Creates indexes to optimize query performance
+
+-- Single node: Create local indexes for Exasol
+ENFORCE LOCAL INDEX ON benchmark.lineitem (l_suppkey);
+ENFORCE LOCAL INDEX ON benchmark.lineitem (l_partkey, l_suppkey);
+ENFORCE LOCAL INDEX ON benchmark.lineitem (l_partkey);
+ENFORCE LOCAL INDEX ON benchmark.lineitem (l_orderkey);
+ENFORCE LOCAL INDEX ON benchmark.nation (n_nationkey);
+ENFORCE LOCAL INDEX ON benchmark.region (r_regionkey);
+ENFORCE LOCAL INDEX ON benchmark.supplier (s_suppkey);
+ENFORCE LOCAL INDEX ON benchmark.supplier (s_nationkey);
+ENFORCE LOCAL INDEX ON benchmark.customer (c_custkey);
+ENFORCE LOCAL INDEX ON benchmark.customer (c_nationkey);
+ENFORCE LOCAL INDEX ON benchmark.part (p_partkey);
+ENFORCE LOCAL INDEX ON benchmark.partsupp (ps_partkey, ps_suppkey);
+ENFORCE LOCAL INDEX ON benchmark.partsupp (ps_partkey);
+ENFORCE LOCAL INDEX ON benchmark.partsupp (ps_suppkey);
+ENFORCE LOCAL INDEX ON benchmark.orders (o_orderkey);
+ENFORCE LOCAL INDEX ON benchmark.orders (o_custkey);
+
+COMMIT;
+</code></pre>
+                </div>
+                
+
+                
+                <div class="code-section">
+                    <h5>📊 Table Analysis & Optimization</h5>
+                    <p class="code-description">Update database statistics for query optimizer</p>
+                    <pre><code class="language-sql">-- Exasol TPC-H Table Analysis
+-- Analyzes tables and updates statistics for optimal query performance
+
+ANALYZE DATABASE ESTIMATE STATISTICS;
+COMMIT;</code></pre>
+                </div>
+                
+            </details>
+            
+            <details class="ddl-details">
+                <summary>
+                    <h4>Clickhouse - DDL & Optimization</h4>
+                </summary>
+
+                
+                <div class="code-section">
+                    <h5>📋 Table Creation</h5>
+                    <p class="code-description">Create 8 TPC-H tables with system-optimized data types</p>
+                    <pre><code class="language-sql">-- ClickHouse TPC-H Table Creation
+-- Creates all 8 TPC-H tables with ClickHouse-specific types and MergeTree engines
+-- Supports both single-node and multinode cluster configurations
+
+-- Single node setup
+
+-- Nation table
+CREATE OR REPLACE TABLE benchmark.nation (
+    n_nationkey INTEGER NOT NULL,
+    n_name CHAR(25) NOT NULL,
+    n_regionkey INTEGER NOT NULL,
+    n_comment VARCHAR(152)
+) ENGINE MergeTree() ORDER BY n_nationkey;
+
+-- Region table
+CREATE OR REPLACE TABLE benchmark.region (
+    r_regionkey INTEGER NOT NULL,
+    r_name CHAR(25) NOT NULL,
+    r_comment VARCHAR(152)
+) ENGINE MergeTree() ORDER BY r_regionkey;
+
+-- Part table
+CREATE OR REPLACE TABLE benchmark.part (
+    p_partkey INTEGER NOT NULL,
+    p_name VARCHAR(55) NOT NULL,
+    p_mfgr CHAR(25) NOT NULL,
+    p_brand CHAR(10) NOT NULL,
+    p_type VARCHAR(25) NOT NULL,
+    p_size INTEGER NOT NULL,
+    p_container CHAR(10) NOT NULL,
+    p_retailprice DECIMAL(15,2) NOT NULL,
+    p_comment VARCHAR(23) NOT NULL
+) ENGINE MergeTree() ORDER BY p_partkey;
+
+-- Supplier table
+CREATE OR REPLACE TABLE benchmark.supplier (
+    s_suppkey INTEGER NOT NULL,
+    s_name CHAR(25) NOT NULL,
+    s_address VARCHAR(40) NOT NULL,
+    s_nationkey INTEGER NOT NULL,
+    s_phone CHAR(15) NOT NULL,
+    s_acctbal DECIMAL(15,2) NOT NULL,
+    s_comment VARCHAR(101) NOT NULL
+) ENGINE MergeTree() ORDER BY s_suppkey;
+
+-- Partsupp table
+CREATE OR REPLACE TABLE benchmark.partsupp (
+    ps_partkey INTEGER NOT NULL,
+    ps_suppkey INTEGER NOT NULL,
+    ps_availqty INTEGER NOT NULL,
+    ps_supplycost DECIMAL(15,2) NOT NULL,
+    ps_comment VARCHAR(199) NOT NULL
+) ENGINE MergeTree() ORDER BY (ps_partkey, ps_suppkey);
+
+-- Customer table
+CREATE OR REPLACE TABLE benchmark.customer (
+    c_custkey INTEGER NOT NULL,
+    c_name VARCHAR(25) NOT NULL,
+    c_address VARCHAR(40) NOT NULL,
+    c_nationkey INTEGER NOT NULL,
+    c_phone CHAR(15) NOT NULL,
+    c_acctbal DECIMAL(15,2) NOT NULL,
+    c_mktsegment CHAR(10) NOT NULL,
+    c_comment VARCHAR(117) NOT NULL
+) ENGINE MergeTree() ORDER BY (c_mktsegment, c_custkey);
+
+-- Orders table
+CREATE OR REPLACE TABLE benchmark.orders (
+    o_orderkey BIGINT NOT NULL,
+    o_custkey INTEGER NOT NULL,
+    o_orderstatus CHAR(1) NOT NULL,
+    o_totalprice DECIMAL(15,2) NOT NULL,
+    o_orderdate DATE NOT NULL,
+    o_orderpriority CHAR(15) NOT NULL,
+    o_clerk CHAR(15) NOT NULL,
+    o_shippriority INTEGER NOT NULL,
+    o_comment VARCHAR(79) NOT NULL
+) ENGINE MergeTree() ORDER BY (o_orderdate, o_orderkey);
+
+-- Lineitem table
+CREATE OR REPLACE TABLE benchmark.lineitem (
+    l_orderkey BIGINT NOT NULL,
+    l_partkey INTEGER NOT NULL,
+    l_suppkey INTEGER NOT NULL,
+    l_linenumber INTEGER NOT NULL,
+    l_quantity DECIMAL(15,2) NOT NULL,
+    l_extendedprice DECIMAL(15,2) NOT NULL,
+    l_discount DECIMAL(15,2) NOT NULL,
+    l_tax DECIMAL(15,2) NOT NULL,
+    l_returnflag CHAR(1) NOT NULL,
+    l_linestatus CHAR(1) NOT NULL,
+    l_shipdate DATE NOT NULL,
+    l_commitdate DATE NOT NULL,
+    l_receiptdate DATE NOT NULL,
+    l_shipinstruct CHAR(25) NOT NULL,
+    l_shipmode CHAR(10) NOT NULL,
+    l_comment VARCHAR(44) NOT NULL
+) ENGINE MergeTree() ORDER BY (l_shipdate, l_orderkey, l_partkey);
+</code></pre>
+                </div>
+                
+
+                
+                <div class="code-section">
+                    <h5>🔍 Index Creation</h5>
+                    <p class="code-description">Create indexes on foreign keys and join columns</p>
+                    <pre><code class="language-sql">-- ClickHouse TPC-H Index Creation
+-- ClickHouse Skip Indexes: DISABLED for TPC-H Analytical Workload
+--
+-- Analysis showed that skip indexes cause net performance REGRESSION for TPC-H:
+-- - 15/22 queries became slower (1-7% regression)
+-- - Only 2/22 queries improved (Q20: -9.5%, Q12: -1.3%)
+-- - Overall net negative impact on workload
+--
+-- Root causes:
+-- 1. Redundancy: Many skip indexes duplicate MergeTree primary key (ORDER BY)
+--    Example: l_orderkey bloom_filter is redundant with ORDER BY (l_shipdate, l_orderkey, l_partkey)
+-- 2. Low selectivity: Indexes on low-cardinality columns (o_orderstatus: 3 values) add overhead
+-- 3. Workload mismatch: TPC-H = analytical scans; skip indexes = OLTP point queries
+-- 4. Granularity overhead: GRANULARITY 4 adds index maintenance cost without benefit
+--
+-- Decision: Rely on MergeTree primary keys and OPTIMIZE TABLE compression for best performance
+-- For analytical workloads, well-designed ORDER BY clauses are more effective than skip indexes
+
+SELECT &#39;ClickHouse indexing: Using MergeTree primary keys only (skip indexes disabled for analytical workload)&#39;;</code></pre>
+                </div>
+                
+
+                
+                <div class="code-section">
+                    <h5>📊 Table Analysis & Optimization</h5>
+                    <p class="code-description">Update database statistics for query optimizer</p>
+                    <pre><code class="language-sql">-- ClickHouse TPC-H Table Optimization
+-- Optimizes tables and optionally collects statistics for query optimizer
+
+-- Statistics are disabled - using basic optimization only
+
+-- Optimize tables to merge data parts and improve compression
+-- OPTIMIZE TABLE FINAL merges all data parts into a single optimized part
+-- This improves query performance by reducing the number of parts to scan
+OPTIMIZE TABLE benchmark.nation FINAL;
+OPTIMIZE TABLE benchmark.region FINAL;
+OPTIMIZE TABLE benchmark.part FINAL;
+OPTIMIZE TABLE benchmark.supplier FINAL;
+OPTIMIZE TABLE benchmark.partsupp FINAL;
+OPTIMIZE TABLE benchmark.customer FINAL;
+OPTIMIZE TABLE benchmark.orders FINAL;
+OPTIMIZE TABLE benchmark.lineitem FINAL;
+
+SELECT &#39;ClickHouse tables optimized (statistics disabled)&#39;;
+</code></pre>
+                </div>
+                
+            </details>
+            
+            <details class="ddl-details">
+                <summary>
+                    <h4>Trino - DDL & Optimization</h4>
+                </summary>
+
+                
+                <div class="code-section">
+                    <h5>📋 Table Creation</h5>
+                    <p class="code-description">Create 8 TPC-H tables with system-optimized data types</p>
+                    <pre><code class="language-sql">-- Trino TPC-H Table Creation
+-- Creates external tables using Parquet files from storage backend
+-- Data is read directly from Parquet files - zero copy loading
+
+-- Nation table
+CREATE TABLE IF NOT EXISTS benchmark.nation (
+    n_nationkey INTEGER,
+    n_name VARCHAR(25),
+    n_regionkey INTEGER,
+    n_comment VARCHAR(152)
+)
+WITH (
+    format = &#39;PARQUET&#39;,
+    external_location = &#39;local:///data/trino/hive-warehouse/benchmark/nation&#39;
+);
+
+-- Region table
+CREATE TABLE IF NOT EXISTS benchmark.region (
+    r_regionkey INTEGER,
+    r_name VARCHAR(25),
+    r_comment VARCHAR(152)
+)
+WITH (
+    format = &#39;PARQUET&#39;,
+    external_location = &#39;local:///data/trino/hive-warehouse/benchmark/region&#39;
+);
+
+-- Part table
+CREATE TABLE IF NOT EXISTS benchmark.part (
+    p_partkey INTEGER,
+    p_name VARCHAR(55),
+    p_mfgr VARCHAR(25),
+    p_brand VARCHAR(10),
+    p_type VARCHAR(25),
+    p_size INTEGER,
+    p_container VARCHAR(10),
+    p_retailprice DECIMAL(15,2),
+    p_comment VARCHAR(23)
+)
+WITH (
+    format = &#39;PARQUET&#39;,
+    external_location = &#39;local:///data/trino/hive-warehouse/benchmark/part&#39;
+);
+
+-- Supplier table
+CREATE TABLE IF NOT EXISTS benchmark.supplier (
+    s_suppkey INTEGER,
+    s_name VARCHAR(25),
+    s_address VARCHAR(40),
+    s_nationkey INTEGER,
+    s_phone VARCHAR(15),
+    s_acctbal DECIMAL(15,2),
+    s_comment VARCHAR(101)
+)
+WITH (
+    format = &#39;PARQUET&#39;,
+    external_location = &#39;local:///data/trino/hive-warehouse/benchmark/supplier&#39;
+);
+
+-- Partsupp table
+CREATE TABLE IF NOT EXISTS benchmark.partsupp (
+    ps_partkey INTEGER,
+    ps_suppkey INTEGER,
+    ps_availqty INTEGER,
+    ps_supplycost DECIMAL(15,2),
+    ps_comment VARCHAR(199)
+)
+WITH (
+    format = &#39;PARQUET&#39;,
+    external_location = &#39;local:///data/trino/hive-warehouse/benchmark/partsupp&#39;
+);
+
+-- Customer table
+CREATE TABLE IF NOT EXISTS benchmark.customer (
+    c_custkey INTEGER,
+    c_name VARCHAR(25),
+    c_address VARCHAR(40),
+    c_nationkey INTEGER,
+    c_phone VARCHAR(15),
+    c_acctbal DECIMAL(15,2),
+    c_mktsegment VARCHAR(10),
+    c_comment VARCHAR(117)
+)
+WITH (
+    format = &#39;PARQUET&#39;,
+    external_location = &#39;local:///data/trino/hive-warehouse/benchmark/customer&#39;
+);
+
+-- Orders table
+CREATE TABLE IF NOT EXISTS benchmark.orders (
+    o_orderkey BIGINT,
+    o_custkey INTEGER,
+    o_orderstatus VARCHAR(1),
+    o_totalprice DECIMAL(15,2),
+    o_orderdate DATE,
+    o_orderpriority VARCHAR(15),
+    o_clerk VARCHAR(15),
+    o_shippriority INTEGER,
+    o_comment VARCHAR(79)
+)
+WITH (
+    format = &#39;PARQUET&#39;,
+    external_location = &#39;local:///data/trino/hive-warehouse/benchmark/orders&#39;
+);
+
+-- Lineitem table
+CREATE TABLE IF NOT EXISTS benchmark.lineitem (
+    l_orderkey BIGINT,
+    l_partkey INTEGER,
+    l_suppkey INTEGER,
+    l_linenumber INTEGER,
+    l_quantity DECIMAL(15,2),
+    l_extendedprice DECIMAL(15,2),
+    l_discount DECIMAL(15,2),
+    l_tax DECIMAL(15,2),
+    l_returnflag VARCHAR(1),
+    l_linestatus VARCHAR(1),
+    l_shipdate DATE,
+    l_commitdate DATE,
+    l_receiptdate DATE,
+    l_shipinstruct VARCHAR(25),
+    l_shipmode VARCHAR(10),
+    l_comment VARCHAR(44)
+)
+WITH (
+    format = &#39;PARQUET&#39;,
+    external_location = &#39;local:///data/trino/hive-warehouse/benchmark/lineitem&#39;
+);</code></pre>
+                </div>
+                
+
+                
+                <div class="code-section">
+                    <h5>🔍 Index Creation</h5>
+                    <p class="code-description">Create indexes on foreign keys and join columns</p>
+                    <pre><code class="language-sql">-- Trino TPC-H Index Creation
+-- Trino/Hive: No traditional indexes supported
+-- Hive connector uses columnar storage formats (ORC/Parquet) for efficient data access
+-- Performance optimizations come from:
+-- 1. Columnar storage format (reads only needed columns)
+-- 2. Predicate pushdown (filters applied at storage layer)
+-- 3. Partition pruning (if tables are partitioned)
+
+SELECT &#39;Trino: No indexes needed (using columnar storage for efficient data access)&#39;;</code></pre>
+                </div>
+                
+
+                
+                <div class="code-section">
+                    <h5>📊 Table Analysis & Optimization</h5>
+                    <p class="code-description">Update database statistics for query optimizer</p>
+                    <pre><code class="language-sql">-- Trino TPC-H Table Analysis
+-- Analyze tables to collect statistics for query optimization
+-- ANALYZE collects column statistics that help the optimizer choose better join orders
+-- and estimate cardinalities for cost-based optimization
+
+ANALYZE benchmark.nation;
+ANALYZE benchmark.region;
+ANALYZE benchmark.part;
+ANALYZE benchmark.supplier;
+ANALYZE benchmark.partsupp;
+ANALYZE benchmark.customer;
+ANALYZE benchmark.orders;
+ANALYZE benchmark.lineitem;
+
+SELECT &#39;Trino: Table statistics collected for query optimization&#39;;</code></pre>
+                </div>
+                
+            </details>
+            
+            <details class="ddl-details">
+                <summary>
+                    <h4>Starrocks - DDL & Optimization</h4>
+                </summary>
+
+                
+                <div class="code-section">
+                    <h5>📋 Table Creation</h5>
+                    <p class="code-description">Create 8 TPC-H tables with system-optimized data types</p>
+                    <pre><code class="language-sql">-- StarRocks TPC-H Table Creation
+-- Uses OLAP engine with DUPLICATE KEY model for analytical queries
+-- Optimizations applied:
+--   - Colocate groups for local joins (lineitem_orders, part_partsupp)
+--   - Date columns first in DUPLICATE KEY for range scan efficiency
+--   - Tuned variant: Scale-aware bucket counts based on scale_factor
+
+
+
+-- Reference tables (tiny, no colocate needed)
+
+CREATE TABLE IF NOT EXISTS benchmark.nation (
+    n_nationkey INT NOT NULL,
+    n_name VARCHAR(25) NOT NULL,
+    n_regionkey INT NOT NULL,
+    n_comment VARCHAR(152)
+)
+ENGINE=OLAP
+DUPLICATE KEY(n_nationkey)
+DISTRIBUTED BY HASH(n_nationkey) BUCKETS 1
+PROPERTIES (&#34;replication_num&#34; = &#34;1&#34;);
+
+CREATE TABLE IF NOT EXISTS benchmark.region (
+    r_regionkey INT NOT NULL,
+    r_name VARCHAR(25) NOT NULL,
+    r_comment VARCHAR(152)
+)
+ENGINE=OLAP
+DUPLICATE KEY(r_regionkey)
+DISTRIBUTED BY HASH(r_regionkey) BUCKETS 1
+PROPERTIES (&#34;replication_num&#34; = &#34;1&#34;);
+
+-- Part and partsupp tables (colocate on partkey)
+
+CREATE TABLE IF NOT EXISTS benchmark.part (
+    p_partkey INT NOT NULL,
+    p_name VARCHAR(55) NOT NULL,
+    p_mfgr VARCHAR(25) NOT NULL,
+    p_brand VARCHAR(10) NOT NULL,
+    p_type VARCHAR(25) NOT NULL,
+    p_size INT NOT NULL,
+    p_container VARCHAR(10) NOT NULL,
+    p_retailprice DECIMAL(15,2) NOT NULL,
+    p_comment VARCHAR(23) NOT NULL
+)
+ENGINE=OLAP
+DUPLICATE KEY(p_partkey)
+DISTRIBUTED BY HASH(p_partkey) BUCKETS 4
+PROPERTIES (
+    &#34;replication_num&#34; = &#34;1&#34;,
+    &#34;colocate_with&#34; = &#34;part_partsupp&#34;
+);
+
+CREATE TABLE IF NOT EXISTS benchmark.partsupp (
+    ps_partkey INT NOT NULL,
+    ps_suppkey INT NOT NULL,
+    ps_availqty INT NOT NULL,
+    ps_supplycost DECIMAL(15,2) NOT NULL,
+    ps_comment VARCHAR(199) NOT NULL
+)
+ENGINE=OLAP
+DUPLICATE KEY(ps_partkey, ps_suppkey)
+DISTRIBUTED BY HASH(ps_partkey) BUCKETS 4
+PROPERTIES (
+    &#34;replication_num&#34; = &#34;1&#34;,
+    &#34;colocate_with&#34; = &#34;part_partsupp&#34;
+);
+
+-- Supplier table (standalone, joins to nation)
+
+CREATE TABLE IF NOT EXISTS benchmark.supplier (
+    s_suppkey INT NOT NULL,
+    s_name VARCHAR(25) NOT NULL,
+    s_address VARCHAR(40) NOT NULL,
+    s_nationkey INT NOT NULL,
+    s_phone VARCHAR(15) NOT NULL,
+    s_acctbal DECIMAL(15,2) NOT NULL,
+    s_comment VARCHAR(101) NOT NULL
+)
+ENGINE=OLAP
+DUPLICATE KEY(s_suppkey)
+DISTRIBUTED BY HASH(s_suppkey) BUCKETS 4
+PROPERTIES (&#34;replication_num&#34; = &#34;1&#34;);
+
+-- Customer table (standalone, joins to nation and orders)
+
+CREATE TABLE IF NOT EXISTS benchmark.customer (
+    c_custkey INT NOT NULL,
+    c_name VARCHAR(25) NOT NULL,
+    c_address VARCHAR(40) NOT NULL,
+    c_nationkey INT NOT NULL,
+    c_phone VARCHAR(15) NOT NULL,
+    c_acctbal DECIMAL(15,2) NOT NULL,
+    c_mktsegment VARCHAR(10) NOT NULL,
+    c_comment VARCHAR(117) NOT NULL
+)
+ENGINE=OLAP
+DUPLICATE KEY(c_custkey)
+DISTRIBUTED BY HASH(c_custkey) BUCKETS 4
+PROPERTIES (&#34;replication_num&#34; = &#34;1&#34;);
+
+-- Orders and lineitem tables (colocate on orderkey for efficient joins)
+-- Date columns first in DUPLICATE KEY for range scan efficiency
+
+CREATE TABLE IF NOT EXISTS benchmark.orders (
+    o_orderdate DATE NOT NULL,
+    o_orderkey BIGINT NOT NULL,
+    o_custkey INT NOT NULL,
+    o_orderstatus VARCHAR(1) NOT NULL,
+    o_totalprice DECIMAL(15,2) NOT NULL,
+    o_orderpriority VARCHAR(15) NOT NULL,
+    o_clerk VARCHAR(15) NOT NULL,
+    o_shippriority INT NOT NULL,
+    o_comment VARCHAR(79) NOT NULL
+)
+ENGINE=OLAP
+DUPLICATE KEY(o_orderdate, o_orderkey)
+DISTRIBUTED BY HASH(o_orderkey) BUCKETS 4
+PROPERTIES (
+    &#34;replication_num&#34; = &#34;1&#34;,
+    &#34;colocate_with&#34; = &#34;lineitem_orders&#34;
+);
+
+CREATE TABLE IF NOT EXISTS benchmark.lineitem (
+    l_shipdate DATE NOT NULL,
+    l_orderkey BIGINT NOT NULL,
+    l_partkey INT NOT NULL,
+    l_suppkey INT NOT NULL,
+    l_linenumber INT NOT NULL,
+    l_quantity DECIMAL(15,2) NOT NULL,
+    l_extendedprice DECIMAL(15,2) NOT NULL,
+    l_discount DECIMAL(15,2) NOT NULL,
+    l_tax DECIMAL(15,2) NOT NULL,
+    l_returnflag VARCHAR(1) NOT NULL,
+    l_linestatus VARCHAR(1) NOT NULL,
+    l_commitdate DATE NOT NULL,
+    l_receiptdate DATE NOT NULL,
+    l_shipinstruct VARCHAR(25) NOT NULL,
+    l_shipmode VARCHAR(10) NOT NULL,
+    l_comment VARCHAR(44) NOT NULL
+)
+ENGINE=OLAP
+DUPLICATE KEY(l_shipdate, l_orderkey)
+DISTRIBUTED BY HASH(l_orderkey) BUCKETS 4
+PROPERTIES (
+    &#34;replication_num&#34; = &#34;1&#34;,
+    &#34;colocate_with&#34; = &#34;lineitem_orders&#34;
+);</code></pre>
+                </div>
+                
+
+                
+                <div class="code-section">
+                    <h5>🔍 Index Creation</h5>
+                    <p class="code-description">Create indexes on foreign keys and join columns</p>
+                    <pre><code class="language-sql">-- StarRocks TPC-H Index Creation
+-- StarRocks uses DUPLICATE KEY ordering and Bloom filters automatically
+-- The DUPLICATE KEY clause in table definitions provides primary sort order
+-- Additional optimization comes from DISTRIBUTED BY hash partitioning
+-- No explicit index creation needed - optimization via table definition
+
+SELECT &#39;StarRocks: Using table sort keys and hash distribution for optimization&#39;;</code></pre>
+                </div>
+                
+
+                
+                <div class="code-section">
+                    <h5>📊 Table Analysis & Optimization</h5>
+                    <p class="code-description">Update database statistics for query optimizer</p>
+                    <pre><code class="language-sql">-- StarRocks TPC-H Table Analysis
+-- Collect table statistics for cost-based optimizer
+-- StarRocks uses ANALYZE TABLE to collect statistics
+
+ANALYZE TABLE benchmark.nation;
+ANALYZE TABLE benchmark.region;
+ANALYZE TABLE benchmark.part;
+ANALYZE TABLE benchmark.supplier;
+ANALYZE TABLE benchmark.partsupp;
+ANALYZE TABLE benchmark.customer;
+ANALYZE TABLE benchmark.orders;
+ANALYZE TABLE benchmark.lineitem;
+
+SELECT &#39;StarRocks: Statistics collected for query optimization&#39;;</code></pre>
+                </div>
+                
+            </details>
+            
+            <details class="ddl-details">
+                <summary>
+                    <h4>Duckdb - DDL & Optimization</h4>
+                </summary>
+
+                
+                <div class="code-section">
+                    <h5>📋 Table Creation</h5>
+                    <p class="code-description">Create 8 TPC-H tables with system-optimized data types</p>
+                    <pre><code class="language-sql">-- DuckDB TPC-H Table Creation
+-- Creates all 8 TPC-H tables with DuckDB-compatible types
+
+-- Nation table
+CREATE TABLE IF NOT EXISTS benchmark.nation (
+    n_nationkey INTEGER NOT NULL,
+    n_name VARCHAR(25) NOT NULL,
+    n_regionkey INTEGER NOT NULL,
+    n_comment VARCHAR(152)
+);
+
+-- Region table
+CREATE TABLE IF NOT EXISTS benchmark.region (
+    r_regionkey INTEGER NOT NULL,
+    r_name VARCHAR(25) NOT NULL,
+    r_comment VARCHAR(152)
+);
+
+-- Part table
+CREATE TABLE IF NOT EXISTS benchmark.part (
+    p_partkey INTEGER NOT NULL,
+    p_name VARCHAR(55) NOT NULL,
+    p_mfgr VARCHAR(25) NOT NULL,
+    p_brand VARCHAR(10) NOT NULL,
+    p_type VARCHAR(25) NOT NULL,
+    p_size INTEGER NOT NULL,
+    p_container VARCHAR(10) NOT NULL,
+    p_retailprice DECIMAL(15,2) NOT NULL,
+    p_comment VARCHAR(23) NOT NULL
+);
+
+-- Supplier table
+CREATE TABLE IF NOT EXISTS benchmark.supplier (
+    s_suppkey INTEGER NOT NULL,
+    s_name VARCHAR(25) NOT NULL,
+    s_address VARCHAR(40) NOT NULL,
+    s_nationkey INTEGER NOT NULL,
+    s_phone VARCHAR(15) NOT NULL,
+    s_acctbal DECIMAL(15,2) NOT NULL,
+    s_comment VARCHAR(101) NOT NULL
+);
+
+-- Partsupp table
+CREATE TABLE IF NOT EXISTS benchmark.partsupp (
+    ps_partkey INTEGER NOT NULL,
+    ps_suppkey INTEGER NOT NULL,
+    ps_availqty INTEGER NOT NULL,
+    ps_supplycost DECIMAL(15,2) NOT NULL,
+    ps_comment VARCHAR(199) NOT NULL
+);
+
+-- Customer table
+CREATE TABLE IF NOT EXISTS benchmark.customer (
+    c_custkey INTEGER NOT NULL,
+    c_name VARCHAR(25) NOT NULL,
+    c_address VARCHAR(40) NOT NULL,
+    c_nationkey INTEGER NOT NULL,
+    c_phone VARCHAR(15) NOT NULL,
+    c_acctbal DECIMAL(15,2) NOT NULL,
+    c_mktsegment VARCHAR(10) NOT NULL,
+    c_comment VARCHAR(117) NOT NULL
+);
+
+-- Orders table
+CREATE TABLE IF NOT EXISTS benchmark.orders (
+    o_orderkey BIGINT NOT NULL,
+    o_custkey INTEGER NOT NULL,
+    o_orderstatus VARCHAR(1) NOT NULL,
+    o_totalprice DECIMAL(15,2) NOT NULL,
+    o_orderdate DATE NOT NULL,
+    o_orderpriority VARCHAR(15) NOT NULL,
+    o_clerk VARCHAR(15) NOT NULL,
+    o_shippriority INTEGER NOT NULL,
+    o_comment VARCHAR(79) NOT NULL
+);
+
+-- Lineitem table
+CREATE TABLE IF NOT EXISTS benchmark.lineitem (
+    l_orderkey BIGINT NOT NULL,
+    l_partkey INTEGER NOT NULL,
+    l_suppkey INTEGER NOT NULL,
+    l_linenumber INTEGER NOT NULL,
+    l_quantity DECIMAL(15,2) NOT NULL,
+    l_extendedprice DECIMAL(15,2) NOT NULL,
+    l_discount DECIMAL(15,2) NOT NULL,
+    l_tax DECIMAL(15,2) NOT NULL,
+    l_returnflag VARCHAR(1) NOT NULL,
+    l_linestatus VARCHAR(1) NOT NULL,
+    l_shipdate DATE NOT NULL,
+    l_commitdate DATE NOT NULL,
+    l_receiptdate DATE NOT NULL,
+    l_shipinstruct VARCHAR(25) NOT NULL,
+    l_shipmode VARCHAR(10) NOT NULL,
+    l_comment VARCHAR(44) NOT NULL
+);</code></pre>
+                </div>
+                
+
+                
+                <div class="code-section">
+                    <h5>🔍 Index Creation</h5>
+                    <p class="code-description">Create indexes on foreign keys and join columns</p>
+                    <pre><code class="language-sql">-- DuckDB TPC-H Index Creation
+-- DuckDB automatically creates implicit indexes via ART (Adaptive Radix Tree)
+-- for primary key-like columns. Explicit indexes are rarely needed.
+--
+-- DuckDB uses zonemap indexes (min/max values per row group) automatically
+-- for efficient predicate pushdown on columnar data.
+--
+-- This file is intentionally minimal - DuckDB&#39;s query optimizer typically
+-- performs well without explicit secondary indexes.
+
+-- No explicit indexes needed for typical TPC-H workload
+-- DuckDB&#39;s columnar format and automatic statistics provide good performance</code></pre>
+                </div>
+                
+
+                
+                <div class="code-section">
+                    <h5>📊 Table Analysis & Optimization</h5>
+                    <p class="code-description">Update database statistics for query optimizer</p>
+                    <pre><code class="language-sql">-- DuckDB TPC-H Statistics Analysis
+-- DuckDB automatically collects statistics during data loading.
+-- This file runs ANALYZE to ensure statistics are up-to-date.
+
+ANALYZE benchmark.nation;
+ANALYZE benchmark.region;
+ANALYZE benchmark.part;
+ANALYZE benchmark.supplier;
+ANALYZE benchmark.partsupp;
+ANALYZE benchmark.customer;
+ANALYZE benchmark.orders;
+ANALYZE benchmark.lineitem;</code></pre>
+                </div>
+                
+            </details>
+            
+            
+        </section>
+        
+
+        <!-- Performance Results -->
+        <section class="section">
+            <h2>Performance Results</h2>
+
+            <!-- Interactive Charts -->
+            <div class="charts-section">
+                
+                <div class="chart-card">
+                    <h3>Query Runtime Distribution</h3>
+                    <iframe src="attachments/figures/query_runtime_boxplot.html" class="chart-iframe"></iframe>
+                    <p class="chart-caption">
+                        Box plot showing the distribution of query runtimes. The box shows the interquartile range (25th to 75th percentile),
+                        with the median marked by the line inside the box.
+                    </p>
+                </div>
+                
+
+                
+                <div class="chart-card">
+                    <h3>Median Query Runtimes</h3>
+                    <iframe src="attachments/figures/median_runtime_bar.html" class="chart-iframe"></iframe>
+                    <p class="chart-caption">
+                        Bar chart comparing median query runtimes across systems. Lower bars indicate better performance.
+                    </p>
+                </div>
+                
+
+                
+                <div class="chart-card">
+                    <h3>Performance Heatmap</h3>
+                    <iframe src="attachments/figures/performance_heatmap.html" class="chart-iframe"></iframe>
+                    <p class="chart-caption">
+                        Heatmap showing relative performance across queries and systems. Values are normalized so that 1.0 represents
+                        the fastest system for each query.
+                    </p>
+                </div>
+                
+            </div>
+
+            <!-- Performance Summary Table -->
+            
+            <div class="table-container">
+                <h3>Detailed Performance Summary</h3>
+                <div class="table-wrapper">
+                    <table  class="summary-table">
+<thead><tr>
+<th>query</th>
+<th>system</th>
+<th>warmup</th>
+<th>runs</th>
+<th>median_ms</th>
+<th>mean_ms</th>
+<th>std_ms</th>
+<th>min_ms</th>
+<th>max_ms</th>
+</tr></thead>
+<tbody>
+<tr data-query-start="true" data-query-group="odd" data-query="Q01" data-system="clickhouse">
+<td>Q01</td>
+<td>clickhouse</td>
+<td class="perf-average">1,265.20</td>
+<td>5</td>
+<td class="perf-poor">8,738.60</td>
+<td class="perf-average">6,377.20</td>
+<td class="perf-poor">4,108.30</td>
+<td class="perf-good">1,901.70</td>
+<td class="perf-average">10,226.00</td>
+</tr>
+<tr data-query-group="odd" data-query="Q01" data-system="duckdb">
+<td>Q01</td>
+<td>duckdb</td>
+<td class="perf-average">628.00</td>
+<td>5</td>
+<td class="perf-good">3,918.20</td>
+<td class="perf-good">3,855.00</td>
+<td class="perf-good">1,293.30</td>
+<td class="perf-good">1,731.80</td>
+<td class="perf-good">4,994.50</td>
+</tr>
+<tr data-query-group="odd" data-query="Q01" data-system="exasol">
+<td>Q01</td>
+<td>exasol</td>
+<td class="perf-good">410.70</td>
+<td>5</td>
+<td class="perf-good">2,198.60</td>
+<td class="perf-good">2,096.70</td>
+<td class="perf-excellent">422.60</td>
+<td class="perf-good">1,425.40</td>
+<td class="perf-excellent">2,587.30</td>
+</tr>
+<tr data-query-group="odd" data-query="Q01" data-system="starrocks">
+<td>Q01</td>
+<td>starrocks</td>
+<td class="perf-average">1,974.20</td>
+<td>5</td>
+<td class="perf-good">3,588.10</td>
+<td class="perf-average">5,368.50</td>
+<td class="perf-poor">3,740.00</td>
+<td class="perf-average">2,542.80</td>
+<td class="perf-average">11,555.20</td>
+</tr>
+<tr data-query-group="odd" data-query="Q01" data-system="trino">
+<td>Q01</td>
+<td>trino</td>
+<td class="perf-poor">3,938.80</td>
+<td>5</td>
+<td class="perf-poor">7,344.80</td>
+<td class="perf-poor">16,688.00</td>
+<td class="perf-poor">15,032.70</td>
+<td class="perf-average">4,514.80</td>
+<td class="perf-poor">33,645.10</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q02" data-system="clickhouse">
+<td>Q02</td>
+<td>clickhouse</td>
+<td class="perf-average">612.70</td>
+<td>5</td>
+<td class="perf-average">6,234.50</td>
+<td class="perf-average">6,383.20</td>
+<td class="perf-average">2,407.00</td>
+<td class="perf-average">3,754.80</td>
+<td class="perf-average">9,857.90</td>
+</tr>
+<tr data-query-group="even" data-query="Q02" data-system="duckdb">
+<td>Q02</td>
+<td>duckdb</td>
+<td class="perf-excellent">193.40</td>
+<td>5</td>
+<td class="perf-average">4,256.80</td>
+<td class="perf-good">3,015.90</td>
+<td class="perf-average">2,147.90</td>
+<td class="perf-excellent">173.90</td>
+<td class="perf-good">5,037.70</td>
+</tr>
+<tr data-query-group="even" data-query="Q02" data-system="exasol">
+<td>Q02</td>
+<td>exasol</td>
+<td class="perf-excellent">64.40</td>
+<td>5</td>
+<td class="perf-excellent">140.70</td>
+<td class="perf-excellent">143.90</td>
+<td class="perf-excellent">16.60</td>
+<td class="perf-excellent">128.00</td>
+<td class="perf-excellent">171.60</td>
+</tr>
+<tr data-query-group="even" data-query="Q02" data-system="starrocks">
+<td>Q02</td>
+<td>starrocks</td>
+<td class="perf-good">281.20</td>
+<td>5</td>
+<td class="perf-excellent">872.10</td>
+<td class="perf-excellent">1,390.10</td>
+<td class="perf-good">1,358.30</td>
+<td class="perf-excellent">665.90</td>
+<td class="perf-good">3,814.00</td>
+</tr>
+<tr data-query-group="even" data-query="Q02" data-system="trino">
+<td>Q02</td>
+<td>trino</td>
+<td class="perf-poor">3,146.70</td>
+<td>5</td>
+<td class="perf-average">5,366.30</td>
+<td class="perf-average">6,944.80</td>
+<td class="perf-poor">3,960.90</td>
+<td class="perf-average">3,666.80</td>
+<td class="perf-poor">13,703.60</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q03" data-system="clickhouse">
+<td>Q03</td>
+<td>clickhouse</td>
+<td class="perf-average">2,080.20</td>
+<td>5</td>
+<td class="perf-average">7,106.20</td>
+<td class="perf-average">7,099.80</td>
+<td class="perf-average">1,756.10</td>
+<td class="perf-poor">5,016.00</td>
+<td class="perf-average">9,563.00</td>
+</tr>
+<tr data-query-group="odd" data-query="Q03" data-system="duckdb">
+<td>Q03</td>
+<td>duckdb</td>
+<td class="perf-good">439.20</td>
+<td>5</td>
+<td class="perf-good">3,430.10</td>
+<td class="perf-good">3,558.90</td>
+<td class="perf-good">739.90</td>
+<td class="perf-average">2,861.10</td>
+<td class="perf-good">4,733.20</td>
+</tr>
+<tr data-query-group="odd" data-query="Q03" data-system="exasol">
+<td>Q03</td>
+<td>exasol</td>
+<td class="perf-excellent">183.70</td>
+<td>5</td>
+<td class="perf-excellent">570.80</td>
+<td class="perf-excellent">671.30</td>
+<td class="perf-excellent">322.40</td>
+<td class="perf-excellent">308.50</td>
+<td class="perf-excellent">1,031.10</td>
+</tr>
+<tr data-query-group="odd" data-query="Q03" data-system="starrocks">
+<td>Q03</td>
+<td>starrocks</td>
+<td class="perf-average">498.70</td>
+<td>5</td>
+<td class="perf-good">1,940.10</td>
+<td class="perf-good">2,315.10</td>
+<td class="perf-average">1,898.70</td>
+<td class="perf-excellent">360.50</td>
+<td class="perf-good">5,353.20</td>
+</tr>
+<tr data-query-group="odd" data-query="Q03" data-system="trino">
+<td>Q03</td>
+<td>trino</td>
+<td class="perf-poor">8,383.90</td>
+<td>5</td>
+<td class="perf-poor">21,943.40</td>
+<td class="perf-poor">20,807.70</td>
+<td class="perf-poor">8,358.90</td>
+<td class="perf-poor">7,911.10</td>
+<td class="perf-poor">29,557.40</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q04" data-system="clickhouse">
+<td>Q04</td>
+<td>clickhouse</td>
+<td class="perf-poor">7,241.90</td>
+<td>5</td>
+<td class="perf-poor">19,777.00</td>
+<td class="perf-poor">18,245.40</td>
+<td class="perf-poor">4,763.20</td>
+<td class="perf-poor">10,712.60</td>
+<td class="perf-poor">23,137.80</td>
+</tr>
+<tr data-query-group="even" data-query="Q04" data-system="duckdb">
+<td>Q04</td>
+<td>duckdb</td>
+<td class="perf-good">430.00</td>
+<td>5</td>
+<td class="perf-average">5,004.10</td>
+<td class="perf-average">5,215.30</td>
+<td class="perf-good">810.10</td>
+<td class="perf-average">4,573.30</td>
+<td class="perf-average">6,605.70</td>
+</tr>
+<tr data-query-group="even" data-query="Q04" data-system="exasol">
+<td>Q04</td>
+<td>exasol</td>
+<td class="perf-excellent">36.80</td>
+<td>5</td>
+<td class="perf-excellent">200.90</td>
+<td class="perf-excellent">191.50</td>
+<td class="perf-excellent">31.90</td>
+<td class="perf-excellent">135.80</td>
+<td class="perf-excellent">216.20</td>
+</tr>
+<tr data-query-group="even" data-query="Q04" data-system="starrocks">
+<td>Q04</td>
+<td>starrocks</td>
+<td class="perf-good">411.90</td>
+<td>5</td>
+<td class="perf-excellent">1,799.90</td>
+<td class="perf-good">2,112.80</td>
+<td class="perf-good">1,167.20</td>
+<td class="perf-good">1,110.20</td>
+<td class="perf-good">3,925.90</td>
+</tr>
+<tr data-query-group="even" data-query="Q04" data-system="trino">
+<td>Q04</td>
+<td>trino</td>
+<td class="perf-poor">3,773.60</td>
+<td>5</td>
+<td class="perf-poor">15,009.20</td>
+<td class="perf-poor">11,915.40</td>
+<td class="perf-poor">5,006.30</td>
+<td class="perf-poor">6,273.90</td>
+<td class="perf-poor">16,256.40</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q05" data-system="clickhouse">
+<td>Q05</td>
+<td>clickhouse</td>
+<td class="perf-poor">2,500.00</td>
+<td>5</td>
+<td class="perf-poor">14,440.30</td>
+<td class="perf-poor">14,616.00</td>
+<td class="perf-poor">3,039.40</td>
+<td class="perf-poor">11,029.20</td>
+<td class="perf-poor">17,952.30</td>
+</tr>
+<tr data-query-group="odd" data-query="Q05" data-system="duckdb">
+<td>Q05</td>
+<td>duckdb</td>
+<td class="perf-average">486.10</td>
+<td>5</td>
+<td class="perf-good">4,014.80</td>
+<td class="perf-average">4,766.40</td>
+<td class="perf-average">1,500.10</td>
+<td class="perf-average">3,423.60</td>
+<td class="perf-average">6,920.60</td>
+</tr>
+<tr data-query-group="odd" data-query="Q05" data-system="exasol">
+<td>Q05</td>
+<td>exasol</td>
+<td class="perf-excellent">171.40</td>
+<td>5</td>
+<td class="perf-excellent">709.60</td>
+<td class="perf-excellent">695.90</td>
+<td class="perf-excellent">87.80</td>
+<td class="perf-excellent">553.90</td>
+<td class="perf-excellent">794.60</td>
+</tr>
+<tr data-query-group="odd" data-query="Q05" data-system="starrocks">
+<td>Q05</td>
+<td>starrocks</td>
+<td class="perf-good">454.50</td>
+<td>5</td>
+<td class="perf-good">4,138.40</td>
+<td class="perf-average">4,664.20</td>
+<td class="perf-average">1,834.10</td>
+<td class="perf-average">2,708.20</td>
+<td class="perf-average">6,870.80</td>
+</tr>
+<tr data-query-group="odd" data-query="Q05" data-system="trino">
+<td>Q05</td>
+<td>trino</td>
+<td class="perf-poor">4,305.70</td>
+<td>5</td>
+<td class="perf-poor">30,760.50</td>
+<td class="perf-poor">34,983.20</td>
+<td class="perf-poor">12,982.40</td>
+<td class="perf-poor">22,503.90</td>
+<td class="perf-poor">54,344.80</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q06" data-system="clickhouse">
+<td>Q06</td>
+<td>clickhouse</td>
+<td class="perf-excellent">111.60</td>
+<td>5</td>
+<td class="perf-good">2,554.60</td>
+<td class="perf-good">2,365.10</td>
+<td class="perf-excellent">402.10</td>
+<td class="perf-good">1,679.60</td>
+<td class="perf-excellent">2,643.30</td>
+</tr>
+<tr data-query-group="even" data-query="Q06" data-system="duckdb">
+<td>Q06</td>
+<td>duckdb</td>
+<td class="perf-excellent">115.30</td>
+<td>5</td>
+<td class="perf-average">4,534.80</td>
+<td class="perf-good">4,051.20</td>
+<td class="perf-good">1,125.10</td>
+<td class="perf-average">2,562.90</td>
+<td class="perf-good">5,164.90</td>
+</tr>
+<tr data-query-group="even" data-query="Q06" data-system="exasol">
+<td>Q06</td>
+<td>exasol</td>
+<td class="perf-excellent">24.70</td>
+<td>5</td>
+<td class="perf-excellent">107.30</td>
+<td class="perf-excellent">108.20</td>
+<td class="perf-excellent">61.50</td>
+<td class="perf-excellent">44.00</td>
+<td class="perf-excellent">188.60</td>
+</tr>
+<tr data-query-group="even" data-query="Q06" data-system="starrocks">
+<td>Q06</td>
+<td>starrocks</td>
+<td class="perf-excellent">55.70</td>
+<td>5</td>
+<td class="perf-excellent">687.00</td>
+<td class="perf-excellent">1,011.00</td>
+<td class="perf-good">957.60</td>
+<td class="perf-excellent">180.20</td>
+<td class="perf-excellent">2,405.20</td>
+</tr>
+<tr data-query-group="even" data-query="Q06" data-system="trino">
+<td>Q06</td>
+<td>trino</td>
+<td class="perf-average">1,708.60</td>
+<td>5</td>
+<td class="perf-poor">8,824.70</td>
+<td class="perf-poor">8,757.60</td>
+<td class="perf-poor">5,051.00</td>
+<td class="perf-good">1,719.70</td>
+<td class="perf-poor">15,022.60</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q07" data-system="clickhouse">
+<td>Q07</td>
+<td>clickhouse</td>
+<td class="perf-poor">4,851.50</td>
+<td>5</td>
+<td class="perf-average">5,901.90</td>
+<td class="perf-average">5,762.40</td>
+<td class="perf-average">2,374.50</td>
+<td class="perf-average">3,110.60</td>
+<td class="perf-average">8,556.90</td>
+</tr>
+<tr data-query-group="odd" data-query="Q07" data-system="duckdb">
+<td>Q07</td>
+<td>duckdb</td>
+<td class="perf-good">469.40</td>
+<td>5</td>
+<td class="perf-good">2,839.90</td>
+<td class="perf-good">3,122.30</td>
+<td class="perf-good">703.70</td>
+<td class="perf-average">2,602.10</td>
+<td class="perf-good">4,298.10</td>
+</tr>
+<tr data-query-group="odd" data-query="Q07" data-system="exasol">
+<td>Q07</td>
+<td>exasol</td>
+<td class="perf-excellent">140.50</td>
+<td>5</td>
+<td class="perf-excellent">808.60</td>
+<td class="perf-excellent">624.60</td>
+<td class="perf-excellent">305.50</td>
+<td class="perf-excellent">133.70</td>
+<td class="perf-excellent">848.30</td>
+</tr>
+<tr data-query-group="odd" data-query="Q07" data-system="starrocks">
+<td>Q07</td>
+<td>starrocks</td>
+<td class="perf-average">575.10</td>
+<td>5</td>
+<td class="perf-good">2,980.80</td>
+<td class="perf-good">2,876.50</td>
+<td class="perf-average">1,490.80</td>
+<td class="perf-excellent">557.50</td>
+<td class="perf-good">4,528.40</td>
+</tr>
+<tr data-query-group="odd" data-query="Q07" data-system="trino">
+<td>Q07</td>
+<td>trino</td>
+<td class="perf-poor">4,569.10</td>
+<td>5</td>
+<td class="perf-poor">23,520.80</td>
+<td class="perf-poor">19,919.50</td>
+<td class="perf-poor">8,851.20</td>
+<td class="perf-poor">9,793.40</td>
+<td class="perf-poor">30,229.00</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q08" data-system="clickhouse">
+<td>Q08</td>
+<td>clickhouse</td>
+<td class="perf-poor">3,498.90</td>
+<td>5</td>
+<td class="perf-poor">20,994.60</td>
+<td class="perf-poor">21,554.30</td>
+<td class="perf-average">2,013.30</td>
+<td class="perf-poor">19,615.10</td>
+<td class="perf-poor">24,958.10</td>
+</tr>
+<tr data-query-group="even" data-query="Q08" data-system="duckdb">
+<td>Q08</td>
+<td>duckdb</td>
+<td class="perf-good">468.40</td>
+<td>5</td>
+<td class="perf-good">4,127.40</td>
+<td class="perf-average">4,973.40</td>
+<td class="perf-average">2,075.90</td>
+<td class="perf-average">2,723.70</td>
+<td class="perf-average">7,645.60</td>
+</tr>
+<tr data-query-group="even" data-query="Q08" data-system="exasol">
+<td>Q08</td>
+<td>exasol</td>
+<td class="perf-excellent">46.40</td>
+<td>5</td>
+<td class="perf-excellent">240.50</td>
+<td class="perf-excellent">230.90</td>
+<td class="perf-excellent">28.90</td>
+<td class="perf-excellent">194.10</td>
+<td class="perf-excellent">268.00</td>
+</tr>
+<tr data-query-group="even" data-query="Q08" data-system="starrocks">
+<td>Q08</td>
+<td>starrocks</td>
+<td class="perf-good">470.70</td>
+<td>5</td>
+<td class="perf-good">2,401.50</td>
+<td class="perf-good">2,597.40</td>
+<td class="perf-average">1,413.60</td>
+<td class="perf-good">1,484.10</td>
+<td class="perf-good">4,974.20</td>
+</tr>
+<tr data-query-group="even" data-query="Q08" data-system="trino">
+<td>Q08</td>
+<td>trino</td>
+<td class="perf-poor">4,194.70</td>
+<td>5</td>
+<td class="perf-poor">22,500.70</td>
+<td class="perf-poor">20,786.90</td>
+<td class="perf-poor">8,268.40</td>
+<td class="perf-poor">10,933.20</td>
+<td class="perf-poor">32,130.80</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q09" data-system="clickhouse">
+<td>Q09</td>
+<td>clickhouse</td>
+<td class="perf-poor">2,718.20</td>
+<td>5</td>
+<td class="perf-poor">19,439.30</td>
+<td class="perf-poor">19,648.70</td>
+<td class="perf-average">1,588.30</td>
+<td class="perf-poor">18,089.70</td>
+<td class="perf-poor">22,159.10</td>
+</tr>
+<tr data-query-group="odd" data-query="Q09" data-system="duckdb">
+<td>Q09</td>
+<td>duckdb</td>
+<td class="perf-average">1,423.80</td>
+<td>5</td>
+<td class="perf-average">4,928.60</td>
+<td class="perf-average">5,112.10</td>
+<td class="perf-good">746.60</td>
+<td class="perf-average">4,307.70</td>
+<td class="perf-average">6,237.30</td>
+</tr>
+<tr data-query-group="odd" data-query="Q09" data-system="exasol">
+<td>Q09</td>
+<td>exasol</td>
+<td class="perf-average">483.30</td>
+<td>5</td>
+<td class="perf-good">3,206.50</td>
+<td class="perf-good">3,049.10</td>
+<td class="perf-excellent">385.80</td>
+<td class="perf-good">2,360.00</td>
+<td class="perf-excellent">3,242.70</td>
+</tr>
+<tr data-query-group="odd" data-query="Q09" data-system="starrocks">
+<td>Q09</td>
+<td>starrocks</td>
+<td class="perf-average">1,599.70</td>
+<td>5</td>
+<td class="perf-average">6,554.60</td>
+<td class="perf-average">6,819.50</td>
+<td class="perf-excellent">666.20</td>
+<td class="perf-poor">6,261.20</td>
+<td class="perf-average">7,885.00</td>
+</tr>
+<tr data-query-group="odd" data-query="Q09" data-system="trino">
+<td>Q09</td>
+<td>trino</td>
+<td class="perf-poor">21,267.00</td>
+<td>5</td>
+<td class="perf-poor">64,036.80</td>
+<td class="perf-poor">74,793.70</td>
+<td class="perf-poor">17,467.20</td>
+<td class="perf-poor">61,321.00</td>
+<td class="perf-poor">98,785.20</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q10" data-system="clickhouse">
+<td>Q10</td>
+<td>clickhouse</td>
+<td class="perf-poor">2,684.00</td>
+<td>5</td>
+<td class="perf-poor">10,525.90</td>
+<td class="perf-poor">10,537.70</td>
+<td class="perf-good">1,059.70</td>
+<td class="perf-poor">9,034.40</td>
+<td class="perf-average">11,924.70</td>
+</tr>
+<tr data-query-group="even" data-query="Q10" data-system="duckdb">
+<td>Q10</td>
+<td>duckdb</td>
+<td class="perf-average">691.30</td>
+<td>5</td>
+<td class="perf-average">5,157.80</td>
+<td class="perf-average">5,412.20</td>
+<td class="perf-good">1,028.90</td>
+<td class="perf-average">4,307.50</td>
+<td class="perf-average">7,103.70</td>
+</tr>
+<tr data-query-group="even" data-query="Q10" data-system="exasol">
+<td>Q10</td>
+<td>exasol</td>
+<td class="perf-good">340.80</td>
+<td>5</td>
+<td class="perf-excellent">797.80</td>
+<td class="perf-excellent">913.90</td>
+<td class="perf-excellent">360.40</td>
+<td class="perf-excellent">450.70</td>
+<td class="perf-excellent">1,308.00</td>
+</tr>
+<tr data-query-group="even" data-query="Q10" data-system="starrocks">
+<td>Q10</td>
+<td>starrocks</td>
+<td class="perf-average">682.60</td>
+<td>5</td>
+<td class="perf-good">3,056.80</td>
+<td class="perf-good">3,224.30</td>
+<td class="perf-good">1,301.70</td>
+<td class="perf-good">1,420.20</td>
+<td class="perf-good">4,614.90</td>
+</tr>
+<tr data-query-group="even" data-query="Q10" data-system="trino">
+<td>Q10</td>
+<td>trino</td>
+<td class="perf-poor">3,923.50</td>
+<td>5</td>
+<td class="perf-poor">21,911.40</td>
+<td class="perf-poor">24,486.20</td>
+<td class="perf-poor">12,017.70</td>
+<td class="perf-poor">14,774.70</td>
+<td class="perf-poor">44,830.20</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q11" data-system="clickhouse">
+<td>Q11</td>
+<td>clickhouse</td>
+<td class="perf-average">487.80</td>
+<td>5</td>
+<td class="perf-good">3,301.60</td>
+<td class="perf-good">3,169.00</td>
+<td class="perf-good">1,083.00</td>
+<td class="perf-good">1,721.20</td>
+<td class="perf-good">4,395.20</td>
+</tr>
+<tr data-query-group="odd" data-query="Q11" data-system="duckdb">
+<td>Q11</td>
+<td>duckdb</td>
+<td class="perf-excellent">72.30</td>
+<td>5</td>
+<td class="perf-good">3,656.10</td>
+<td class="perf-good">3,817.60</td>
+<td class="perf-average">1,519.90</td>
+<td class="perf-good">1,811.80</td>
+<td class="perf-good">5,718.20</td>
+</tr>
+<tr data-query-group="odd" data-query="Q11" data-system="exasol">
+<td>Q11</td>
+<td>exasol</td>
+<td class="perf-excellent">123.00</td>
+<td>5</td>
+<td class="perf-excellent">264.50</td>
+<td class="perf-excellent">240.60</td>
+<td class="perf-excellent">61.80</td>
+<td class="perf-excellent">158.30</td>
+<td class="perf-excellent">299.90</td>
+</tr>
+<tr data-query-group="odd" data-query="Q11" data-system="starrocks">
+<td>Q11</td>
+<td>starrocks</td>
+<td class="perf-excellent">99.80</td>
+<td>5</td>
+<td class="perf-excellent">673.40</td>
+<td class="perf-excellent">1,055.80</td>
+<td class="perf-good">1,044.60</td>
+<td class="perf-excellent">274.90</td>
+<td class="perf-excellent">2,882.80</td>
+</tr>
+<tr data-query-group="odd" data-query="Q11" data-system="trino">
+<td>Q11</td>
+<td>trino</td>
+<td class="perf-average">1,057.80</td>
+<td>5</td>
+<td class="perf-good">1,896.60</td>
+<td class="perf-good">3,157.20</td>
+<td class="perf-average">2,659.50</td>
+<td class="perf-good">1,594.20</td>
+<td class="perf-average">7,850.60</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q12" data-system="clickhouse">
+<td>Q12</td>
+<td>clickhouse</td>
+<td class="perf-average">1,336.30</td>
+<td>5</td>
+<td class="perf-average">4,449.70</td>
+<td class="perf-average">5,613.40</td>
+<td class="perf-average">2,774.00</td>
+<td class="perf-average">2,825.10</td>
+<td class="perf-average">9,840.30</td>
+</tr>
+<tr data-query-group="even" data-query="Q12" data-system="duckdb">
+<td>Q12</td>
+<td>duckdb</td>
+<td class="perf-good">424.40</td>
+<td>5</td>
+<td class="perf-average">4,432.20</td>
+<td class="perf-good">4,419.10</td>
+<td class="perf-good">669.60</td>
+<td class="perf-average">3,625.70</td>
+<td class="perf-good">5,148.10</td>
+</tr>
+<tr data-query-group="even" data-query="Q12" data-system="exasol">
+<td>Q12</td>
+<td>exasol</td>
+<td class="perf-excellent">53.50</td>
+<td>5</td>
+<td class="perf-excellent">276.10</td>
+<td class="perf-excellent">290.80</td>
+<td class="perf-excellent">33.30</td>
+<td class="perf-excellent">263.50</td>
+<td class="perf-excellent">338.30</td>
+</tr>
+<tr data-query-group="even" data-query="Q12" data-system="starrocks">
+<td>Q12</td>
+<td>starrocks</td>
+<td class="perf-excellent">174.50</td>
+<td>5</td>
+<td class="perf-excellent">1,768.50</td>
+<td class="perf-excellent">2,020.70</td>
+<td class="perf-good">889.00</td>
+<td class="perf-good">1,103.70</td>
+<td class="perf-good">3,475.20</td>
+</tr>
+<tr data-query-group="even" data-query="Q12" data-system="trino">
+<td>Q12</td>
+<td>trino</td>
+<td class="perf-average">2,104.50</td>
+<td>5</td>
+<td class="perf-poor">15,753.20</td>
+<td class="perf-poor">16,762.90</td>
+<td class="perf-poor">5,901.10</td>
+<td class="perf-poor">9,425.00</td>
+<td class="perf-poor">22,801.20</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q13" data-system="clickhouse">
+<td>Q13</td>
+<td>clickhouse</td>
+<td class="perf-average">2,085.00</td>
+<td>5</td>
+<td class="perf-poor">8,066.30</td>
+<td class="perf-poor">8,649.80</td>
+<td class="perf-average">2,788.70</td>
+<td class="perf-poor">6,153.80</td>
+<td class="perf-poor">13,290.20</td>
+</tr>
+<tr data-query-group="odd" data-query="Q13" data-system="duckdb">
+<td>Q13</td>
+<td>duckdb</td>
+<td class="perf-average">1,190.90</td>
+<td>5</td>
+<td class="perf-good">3,498.50</td>
+<td class="perf-good">3,888.00</td>
+<td class="perf-average">2,055.20</td>
+<td class="perf-good">1,097.40</td>
+<td class="perf-average">6,753.00</td>
+</tr>
+<tr data-query-group="odd" data-query="Q13" data-system="exasol">
+<td>Q13</td>
+<td>exasol</td>
+<td class="perf-good">347.90</td>
+<td>5</td>
+<td class="perf-good">2,206.30</td>
+<td class="perf-excellent">1,747.80</td>
+<td class="perf-good">767.70</td>
+<td class="perf-excellent">448.70</td>
+<td class="perf-excellent">2,223.10</td>
+</tr>
+<tr data-query-group="odd" data-query="Q13" data-system="starrocks">
+<td>Q13</td>
+<td>starrocks</td>
+<td class="perf-average">1,011.30</td>
+<td>5</td>
+<td class="perf-average">4,285.30</td>
+<td class="perf-good">3,797.10</td>
+<td class="perf-average">1,772.90</td>
+<td class="perf-good">942.00</td>
+<td class="perf-good">5,634.60</td>
+</tr>
+<tr data-query-group="odd" data-query="Q13" data-system="trino">
+<td>Q13</td>
+<td>trino</td>
+<td class="perf-poor">5,450.20</td>
+<td>5</td>
+<td class="perf-poor">20,070.60</td>
+<td class="perf-poor">24,778.20</td>
+<td class="perf-poor">13,282.20</td>
+<td class="perf-poor">11,367.90</td>
+<td class="perf-poor">41,047.40</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q14" data-system="clickhouse">
+<td>Q14</td>
+<td>clickhouse</td>
+<td class="perf-excellent">120.10</td>
+<td>5</td>
+<td class="perf-good">2,748.70</td>
+<td class="perf-good">3,048.90</td>
+<td class="perf-good">1,004.00</td>
+<td class="perf-good">2,161.10</td>
+<td class="perf-good">4,484.00</td>
+</tr>
+<tr data-query-group="even" data-query="Q14" data-system="duckdb">
+<td>Q14</td>
+<td>duckdb</td>
+<td class="perf-good">319.80</td>
+<td>5</td>
+<td class="perf-good">3,665.60</td>
+<td class="perf-good">4,111.20</td>
+<td class="perf-poor">2,940.50</td>
+<td class="perf-excellent">314.50</td>
+<td class="perf-average">8,200.30</td>
+</tr>
+<tr data-query-group="even" data-query="Q14" data-system="exasol">
+<td>Q14</td>
+<td>exasol</td>
+<td class="perf-excellent">43.50</td>
+<td>5</td>
+<td class="perf-excellent">261.90</td>
+<td class="perf-excellent">272.00</td>
+<td class="perf-excellent">16.10</td>
+<td class="perf-excellent">260.00</td>
+<td class="perf-excellent">296.80</td>
+</tr>
+<tr data-query-group="even" data-query="Q14" data-system="starrocks">
+<td>Q14</td>
+<td>starrocks</td>
+<td class="perf-excellent">121.80</td>
+<td>5</td>
+<td class="perf-good">3,696.10</td>
+<td class="perf-good">3,044.70</td>
+<td class="perf-good">1,121.10</td>
+<td class="perf-good">1,776.20</td>
+<td class="perf-good">4,013.40</td>
+</tr>
+<tr data-query-group="even" data-query="Q14" data-system="trino">
+<td>Q14</td>
+<td>trino</td>
+<td class="perf-poor">2,751.70</td>
+<td>5</td>
+<td class="perf-poor">18,710.60</td>
+<td class="perf-poor">17,056.90</td>
+<td class="perf-poor">8,246.30</td>
+<td class="perf-poor">6,331.90</td>
+<td class="perf-poor">27,826.00</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q15" data-system="clickhouse">
+<td>Q15</td>
+<td>clickhouse</td>
+<td class="perf-excellent">202.90</td>
+<td>5</td>
+<td class="perf-good">2,397.50</td>
+<td class="perf-good">2,345.50</td>
+<td class="perf-excellent">640.30</td>
+<td class="perf-good">1,742.20</td>
+<td class="perf-good">3,314.90</td>
+</tr>
+<tr data-query-group="odd" data-query="Q15" data-system="duckdb">
+<td>Q15</td>
+<td>duckdb</td>
+<td class="perf-good">291.10</td>
+<td>5</td>
+<td class="perf-average">4,674.70</td>
+<td class="perf-average">4,487.30</td>
+<td class="perf-good">700.00</td>
+<td class="perf-average">3,627.90</td>
+<td class="perf-good">5,252.90</td>
+</tr>
+<tr data-query-group="odd" data-query="Q15" data-system="exasol">
+<td>Q15</td>
+<td>exasol</td>
+<td class="perf-good">216.20</td>
+<td>5</td>
+<td class="perf-excellent">778.10</td>
+<td class="perf-excellent">770.60</td>
+<td class="perf-excellent">40.10</td>
+<td class="perf-good">715.50</td>
+<td class="perf-excellent">819.70</td>
+</tr>
+<tr data-query-group="odd" data-query="Q15" data-system="starrocks">
+<td>Q15</td>
+<td>starrocks</td>
+<td class="perf-excellent">106.30</td>
+<td>5</td>
+<td class="perf-excellent">1,520.50</td>
+<td class="perf-excellent">1,752.70</td>
+<td class="perf-excellent">570.90</td>
+<td class="perf-good">1,248.00</td>
+<td class="perf-excellent">2,554.20</td>
+</tr>
+<tr data-query-group="odd" data-query="Q15" data-system="trino">
+<td>Q15</td>
+<td>trino</td>
+<td class="perf-poor">3,961.70</td>
+<td>5</td>
+<td class="perf-poor">20,212.60</td>
+<td class="perf-poor">21,451.90</td>
+<td class="perf-poor">3,808.20</td>
+<td class="perf-poor">18,264.20</td>
+<td class="perf-poor">27,985.30</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q16" data-system="clickhouse">
+<td>Q16</td>
+<td>clickhouse</td>
+<td class="perf-good">358.00</td>
+<td>5</td>
+<td class="perf-average">5,117.20</td>
+<td class="perf-average">4,953.80</td>
+<td class="perf-good">667.30</td>
+<td class="perf-average">3,795.10</td>
+<td class="perf-good">5,425.50</td>
+</tr>
+<tr data-query-group="even" data-query="Q16" data-system="duckdb">
+<td>Q16</td>
+<td>duckdb</td>
+<td class="perf-good">326.80</td>
+<td>5</td>
+<td class="perf-average">4,606.60</td>
+<td class="perf-average">4,770.80</td>
+<td class="perf-good">1,084.20</td>
+<td class="perf-average">3,576.80</td>
+<td class="perf-average">6,509.80</td>
+</tr>
+<tr data-query-group="even" data-query="Q16" data-system="exasol">
+<td>Q16</td>
+<td>exasol</td>
+<td class="perf-good">348.30</td>
+<td>5</td>
+<td class="perf-excellent">1,123.00</td>
+<td class="perf-excellent">1,146.30</td>
+<td class="perf-excellent">59.50</td>
+<td class="perf-good">1,093.40</td>
+<td class="perf-excellent">1,244.50</td>
+</tr>
+<tr data-query-group="even" data-query="Q16" data-system="starrocks">
+<td>Q16</td>
+<td>starrocks</td>
+<td class="perf-good">403.50</td>
+<td>5</td>
+<td class="perf-excellent">1,458.10</td>
+<td class="perf-excellent">1,389.40</td>
+<td class="perf-excellent">215.10</td>
+<td class="perf-good">1,048.00</td>
+<td class="perf-excellent">1,627.90</td>
+</tr>
+<tr data-query-group="even" data-query="Q16" data-system="trino">
+<td>Q16</td>
+<td>trino</td>
+<td class="perf-average">2,165.40</td>
+<td>5</td>
+<td class="perf-average">6,460.40</td>
+<td class="perf-average">5,978.60</td>
+<td class="perf-average">1,950.80</td>
+<td class="perf-average">3,278.70</td>
+<td class="perf-average">8,129.00</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q17" data-system="clickhouse">
+<td>Q17</td>
+<td>clickhouse</td>
+<td class="perf-average">558.70</td>
+<td>5</td>
+<td class="perf-average">4,780.30</td>
+<td class="perf-average">4,838.50</td>
+<td class="perf-poor">2,921.00</td>
+<td class="perf-good">1,987.50</td>
+<td class="perf-average">9,591.00</td>
+</tr>
+<tr data-query-group="odd" data-query="Q17" data-system="duckdb">
+<td>Q17</td>
+<td>duckdb</td>
+<td class="perf-good">458.30</td>
+<td>5</td>
+<td class="perf-average">4,990.50</td>
+<td class="perf-average">4,606.40</td>
+<td class="perf-good">828.90</td>
+<td class="perf-average">3,295.70</td>
+<td class="perf-good">5,276.60</td>
+</tr>
+<tr data-query-group="odd" data-query="Q17" data-system="exasol">
+<td>Q17</td>
+<td>exasol</td>
+<td class="perf-excellent">21.20</td>
+<td>5</td>
+<td class="perf-excellent">52.60</td>
+<td class="perf-excellent">51.30</td>
+<td class="perf-excellent">10.30</td>
+<td class="perf-excellent">35.50</td>
+<td class="perf-excellent">63.40</td>
+</tr>
+<tr data-query-group="odd" data-query="Q17" data-system="starrocks">
+<td>Q17</td>
+<td>starrocks</td>
+<td class="perf-excellent">189.30</td>
+<td>5</td>
+<td class="perf-good">3,364.80</td>
+<td class="perf-good">2,592.40</td>
+<td class="perf-average">1,534.90</td>
+<td class="perf-excellent">714.10</td>
+<td class="perf-good">4,107.00</td>
+</tr>
+<tr data-query-group="odd" data-query="Q17" data-system="trino">
+<td>Q17</td>
+<td>trino</td>
+<td class="perf-poor">4,460.20</td>
+<td>5</td>
+<td class="perf-poor">26,287.30</td>
+<td class="perf-poor">23,415.40</td>
+<td class="perf-poor">6,692.10</td>
+<td class="perf-poor">12,530.20</td>
+<td class="perf-poor">29,122.70</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q18" data-system="clickhouse">
+<td>Q18</td>
+<td>clickhouse</td>
+<td class="perf-poor">3,289.50</td>
+<td>5</td>
+<td class="perf-poor">18,397.80</td>
+<td class="perf-poor">18,530.60</td>
+<td class="perf-poor">4,045.50</td>
+<td class="perf-poor">12,941.80</td>
+<td class="perf-poor">23,487.30</td>
+</tr>
+<tr data-query-group="even" data-query="Q18" data-system="duckdb">
+<td>Q18</td>
+<td>duckdb</td>
+<td class="perf-average">969.70</td>
+<td>5</td>
+<td class="perf-average">5,219.00</td>
+<td class="perf-average">5,216.40</td>
+<td class="perf-average">1,359.80</td>
+<td class="perf-average">3,252.70</td>
+<td class="perf-average">7,094.60</td>
+</tr>
+<tr data-query-group="even" data-query="Q18" data-system="exasol">
+<td>Q18</td>
+<td>exasol</td>
+<td class="perf-good">347.30</td>
+<td>5</td>
+<td class="perf-excellent">1,710.40</td>
+<td class="perf-excellent">1,485.40</td>
+<td class="perf-excellent">568.10</td>
+<td class="perf-excellent">493.50</td>
+<td class="perf-excellent">1,866.80</td>
+</tr>
+<tr data-query-group="even" data-query="Q18" data-system="starrocks">
+<td>Q18</td>
+<td>starrocks</td>
+<td class="perf-poor">2,678.20</td>
+<td>5</td>
+<td class="perf-average">6,530.20</td>
+<td class="perf-average">6,924.90</td>
+<td class="perf-good">1,078.10</td>
+<td class="perf-poor">5,698.70</td>
+<td class="perf-average">8,413.20</td>
+</tr>
+<tr data-query-group="even" data-query="Q18" data-system="trino">
+<td>Q18</td>
+<td>trino</td>
+<td class="perf-poor">5,895.70</td>
+<td>5</td>
+<td class="perf-poor">21,742.20</td>
+<td class="perf-poor">23,948.60</td>
+<td class="perf-poor">6,783.40</td>
+<td class="perf-poor">15,647.40</td>
+<td class="perf-poor">32,141.70</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q19" data-system="clickhouse">
+<td>Q19</td>
+<td>clickhouse</td>
+<td class="perf-poor">2,602.90</td>
+<td>5</td>
+<td class="perf-poor">14,573.60</td>
+<td class="perf-poor">15,388.40</td>
+<td class="perf-poor">5,421.90</td>
+<td class="perf-poor">9,048.40</td>
+<td class="perf-poor">21,555.80</td>
+</tr>
+<tr data-query-group="odd" data-query="Q19" data-system="duckdb">
+<td>Q19</td>
+<td>duckdb</td>
+<td class="perf-good">429.00</td>
+<td>5</td>
+<td class="perf-good">3,891.70</td>
+<td class="perf-good">3,858.60</td>
+<td class="perf-average">1,382.90</td>
+<td class="perf-good">1,662.90</td>
+<td class="perf-good">5,372.80</td>
+</tr>
+<tr data-query-group="odd" data-query="Q19" data-system="exasol">
+<td>Q19</td>
+<td>exasol</td>
+<td class="perf-excellent">18.40</td>
+<td>5</td>
+<td class="perf-excellent">71.10</td>
+<td class="perf-excellent">66.20</td>
+<td class="perf-excellent">33.20</td>
+<td class="perf-excellent">17.40</td>
+<td class="perf-excellent">106.30</td>
+</tr>
+<tr data-query-group="odd" data-query="Q19" data-system="starrocks">
+<td>Q19</td>
+<td>starrocks</td>
+<td class="perf-good">260.50</td>
+<td>5</td>
+<td class="perf-excellent">875.50</td>
+<td class="perf-excellent">798.20</td>
+<td class="perf-excellent">398.60</td>
+<td class="perf-excellent">155.90</td>
+<td class="perf-excellent">1,250.00</td>
+</tr>
+<tr data-query-group="odd" data-query="Q19" data-system="trino">
+<td>Q19</td>
+<td>trino</td>
+<td class="perf-poor">2,569.60</td>
+<td>5</td>
+<td class="perf-poor">8,713.10</td>
+<td class="perf-poor">9,630.60</td>
+<td class="perf-poor">7,096.50</td>
+<td class="perf-good">2,053.90</td>
+<td class="perf-poor">16,936.40</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q20" data-system="clickhouse">
+<td>Q20</td>
+<td>clickhouse</td>
+<td class="perf-average">961.90</td>
+<td>5</td>
+<td class="perf-average">5,063.70</td>
+<td class="perf-average">5,260.40</td>
+<td class="perf-good">874.70</td>
+<td class="perf-poor">4,610.30</td>
+<td class="perf-average">6,783.40</td>
+</tr>
+<tr data-query-group="even" data-query="Q20" data-system="duckdb">
+<td>Q20</td>
+<td>duckdb</td>
+<td class="perf-good">422.20</td>
+<td>5</td>
+<td class="perf-average">4,491.90</td>
+<td class="perf-good">4,290.90</td>
+<td class="perf-good">740.60</td>
+<td class="perf-average">3,436.50</td>
+<td class="perf-good">5,130.40</td>
+</tr>
+<tr data-query-group="even" data-query="Q20" data-system="exasol">
+<td>Q20</td>
+<td>exasol</td>
+<td class="perf-excellent">155.70</td>
+<td>5</td>
+<td class="perf-excellent">444.00</td>
+<td class="perf-excellent">441.10</td>
+<td class="perf-excellent">204.40</td>
+<td class="perf-excellent">234.20</td>
+<td class="perf-excellent">655.00</td>
+</tr>
+<tr data-query-group="even" data-query="Q20" data-system="starrocks">
+<td>Q20</td>
+<td>starrocks</td>
+<td class="perf-excellent">170.90</td>
+<td>5</td>
+<td class="perf-excellent">1,388.00</td>
+<td class="perf-excellent">1,850.40</td>
+<td class="perf-average">1,626.10</td>
+<td class="perf-excellent">605.00</td>
+<td class="perf-good">4,674.20</td>
+</tr>
+<tr data-query-group="even" data-query="Q20" data-system="trino">
+<td>Q20</td>
+<td>trino</td>
+<td class="perf-poor">2,855.10</td>
+<td>5</td>
+<td class="perf-average">7,274.70</td>
+<td class="perf-poor">9,300.20</td>
+<td class="perf-poor">5,478.50</td>
+<td class="perf-average">4,196.60</td>
+<td class="perf-poor">17,505.90</td>
+</tr>
+<tr data-query-start="true" data-query-group="odd" data-query="Q21" data-system="clickhouse">
+<td>Q21</td>
+<td>clickhouse</td>
+<td class="perf-poor">3,097.20</td>
+<td>5</td>
+<td class="perf-poor">14,544.00</td>
+<td class="perf-poor">14,264.50</td>
+<td class="perf-average">2,268.30</td>
+<td class="perf-poor">10,746.70</td>
+<td class="perf-poor">16,445.90</td>
+</tr>
+<tr data-query-group="odd" data-query="Q21" data-system="duckdb">
+<td>Q21</td>
+<td>duckdb</td>
+<td class="perf-average">2,351.60</td>
+<td>5</td>
+<td class="perf-average">5,469.40</td>
+<td class="perf-average">5,687.50</td>
+<td class="perf-good">1,177.90</td>
+<td class="perf-average">4,336.80</td>
+<td class="perf-average">7,571.50</td>
+</tr>
+<tr data-query-group="odd" data-query="Q21" data-system="exasol">
+<td>Q21</td>
+<td>exasol</td>
+<td class="perf-good">209.60</td>
+<td>5</td>
+<td class="perf-excellent">968.40</td>
+<td class="perf-excellent">812.80</td>
+<td class="perf-excellent">464.90</td>
+<td class="perf-excellent">303.30</td>
+<td class="perf-excellent">1,307.20</td>
+</tr>
+<tr data-query-group="odd" data-query="Q21" data-system="starrocks">
+<td>Q21</td>
+<td>starrocks</td>
+<td class="perf-poor">4,245.10</td>
+<td>5</td>
+<td class="perf-poor">9,654.70</td>
+<td class="perf-poor">9,455.00</td>
+<td class="perf-poor">2,792.90</td>
+<td class="perf-poor">5,462.30</td>
+<td class="perf-poor">13,232.20</td>
+</tr>
+<tr data-query-group="odd" data-query="Q21" data-system="trino">
+<td>Q21</td>
+<td>trino</td>
+<td class="perf-poor">12,995.20</td>
+<td>5</td>
+<td class="perf-poor">57,294.90</td>
+<td class="perf-poor">53,537.50</td>
+<td class="perf-poor">21,329.10</td>
+<td class="perf-poor">19,814.50</td>
+<td class="perf-poor">76,861.80</td>
+</tr>
+<tr data-query-start="true" data-query-group="even" data-query="Q22" data-system="clickhouse">
+<td>Q22</td>
+<td>clickhouse</td>
+<td class="perf-good">292.20</td>
+<td>5</td>
+<td class="perf-average">5,757.60</td>
+<td class="perf-average">5,248.50</td>
+<td class="perf-average">2,229.80</td>
+<td class="perf-good">1,533.10</td>
+<td class="perf-average">7,536.50</td>
+</tr>
+<tr data-query-group="even" data-query="Q22" data-system="duckdb">
+<td>Q22</td>
+<td>duckdb</td>
+<td class="perf-good">279.30</td>
+<td>5</td>
+<td class="perf-good">3,768.20</td>
+<td class="perf-average">4,827.30</td>
+<td class="perf-average">1,976.60</td>
+<td class="perf-average">3,037.00</td>
+<td class="perf-average">7,678.00</td>
+</tr>
+<tr data-query-group="even" data-query="Q22" data-system="exasol">
+<td>Q22</td>
+<td>exasol</td>
+<td class="perf-excellent">54.40</td>
+<td>5</td>
+<td class="perf-excellent">290.20</td>
+<td class="perf-excellent">293.00</td>
+<td class="perf-excellent">33.20</td>
+<td class="perf-excellent">261.80</td>
+<td class="perf-excellent">339.10</td>
+</tr>
+<tr data-query-group="even" data-query="Q22" data-system="starrocks">
+<td>Q22</td>
+<td>starrocks</td>
+<td class="perf-excellent">194.40</td>
+<td>5</td>
+<td class="perf-good">2,130.50</td>
+<td class="perf-good">2,865.60</td>
+<td class="perf-average">2,031.20</td>
+<td class="perf-good">1,382.20</td>
+<td class="perf-average">6,287.00</td>
+</tr>
+<tr data-query-group="even" data-query="Q22" data-system="trino">
+<td>Q22</td>
+<td>trino</td>
+<td class="perf-average">1,429.90</td>
+<td>5</td>
+<td class="perf-average">4,472.00</td>
+<td class="perf-average">4,442.80</td>
+<td class="perf-excellent">465.90</td>
+<td class="perf-average">3,856.10</td>
+<td class="perf-good">4,921.00</td>
+</tr>
+</tbody>
+</table>
+                </div>
+            </div>
+            
+        </section>
+
+        <!-- Infrastructure Setup Timings -->
+        
+
+        <!-- Configuration & Setup -->
+        <section class="section">
+            <h2>Configuration & Setup</h2>
+
+            
+            
+            <details class="setup-details">
+                <summary>
+                    <h3>Exasol 2025.2.0 Setup</h3>
+                </summary>
+
+                
+                
+
+    
+    
+    
+    
+    
+    
+        
+            
+            
+<div class="code-section">
+    <h4>Storage Setup</h4>
+    <pre><code class="language-bash"># Create GPT partition table
+sudo parted -s /dev/nvme1n1 mklabel gpt
+# Create 70GB partition for data generation
+sudo parted -s /dev/nvme1n1 mkpart primary ext4 1MiB 70GiB
+# Create raw partition for Exasol (1699GB)
+sudo parted -s /dev/nvme1n1 mkpart primary 70GiB 100%
+# Format /dev/nvme1n1p1 with ext4 filesystem
+sudo mkfs.ext4 -F /dev/nvme1n1p1
+# Create mount point /data
+sudo mkdir -p /data
+# Mount /dev/nvme1n1p1 to /data
+sudo mount /dev/nvme1n1p1 /data
+# Set ownership of /data to $(whoami):$(whoami)
+sudo chown -R $(whoami):$(whoami) /data
+</code></pre>
+</div>
+
+        
+    
+        
+            
+            
+<div class="code-section">
+    <h4>User Setup</h4>
+    <pre><code class="language-bash"># Create Exasol system user
+sudo useradd -m -s /bin/bash exasol || true
+# Add exasol user to sudo group
+sudo usermod -aG sudo exasol || true
+# Set password for exasol user (interactive)
+sudo passwd exasol
+</code></pre>
+</div>
+
+        
+    
+        
+            
+            
+<div class="code-section">
+    <h4>Setup</h4>
+    <pre><code class="language-bash"># Configuring passwordless sudo on all nodes
+sudo sed -i &#34;/%sudo/s/) ALL$/) NOPASSWD: ALL/&#34; /etc/sudoers
+</code></pre>
+</div>
+
+        
+    
+        
+            
+            
+<div class="code-section">
+    <h4>Ssh Setup</h4>
+    <pre><code class="language-bash"># Generate SSH key pair for cluster communication
+ssh-keygen -t rsa -b 2048 -f ~/.ssh/id_rsa -N &#34;&#34;
+# Distribute ubuntu SSH key to exasol user
+sudo mkdir -p ~exasol/.ssh &amp;&amp; echo &#39;ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCddWe0MSlyC1+QQ5tTWyWMoOZKUSOPDVqgjZBIH4XFUxKQ4iHiIQGBLunnymNVVl96/USqHd8ELxrLTE9vnLJhVd+Iq3tyO96/2na8EB0N2LScHFPRgJr1mXtsdu4uj/yrbTcwO6DLJP7hewlX42mB+V3e4rMievYrLgsSPSwfagPKZ+YJ3SHza5LneAuNLRqbYe9saE12AnhBijbvU32qgneq1XKcdZBmW1AKuA8AxBw9fF8UrMkhS1A4/eMOKABJTceVWjPWBKizuwXQOcypGWk1QywyIMxiAd41iF5TCqfA+clXA9dm7/DuxQMukJ6iemDENkPcYg5wtU5pPabx ubuntu@ip-10-0-1-196&#39; | sudo tee ~exasol/.ssh/authorized_keys &gt; /dev/null &amp;&amp; sudo chown -R exasol:exasol ~exasol/.ssh &amp;&amp; sudo chmod 700 ~exasol/.ssh &amp;&amp; sudo chmod 600 ~exasol/.ssh/authorized_keys
+# Configure localhost SSH access to exasol user
+ssh-keyscan -H localhost &gt;&gt; ~/.ssh/known_hosts 2&gt;/dev/null || true
+ssh-keyscan -H 127.0.0.1 &gt;&gt; ~/.ssh/known_hosts 2&gt;/dev/null || true
+mkdir -p ~/.ssh
+touch ~/.ssh/config
+grep -q &#34;Host localhost&#34; ~/.ssh/config 2&gt;/dev/null || cat &gt;&gt; ~/.ssh/config &lt;&lt; &#39;SSHEOF&#39;
+
+Host localhost 127.0.0.1
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+    LogLevel ERROR
+SSHEOF
+chmod 600 ~/.ssh/config
+# Generate SSH key pair for exasol user
+sudo -u exasol bash -c &#39;mkdir -p ~/.ssh &amp;&amp; chmod 700 ~/.ssh &amp;&amp; if [ ! -f ~/.ssh/id_rsa ]; then ssh-keygen -t rsa -b 2048 -f ~/.ssh/id_rsa -N &#34;&#34; -q; fi&#39;
+# [All 1 Nodes] Cross-distribute exasol SSH keys for cluster communication
+# Collect exasol public keys from all nodes, distribute to all authorized_keys
+sudo cat ~exasol/.ssh/id_rsa.pub  # on each node
+echo &#39;&lt;KEY&gt;&#39; | sudo tee -a ~exasol/.ssh/authorized_keys &gt; /dev/null
+sudo chown exasol:exasol ~exasol/.ssh/authorized_keys &amp;&amp; sudo chmod 600 ~exasol/.ssh/authorized_keys
+# Configure exasol SSH config for cluster nodes
+sudo -u exasol bash -c &#39;
+mkdir -p ~/.ssh &amp;&amp; chmod 700 ~/.ssh
+touch ~/.ssh/config &amp;&amp; chmod 600 ~/.ssh/config
+grep -q &#34;Host localhost&#34; ~/.ssh/config 2&gt;/dev/null || cat &gt;&gt; ~/.ssh/config &lt;&lt; SSHEOF
+
+Host localhost 127.0.0.1 &lt;PRIVATE_IP&gt; &lt;PUBLIC_IP&gt;
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+    LogLevel ERROR
+SSHEOF
+&#39;
+</code></pre>
+</div>
+
+        
+    
+        
+            
+            
+<div class="code-section">
+    <h4>License Setup</h4>
+    <pre><code class="language-bash"># Install Exasol license file
+confd_client license_upload license: &lt;LICENSE_CONTENT&gt;
+</code></pre>
+</div>
+
+        
+    
+        
+            
+            
+<div class="code-section">
+    <h4>Database Tuning</h4>
+    <pre><code class="language-bash"># Stop Exasol database for parameter configuration
+confd_client db_stop db_name: Exasol
+# Configure Exasol database parameters for analytical workload optimization
+confd_client db_configure db_name: Exasol params_add: &#34;[&#39;-writeTouchInit=1&#39;,&#39;-cacheMonitorLimit=0&#39;,&#39;-maxOverallSlbUsageRatio=0.95&#39;,&#39;-useQueryCache=0&#39;,&#39;-query_log_timeout=0&#39;,&#39;-joinOrderMethod=0&#39;,&#39;-etlCheckCertsDefault=0&#39;]&#34;
+# Starting database with new parameters
+confd_client db_start db_name: Exasol
+</code></pre>
+</div>
+
+        
+    
+
+
+
+    
+    
+    <div class="tuning-parameters">
+        <h4>Tuning Parameters</h4>
+        <ul>
+            
+            <li><code>optimizer_mode</code>: analytical</li>
+            
+            <li>Database parameters:
+                <ul>
+                    
+                    <li><code>-writeTouchInit=1</code></li>
+                    
+                    <li><code>-cacheMonitorLimit=0</code></li>
+                    
+                    <li><code>-maxOverallSlbUsageRatio=0.95</code></li>
+                    
+                    <li><code>-useQueryCache=0</code></li>
+                    
+                    <li><code>-query_log_timeout=0</code></li>
+                    
+                    <li><code>-joinOrderMethod=0</code></li>
+                    
+                    <li><code>-etlCheckCertsDefault=0</code></li>
+                    
+                </ul>
+            </li>
+            
+            
+            
+            
+        </ul>
+    </div>
+    
+
+
+
+<div class="data-directory">
+    <strong>Data Directory:</strong> <code>None</code>
+</div>
+
+
+                
+            </details>
+            
+            <details class="setup-details">
+                <summary>
+                    <h3>Trino 479 Setup</h3>
+                </summary>
+
+                
+                
+
+    
+    
+    
+    
+    
+    
+        
+            
+            
+<div class="code-section">
+    <h4>Storage Setup</h4>
+    <pre><code class="language-bash"># Format /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS646BA6C32B2530433 with ext4 filesystem
+sudo mkfs.ext4 -F /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS646BA6C32B2530433
+# Create mount point /data
+sudo mkdir -p /data
+# Mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS646BA6C32B2530433 to /data
+sudo mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS646BA6C32B2530433 /data
+# Set ownership of /data to ubuntu:ubuntu
+sudo chown -R ubuntu:ubuntu /data
+# Create trino data directory
+sudo mkdir -p /data/trino
+</code></pre>
+</div>
+
+        
+    
+        
+            
+            
+<div class="code-section">
+    <h4>Installation</h4>
+    <pre><code class="language-bash"># Create Trino directories
+sudo mkdir -p /var/trino/data /etc/trino /var/log/trino
+</code></pre>
+</div>
+
+        
+    
+
+
+
+    
+    
+    <div class="tuning-parameters">
+        <h4>Tuning Parameters</h4>
+        <ul>
+            
+            
+            
+            
+            
+            
+        </ul>
+    </div>
+    
+
+
+
+<div class="data-directory">
+    <strong>Data Directory:</strong> <code>/data/trino</code>
+</div>
+
+
+                
+            </details>
+            
+            <details class="setup-details">
+                <summary>
+                    <h3>Starrocks 4.0.6 Setup</h3>
+                </summary>
+
+                
+                
+
+    
+    
+    
+    
+    
+    
+        
+            
+            
+<div class="code-section">
+    <h4>Storage Setup</h4>
+    <pre><code class="language-bash"># Format /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS22597D209069DB9C5 with ext4 filesystem
+sudo mkfs.ext4 -F /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS22597D209069DB9C5
+# Create mount point /data
+sudo mkdir -p /data
+# Mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS22597D209069DB9C5 to /data
+sudo mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS22597D209069DB9C5 /data
+# Set ownership of /data to ubuntu:ubuntu
+sudo chown -R ubuntu:ubuntu /data
+# Create starrocks data directory
+sudo mkdir -p /data/starrocks &amp;&amp; sudo chmod 1777 /data/starrocks
+# Set ownership of /data/starrocks to ubuntu:ubuntu
+sudo chown -R ubuntu:ubuntu /data/starrocks
+</code></pre>
+</div>
+
+        
+    
+
+
+
+    
+    
+    <div class="tuning-parameters">
+        <h4>Tuning Parameters</h4>
+        <ul>
+            
+            
+            
+            
+            
+            
+        </ul>
+    </div>
+    
+
+
+
+<div class="data-directory">
+    <strong>Data Directory:</strong> <code>/data/starrocks</code>
+</div>
+
+
+                
+            </details>
+            
+            <details class="setup-details">
+                <summary>
+                    <h3>Clickhouse 26.1.3.52 Setup</h3>
+                </summary>
+
+                
+                
+
+    
+    
+    
+    
+    
+    
+        
+            
+            
+<div class="code-section">
+    <h4>Storage Setup</h4>
+    <pre><code class="language-bash"># Format /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS43F5AA420927A5803 with ext4 filesystem
+sudo mkfs.ext4 -F /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS43F5AA420927A5803
+# Create mount point /data
+sudo mkdir -p /data
+# Mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS43F5AA420927A5803 to /data
+sudo mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS43F5AA420927A5803 /data
+# Set ownership of /data to ubuntu:ubuntu
+sudo chown -R ubuntu:ubuntu /data
+# Create clickhouse data directory
+sudo mkdir -p /data/clickhouse &amp;&amp; sudo chmod 1777 /data/clickhouse
+</code></pre>
+</div>
+
+        
+    
+
+
+
+    
+    
+    <div class="tuning-parameters">
+        <h4>Tuning Parameters</h4>
+        <ul>
+            
+            
+            
+            <li><code>memory_limit</code>: 192g</li>
+            <li><code>max_threads</code>: 32</li>
+            
+                
+                
+                    
+                
+                <li><code>max_memory_usage</code>: 24.0GB</li>
+            
+        </ul>
+    </div>
+    
+
+
+
+<div class="data-directory">
+    <strong>Data Directory:</strong> <code>/data/clickhouse</code>
+</div>
+
+
+                
+            </details>
+            
+            <details class="setup-details">
+                <summary>
+                    <h3>Duckdb 1.4.4 Setup</h3>
+                </summary>
+
+                
+                
+
+    
+    
+    
+    
+    
+    
+        
+            
+            
+<div class="code-section">
+    <h4>Storage Setup</h4>
+    <pre><code class="language-bash"># Format /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS43EF37F44E2BFC9D7 with ext4 filesystem
+sudo mkfs.ext4 -F /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS43EF37F44E2BFC9D7
+# Create mount point /data
+sudo mkdir -p /data
+# Mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS43EF37F44E2BFC9D7 to /data
+sudo mount /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS43EF37F44E2BFC9D7 /data
+# Set ownership of /data to ubuntu:ubuntu
+sudo chown -R ubuntu:ubuntu /data
+# Create duckdb data directory
+sudo mkdir -p /data/duckdb
+# Set ownership of /data/duckdb to ubuntu:ubuntu
+sudo chown -R ubuntu:ubuntu /data/duckdb
+</code></pre>
+</div>
+
+        
+    
+        
+            
+            
+<div class="code-section">
+    <h4>Preparation</h4>
+    <pre><code class="language-bash"># Create DuckDB data directory: /data/duckdb
+sudo mkdir -p /data/duckdb &amp;&amp; sudo chown ubuntu:ubuntu /data/duckdb
+</code></pre>
+</div>
+
+        
+    
+
+
+
+    
+    
+    <div class="tuning-parameters">
+        <h4>Tuning Parameters</h4>
+        <ul>
+            
+            
+            
+            <li><code>memory_limit</code>: 192GB</li>
+            
+            
+        </ul>
+    </div>
+    
+
+
+
+<div class="data-directory">
+    <strong>Data Directory:</strong> <code>/data/duckdb</code>
+</div>
+
+
+                
+            </details>
+            
+            
+        </section>
+
+        <!-- Download Section -->
+        <section class="section">
+            <h2>Download Data</h2>
+            <div class="download-grid">
+                
+<div class="download-card">
+    <div class="download-icon">📊</div>
+    <h4>Query Results</h4>
+    <p>Raw benchmark results (CSV format)</p>
+    <a href="attachments/runs.csv" class="btn btn-download" download>Download</a>
+</div>
+
+                
+<div class="download-card">
+    <div class="download-icon">📈</div>
+    <h4>Summary Statistics</h4>
+    <p>Aggregated performance metrics (JSON)</p>
+    <a href="attachments/summary.json" class="btn btn-download" download>Download</a>
+</div>
+
+
+                
+                    
+                    
+<div class="download-card">
+    <div class="download-icon">💻</div>
+    <h4>Starrocks System Information</h4>
+    <p>Hardware specifications captured during the benchmark (JSON)</p>
+    <a href="attachments/system_starrocks.json" class="btn btn-download" download>Download</a>
+</div>
+
+                    
+                    
+<div class="download-card">
+    <div class="download-icon">💻</div>
+    <h4>Trino System Information</h4>
+    <p>Hardware specifications captured during the benchmark (JSON)</p>
+    <a href="attachments/system_trino.json" class="btn btn-download" download>Download</a>
+</div>
+
+                    
+                    
+<div class="download-card">
+    <div class="download-icon">💻</div>
+    <h4>Duckdb System Information</h4>
+    <p>Hardware specifications captured during the benchmark (JSON)</p>
+    <a href="attachments/system_duckdb.json" class="btn btn-download" download>Download</a>
+</div>
+
+                    
+                    
+<div class="download-card">
+    <div class="download-icon">💻</div>
+    <h4>Clickhouse System Information</h4>
+    <p>Hardware specifications captured during the benchmark (JSON)</p>
+    <a href="attachments/system_clickhouse.json" class="btn btn-download" download>Download</a>
+</div>
+
+                    
+                    
+<div class="download-card">
+    <div class="download-icon">💻</div>
+    <h4>Exasol System Information</h4>
+    <p>Hardware specifications captured during the benchmark (JSON)</p>
+    <a href="attachments/system_exasol.json" class="btn btn-download" download>Download</a>
+</div>
+
+                    
+                
+
+                
+                
+<div class="download-card">
+    <div class="download-icon">📦</div>
+    <h4>Benchmark Package</h4>
+    <p>Self-contained reproduction package</p>
+    <a href="extscal_streams_8-workload.zip" class="btn btn-download" download>Download</a>
+</div>
+
+                
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Generated by BenchKit | 2026-02-17 17:36:58</p>
+        </footer>
+    </div>
+
+    <!-- Query Modal -->
+    <div id="queryModal" class="query-modal">
+        <div class="query-modal-content">
+            <div class="query-modal-header">
+                <h3 id="modalTitle">Query Details</h3>
+                <button class="query-modal-close" onclick="closeQueryModal()">&times;</button>
+            </div>
+            <div id="modalBody">
+                <pre><code id="queryCode" class="language-sql"></code></pre>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+
+    <script>
+        // Query data embedded from workload
+        const queryData = {
+            
+            
+            "Q01": {
+                
+                "exasol": "attachments/queries/exasol/Q01.sql",
+                
+                "clickhouse": "attachments/queries/clickhouse/Q01.sql",
+                
+                "trino": "attachments/queries/trino/Q01.sql",
+                
+                "starrocks": "attachments/queries/starrocks/Q01.sql",
+                
+                "duckdb": "attachments/queries/duckdb/Q01.sql"
+                
+            },
+            
+            "Q02": {
+                
+                "exasol": "attachments/queries/exasol/Q02.sql",
+                
+                "clickhouse": "attachments/queries/clickhouse/Q02.sql",
+                
+                "trino": "attachments/queries/trino/Q02.sql",
+                
+                "starrocks": "attachments/queries/starrocks/Q02.sql",
+                
+                "duckdb": "attachments/queries/duckdb/Q02.sql"
+                
+            },
+            
+            "Q03": {
+                
+                "exasol": "attachments/queries/exasol/Q03.sql",
+                
+                "clickhouse": "attachments/queries/clickhouse/Q03.sql",
+                
+                "trino": "attachments/queries/trino/Q03.sql",
+                
+                "starrocks": "attachments/queries/starrocks/Q03.sql",
+                
+                "duckdb": "attachments/queries/duckdb/Q03.sql"
+                
+            },
+            
+            "Q04": {
+                
+                "exasol": "attachments/queries/exasol/Q04.sql",
+                
+                "clickhouse": "attachments/queries/clickhouse/Q04.sql",
+                
+                "trino": "attachments/queries/trino/Q04.sql",
+                
+                "starrocks": "attachments/queries/starrocks/Q04.sql",
+                
+                "duckdb": "attachments/queries/duckdb/Q04.sql"
+                
+            },
+            
+            "Q05": {
+                
+                "exasol": "attachments/queries/exasol/Q05.sql",
+                
+                "clickhouse": "attachments/queries/clickhouse/Q05.sql",
+                
+                "trino": "attachments/queries/trino/Q05.sql",
+                
+                "starrocks": "attachments/queries/starrocks/Q05.sql",
+                
+                "duckdb": "attachments/queries/duckdb/Q05.sql"
+                
+            },
+            
+            "Q06": {
+                
+                "exasol": "attachments/queries/exasol/Q06.sql",
+                
+                "clickhouse": "attachments/queries/clickhouse/Q06.sql",
+                
+                "trino": "attachments/queries/trino/Q06.sql",
+                
+                "starrocks": "attachments/queries/starrocks/Q06.sql",
+                
+                "duckdb": "attachments/queries/duckdb/Q06.sql"
+                
+            },
+            
+            "Q07": {
+                
+                "exasol": "attachments/queries/exasol/Q07.sql",
+                
+                "clickhouse": "attachments/queries/clickhouse/Q07.sql",
+                
+                "trino": "attachments/queries/trino/Q07.sql",
+                
+                "starrocks": "attachments/queries/starrocks/Q07.sql",
+                
+                "duckdb": "attachments/queries/duckdb/Q07.sql"
+                
+            },
+            
+            "Q08": {
+                
+                "exasol": "attachments/queries/exasol/Q08.sql",
+                
+                "clickhouse": "attachments/queries/clickhouse/Q08.sql",
+                
+                "trino": "attachments/queries/trino/Q08.sql",
+                
+                "starrocks": "attachments/queries/starrocks/Q08.sql",
+                
+                "duckdb": "attachments/queries/duckdb/Q08.sql"
+                
+            },
+            
+            "Q09": {
+                
+                "exasol": "attachments/queries/exasol/Q09.sql",
+                
+                "clickhouse": "attachments/queries/clickhouse/Q09.sql",
+                
+                "trino": "attachments/queries/trino/Q09.sql",
+                
+                "starrocks": "attachments/queries/starrocks/Q09.sql",
+                
+                "duckdb": "attachments/queries/duckdb/Q09.sql"
+                
+            },
+            
+            "Q10": {
+                
+                "exasol": "attachments/queries/exasol/Q10.sql",
+                
+                "clickhouse": "attachments/queries/clickhouse/Q10.sql",
+                
+                "trino": "attachments/queries/trino/Q10.sql",
+                
+                "starrocks": "attachments/queries/starrocks/Q10.sql",
+                
+                "duckdb": "attachments/queries/duckdb/Q10.sql"
+                
+            },
+            
+            "Q11": {
+                
+                "exasol": "attachments/queries/exasol/Q11.sql",
+                
+                "clickhouse": "attachments/queries/clickhouse/Q11.sql",
+                
+                "trino": "attachments/queries/trino/Q11.sql",
+                
+                "starrocks": "attachments/queries/starrocks/Q11.sql",
+                
+                "duckdb": "attachments/queries/duckdb/Q11.sql"
+                
+            },
+            
+            "Q12": {
+                
+                "exasol": "attachments/queries/exasol/Q12.sql",
+                
+                "clickhouse": "attachments/queries/clickhouse/Q12.sql",
+                
+                "trino": "attachments/queries/trino/Q12.sql",
+                
+                "starrocks": "attachments/queries/starrocks/Q12.sql",
+                
+                "duckdb": "attachments/queries/duckdb/Q12.sql"
+                
+            },
+            
+            "Q13": {
+                
+                "exasol": "attachments/queries/exasol/Q13.sql",
+                
+                "clickhouse": "attachments/queries/clickhouse/Q13.sql",
+                
+                "trino": "attachments/queries/trino/Q13.sql",
+                
+                "starrocks": "attachments/queries/starrocks/Q13.sql",
+                
+                "duckdb": "attachments/queries/duckdb/Q13.sql"
+                
+            },
+            
+            "Q14": {
+                
+                "exasol": "attachments/queries/exasol/Q14.sql",
+                
+                "clickhouse": "attachments/queries/clickhouse/Q14.sql",
+                
+                "trino": "attachments/queries/trino/Q14.sql",
+                
+                "starrocks": "attachments/queries/starrocks/Q14.sql",
+                
+                "duckdb": "attachments/queries/duckdb/Q14.sql"
+                
+            },
+            
+            "Q15": {
+                
+                "exasol": "attachments/queries/exasol/Q15.sql",
+                
+                "clickhouse": "attachments/queries/clickhouse/Q15.sql",
+                
+                "trino": "attachments/queries/trino/Q15.sql",
+                
+                "starrocks": "attachments/queries/starrocks/Q15.sql",
+                
+                "duckdb": "attachments/queries/duckdb/Q15.sql"
+                
+            },
+            
+            "Q16": {
+                
+                "exasol": "attachments/queries/exasol/Q16.sql",
+                
+                "clickhouse": "attachments/queries/clickhouse/Q16.sql",
+                
+                "trino": "attachments/queries/trino/Q16.sql",
+                
+                "starrocks": "attachments/queries/starrocks/Q16.sql",
+                
+                "duckdb": "attachments/queries/duckdb/Q16.sql"
+                
+            },
+            
+            "Q17": {
+                
+                "exasol": "attachments/queries/exasol/Q17.sql",
+                
+                "clickhouse": "attachments/queries/clickhouse/Q17.sql",
+                
+                "trino": "attachments/queries/trino/Q17.sql",
+                
+                "starrocks": "attachments/queries/starrocks/Q17.sql",
+                
+                "duckdb": "attachments/queries/duckdb/Q17.sql"
+                
+            },
+            
+            "Q18": {
+                
+                "exasol": "attachments/queries/exasol/Q18.sql",
+                
+                "clickhouse": "attachments/queries/clickhouse/Q18.sql",
+                
+                "trino": "attachments/queries/trino/Q18.sql",
+                
+                "starrocks": "attachments/queries/starrocks/Q18.sql",
+                
+                "duckdb": "attachments/queries/duckdb/Q18.sql"
+                
+            },
+            
+            "Q19": {
+                
+                "exasol": "attachments/queries/exasol/Q19.sql",
+                
+                "clickhouse": "attachments/queries/clickhouse/Q19.sql",
+                
+                "trino": "attachments/queries/trino/Q19.sql",
+                
+                "starrocks": "attachments/queries/starrocks/Q19.sql",
+                
+                "duckdb": "attachments/queries/duckdb/Q19.sql"
+                
+            },
+            
+            "Q20": {
+                
+                "exasol": "attachments/queries/exasol/Q20.sql",
+                
+                "clickhouse": "attachments/queries/clickhouse/Q20.sql",
+                
+                "trino": "attachments/queries/trino/Q20.sql",
+                
+                "starrocks": "attachments/queries/starrocks/Q20.sql",
+                
+                "duckdb": "attachments/queries/duckdb/Q20.sql"
+                
+            },
+            
+            "Q21": {
+                
+                "exasol": "attachments/queries/exasol/Q21.sql",
+                
+                "clickhouse": "attachments/queries/clickhouse/Q21.sql",
+                
+                "trino": "attachments/queries/trino/Q21.sql",
+                
+                "starrocks": "attachments/queries/starrocks/Q21.sql",
+                
+                "duckdb": "attachments/queries/duckdb/Q21.sql"
+                
+            },
+            
+            "Q22": {
+                
+                "exasol": "attachments/queries/exasol/Q22.sql",
+                
+                "clickhouse": "attachments/queries/clickhouse/Q22.sql",
+                
+                "trino": "attachments/queries/trino/Q22.sql",
+                
+                "starrocks": "attachments/queries/starrocks/Q22.sql",
+                
+                "duckdb": "attachments/queries/duckdb/Q22.sql"
+                
+            }
+            
+            
+        };
+
+        // Add click handlers to summary table rows
+        document.addEventListener('DOMContentLoaded', function() {
+            const summaryTable = document.querySelector('.summary-table');
+            if (summaryTable) {
+                const rows = summaryTable.querySelectorAll('tbody tr[data-query]');
+                rows.forEach(row => {
+                    row.addEventListener('click', function() {
+                        const query = this.dataset.query;
+                        const system = this.dataset.system;
+                        showQueryModal(query, system);
+                    });
+                });
+            }
+        });
+
+        function showQueryModal(query, system) {
+            const modal = document.getElementById('queryModal');
+            const title = document.getElementById('modalTitle');
+            const code = document.getElementById('queryCode');
+
+            title.textContent = `${query} - ${system}`;
+
+            // Load query from file
+            if (queryData[query] && queryData[query][system]) {
+                fetch(queryData[query][system])
+                    .then(response => response.text())
+                    .then(sql => {
+                        code.textContent = sql;
+                        Prism.highlightElement(code);
+                        modal.classList.add('active');
+                    })
+                    .catch(error => {
+                        code.textContent = `Error loading query: ${error}`;
+                        modal.classList.add('active');
+                    });
+            } else {
+                code.textContent = `Query ${query} not found for system ${system}`;
+                modal.classList.add('active');
+            }
+        }
+
+        function closeQueryModal() {
+            const modal = document.getElementById('queryModal');
+            modal.classList.remove('active');
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('queryModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeQueryModal();
+            }
+        });
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeQueryModal();
+            }
+        });
+
+        // Auto-resize iframes to match content height
+        function resizeIframe(iframe) {
+            try {
+                const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                if (iframeDoc && iframeDoc.body) {
+                    // Get the full height of the iframe content
+                    const height = iframeDoc.body.scrollHeight;
+                    // Set iframe height to match content (add small padding)
+                    iframe.style.height = (height + 20) + 'px';
+                }
+            } catch (e) {
+                // Cross-origin or access issues - keep default height
+                console.warn('Could not resize iframe:', e);
+            }
+        }
+
+        // Resize all iframes on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            const iframes = document.querySelectorAll('iframe');
+            iframes.forEach(function(iframe) {
+                // Resize on load
+                iframe.addEventListener('load', function() {
+                    resizeIframe(iframe);
+                });
+                // Also try to resize immediately in case already loaded
+                if (iframe.contentDocument && iframe.contentDocument.readyState === 'complete') {
+                    resizeIframe(iframe);
+                }
+            });
+        });
+    </script>
+</body>
+</html>

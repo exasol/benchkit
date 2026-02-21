@@ -73,7 +73,7 @@ systems:
   # ClickHouse - 4-node sharded cluster (128GB total)
   - name: "clickhouse"
     kind: "clickhouse"
-    version: "25.10.2.65"
+    version: "26.1.3.52"
     setup:
       method: "native"
       node_count: 4
@@ -118,7 +118,7 @@ systems:
   # StarRocks - 4-node cluster (1 FE + 3 BE, 128GB total)
   - name: "starrocks"
     kind: "starrocks"
-    version: "4.0.4"
+    version: "4.0.6"
     setup:
       method: "native"
       node_count: 4
