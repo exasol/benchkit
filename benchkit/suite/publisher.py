@@ -5,6 +5,7 @@ visualizations, similar to benchmark.clickhouse.com.
 """
 
 import json
+import math
 import shutil
 import time
 from dataclasses import dataclass, field
@@ -62,6 +63,7 @@ class SystemDataEntry:
     speed_score: float = 0.0
     scale_score: float = 0.0
     sum_medians_ms: float = 0.0
+    geomean_mins_ms: float = 0.0
     success_rate: float = 100.0
     node_count: int = 1
 
@@ -171,19 +173,21 @@ class SuitePublisher:
         """Compute BenchScore as a composite of speed and scale.
 
         BenchScore = sqrt(SpeedScore * ScaleScore)
-        SpeedScore = SF / geomean_s
+        SpeedScore = SF * sqrt(S) / geomean(mins)_s
         ScaleScore = SF * S * Q / sum_medians_s
 
         Returns dict with bench_score, speed_score, scale_score,
-        geomean_ms, sum_medians_ms.
+        geomean_ms, geomean_mins_ms, sum_medians_ms.
         """
         query_medians = success_df.groupby("query")["elapsed_ms"].median()
+        query_mins = success_df.groupby("query")["elapsed_ms"].min()
         if len(query_medians) == 0 or not (query_medians > 0).all():
             return {
                 "bench_score": 0.0,
                 "speed_score": 0.0,
                 "scale_score": 0.0,
                 "geomean_ms": 0.0,
+                "geomean_mins_ms": 0.0,
                 "sum_medians_ms": 0.0,
             }
 
@@ -191,14 +195,17 @@ class SuitePublisher:
         geomean_ms = float(np.exp(log_medians.mean()))
         sum_medians_ms = float(query_medians.sum())
 
+        log_mins: np.ndarray = np.log(query_mins.to_numpy())  # type: ignore[assignment]
+        geomean_mins_ms = float(np.exp(log_mins.mean()))
+
         sf = float(scale_factor) if scale_factor else 1.0
         s = max(stream_count, 1)
         q = WORKLOAD_EXPECTED_QUERIES.get(workload_name, len(query_medians))
 
-        geomean_s = geomean_ms / 1000.0
+        geomean_mins_s = geomean_mins_ms / 1000.0
         sum_medians_s = sum_medians_ms / 1000.0
 
-        speed_score = sf / geomean_s if geomean_s > 0 else 0.0
+        speed_score = sf * math.sqrt(s) / geomean_mins_s if geomean_mins_s > 0 else 0.0
         scale_score = sf * s * q / sum_medians_s if sum_medians_s > 0 else 0.0
         bench_score = float(np.sqrt(speed_score * scale_score))
 
@@ -207,6 +214,7 @@ class SuitePublisher:
             "speed_score": speed_score,
             "scale_score": scale_score,
             "geomean_ms": geomean_ms,
+            "geomean_mins_ms": geomean_mins_ms,
             "sum_medians_ms": sum_medians_ms,
         }
 
@@ -410,6 +418,7 @@ class SuitePublisher:
                         speed_score=scores["speed_score"],
                         scale_score=scores["scale_score"],
                         sum_medians_ms=scores["sum_medians_ms"],
+                        geomean_mins_ms=scores["geomean_mins_ms"],
                         success_rate=success_rate,
                         node_count=system_config.get("setup", {}).get("node_count", 1),
                     )
@@ -1078,6 +1087,12 @@ class SuitePublisher:
                     if system.name in sys_errors:
                         query_errors[query_name] = sys_errors[system.name]
 
+                # Determine variant for this system
+                system_variants = workload_config.get("system_variants") or {}
+                variant = system_variants.get(
+                    system.name, workload_config.get("variant", "official")
+                )
+
                 # Render query SQL and DDL for this system
                 query_sql = self._render_queries_for_system(
                     benchmark.workload,
@@ -1113,6 +1128,7 @@ class SuitePublisher:
                         "speed_score": round(system.speed_score, 1),
                         "scale_score": round(system.scale_score, 1),
                         "geomean_ms": round(system.geomean_ms, 2),
+                        "geomean_mins_ms": round(system.geomean_mins_ms, 2),
                         "sum_medians_ms": round(system.sum_medians_ms, 2),
                         "total_ms": round(system.total_ms, 2),
                         "query_count": system.query_count,
@@ -1133,6 +1149,7 @@ class SuitePublisher:
                         "ddl_scripts": ddl_scripts,
                         "setup_commands": setup_commands,
                         "config_parameters": config_parameters,
+                        "variant": variant,
                         "warmup_times": warmup_times,
                         "system_info": system_info,
                         "setup_info": setup_json,
@@ -1156,7 +1173,7 @@ class SuitePublisher:
                 "total_entries": len(entries),
                 "score_formula": (
                     "sqrt(SpeedScore × ScaleScore), where "
-                    "SpeedScore = SF / geomean_s, "
+                    "SpeedScore = SF × √S / geomean(mins)_s, "
                     "ScaleScore = SF × S × Q / sum_medians_s"
                 ),
                 "score_description": (

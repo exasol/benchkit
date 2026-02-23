@@ -35,7 +35,7 @@
         <!-- Disclaimer -->
         <div class="disclaimer benchscore-explainer" id="benchscore-disclaimer">
             <strong>BenchScore</strong> = &radic;(Speed &times; Scale), where
-            Speed = SF / geomean<sub>s</sub>,
+            Speed = SF &times; &radic;S / geomean(mins)<sub>s</sub>,
             Scale = SF &times; S &times; Q / &Sigma;medians<sub>s</sub>.
             Higher is better.
             This is <em>not</em> an official TPC-H metric and should not be compared to audited results.
@@ -71,7 +71,6 @@
                             <th class="col-speed">Speed</th>
                             <th class="col-scale">Scale</th>
                             <th class="col-geomean">Geomean</th>
-                            <th class="col-queries">Queries</th>
                             <th class="col-sf">SF</th>
                             <th class="col-streams">Streams</th>
                             <th class="col-instance">Instance</th>

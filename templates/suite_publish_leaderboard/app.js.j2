@@ -363,7 +363,7 @@ class LeaderboardApp {
         if (entry._searchText) return entry._searchText;
         const parts = [
             entry.system_name, entry.system_kind, entry.system_version,
-            entry.instance_type, entry.environment, entry.run_date,
+            entry.variant, entry.instance_type, entry.environment, entry.run_date,
             entry.system_info?.cpu_model,
         ];
         if (entry.query_sql) Object.values(entry.query_sql).forEach(v => parts.push(v));
@@ -465,8 +465,9 @@ class LeaderboardApp {
                     <span class="rank-badge ${rank <= 3 ? 'rank-' + rank : 'rank-other'}">${rank}</span>
                 </td>
                 <td>
-                    <span class="system-name">${this._esc(entry.system_name)}</span>
-                    <span class="system-kind">${this._esc(entry.system_kind)}</span>
+                    <span class="system-name">${this._esc(this._displayKind(entry.system_kind))}</span>
+                    <span class="system-kind">${this._esc(entry.system_name)}</span>
+                    ${entry.variant && entry.variant !== 'official' ? `<span class="variant-badge">${this._esc(entry.variant)}</span>` : ''}
                     ${failBadge}
                 </td>
                 <td>${this._esc(entry.system_version)}</td>
@@ -479,7 +480,6 @@ class LeaderboardApp {
                 <td class="col-speed">${entry.speed_score.toFixed(1)}</td>
                 <td class="col-scale">${entry.scale_score.toFixed(1)}</td>
                 <td class="col-geomean">${this._fmtDuration(entry.geomean_ms)}</td>
-                <td>${entry.query_count}</td>
                 <td class="col-sf">${entry.scale_factor != null ? entry.scale_factor : '-'}</td>
                 <td class="col-streams">${entry.stream_count}</td>
                 <td>${this._esc(entry.instance_type || '-')}</td>
@@ -541,7 +541,7 @@ class LeaderboardApp {
                     x.push(q);
                     y.push(t.median / 1000);  // ms to seconds
                     text.push(
-                        `${q}<br>${entry.system_name}` +
+                        `${q}<br>${this._displayKind(entry.system_kind)}` +
                         (entry.instance_type ? ` (${entry.instance_type})` : '') +
                         `<br>${(t.median / 1000).toFixed(2)}s`
                     );
@@ -550,7 +550,7 @@ class LeaderboardApp {
 
             if (x.length > 0) {
                 traces.push({
-                    name: entry.system_name + (entry.instance_type ? ` (${entry.instance_type})` : ''),
+                    name: this._displayKind(entry.system_kind) + (entry.instance_type ? ` (${entry.instance_type})` : ''),
                     type: 'scatter',
                     mode: 'markers',
                     x: x,
@@ -722,7 +722,7 @@ class LeaderboardApp {
             const tr = document.createElement('tr');
             const sysCell = document.createElement('td');
             sysCell.className = 'system-cell';
-            sysCell.textContent = entry.system_name;
+            sysCell.textContent = this._displayKind(entry.system_kind);
             sysCell.title = 'Click for details';
             sysCell.addEventListener('click', () => this._openModal(entry));
             tr.appendChild(sysCell);
@@ -938,8 +938,9 @@ class LeaderboardApp {
             <div class="modal-section">
                 <h3>System</h3>
                 <div class="modal-grid">
-                    <div class="modal-field"><span class="label">Kind</span><span class="value">${this._esc(entry.system_kind)}</span></div>
+                    <div class="modal-field"><span class="label">Kind</span><span class="value">${this._esc(this._displayKind(entry.system_kind))}</span></div>
                     <div class="modal-field"><span class="label">Version</span><span class="value">${this._esc(entry.system_version)}</span></div>
+                    <div class="modal-field"><span class="label">Variant</span><span class="value">${this._esc(entry.variant || 'official')}</span></div>
                     <div class="modal-field"><span class="label">Nodes</span><span class="value">${entry.node_count}</span></div>
                     <div class="modal-field"><span class="label">Environment</span><span class="value">${this._esc(entry.environment)}</span></div>
                     <div class="modal-field"><span class="label">Run Date</span><span class="value">${this._esc(entry.run_date || 'Not recorded')}</span></div>
@@ -1192,7 +1193,7 @@ class LeaderboardApp {
                     BenchScore = &radic;(<span class="score-hl">SpeedScore</span> &times; <span class="score-hl">ScaleScore</span>)
                 </div>
                 <div class="score-formula">
-                    <strong>SpeedScore</strong> = SF / geomean<sub>s</sub>
+                    <strong>SpeedScore</strong> = SF &times; &radic;S / geomean(mins)<sub>s</sub>
                 </div>
                 <div class="score-formula">
                     <strong>ScaleScore</strong> = SF &times; S &times; Q / &Sigma;medians<sub>s</sub>
@@ -1201,14 +1202,15 @@ class LeaderboardApp {
                     <div class="score-var-item"><strong>SF</strong> — Scale Factor (e.g., 10, 100). Larger datasets yield higher scores.</div>
                     <div class="score-var-item"><strong>S</strong> — Number of concurrent query streams (default 1).</div>
                     <div class="score-var-item"><strong>Q</strong> — Expected number of queries in the workload (22 for TPC-H, 43 for ClickBench).</div>
-                    <div class="score-var-item"><strong>geomean<sub>s</sub></strong> — Geometric mean of per-query median runtimes (in seconds). Balances fast and slow queries equally.</div>
+                    <div class="score-var-item"><strong>geomean(mins)<sub>s</sub></strong> — Geometric mean of per-query <em>minimum</em> runtimes (in seconds). Captures best-achievable latency per query.</div>
                     <div class="score-var-item"><strong>&Sigma;medians<sub>s</sub></strong> — Sum of all per-query median runtimes (in seconds). Rewards consistent speed across all queries.</div>
+                    <div class="score-var-item"><strong>&radic;S</strong> — Square root of stream count. Partially compensates for expected latency increase under concurrent streams.</div>
                 </div>
                 <details class="collapsible-section" style="margin-top:var(--spacing-sm);">
                     <summary>Why this formula?</summary>
                     <div style="padding:var(--spacing-sm) var(--spacing-md);font-size:0.85rem;line-height:1.6;">
-                        <p><strong>SpeedScore</strong> uses the geometric mean, which prevents a single fast query from masking slow ones. It answers: "how fast is this system on a <em>typical</em> query?"</p>
-                        <p style="margin-top:var(--spacing-sm);"><strong>ScaleScore</strong> uses the arithmetic sum, rewarding systems that are fast across <em>all</em> queries. Multiplying by Q normalizes for workload size.</p>
+                        <p><strong>SpeedScore</strong> uses the geometric mean of per-query <em>minimums</em>, which captures the best-achievable latency for each query. Under multi-stream execution, the &radic;S factor partially compensates for contention-induced latency increases — a system running S concurrent streams is doing S&times; more work.</p>
+                        <p style="margin-top:var(--spacing-sm);"><strong>ScaleScore</strong> uses the arithmetic sum of medians, rewarding systems that are fast across <em>all</em> queries. Multiplying by Q normalizes for workload size.</p>
                         <p style="margin-top:var(--spacing-sm);">The final <strong>geometric mean</strong> of the two sub-scores balances both perspectives. A system must be both typically fast (SpeedScore) and broadly efficient (ScaleScore) to rank highly.</p>
                     </div>
                 </details>
@@ -1225,14 +1227,16 @@ class LeaderboardApp {
             return a.localeCompare(b);
         });
 
-        // Get per-query medians in ms, filtering to successful queries with positive times
+        // Get per-query medians and mins in ms, filtering to successful queries with positive times
         const medians = [];
+        const mins = [];
         const queryRows = [];
         queries.forEach(q => {
             const t = queryTimes[q];
             if (t && t.median > 0) {
                 medians.push({ name: q, ms: t.median });
-                queryRows.push({ name: q, ms: t.median });
+                mins.push({ name: q, ms: t.min });
+                queryRows.push({ name: q, ms: t.median, minMs: t.min });
             }
         });
 
@@ -1244,23 +1248,33 @@ class LeaderboardApp {
         const s = Math.max(entry.stream_count || 1, 1);
         const q = this._expectedQueries(entry);
 
-        // Recompute from raw medians
+        // Recompute from raw data
         const mediansSec = medians.map(m => m.ms / 1000);
+        const sumMediansSec = mediansSec.reduce((a, b) => a + b, 0);
+
+        // Geomean of per-query minimums for SpeedScore
+        const minsSec = mins.map(m => m.ms / 1000);
+        const lnMins = minsSec.map(v => Math.log(v));
+        const sumLnMins = lnMins.reduce((a, b) => a + b, 0);
+        const meanLnMins = sumLnMins / mins.length;
+        const geomeanMinsS = Math.exp(meanLnMins);
+
+        // Geomean of medians (kept for reference display)
         const lnValues = mediansSec.map(v => Math.log(v));
         const sumLn = lnValues.reduce((a, b) => a + b, 0);
         const meanLn = sumLn / medians.length;
         const geomeanS = Math.exp(meanLn);
-        const sumMediansSec = mediansSec.reduce((a, b) => a + b, 0);
 
-        const speedScore = sf / geomeanS;
+        const speedScore = (sf * Math.sqrt(s)) / geomeanMinsS;
         const scaleScore = (sf * s * q) / sumMediansSec;
         const benchScore = Math.sqrt(speedScore * scaleScore);
 
-        // Build per-query table
+        // Build per-query table (with both median and min columns)
         const queryTableRows = queryRows.map(qr => {
-            const sec = (qr.ms / 1000).toFixed(4);
-            const ln = Math.log(qr.ms / 1000).toFixed(4);
-            return `<tr><td>${this._esc(qr.name)}</td><td>${qr.ms.toFixed(1)}</td><td>${sec}</td><td>${ln}</td></tr>`;
+            const medSec = (qr.ms / 1000).toFixed(4);
+            const minSec = (qr.minMs / 1000).toFixed(4);
+            const lnMin = Math.log(qr.minMs / 1000).toFixed(4);
+            return `<tr><td>${this._esc(qr.name)}</td><td>${qr.ms.toFixed(1)}</td><td>${qr.minMs.toFixed(1)}</td><td>${minSec}</td><td>${lnMin}</td></tr>`;
         }).join('');
 
         const sumInline = mediansSec.length <= 10
@@ -1280,27 +1294,28 @@ class LeaderboardApp {
                 <div class="score-tree-children">
                     <details class="score-tree-node" open>
                         <summary class="score-tree-formula">
-                            <strong>SpeedScore</strong> = SF / geomean<sub>s</sub>
-                            = ${sf} / ${geomeanS.toFixed(4)}
+                            <strong>SpeedScore</strong> = SF &times; &radic;S / geomean(mins)<sub>s</sub>
+                            = ${sf} &times; &radic;${s} / ${geomeanMinsS.toFixed(4)}
                             = <span class="score-result">${speedScore.toFixed(1)}</span>
                         </summary>
                         <div class="score-tree-children">
                             <div class="score-tree-leaf">SF (Scale Factor) = ${sf}</div>
+                            <div class="score-tree-leaf">&radic;S = &radic;${s} = ${Math.sqrt(s).toFixed(4)}</div>
                             <details class="score-tree-node">
                                 <summary class="score-tree-formula">
-                                    geomean<sub>s</sub> = exp(mean(ln(medians)))
-                                    = exp(${meanLn.toFixed(4)})
-                                    = <span class="score-result">${geomeanS.toFixed(4)}s</span>
+                                    geomean(mins)<sub>s</sub> = exp(mean(ln(mins)))
+                                    = exp(${meanLnMins.toFixed(4)})
+                                    = <span class="score-result">${geomeanMinsS.toFixed(4)}s</span>
                                 </summary>
                                 <div class="score-tree-children">
                                     <div class="score-tree-leaf">
-                                        mean(ln) = sum(ln) / n = ${sumLn.toFixed(4)} / ${medians.length} = ${meanLn.toFixed(4)}
+                                        mean(ln) = sum(ln) / n = ${sumLnMins.toFixed(4)} / ${mins.length} = ${meanLnMins.toFixed(4)}
                                     </div>
                                     <details class="score-tree-node">
-                                        <summary>Per-query medians (${medians.length} queries)</summary>
+                                        <summary>Per-query times (${mins.length} queries)</summary>
                                         <div class="query-breakdown-table-wrapper">
                                             <table class="query-breakdown-table">
-                                                <thead><tr><th>Query</th><th>Median (ms)</th><th>Seconds</th><th>ln(s)</th></tr></thead>
+                                                <thead><tr><th>Query</th><th>Median (ms)</th><th>Min (ms)</th><th>Min (s)</th><th>ln(min s)</th></tr></thead>
                                                 <tbody>${queryTableRows}</tbody>
                                             </table>
                                         </div>
@@ -1354,6 +1369,14 @@ class LeaderboardApp {
         return min + 'm ' + sec + 's';
     }
 
+    _displayKind(kind) {
+        const map = {
+            exasol: 'Exasol', clickhouse: 'ClickHouse', duckdb: 'DuckDB',
+            starrocks: 'StarRocks', trino: 'Trino', doris: 'Doris',
+        };
+        return map[(kind || '').toLowerCase()] || kind || '';
+    }
+
     _esc(str) {
         if (str == null) return '';
         const div = document.createElement('div');
@@ -1369,6 +1392,7 @@ LeaderboardApp.TAG_DIMENSIONS = [
     { key: 'sf',       label: 'SF',       extract: e => e.scale_factor },
     { key: 'streams',  label: 'Streams',  extract: e => e.stream_count },
     { key: 'nodes',    label: 'Nodes',    extract: e => e.node_count },
+    { key: 'variant',  label: 'Variant',  extract: e => e.variant },
     { key: 'instance', label: 'Instance', extract: e => e.instance_type },
     { key: 'env',      label: 'Env',      extract: e => e.environment },
     { key: 'year',     label: 'Year',     extract: e => e.run_date ? e.run_date.slice(0, 4) : null },
