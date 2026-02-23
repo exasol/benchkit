@@ -6,6 +6,7 @@ visualizations, similar to benchmark.clickhouse.com.
 
 import json
 import shutil
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -320,6 +321,12 @@ class SuitePublisher:
                 summary = load_json(summary_file)
             except Exception:
                 pass
+        # Derive run_date from runs.csv mtime if not available
+        if not summary.get("run_date") and runs_csv.exists():
+            mtime = runs_csv.stat().st_mtime
+            summary["run_date"] = time.strftime(
+                "%Y-%m-%d %H:%M:%S", time.localtime(mtime)
+            )
 
         # Extract workload info
         workload_config = cfg.get("workload", {})
@@ -570,7 +577,7 @@ class SuitePublisher:
                     "median_ms": round(s.median_ms, 2),
                     "avg_ms": round(s.avg_ms, 2),
                     "geomean_ms": round(s.geomean_ms, 2),
-                    "total_ms": round(s.total_ms, 2),
+                    "total_ms": round(s.sum_medians_ms, 2),
                     "min_ms": round(s.min_ms, 2),
                     "max_ms": round(s.max_ms, 2),
                     "query_count": s.query_count,

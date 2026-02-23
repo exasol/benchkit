@@ -19,4 +19,4 @@ series:
 publish:
   title: "Performance Benchmark Leaderboard"
   template: "leaderboard"
-  include_reports: false
+  include_reports: true

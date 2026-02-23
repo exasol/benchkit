@@ -48,6 +48,7 @@ Thumbs.db
 
 # Results and generated content
 results/
+!public/performance/results/
 docs/*/reports/*/workload-package
 public/*/reports/*/workload-package
 packages/
@@ -68,6 +69,7 @@ public/**/logs/
 # Data files
 data/
 *.csv
+!public/performance/results/**/*.csv
 *.tbl
 *.dat
 posts/

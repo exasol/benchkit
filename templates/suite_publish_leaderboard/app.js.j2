@@ -95,12 +95,15 @@ class LeaderboardApp {
                 this._renderAvailableTags();
             } else if (e.key === 'Enter') {
                 e.preventDefault();
-                const parsed = this._parseTagInput(searchInput.value.trim());
+                const raw = searchInput.value.trim();
+                const parsed = this._parseTagInput(raw);
                 if (parsed) {
                     this._addTag(parsed.dim, parsed.value, parsed.negated);
-                    searchInput.value = '';
-                    this.tagSearchQuery = '';
+                } else if (raw) {
+                    this._addTag('_text', raw, false);
                 }
+                searchInput.value = '';
+                this.tagSearchQuery = '';
             }
         });
 
@@ -179,9 +182,10 @@ class LeaderboardApp {
         if (!container) return;
         container.innerHTML = this.activeTags.map(tag => {
             const dimDef = LeaderboardApp.TAG_DIMENSIONS.find(d => d.key === tag.dim);
-            const label = dimDef ? dimDef.label : tag.dim;
+            const label = tag.dim === '_text' ? 'Search' : (dimDef ? dimDef.label : tag.dim);
             const prefix = tag.negated ? '!' : '';
-            return `<span class="tag-chip${tag.negated ? ' negated' : ''}" data-dim="${this._esc(tag.dim)}" data-value="${this._esc(tag.value)}" data-negated="${tag.negated}">
+            const chipClass = tag.dim === '_text' ? ' search' : (tag.negated ? ' negated' : '');
+            return `<span class="tag-chip${chipClass}" data-dim="${this._esc(tag.dim)}" data-value="${this._esc(tag.value)}" data-negated="${tag.negated}">
                 <span class="tag-chip-label">${prefix}${this._esc(label)}:</span>
                 <span class="tag-chip-value">${this._esc(tag.value)}</span>
                 <button class="tag-chip-remove" type="button">&times;</button>
@@ -263,15 +267,24 @@ class LeaderboardApp {
     _applyTagFilters(entries) {
         if (this.activeTags.length === 0) return entries;
 
-        // Group tags by dimension
+        const textTags = this.activeTags.filter(t => t.dim === '_text');
+        const dimTags = this.activeTags.filter(t => t.dim !== '_text');
+
+        // Group dimension tags by dimension
         const byDim = {};
-        this.activeTags.forEach(tag => {
+        dimTags.forEach(tag => {
             if (!byDim[tag.dim]) byDim[tag.dim] = { positive: [], negated: [] };
             if (tag.negated) byDim[tag.dim].negated.push(tag.value);
             else byDim[tag.dim].positive.push(tag.value);
         });
 
         return entries.filter(entry => {
+            // Free-text: AND — all text queries must match
+            for (const t of textTags) {
+                const haystack = this._getEntrySearchText(entry);
+                if (!haystack.includes(t.value.toLowerCase())) return false;
+            }
+            // Dimension tags (unchanged logic)
             for (const [dimKey, tags] of Object.entries(byDim)) {
                 const dimDef = LeaderboardApp.TAG_DIMENSIONS.find(d => d.key === dimKey);
                 if (!dimDef) continue;
@@ -295,14 +308,22 @@ class LeaderboardApp {
         // (negated tags for excludeDim still apply)
         if (this.activeTags.length === 0) return entries;
 
+        const textTags = this.activeTags.filter(t => t.dim === '_text');
+        const dimTags = this.activeTags.filter(t => t.dim !== '_text');
+
         const byDim = {};
-        this.activeTags.forEach(tag => {
+        dimTags.forEach(tag => {
             if (!byDim[tag.dim]) byDim[tag.dim] = { positive: [], negated: [] };
             if (tag.negated) byDim[tag.dim].negated.push(tag.value);
             else byDim[tag.dim].positive.push(tag.value);
         });
 
         return entries.filter(entry => {
+            // Free-text always applies (not part of any excludable dimension)
+            for (const t of textTags) {
+                if (!this._getEntrySearchText(entry).includes(t.value.toLowerCase())) return false;
+            }
+            // Dimension tags
             for (const [dimKey, tags] of Object.entries(byDim)) {
                 const dimDef = LeaderboardApp.TAG_DIMENSIONS.find(d => d.key === dimKey);
                 if (!dimDef) continue;
@@ -336,6 +357,28 @@ class LeaderboardApp {
         );
         if (!dim) return null;
         return { dim: dim.key, value, negated };
+    }
+
+    _getEntrySearchText(entry) {
+        if (entry._searchText) return entry._searchText;
+        const parts = [
+            entry.system_name, entry.system_kind, entry.system_version,
+            entry.instance_type, entry.environment, entry.run_date,
+            entry.system_info?.cpu_model,
+        ];
+        if (entry.query_sql) Object.values(entry.query_sql).forEach(v => parts.push(v));
+        if (entry.query_errors) Object.values(entry.query_errors).forEach(v => parts.push(v));
+        if (entry.ddl_scripts) Object.values(entry.ddl_scripts).forEach(v => parts.push(v));
+        if (entry.setup_commands) {
+            Object.values(entry.setup_commands).forEach(cmds => {
+                if (Array.isArray(cmds)) cmds.forEach(c => { parts.push(c.command); parts.push(c.description); });
+            });
+        }
+        if (entry.config_parameters) {
+            JSON.stringify(entry.config_parameters).replace(/[{}"[\]]/g, ' ').split(/\s+/).forEach(v => parts.push(v));
+        }
+        entry._searchText = parts.filter(Boolean).join(' ').toLowerCase();
+        return entry._searchText;
     }
 
     _applyHashState() {

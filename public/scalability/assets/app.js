@@ -30,6 +30,7 @@ class BenchmarkDashboard {
         // Display settings
         this.metric = 'geomean';  // 'median', 'avg', 'geomean', 'total'
         this.logScale = true;  // Log scale by default
+        this._suppressHashChange = false;
 
         this.init();
     }
@@ -37,6 +38,7 @@ class BenchmarkDashboard {
     init() {
         this.parseHashState();
         this.bindEvents();
+        this._initFullscreen();
         this.renderAllCharts();
         this.renderTable();
         this.updateStats();
@@ -92,8 +94,12 @@ class BenchmarkDashboard {
             });
         }
 
-        // Handle hash changes
+        // Handle hash changes (skip if we triggered the change ourselves)
         window.addEventListener('hashchange', () => {
+            if (this._suppressHashChange) {
+                this._suppressHashChange = false;
+                return;
+            }
             this.parseHashState();
             this.syncFilterUI();
             this.renderAllCharts();
@@ -138,6 +144,7 @@ class BenchmarkDashboard {
         this.logScale = true;
 
         this.syncFilterUI();
+        this._suppressHashChange = true;
         window.location.hash = '';
         this.renderAllCharts();
         this.renderTable();
@@ -235,10 +242,30 @@ class BenchmarkDashboard {
             params.set('sf', Array.from(this.filters.scaleFactor).join(','));
         }
 
+        this._suppressHashChange = true;
         window.location.hash = params.toString();
     }
 
     // ==================== Chart Rendering ====================
+
+    // Shared Plotly config
+    get plotlyConfig() {
+        return {
+            responsive: true,
+            scrollZoom: true,
+            displaylogo: false,
+            modeBarButtonsToRemove: ['lasso2d', 'select2d'],
+        };
+    }
+
+    // Render helper: newPlot for first render, react for updates (preserves zoom)
+    _plotChart(container, traces, layout) {
+        if (container._fullLayout) {
+            Plotly.react(container, traces, layout, this.plotlyConfig);
+        } else {
+            Plotly.newPlot(container, traces, layout, this.plotlyConfig);
+        }
+    }
 
     showNoData(container, icon, message) {
         // Purge any existing Plotly chart before replacing content
@@ -246,6 +273,64 @@ class BenchmarkDashboard {
             Plotly.purge(container);
         }
         container.innerHTML = `<div class="no-data"><div class="no-data-icon">${icon}</div>${message}</div>`;
+    }
+
+    // ==================== Fullscreen ====================
+
+    _initFullscreen() {
+        // Inject expand button into every chart header
+        const expandSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+            + '<path class="expand-icon" d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>'
+            + '<path class="collapse-icon" d="M4 14h6v6M20 10h-6V4M10 14l-7 7M14 10l7-7"/>'
+            + '</svg>';
+
+        document.querySelectorAll('.chart-header').forEach(header => {
+            const btn = document.createElement('button');
+            btn.className = 'chart-expand-btn';
+            btn.title = 'Fullscreen';
+            btn.innerHTML = expandSvg;
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this._toggleFullscreen(header.closest('.chart-container'));
+            });
+            header.appendChild(btn);
+        });
+
+        // Escape key closes fullscreen
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                const fs = document.querySelector('.chart-container.fullscreen');
+                if (fs) this._toggleFullscreen(fs);
+            }
+        });
+    }
+
+    _toggleFullscreen(container) {
+        const isFullscreen = container.classList.toggle('fullscreen');
+
+        // Manage backdrop
+        let backdrop = document.getElementById('chart-fullscreen-backdrop');
+        if (isFullscreen) {
+            if (!backdrop) {
+                backdrop = document.createElement('div');
+                backdrop.id = 'chart-fullscreen-backdrop';
+                backdrop.addEventListener('click', () => this._toggleFullscreen(container));
+                document.body.appendChild(backdrop);
+            }
+            backdrop.classList.add('visible');
+            document.body.style.overflow = 'hidden';
+        } else {
+            if (backdrop) backdrop.classList.remove('visible');
+            document.body.style.overflow = '';
+        }
+
+        // Let the layout settle, then tell Plotly to resize
+        requestAnimationFrame(() => {
+            const chart = container.querySelector('.chart');
+            if (chart && chart._fullLayout) {
+                Plotly.Plots.resize(chart);
+            }
+        });
     }
 
     renderAllCharts() {
@@ -288,6 +373,20 @@ class BenchmarkDashboard {
         return ms / 1000;
     }
 
+    // Stable key for Plotly uirevision: same key = preserve zoom/pan,
+    // different key = reset (e.g. when filters or metric change).
+    _uiRevisionKey() {
+        const parts = [
+            this.metric,
+            Array.from(this.filters.series).sort().join(','),
+            Array.from(this.filters.systems).sort().join(','),
+            Array.from(this.filters.nodeCount).sort().join(','),
+            Array.from(this.filters.streamCount).sort().join(','),
+            Array.from(this.filters.scaleFactor).sort().join(','),
+        ];
+        return parts.join('|');
+    }
+
     renderScalingChart(benchmarks, dimension, containerId, axisLabel) {
         const container = document.getElementById(containerId);
         if (!container) return;
@@ -300,6 +399,31 @@ class BenchmarkDashboard {
         // Group by the specified dimension
         // For node_count, use per-system node_count (systems may have different node counts)
         const useSystemDim = (dimension === 'node_count');
+
+        // Auto-filter to series where this dimension actually varies.
+        // Prevents cross-series contamination (e.g., Node Scaling benchmarks
+        // all have stream_count=4, which would skew the streams chart at x=4).
+        const seriesDimValues = {};
+        benchmarks.forEach(b => {
+            if (!seriesDimValues[b.series]) seriesDimValues[b.series] = new Set();
+            if (useSystemDim) {
+                b.systems.forEach(s => {
+                    if (!this.filters.systems.has(s.name)) return;
+                    const dv = s.node_count || b[dimension];
+                    if (dv != null) seriesDimValues[b.series].add(dv);
+                });
+            } else {
+                const dv = b[dimension];
+                if (dv != null) seriesDimValues[b.series].add(dv);
+            }
+        });
+        const relevantSeries = Object.entries(seriesDimValues)
+            .filter(([_, values]) => values.size > 1)
+            .map(([series]) => series);
+        if (relevantSeries.length > 0) {
+            benchmarks = benchmarks.filter(b => relevantSeries.includes(b.series));
+        }
+
         const groups = {};
         benchmarks.forEach(b => {
             b.systems.forEach(s => {
@@ -358,14 +482,19 @@ class BenchmarkDashboard {
             return;
         }
 
+        const revisionKey = this._uiRevisionKey();
         const layout = {
+            uirevision: revisionKey,
+            dragmode: 'zoom',
             xaxis: {
                 title: axisLabel,
                 type: 'category',
+                uirevision: revisionKey,
             },
             yaxis: {
                 title: `${this.getMetricLabel()} Runtime (s)`,
                 type: this.logScale ? 'log' : 'linear',
+                uirevision: revisionKey + '|log:' + this.logScale,
             },
             legend: {
                 orientation: 'h',
@@ -378,7 +507,7 @@ class BenchmarkDashboard {
             hovermode: 'closest',
         };
 
-        Plotly.react(container, traces, layout, { responsive: true });
+        this._plotChart(container, traces, layout);
     }
 
     renderComparisonChart(benchmarks) {
@@ -412,14 +541,19 @@ class BenchmarkDashboard {
             });
         });
 
+        const revisionKey = this._uiRevisionKey();
         const layout = {
+            uirevision: revisionKey,
+            dragmode: 'zoom',
             xaxis: {
                 title: 'Benchmark #',
                 tickfont: { size: 10 },
+                uirevision: revisionKey,
             },
             yaxis: {
                 title: `${this.getMetricLabel()} Runtime (s)`,
                 type: this.logScale ? 'log' : 'linear',
+                uirevision: revisionKey + '|log:' + this.logScale,
             },
             barmode: 'group',
             legend: {
@@ -432,7 +566,7 @@ class BenchmarkDashboard {
             margin: { t: 40, r: 20, b: 50, l: 80 },
         };
 
-        Plotly.react(container, traces, layout, { responsive: true });
+        this._plotChart(container, traces, layout);
     }
 
     populateHeatmapSelect(benchmarks) {
@@ -504,12 +638,15 @@ class BenchmarkDashboard {
             hovertemplate: '%{text}<extra></extra>',
         };
 
+        const revisionKey = this._uiRevisionKey();
         const layout = {
+            uirevision: revisionKey,
+            dragmode: 'zoom',
             margin: { t: 20, r: 20, b: 80, l: 100 },
-            xaxis: { tickangle: -45 },
+            xaxis: { tickangle: -45, uirevision: revisionKey },
         };
 
-        Plotly.react(container, [trace], layout, { responsive: true });
+        this._plotChart(container, [trace], layout);
     }
 
     renderEfficiencyChart(benchmarks) {
@@ -623,14 +760,17 @@ class BenchmarkDashboard {
             return;
         }
 
+        const revisionKey = this._uiRevisionKey();
         const layout = {
-            xaxis: { title: 'Node Count', type: 'category' },
-            yaxis: { title: 'Time Ratio (lower = better)' },
+            uirevision: revisionKey,
+            dragmode: 'zoom',
+            xaxis: { title: 'Node Count', type: 'category', uirevision: revisionKey },
+            yaxis: { title: 'Time Ratio (lower = better)', uirevision: revisionKey },
             legend: { orientation: 'h', y: -0.2 },
             margin: { t: 20, r: 20, b: 80, l: 60 },
         };
 
-        Plotly.react(container, traces, layout, { responsive: true });
+        this._plotChart(container, traces, layout);
     }
 
     renderQueryScatter(benchmarks) {
@@ -696,15 +836,20 @@ class BenchmarkDashboard {
             return;
         }
 
+        const revisionKey = this._uiRevisionKey();
         const layout = {
+            uirevision: revisionKey,
+            dragmode: 'zoom',
             xaxis: {
                 title: '',
                 tickangle: -90,
                 tickfont: { size: 9 },
+                uirevision: revisionKey,
             },
             yaxis: {
                 title: 'Query Runtime (s)',
                 type: this.logScale ? 'log' : 'linear',
+                uirevision: revisionKey + '|log:' + this.logScale,
             },
             legend: {
                 orientation: 'h',
@@ -717,7 +862,7 @@ class BenchmarkDashboard {
             hovermode: 'closest',
         };
 
-        Plotly.react(container, traces, layout, { responsive: true });
+        this._plotChart(container, traces, layout);
     }
 
     renderStackedChart(benchmarks) {
@@ -763,15 +908,18 @@ class BenchmarkDashboard {
             });
         });
 
+        const revisionKey = this._uiRevisionKey();
         const layout = {
+            uirevision: revisionKey,
+            dragmode: 'zoom',
             barmode: 'stack',
-            xaxis: { title: 'System' },
-            yaxis: { title: 'Total Runtime (s)' },
+            xaxis: { title: 'System', uirevision: revisionKey },
+            yaxis: { title: 'Total Runtime (s)', uirevision: revisionKey },
             legend: { orientation: 'h', y: -0.2 },
             margin: { t: 20, r: 20, b: 80, l: 80 },
         };
 
-        Plotly.react(container, correctTraces, layout, { responsive: true });
+        this._plotChart(container, correctTraces, layout);
     }
 
     // ==================== Table Rendering ====================

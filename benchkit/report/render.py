@@ -3,6 +3,7 @@
 import json
 import os
 import shutil
+import time
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -389,6 +390,12 @@ class ReportRenderer:
             data["summary"] = load_json(summary_file)
         else:
             data["summary"] = {}  # type: ignore
+            # Derive run_date from runs.csv mtime as fallback
+            if runs_file.exists():
+                mtime = runs_file.stat().st_mtime
+                data["summary"]["run_date"] = time.strftime(
+                    "%Y-%m-%d %H:%M:%S", time.localtime(mtime)
+                )
 
         # Load raw results
         raw_results_file = results_dir / "raw_results.json"
@@ -1085,12 +1092,40 @@ class ReportRenderer:
                 summary["systems"] = system_names
                 with open(attachments_dir / "summary.json", "w") as f:
                     json.dump(summary, f, indent=2)
+
+            # If summary.json still missing, create minimal one from runs.csv mtime
+            summary_dst = attachments_dir / "summary.json"
+            if not summary_dst.exists():
+                runs_src = results_dir / "runs.csv"
+                if runs_src.exists():
+                    mtime = runs_src.stat().st_mtime
+                    minimal_summary = {
+                        "run_date": time.strftime(
+                            "%Y-%m-%d %H:%M:%S", time.localtime(mtime)
+                        )
+                    }
+                    with open(summary_dst, "w") as f:
+                        json.dump(minimal_summary, f, indent=2)
         else:
             # Copy without filtering
             for filename in ["runs.csv", "summary.json"]:
                 src_file = results_dir / filename
                 if src_file.exists():
                     shutil.copy2(src_file, attachments_dir / filename)
+
+            # If summary.json still missing, create minimal one from runs.csv mtime
+            summary_dst = attachments_dir / "summary.json"
+            if not summary_dst.exists():
+                runs_src = results_dir / "runs.csv"
+                if runs_src.exists():
+                    mtime = runs_src.stat().st_mtime
+                    minimal_summary = {
+                        "run_date": time.strftime(
+                            "%Y-%m-%d %H:%M:%S", time.localtime(mtime)
+                        )
+                    }
+                    with open(summary_dst, "w") as f:
+                        json.dump(minimal_summary, f, indent=2)
 
         # Copy system.json and raw_results.json (not system-specific)
         for filename in ["system.json", "raw_results.json"]:
