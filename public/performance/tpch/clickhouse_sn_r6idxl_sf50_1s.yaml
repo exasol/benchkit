@@ -1,0 +1,31 @@
+project_id: perf_tpch_clickhouse_sn_r6idxl_sf50_1s
+title: 'Combined benchmark: perf_tpch_clickhouse_sn_r6idxl_sf50_1s'
+author: Combined
+systems:
+- name: clickhouse
+  kind: clickhouse
+  version: 26.1.3.52
+  setup:
+    method: preinstalled
+    extra:
+      memory_limit: 24g
+      max_threads: '4'
+      max_memory_usage: '24000000000'
+      max_bytes_before_external_group_by: '8000000000'
+      max_bytes_before_external_sort: '8000000000'
+      join_algorithm: grace_hash
+      max_bytes_in_join: '16000000000'
+workload:
+  name: tpch
+  scale_factor: 50
+  runs_per_query: 5
+  warmup_runs: 1
+  data_format: csv
+  generator: dbgen
+  system_variants:
+    clickhouse: tuned
+env:
+  mode: aws
+  instances:
+    clickhouse:
+      instance_type: r6id.xlarge
