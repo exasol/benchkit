@@ -90,20 +90,25 @@ def probe(
     from ..common.cli_helpers import (
         is_any_system_cloud_mode,
         is_any_system_managed_mode,
+        is_any_system_remote_mode,
     )
 
     has_cloud = is_any_system_cloud_mode(cfg)
     has_managed = is_any_system_managed_mode(cfg)
+    has_remote = is_any_system_remote_mode(cfg)
 
     any_success = True
 
-    if has_cloud:
-        console.print("[blue]Cloud benchmark detected - probing remote instances...[/]")
+    if has_cloud or has_remote:
+        label = "Cloud" if has_cloud else "Remote"
+        console.print(
+            f"[blue]{label} benchmark detected - probing remote instances...[/]"
+        )
         success = probe_remote_systems(cfg, outdir)
         if success:
-            console.print("[green]✓ Cloud system probes completed[/]")
+            console.print(f"[green]✓ {label} system probes completed[/]")
         else:
-            console.print("[red]✗ Some cloud system probes failed[/]")
+            console.print(f"[red]✗ Some {label.lower()} system probes failed[/]")
             any_success = False
 
     if has_managed:
@@ -117,7 +122,7 @@ def probe(
             console.print("[red]✗ Some managed system probes failed[/]")
             any_success = False
 
-    if not has_cloud and not has_managed:
+    if not has_cloud and not has_managed and not has_remote:
         # Local benchmark - probe current system
         meta = probe_all(outdir)
         console.print(f"[green]✓ System probe saved to:[/] {outdir / 'system.json'}")
@@ -126,7 +131,7 @@ def probe(
             f"{meta['memory_total_gb']}GB RAM[/]"
         )
 
-    if (has_cloud or has_managed) and not any_success:
+    if (has_cloud or has_managed or has_remote) and not any_success:
         raise typer.Exit(1)
 
 
@@ -353,29 +358,34 @@ def run(
             console.print("[bold blue]Running full benchmark workflow[/bold blue]")
             console.print()
 
-            # Import helpers for detecting cloud/managed modes
+            # Import helpers for detecting cloud/managed/remote modes
             from ..common.cli_helpers import (
                 is_any_system_cloud_mode,
                 is_any_system_managed_mode,
+                is_any_system_remote_mode,
             )
 
             has_cloud = is_any_system_cloud_mode(cfg)
             has_managed = is_any_system_managed_mode(cfg)
+            has_remote = is_any_system_remote_mode(cfg)
 
-            # Phase 0: Infrastructure Provisioning (cloud + managed)
+            # Phase 0: Infrastructure Provisioning (cloud + managed + remote)
             # This must happen BEFORE probe so terraform/managed state exists
-            if has_cloud or has_managed:
+            if has_cloud or has_managed or has_remote:
                 console.print("[bold]Phase 0: Infrastructure Provisioning[/bold]")
 
-                # Cloud systems: Terraform provisioning
-                if has_cloud:
-                    console.print("[blue]Provisioning cloud infrastructure...[/]")
+                # Cloud or remote systems: infrastructure provisioning / connectivity
+                if has_cloud or has_remote:
+                    label = "cloud" if has_cloud else "remote"
+                    console.print(f"[blue]Provisioning {label} infrastructure...[/]")
                     if not runner.ensure_cloud_infrastructure():
                         console.print(
-                            "[red]✗ Cloud infrastructure provisioning failed[/]"
+                            f"[red]✗ {label.capitalize()} infrastructure provisioning failed[/]"
                         )
                         raise typer.Exit(1)
-                    console.print("[green]✓ Cloud infrastructure ready[/]")
+                    console.print(
+                        f"[green]✓ {label.capitalize()} infrastructure ready[/]"
+                    )
 
                 # Managed systems: Self-managed deployments (like Exasol PE)
                 if has_managed:
@@ -1216,13 +1226,13 @@ def check(
 
         console.print(Panel(report_table, title="Report Settings", border_style="blue"))
 
-    # Run pre-flight validation for cloud modes and display at the bottom
-    from ..common.cli_helpers import is_any_system_cloud_mode
+    # Run pre-flight validation for cloud and remote modes and display at the bottom
+    from ..common.cli_helpers import is_any_system_cloud_mode, is_any_system_remote_mode
     from ..validation import PreflightChecker
 
     preflight_failed = False
 
-    if is_any_system_cloud_mode(cfg):
+    if is_any_system_cloud_mode(cfg) or is_any_system_remote_mode(cfg):
         checker = PreflightChecker(cfg, skip_aws_checks=skip_aws_check, console=console)
         validation_report = checker.run_check_command_validation()
 
@@ -1427,6 +1437,7 @@ def _destroy_all_environments(cfg: dict[str, Any]) -> tuple[bool, list[str]]:
     managed_envs: list[tuple[str, dict[str, Any], dict[str, Any]]] = (
         []
     )  # (env_name, env_config, system_config)
+    remote_envs: list[tuple[str, dict[str, Any]]] = []  # (env_name, env_config)
 
     for env_name in used_env_names:
         env_config = environments.get(env_name, {})
@@ -1439,6 +1450,8 @@ def _destroy_all_environments(cfg: dict[str, Any]) -> tuple[bool, list[str]]:
             for system in cfg.get("systems", []):
                 if (system.get("environment") or "default") == env_name:
                     managed_envs.append((env_name, env_config, system))
+        elif EnvironmentMode.is_remote(mode):
+            remote_envs.append((env_name, env_config))
 
     # Destroy cloud-provider environments (terraform-managed)
     # Group by provider since terraform state is per-provider
@@ -1541,6 +1554,12 @@ def _destroy_all_environments(cfg: dict[str, Any]) -> tuple[bool, list[str]]:
             errors.append(error_msg)
             console.print(f"  [red]✗ {error_msg}[/red]")
 
+    # Remote environments: nothing to destroy (user-managed infrastructure)
+    for env_name, _env_config in remote_envs:
+        console.print(
+            f"\n[blue]Remote infrastructure (env: {env_name}) is user-managed — skipping destroy[/blue]"
+        )
+
     return all_success, errors
 
 
@@ -1595,11 +1614,14 @@ def infra(
 
     # Run pre-flight validation for apply and plan
     if action in ["apply", "plan"] and not skip_preflight:
-        from ..common.cli_helpers import is_any_system_cloud_mode
+        from ..common.cli_helpers import (
+            is_any_system_cloud_mode,
+            is_any_system_remote_mode,
+        )
         from ..validation import PreflightChecker
 
-        # Check if any system uses cloud mode (supports both env and environments)
-        if is_any_system_cloud_mode(cfg):
+        # Check if any system uses cloud or remote mode
+        if is_any_system_cloud_mode(cfg) or is_any_system_remote_mode(cfg):
             console.print("[bold blue]Running pre-flight checks...[/bold blue]\n")
             checker = PreflightChecker(cfg, console=console)
             report = checker.run_infra_deploy_validation()
@@ -1652,14 +1674,92 @@ def infra(
             raise typer.Exit(1)
         return
 
-    # Import managed systems helpers
+    # Import managed and remote systems helpers
     from ..common.cli_helpers import (
+        get_remote_nodes_for_system,
+        get_remote_systems,
         is_any_system_cloud_mode,
         is_any_system_managed_mode,
+        is_any_system_remote_mode,
     )
 
     has_cloud = is_any_system_cloud_mode(cfg)
     has_managed = is_any_system_managed_mode(cfg)
+    has_remote = is_any_system_remote_mode(cfg)
+
+    # For plan and apply actions on remote systems
+    if has_remote:
+        if action == "plan":
+            # Show configured remote nodes
+            console.print("[bold blue]Remote Infrastructure (user-managed)[/bold blue]")
+            remote_systems = get_remote_systems(cfg)
+            for system in remote_systems:
+                system_name = system["name"]
+                nodes = get_remote_nodes_for_system(cfg, system_name)
+                if len(nodes) == 1:
+                    console.print(
+                        f"  {system_name}: {nodes[0]['public_ip']} "
+                        f"(private: {nodes[0]['private_ip']})"
+                    )
+                else:
+                    console.print(f"  {system_name}: {len(nodes)} nodes")
+                    for i, node in enumerate(nodes):
+                        console.print(
+                            f"    node {i}: {node['public_ip']} "
+                            f"(private: {node['private_ip']})"
+                        )
+            console.print("[green]✓ Remote infrastructure plan complete[/green]")
+
+        elif action == "apply":
+            # Test SSH connectivity to all remote nodes
+            console.print("[blue]Testing SSH connectivity to remote nodes...[/blue]")
+            from ..infra.manager import CloudInstanceManager
+
+            remote_systems = get_remote_systems(cfg)
+            all_reachable = True
+
+            for system in remote_systems:
+                system_name = system["name"]
+                nodes = get_remote_nodes_for_system(cfg, system_name)
+
+                # Get SSH settings from environment config
+                from ..common.cli_helpers import get_environment_for_system
+
+                _, env_cfg = get_environment_for_system(cfg, system_name)
+                ssh_key_path = env_cfg.get("ssh_private_key_path")
+                ssh_user = env_cfg.get("ssh_user", "ubuntu")
+                ssh_port = env_cfg.get("ssh_port", 22)
+
+                for i, node in enumerate(nodes):
+                    instance_info = {
+                        "public_ip": node["public_ip"],
+                        "private_ip": node["private_ip"],
+                    }
+                    mgr = CloudInstanceManager(
+                        instance_info,
+                        ssh_key_path,
+                        ssh_user=ssh_user,
+                        ssh_port=ssh_port,
+                    )
+                    node_label = (
+                        f"{system_name}"
+                        if len(nodes) == 1
+                        else f"{system_name} node {i}"
+                    )
+                    console.print(
+                        f"  Testing {node_label} ({node['public_ip']})...", end=" "
+                    )
+                    if mgr.wait_for_ssh(timeout=30):
+                        console.print("[green]✓ reachable[/green]")
+                    else:
+                        console.print("[red]✗ unreachable[/red]")
+                        all_reachable = False
+
+            if all_reachable:
+                console.print("[green]✓ All remote nodes are reachable via SSH[/green]")
+            else:
+                console.print("[red]✗ Some remote nodes are unreachable[/red]")
+                raise typer.Exit(1)
 
     # For plan and apply actions on cloud systems, use InfraManager
     if has_cloud:
@@ -1707,10 +1807,10 @@ def infra(
             raise typer.Exit(1)
         console.print("[green]✓ Managed systems deployed successfully[/green]")
 
-    # If no cloud systems but has managed, we still succeed
-    if not has_cloud and not has_managed:
+    # If no cloud, managed, or remote systems, nothing to do
+    if not has_cloud and not has_managed and not has_remote:
         console.print(
-            "[yellow]No cloud or managed systems found in config. Nothing to do.[/yellow]"
+            "[yellow]No cloud, managed, or remote systems found in config. Nothing to do.[/yellow]"
         )
 
 
@@ -1917,10 +2017,15 @@ def cleanup(
         runner = BenchmarkRunner(cfg, Path("results") / cfg["project_id"])
         runner._setup_cloud_infrastructure()
 
-        # For cloud environments, check if any systems were connected
-        from ..common.cli_helpers import is_any_system_cloud_mode
+        # For cloud/remote environments, check if any systems were connected
+        from ..common.cli_helpers import (
+            is_any_system_cloud_mode,
+            is_any_system_remote_mode,
+        )
 
-        if is_any_system_cloud_mode(cfg) and not runner._cloud_instance_managers:
+        if (
+            is_any_system_cloud_mode(cfg) or is_any_system_remote_mode(cfg)
+        ) and not runner._cloud_instance_managers:
             console.print(
                 "[yellow]No running systems found. Infrastructure may already be destroyed.[/yellow]"
             )
@@ -1956,7 +2061,7 @@ def cleanup(
                     f"[red]✗ Failed to cleanup {system_config['name']}: {e}[/red]"
                 )
 
-        # Clean up infrastructure if using cloud
+        # Clean up infrastructure if using cloud (remote infra is user-managed)
         if is_any_system_cloud_mode(cfg):
             console.print(
                 "[yellow]Infrastructure cleanup available via: make infra-destroy[/yellow]"

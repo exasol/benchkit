@@ -229,14 +229,16 @@ def check_infra_available(
         get_managed_systems,
         is_any_system_cloud_mode,
         is_managed_system,
+        is_remote_system,
     )
 
-    # Check if system has infrastructure (cloud or managed)
+    # Check if system has infrastructure (cloud, managed, or remote)
     has_cloud = is_any_system_cloud_mode(cfg)
     has_managed = is_managed_system(cfg, system_name)
+    has_remote = is_remote_system(cfg, system_name)
 
     # Local mode - infrastructure N/A
-    if not has_cloud and not has_managed:
+    if not has_cloud and not has_managed and not has_remote:
         return ("na", "[dim]-[/]")
 
     # No infrastructure IPs available
@@ -426,11 +428,13 @@ def show_detailed_status(
         get_all_infrastructure_ips,
         is_any_system_cloud_mode,
         is_any_system_managed_mode,
+        is_any_system_remote_mode,
     )
 
     is_cloud = is_any_system_cloud_mode(cfg)
     is_managed = is_any_system_managed_mode(cfg)
-    has_infra = is_cloud or is_managed
+    is_remote = is_any_system_remote_mode(cfg)
+    has_infra = is_cloud or is_managed or is_remote
 
     # Get combined infrastructure IPs from both cloud and managed systems
     infra_ips: dict[str, Any] | None = None
@@ -690,9 +694,26 @@ def build_ssh_command(
         get_managed_deployment_dir,
         get_managed_systems,
         is_managed_system,
+        is_remote_system,
     )
 
     system_name = system["name"]
+
+    # For remote systems, construct SSH command from environment config
+    if is_remote_system(cfg, system_name):
+        _, env_config = get_environment_for_system(cfg, system_name)
+        ssh_key_path = str(env_config.get("ssh_private_key_path", ""))
+        ssh_user = env_config.get("ssh_user", "ubuntu")
+        ssh_port = env_config.get("ssh_port", 22)
+
+        cmd = "ssh"
+        if ssh_key_path:
+            expanded_path = os.path.expanduser(ssh_key_path)
+            cmd += f" -i {expanded_path}"
+        if ssh_port != 22:
+            cmd += f" -p {ssh_port}"
+        cmd += f" {ssh_user}@{public_ip}"
+        return cmd
 
     # For managed systems, use the stored SSH command
     if is_managed_system(cfg, system_name):

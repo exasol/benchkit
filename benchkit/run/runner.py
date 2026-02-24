@@ -18,6 +18,7 @@ from ..systems import create_system
 from ..workloads import create_workload
 from .infrastructure import InfrastructureHelper
 from .infrastructure import setup_cloud_infrastructure as _setup_cloud_infra
+from .infrastructure import setup_remote_infrastructure as _setup_remote_infra
 from .parallel_executor import ParallelExecutor
 from .remote_execution import RemoteExecutor
 from .results import ResultsManager
@@ -406,12 +407,14 @@ class BenchmarkRunner:
             get_managed_deployment_dir,
             is_any_system_cloud_mode,
             is_any_system_managed_mode,
+            is_any_system_remote_mode,
             is_managed_system,
         )
         from ..infra.self_managed import get_self_managed_deployment
 
         has_cloud = is_any_system_cloud_mode(self.config)
         has_managed = is_any_system_managed_mode(self.config)
+        has_remote = is_any_system_remote_mode(self.config)
 
         # Build managed instance managers for systems that support remote execution
         managed_managers: dict[str, Any] = {}
@@ -432,7 +435,7 @@ class BenchmarkRunner:
 
         # Determine mode
         mode: Literal["local", "cloud", "local_to_remote", "managed_remote"]
-        if has_cloud:
+        if has_cloud or has_remote:
             mode = "local_to_remote" if local_override else "cloud"
         elif managed_managers:  # Has managed systems with remote execution
             mode = "local_to_remote" if local_override else "managed_remote"
@@ -1534,7 +1537,15 @@ class BenchmarkRunner:
     def _setup_cloud_infrastructure(
         self, log_callback: Callable[[str], None] | None = None
     ) -> bool:
-        """Setup cloud infrastructure connection and managers."""
+        """Setup cloud infrastructure connection and managers.
+
+        Dispatches to remote infrastructure setup if any system uses remote mode,
+        otherwise uses standard cloud (Terraform) infrastructure setup.
+        """
+        from ..common.cli_helpers import is_any_system_remote_mode
+
+        if is_any_system_remote_mode(self.config):
+            return _setup_remote_infra(self, log_callback)
         return _setup_cloud_infra(self, log_callback)
 
     @exclude_from_package
@@ -1966,10 +1977,15 @@ class BenchmarkRunner:
         Returns:
             True if all phases succeeded
         """
-        from ..common.cli_helpers import is_any_system_cloud_mode
+        from ..common.cli_helpers import (
+            is_any_system_cloud_mode,
+            is_any_system_remote_mode,
+        )
 
         # Phase 0: Provision infrastructure
-        if is_any_system_cloud_mode(self.config):
+        if is_any_system_cloud_mode(self.config) or is_any_system_remote_mode(
+            self.config
+        ):
             self._log("\n[bold]Phase 0: Infrastructure Provisioning[/bold]")
             if not self.ensure_cloud_infrastructure():
                 return False
@@ -2300,10 +2316,15 @@ class BenchmarkRunner:
         Returns:
             True if all phases succeeded
         """
-        from ..common.cli_helpers import is_any_system_cloud_mode
+        from ..common.cli_helpers import (
+            is_any_system_cloud_mode,
+            is_any_system_remote_mode,
+        )
 
         # Phase 0: Provision infrastructure
-        if is_any_system_cloud_mode(self.config):
+        if is_any_system_cloud_mode(self.config) or is_any_system_remote_mode(
+            self.config
+        ):
             log("Phase 0: Infrastructure Provisioning")
             if not self.ensure_cloud_infrastructure():
                 log("ERROR: Infrastructure provisioning failed")

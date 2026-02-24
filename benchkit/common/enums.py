@@ -12,6 +12,7 @@ class EnvironmentMode(str, Enum):
     - GCP: Use GCP cloud infrastructure (managed by benchkit terraform)
     - AZURE: Use Azure cloud infrastructure (managed by benchkit terraform)
     - MANAGED: Self-managed deployment (infrastructure managed externally, e.g., Exasol Personal Edition)
+    - REMOTE: Pre-provisioned remote machines (user provides IPs and SSH credentials)
     """
 
     LOCAL = "local"
@@ -19,6 +20,7 @@ class EnvironmentMode(str, Enum):
     GCP = "gcp"
     AZURE = "azure"
     MANAGED = "managed"  # Self-managed deployments (e.g., Exasol Personal Edition)
+    REMOTE = "remote"  # Pre-provisioned remote machines (user provides IPs)
 
     @classmethod
     def cloud_providers(cls) -> set["EnvironmentMode"]:
@@ -32,6 +34,19 @@ class EnvironmentMode(str, Enum):
             return cls(mode) in cls.cloud_providers()
         except ValueError:
             return False
+
+    @classmethod
+    def is_remote(cls, mode: str) -> bool:
+        """Check if a mode string represents remote (pre-provisioned) infrastructure."""
+        try:
+            return cls(mode) == cls.REMOTE
+        except ValueError:
+            return False
+
+    @classmethod
+    def requires_ssh(cls, mode: str) -> bool:
+        """Check if a mode requires SSH access (cloud providers or remote)."""
+        return cls.is_cloud_provider(mode) or cls.is_remote(mode)
 
     @classmethod
     def valid_values(cls) -> set[str]:

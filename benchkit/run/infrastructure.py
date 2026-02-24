@@ -312,6 +312,129 @@ class InfrastructureHelper:
 
 
 @exclude_from_package
+def setup_remote_infrastructure(
+    runner: "BenchmarkRunner",
+    log_callback: Callable[[str], None] | None = None,
+) -> bool:
+    """Setup remote infrastructure from pre-provisioned machine IPs in config.
+
+    Creates CloudInstanceManager objects directly from the node IPs specified
+    in the config, without any Terraform provisioning. Tests SSH connectivity
+    to each node.
+
+    Args:
+        runner: BenchmarkRunner instance
+        log_callback: Optional callback for routing log messages
+
+    Returns:
+        True if setup succeeded and all nodes are reachable, False otherwise
+    """
+    from ..common.cli_helpers import (
+        get_environment_for_system,
+        get_remote_nodes_for_system,
+        get_remote_systems,
+    )
+
+    try:
+        from ..infra.manager import CloudInstanceManager
+
+        remote_systems = get_remote_systems(runner.config)
+        if not remote_systems:
+            _log("[red]❌ No remote systems found in config[/red]", log_callback)
+            return False
+
+        _log("🔗 Connecting to remote infrastructure...", log_callback)
+
+        for system_config in remote_systems:
+            system_name = system_config["name"]
+            nodes = get_remote_nodes_for_system(runner.config, system_name)
+
+            if not nodes:
+                _log(
+                    f"[red]❌ No nodes configured for remote system '{system_name}'[/red]",
+                    log_callback,
+                )
+                return False
+
+            # Get SSH settings from environment config
+            _, env_cfg = get_environment_for_system(runner.config, system_name)
+            ssh_key_path = env_cfg.get("ssh_private_key_path")
+            ssh_user = env_cfg.get("ssh_user", "ubuntu")
+            ssh_port = env_cfg.get("ssh_port", 22)
+
+            if len(nodes) == 1:
+                # Single-node system
+                instance_info = {
+                    "public_ip": nodes[0]["public_ip"],
+                    "private_ip": nodes[0]["private_ip"],
+                }
+                manager = CloudInstanceManager(
+                    instance_info, ssh_key_path, ssh_user=ssh_user, ssh_port=ssh_port
+                )
+
+                _log(
+                    f"  Testing SSH to {system_name} ({nodes[0]['public_ip']})...",
+                    log_callback,
+                )
+                if not manager.wait_for_ssh(timeout=30):
+                    _log(
+                        f"[red]❌ Cannot reach {system_name} at {nodes[0]['public_ip']}[/red]",
+                        log_callback,
+                    )
+                    return False
+
+                runner._cloud_instance_managers[system_name] = manager
+                _log(
+                    f"[green]✅ Connected to {system_name}: {nodes[0]['public_ip']}[/green]",
+                    log_callback,
+                )
+            else:
+                # Multinode system
+                node_managers = []
+                for i, node in enumerate(nodes):
+                    instance_info = {
+                        "public_ip": node["public_ip"],
+                        "private_ip": node["private_ip"],
+                    }
+                    node_manager = CloudInstanceManager(
+                        instance_info,
+                        ssh_key_path,
+                        ssh_user=ssh_user,
+                        ssh_port=ssh_port,
+                    )
+
+                    _log(
+                        f"  Testing SSH to {system_name} node {i} ({node['public_ip']})...",
+                        log_callback,
+                    )
+                    if not node_manager.wait_for_ssh(timeout=30):
+                        _log(
+                            f"[red]❌ Cannot reach {system_name} node {i} at {node['public_ip']}[/red]",
+                            log_callback,
+                        )
+                        return False
+
+                    node_managers.append(node_manager)
+
+                runner._cloud_instance_managers[system_name] = node_managers
+                _log(
+                    f"[green]✅ Connected to {system_name}: {len(node_managers)} nodes "
+                    f"(primary: {nodes[0]['public_ip']})[/green]",
+                    log_callback,
+                )
+
+        if not runner._cloud_instance_managers:
+            _log("[red]❌ No remote instances configured[/red]", log_callback)
+            return False
+
+        return True
+
+    except Exception as e:
+        _log(f"[red]❌ Remote infrastructure setup failed: {e}[/red]", log_callback)
+        return False
+
+
+@exclude_from_package
 def setup_cloud_infrastructure(
     runner: "BenchmarkRunner",
     log_callback: Callable[[str], None] | None = None,

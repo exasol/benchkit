@@ -792,7 +792,7 @@ class PreflightChecker:
         """Get environment configuration.
 
         Handles both legacy 'env' and multi-environment 'environments' configs.
-        Returns the first cloud environment config found, or the default env.
+        Returns the first cloud/remote environment config found, or the default env.
         """
         from .common.cli_helpers import get_all_environments
         from .common.enums import EnvironmentMode
@@ -802,14 +802,14 @@ class PreflightChecker:
         if env and isinstance(env, dict):
             return dict(env)
 
-        # Check environments config - find first cloud environment
+        # Check environments config - find first cloud or remote environment
         environments = get_all_environments(self.config)
         for _env_name, env_cfg in environments.items():
             mode = env_cfg.get("mode", EnvironmentMode.LOCAL.value)
-            if EnvironmentMode.is_cloud_provider(str(mode)):
+            if EnvironmentMode.requires_ssh(str(mode)):
                 return dict(env_cfg)
 
-        # Return first environment if no cloud providers found
+        # Return first environment if no cloud/remote providers found
         if environments:
             return dict(next(iter(environments.values())))
 
@@ -820,7 +820,7 @@ class PreflightChecker:
 
         Checks explicit mode in env config first, then falls back to
         checking cloud providers from systems configuration.
-        Returns 'local' if no cloud mode is configured.
+        Returns 'local' if no cloud/remote mode is configured.
         """
         # First check explicit mode in env config
         env_config = self._get_env_config()
@@ -969,6 +969,10 @@ class PreflightChecker:
         - SSH key file validations
         - AWS key existence (unless skip_aws_checks)
 
+        For remote mode:
+        - SSH key file validations only (no cloud provider checks)
+        - Node configuration summary
+
         For local mode:
         - No additional validation needed
 
@@ -989,13 +993,68 @@ class PreflightChecker:
             )
             return report
 
-        # Cloud mode: validate SSH keys
+        # Cloud and remote modes: validate SSH keys
         ssh_report = self.validate_ssh_keys()
         report.merge(ssh_report)
 
-        # AWS-specific checks
-        aws_report = self.validate_aws_environment()
-        report.merge(aws_report)
+        if mode == "remote":
+            # Remote mode: validate node configuration
+            remote_report = self.validate_remote_config()
+            report.merge(remote_report)
+        else:
+            # AWS-specific checks
+            aws_report = self.validate_aws_environment()
+            report.merge(aws_report)
+
+        return report
+
+    def validate_remote_config(self) -> ValidationReport:
+        """
+        Validate remote mode configuration.
+
+        Checks:
+        - Nodes are configured
+        - Node count per system
+
+        Returns:
+            ValidationReport with remote config check results
+        """
+        report = ValidationReport()
+        env_config = self._get_env_config()
+
+        nodes = env_config.get("nodes", {})
+        if not nodes:
+            report.add(
+                CheckResult(
+                    name="Remote nodes",
+                    passed=False,
+                    severity=CheckSeverity.ERROR,
+                    message="No nodes configured for remote mode",
+                    suggestion="Add nodes with public_ip to your environment config",
+                )
+            )
+            return report
+
+        total_nodes = 0
+        for _system_name, node_info in nodes.items():
+            if isinstance(node_info, list):
+                node_count = len(node_info)
+            else:
+                node_count = 1
+            total_nodes += node_count
+
+        report.add(
+            CheckResult(
+                name="Remote nodes",
+                passed=True,
+                severity=CheckSeverity.INFO,
+                message=f"{len(nodes)} system(s), {total_nodes} node(s) configured",
+                details=", ".join(
+                    f"{name}: {len(info) if isinstance(info, list) else 1} node(s)"
+                    for name, info in nodes.items()
+                ),
+            )
+        )
 
         return report
 
@@ -1004,16 +1063,18 @@ class PreflightChecker:
         Run full validations for 'benchkit infra deploy/apply' command.
 
         All checks from run_check_command_validation plus:
-        - AWS permissions validation
+        - AWS permissions validation (cloud modes only, skipped for remote)
 
         Returns:
             Combined ValidationReport
         """
         report = self.run_check_command_validation()
 
-        # Additional permission checks for infra deploy
-        permissions_report = self.validate_aws_permissions()
-        report.merge(permissions_report)
+        # Additional permission checks for infra deploy (skip for remote mode)
+        mode = self._get_mode()
+        if mode != "remote":
+            permissions_report = self.validate_aws_permissions()
+            report.merge(permissions_report)
 
         return report
 

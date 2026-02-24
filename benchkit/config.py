@@ -144,7 +144,7 @@ class WorkloadConfig(BaseModel):
 class EnvironmentConfig(BaseModel):
     """Configuration for execution environment."""
 
-    mode: str = "local"  # local, aws, gcp, azure
+    mode: str = "local"  # local, aws, gcp, azure, managed, remote
     region: str | None = None
     availability_zone_index: int = (
         0  # Index of AZ to use (0, 1, 2) - useful when specific AZ lacks capacity
@@ -165,16 +165,36 @@ class EnvironmentConfig(BaseModel):
         False  # Allow external access to database ports
     )
 
+    # Remote mode fields (pre-provisioned machines)
+    nodes: dict[str, Any] | None = None  # Maps system names to IP info
+    ssh_user: str = "ubuntu"  # SSH user for remote connections
+    ssh_port: int = 22  # SSH port for remote connections
+
     @field_validator("mode")
     @classmethod
     def validate_mode(cls, v: str) -> str:
         """Ensure environment mode is valid."""
-        valid_modes = {"local", "aws", "gcp", "azure", "managed"}
+        valid_modes = {"local", "aws", "gcp", "azure", "managed", "remote"}
         if v not in valid_modes:
             raise ValueError(
                 f"Unknown environment mode '{v}'. Supported: {', '.join(sorted(valid_modes))}"
             )
         return v
+
+    @model_validator(mode="after")
+    def validate_remote_config(self) -> "EnvironmentConfig":
+        """Validate remote mode has required fields."""
+        if self.mode == "remote":
+            if not self.nodes:
+                raise ValueError(
+                    "Remote mode requires 'nodes' mapping system names to IP info. "
+                    "Example: nodes: {exasol: {public_ip: '54.1.2.3'}}"
+                )
+            if not self.ssh_private_key_path:
+                raise ValueError(
+                    "Remote mode requires 'ssh_private_key_path' for SSH access"
+                )
+        return self
 
 
 class ReportConfig(BaseModel):
@@ -326,6 +346,68 @@ class BenchmarkConfig(BaseModel):
             )
 
         return v
+
+    @model_validator(mode="after")
+    def validate_remote_nodes_match_systems(self) -> "BenchmarkConfig":
+        """Validate that remote mode nodes reference valid systems with required fields."""
+        if not self.systems:
+            return self
+
+        system_names = {s.name for s in self.systems}
+
+        # Collect all environments (both legacy and multi-format)
+        envs: dict[str, EnvironmentConfig] = {}
+        if self.environments:
+            for name, env in self.environments.items():
+                envs[name] = env
+        elif self.env:
+            envs["default"] = self.env
+
+        for env_name, env_cfg in envs.items():
+            if env_cfg.mode != "remote" or not env_cfg.nodes:
+                continue
+
+            # Find systems using this environment
+            systems_using_env = set()
+            for system in self.systems:
+                sys_env = system.environment or "default"
+                if sys_env == env_name:
+                    systems_using_env.add(system.name)
+
+            # Validate each node entry
+            for node_name, node_info in env_cfg.nodes.items():
+                if node_name not in system_names:
+                    raise ValueError(
+                        f"Remote node '{node_name}' does not match any system. "
+                        f"Valid systems: {', '.join(sorted(system_names))}"
+                    )
+
+                # Validate node info structure (single or multinode)
+                if isinstance(node_info, list):
+                    for i, node in enumerate(node_info):
+                        if not isinstance(node, dict) or "public_ip" not in node:
+                            raise ValueError(
+                                f"Remote node '{node_name}[{i}]' must have 'public_ip'"
+                            )
+                elif isinstance(node_info, dict):
+                    if "public_ip" not in node_info:
+                        raise ValueError(
+                            f"Remote node '{node_name}' must have 'public_ip'"
+                        )
+                else:
+                    raise ValueError(
+                        f"Remote node '{node_name}' must be a dict or list of dicts"
+                    )
+
+            # Check that all systems using this remote env have node entries
+            for system_name in systems_using_env:
+                if system_name not in env_cfg.nodes:
+                    raise ValueError(
+                        f"System '{system_name}' uses remote environment '{env_name}' "
+                        f"but has no entry in 'nodes'. Add: nodes.{system_name}.public_ip"
+                    )
+
+        return self
 
     @model_validator(mode="after")
     def validate_instance_config_matches_systems(self) -> "BenchmarkConfig":

@@ -263,7 +263,7 @@ def get_cloud_ssh_key_path(cfg: dict[str, Any]) -> str | None:
     for env_name in used_env_names:
         env_cfg = environments.get(env_name, {})
         mode = env_cfg.get("mode", EnvironmentMode.LOCAL.value)
-        if EnvironmentMode.is_cloud_provider(mode):
+        if EnvironmentMode.requires_ssh(mode):
             ssh_key = env_cfg.get("ssh_private_key_path")
             if ssh_key:
                 return str(ssh_key)
@@ -414,6 +414,26 @@ def get_all_infrastructure_ips(
         except Exception:
             pass  # Cloud infrastructure not available
 
+    # Get remote system IPs (from config, no Terraform needed)
+    remote_systems = get_remote_systems(cfg)
+    for system in remote_systems:
+        system_name = system["name"]
+        nodes = get_remote_nodes_for_system(cfg, system_name)
+
+        if not nodes:
+            continue
+
+        if len(nodes) == 1:
+            all_ips[system_name] = {
+                "public_ip": nodes[0]["public_ip"],
+                "private_ip": nodes[0]["private_ip"],
+            }
+        else:
+            all_ips[system_name] = {
+                "public_ips": [n["public_ip"] for n in nodes],
+                "private_ips": [n["private_ip"] for n in nodes],
+            }
+
     # Get managed system IPs
     managed_systems = get_managed_systems(cfg)
     for system in managed_systems:
@@ -436,6 +456,125 @@ def get_all_infrastructure_ips(
                 }
 
     return all_ips
+
+
+def is_any_system_remote_mode(cfg: dict[str, Any]) -> bool:
+    """Check if any system in the config uses a remote environment.
+
+    Remote environments are pre-provisioned machines where the user provides
+    IPs and SSH credentials directly in the config.
+
+    Args:
+        cfg: Configuration dictionary
+
+    Returns:
+        True if any system uses remote mode
+    """
+    environments = get_all_environments(cfg)
+
+    used_env_names = {
+        system.get("environment") or "default" for system in cfg.get("systems", [])
+    }
+
+    for env_name in used_env_names:
+        env_cfg = environments.get(env_name, {})
+        mode = env_cfg.get("mode", EnvironmentMode.LOCAL.value)
+        if EnvironmentMode.is_remote(mode):
+            return True
+
+    return False
+
+
+def get_remote_systems(cfg: dict[str, Any]) -> list[dict[str, Any]]:
+    """Get list of systems that use remote environments.
+
+    Args:
+        cfg: Configuration dictionary
+
+    Returns:
+        List of system configuration dictionaries for remote systems
+    """
+    environments = get_all_environments(cfg)
+    remote_systems: list[dict[str, Any]] = []
+
+    for system in cfg.get("systems", []):
+        env_name = system.get("environment") or "default"
+        env_cfg = environments.get(env_name, {})
+        mode = env_cfg.get("mode", EnvironmentMode.LOCAL.value)
+
+        if EnvironmentMode.is_remote(mode):
+            remote_systems.append(system)
+
+    return remote_systems
+
+
+def is_remote_system(cfg: dict[str, Any], system_name: str) -> bool:
+    """Check if a specific system uses remote mode.
+
+    Args:
+        cfg: Configuration dictionary
+        system_name: Name of the system to check
+
+    Returns:
+        True if the system uses remote mode
+    """
+    environments = get_all_environments(cfg)
+
+    for system in cfg.get("systems", []):
+        if system["name"] == system_name:
+            env_name = system.get("environment") or "default"
+            env_cfg = environments.get(env_name, {})
+            mode = str(env_cfg.get("mode", EnvironmentMode.LOCAL.value))
+            return EnvironmentMode.is_remote(mode)
+
+    return False
+
+
+def get_remote_nodes_for_system(
+    cfg: dict[str, Any], system_name: str
+) -> list[dict[str, str]]:
+    """Get node IP info for a remote system from the config.
+
+    Returns a normalized list of node dicts, each with 'public_ip' and 'private_ip'.
+    For single-node configs (dict), wraps in a list.
+    If private_ip is not specified, defaults to public_ip.
+
+    Args:
+        cfg: Configuration dictionary
+        system_name: Name of the system
+
+    Returns:
+        List of node dicts with 'public_ip' and 'private_ip' keys
+    """
+    environments = get_all_environments(cfg)
+
+    # Find the environment for this system
+    for system in cfg.get("systems", []):
+        if system["name"] == system_name:
+            env_name = system.get("environment") or "default"
+            env_cfg = environments.get(env_name, {})
+            nodes = env_cfg.get("nodes", {})
+            node_info = nodes.get(system_name)
+
+            if node_info is None:
+                return []
+
+            # Normalize to list
+            if isinstance(node_info, dict):
+                node_info = [node_info]
+
+            # Ensure private_ip defaults to public_ip
+            result = []
+            for node in node_info:
+                result.append(
+                    {
+                        "public_ip": node["public_ip"],
+                        "private_ip": node.get("private_ip", node["public_ip"]),
+                    }
+                )
+            return result
+
+    return []
 
 
 def is_managed_system(cfg: dict[str, Any], system_name: str) -> bool:

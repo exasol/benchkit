@@ -10,6 +10,7 @@ This comprehensive guide will help you install, configure, and run your first da
 - [CLI Commands Reference](#cli-commands-reference)
 - [Configuration Guide](#configuration-guide)
 - [Cloud Deployment](#cloud-deployment)
+- [Remote Deployment](#remote-deployment)
 - [Customizing Benchmarks](#customizing-benchmarks)
 - [Troubleshooting](#troubleshooting)
 - [Example Workflows](#example-workflows)
@@ -525,14 +526,14 @@ title: "My Database Comparison"      # Human-readable title
 author: "Your Name"                  # Author attribution
 
 env:                                 # Environment configuration
-  mode: "local"                      # local, aws, gcp, azure
+  mode: "local"                      # local, remote, aws, gcp, azure
   
 systems:                             # Database systems to benchmark
   - name: "system1"
     kind: "exasol"
     version: "2025.1.0"
     setup:
-      method: "installer"            # docker, native, installer, preinstalled
+      method: "installer"            # preinstalled, installer, native, docker
       extra: {}                      # System-specific parameters
 
 workload:                            # Benchmark workload
@@ -551,6 +552,17 @@ report:                              # Report generation (optional)
 
 ### Environment Modes
 
+The framework supports three environment modes that control **where** your benchmark runs. Each mode determines how the framework connects to machines and manages infrastructure.
+
+| Feature | Local | Remote | AWS |
+|---------|-------|--------|-----|
+| Infrastructure | Your machine | Pre-provisioned | Auto-provisioned (Terraform) |
+| SSH required | No | Yes | Yes (automatic) |
+| Disk setup | Manual | Automatic | Automatic |
+| Setup methods | docker, preinstalled | installer, native, preinstalled | installer, native |
+| Terraform | No | No | Yes |
+| Best for | Dev/testing | Existing servers, on-prem | Reproducible cloud benchmarks |
+
 #### Local Mode
 
 ```yaml
@@ -558,10 +570,57 @@ env:
   mode: "local"
 ```
 
-Runs benchmarks on the current machine. Suitable for:
-- Development and testing
-- Comparing containerized databases
-- Quick performance checks
+Runs benchmarks on the current machine. The simplest mode — no SSH, no remote machines.
+
+**When to use**: Development, testing, quick checks, or when the database is already running locally.
+
+**Compatible setup methods**: `docker`, `preinstalled`
+
+#### Remote Mode
+
+```yaml
+env:
+  mode: "remote"
+  nodes:
+    exasol:
+      public_ip: "54.93.100.10"
+      private_ip: "10.0.1.5"
+    clickhouse:
+      public_ip: "54.93.100.20"
+  ssh_private_key_path: "~/.ssh/benchmark-key.pem"
+  ssh_user: "ubuntu"
+```
+
+Connects via SSH to pre-provisioned machines that you manage yourself. The framework handles disk setup, database installation, and benchmarking over SSH — identical to cloud mode, but without Terraform.
+
+**When to use**: Existing servers, on-premises hardware, VMs from any provider, or machines provisioned outside the framework.
+
+**Required fields**:
+- `nodes` — maps each system name to its IP address(es)
+- `ssh_private_key_path` — path to the SSH private key
+
+**Node structure**: For single-node systems, use a dictionary with `public_ip` (and optionally `private_ip`). For multinode clusters, use a list of dictionaries:
+
+```yaml
+# Single node
+nodes:
+  exasol:
+    public_ip: "54.93.100.10"
+    private_ip: "10.0.1.5"
+
+# Multinode cluster
+nodes:
+  exasol:
+    - public_ip: "54.93.100.10"
+      private_ip: "10.0.1.5"
+    - public_ip: "54.93.100.11"
+      private_ip: "10.0.1.6"
+```
+
+**Compatible setup methods**: `preinstalled`, `installer`, `native`
+
+> [!NOTE]
+> For `installer` configs in remote mode, use **literal IP addresses** (not `$VAR` references) because there is no Terraform state to resolve variables from.
 
 #### AWS Mode
 
@@ -586,11 +645,115 @@ env:
   ssh_key_name: "my-aws-key"         # Optional: for SSH access
 ```
 
-Creates separate EC2 instances for each system, enabling:
+Provisions separate EC2 instances for each system via Terraform, enabling:
 - Native database installations
 - Dedicated resources per system
 - Network isolation
 - Production-like environments
+
+**When to use**: Reproducible benchmarks, production-scale tests, automated pipelines.
+
+**Compatible setup methods**: `installer`, `native`
+
+See [Cloud Deployment](#cloud-deployment) for the full AWS setup guide.
+
+### Setup Methods
+
+Setup methods control **how** the database gets installed on the target machine. They work in combination with [environment modes](#environment-modes) to cover different deployment scenarios.
+
+#### `preinstalled`
+
+The database is already running — benchkit just connects and runs queries. No installation, no disk setup.
+
+```yaml
+systems:
+  - name: "exasol"
+    kind: "exasol"
+    version: "2025.1.0"
+    setup:
+      method: "preinstalled"
+      host: "54.93.100.10"
+      port: 8563
+      username: "sys"
+      password: "exasol456"
+      schema: "BENCHMARK"
+```
+
+**Required fields**: `host`, `port`, credentials (`username`/`password`)
+
+**Works with**: `local`, `remote`, `aws`
+
+#### `installer`
+
+Benchkit installs the database from scratch using the system's own installer tool. For Exasol, this means the c4 cluster tool. Includes disk setup and full configuration.
+
+```yaml
+systems:
+  - name: "exasol"
+    kind: "exasol"
+    version: "2025.2.0"
+    setup:
+      method: "installer"
+      node_count: 1
+      use_additional_disk: true
+      c4_version: "4.28.5"
+      host_addrs: "10.0.1.5"
+      host_external_addrs: "54.93.100.10"
+      image_password: "exasol123"
+      db_password: "exasol456"
+      admin_password: "exasol789"
+      db_mem_size: 12000
+      schema: "BENCHMARK"
+```
+
+**Works with**: `remote`, `aws`
+
+> [!IMPORTANT]
+> In remote mode, use **literal IPs** in `host_addrs`/`host_external_addrs` — not `$VAR` references, since there is no Terraform state to resolve variables from.
+
+#### `native`
+
+Benchkit installs the database via system package manager (e.g., `apt` for ClickHouse). Includes disk setup and service configuration.
+
+```yaml
+systems:
+  - name: "clickhouse"
+    kind: "clickhouse"
+    version: "25.1.3.23"
+    setup:
+      method: "native"
+      use_additional_disk: true
+      data_dir: "/data/clickhouse"
+      host: "54.93.100.20"
+      port: 8123
+      username: "default"
+      password: "clickhouse123"
+      extra:
+        max_memory_usage: "8000000000"
+        max_threads: "16"
+```
+
+**Works with**: `remote`, `aws`
+
+#### `docker`
+
+Benchkit runs the database in a Docker container on the local machine. Only available in local mode.
+
+```yaml
+systems:
+  - name: "clickhouse"
+    kind: "clickhouse"
+    version: "24.12"
+    setup:
+      method: "docker"
+      container_name: "clickhouse_bench"
+      host: "localhost"
+      port: 9000
+      http_port: 8123
+      data_dir: "/data/clickhouse"
+```
+
+**Works with**: `local`
 
 ### System Configuration
 
@@ -759,6 +922,222 @@ benchkit infra destroy --provider aws --config configs/my_benchmark.yaml
 - Scale up for production benchmarks
 - Consider spot instances for cost savings
 - Remember to destroy infrastructure when done
+
+## Remote Deployment
+
+Remote mode lets you run benchmarks on pre-provisioned machines — servers you already have access to via SSH. This is useful for on-premises hardware, VMs from any cloud provider, shared infrastructure, or machines provisioned outside the framework.
+
+Unlike AWS mode, remote mode does **not** use Terraform. You provide the IP addresses directly in the configuration, and the framework handles everything else (disk setup, database installation, data loading, benchmarking) over SSH.
+
+### Prerequisites
+
+- SSH access to the target machine(s)
+- An SSH private key file
+- Ubuntu 22.04 (or a supported OS) on the target machines
+- The SSH user must have `sudo` access (for disk setup and installation)
+
+### Remote with Preinstalled Database
+
+The simplest remote scenario: the database is already installed and running. Benchkit just connects and runs queries.
+
+```yaml
+project_id: "remote_exasol_bench"
+title: "Remote Exasol Benchmark"
+author: "Benchmark Team"
+
+env:
+  mode: "remote"
+  nodes:
+    exasol:
+      public_ip: "54.93.100.10"
+  ssh_private_key_path: "~/.ssh/benchmark-key.pem"
+  ssh_user: "ubuntu"
+
+systems:
+  - name: "exasol"
+    kind: "exasol"
+    version: "2025.2.0"
+    setup:
+      method: "preinstalled"
+      host: "54.93.100.10"
+      port: 8563
+      username: "sys"
+      password: "exasol456"
+      schema: "BENCHMARK"
+
+workload:
+  name: "tpch"
+  scale_factor: 1
+  runs_per_query: 3
+  warmup_runs: 1
+```
+
+**Workflow**:
+
+```bash
+benchkit check --config configs/remote_preinstalled.yaml
+benchkit run --config configs/remote_preinstalled.yaml
+benchkit report --config configs/remote_preinstalled.yaml
+```
+
+### Remote with Installer
+
+For a fresh machine where benchkit installs the database from scratch. Disk setup runs automatically (identical to cloud mode).
+
+```yaml
+project_id: "remote_exasol_install"
+title: "Remote Exasol (Fresh Install)"
+author: "Benchmark Team"
+
+env:
+  mode: "remote"
+  nodes:
+    exasol:
+      public_ip: "54.93.100.10"
+      private_ip: "10.0.1.5"
+  ssh_private_key_path: "~/.ssh/benchmark-key.pem"
+  ssh_user: "ubuntu"
+
+systems:
+  - name: "exasol"
+    kind: "exasol"
+    version: "2025.2.0"
+    setup:
+      method: "installer"
+      node_count: 1
+      use_additional_disk: true
+      c4_version: "4.28.5"
+      host_addrs: "10.0.1.5"
+      host_external_addrs: "54.93.100.10"
+      image_password: "exasol123"
+      db_password: "exasol456"
+      admin_password: "exasol789"
+      db_mem_size: 12000
+      schema: "BENCHMARK"
+
+workload:
+  name: "tpch"
+  scale_factor: 1
+  runs_per_query: 3
+  warmup_runs: 1
+```
+
+**Workflow**:
+
+```bash
+benchkit check --config configs/remote_installer.yaml
+benchkit setup --config configs/remote_installer.yaml
+benchkit load --config configs/remote_installer.yaml
+benchkit run --config configs/remote_installer.yaml
+benchkit report --config configs/remote_installer.yaml
+```
+
+> [!IMPORTANT]
+> Use **literal IP addresses** in `host_addrs` and `host_external_addrs` — not `$VAR` references. Remote mode has no Terraform state to resolve variables from.
+
+### Remote with Multiple Systems
+
+Compare different databases on separate machines by listing each under `nodes`:
+
+```yaml
+project_id: "remote_exa_vs_ch"
+title: "Remote Exasol vs ClickHouse"
+author: "Benchmark Team"
+
+env:
+  mode: "remote"
+  nodes:
+    exasol:
+      public_ip: "54.93.100.10"
+    clickhouse:
+      public_ip: "54.93.100.20"
+  ssh_private_key_path: "~/.ssh/benchmark-key.pem"
+  ssh_user: "ubuntu"
+
+systems:
+  - name: "exasol"
+    kind: "exasol"
+    version: "2025.2.0"
+    setup:
+      method: "preinstalled"
+      host: "54.93.100.10"
+      port: 8563
+      username: "sys"
+      password: "exasol456"
+      schema: "BENCHMARK"
+
+  - name: "clickhouse"
+    kind: "clickhouse"
+    version: "25.1.3.23"
+    setup:
+      method: "preinstalled"
+      host: "54.93.100.20"
+      port: 8123
+      username: "default"
+      password: "clickhouse123"
+
+workload:
+  name: "tpch"
+  scale_factor: 1
+  runs_per_query: 3
+  warmup_runs: 1
+```
+
+### Remote Multinode Cluster
+
+For multinode clusters, list multiple IPs under the system's `nodes` entry and set `node_count` in the system setup:
+
+```yaml
+project_id: "remote_exasol_2node"
+title: "Remote Exasol 2-Node Cluster"
+author: "Benchmark Team"
+
+env:
+  mode: "remote"
+  nodes:
+    exasol:
+      - public_ip: "54.93.100.10"
+        private_ip: "10.0.1.5"
+      - public_ip: "54.93.100.11"
+        private_ip: "10.0.1.6"
+  ssh_private_key_path: "~/.ssh/benchmark-key.pem"
+  ssh_user: "ubuntu"
+
+systems:
+  - name: "exasol"
+    kind: "exasol"
+    version: "2025.2.0"
+    setup:
+      method: "installer"
+      node_count: 2
+      use_additional_disk: true
+      c4_version: "4.28.5"
+      image_password: "exasol123"
+      db_password: "exasol456"
+      admin_password: "exasol789"
+      db_mem_size: 12000
+      schema: "BENCHMARK"
+
+workload:
+  name: "tpch"
+  scale_factor: 1
+  runs_per_query: 3
+  warmup_runs: 1
+```
+
+### Working Examples
+
+The `configs/remote_test/` directory contains a complete, tested remote mode example suite:
+
+| Config | Description |
+|--------|-------------|
+| `01_remote_exasol_installer.yaml` | Fresh Exasol install via c4 |
+| `02_remote_exasol_preinstalled.yaml` | Connect to existing Exasol |
+| `03_remote_clickhouse.yaml` | Fresh ClickHouse native install |
+| `04_remote_exa_vs_ch.yaml` | Two-system comparison |
+| `05_remote_exasol_multinode.yaml` | 2-node Exasol cluster |
+
+These configs use `{{placeholder}}` values that are filled in by the test suite's `setup_ips.sh` script after provisioning machines.
 
 ## Customizing Benchmarks
 

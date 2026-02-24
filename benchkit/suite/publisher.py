@@ -718,7 +718,13 @@ class SuitePublisher:
         copied_count = 0
         for benchmark in benchmarks:
             # Source: results/{project_id}/reports/3-full/
-            src_dir = self.suite_path / "results" / benchmark.project_id / "reports" / "3-full"
+            src_dir = (
+                self.suite_path
+                / "results"
+                / benchmark.project_id
+                / "reports"
+                / "3-full"
+            )
 
             if not src_dir.exists():
                 # Try alternative path structure
@@ -1037,7 +1043,9 @@ class SuitePublisher:
             setup_json = sys_info.get("setup", {})
 
             # Load workload config from original YAML for variant resolution
-            config_path = self.suite_path / "results" / benchmark.project_id / "config.yaml"
+            config_path = (
+                self.suite_path / "results" / benchmark.project_id / "config.yaml"
+            )
             workload_config: dict[str, Any] = {}
             if config_path.exists():
                 try:
@@ -1274,9 +1282,7 @@ class SuitePublisher:
                                 if key in cfg["report"] and cfg["report"][key]:
                                     p = Path(cfg["report"][key])
                                     if not p.is_absolute():
-                                        cfg["report"][key] = str(
-                                            self.suite_path / p
-                                        )
+                                        cfg["report"][key] = str(self.suite_path / p)
                         render_report(cfg)
                         regenerated += 1
                     except Exception as e:

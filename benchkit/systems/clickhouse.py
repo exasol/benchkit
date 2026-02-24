@@ -690,9 +690,6 @@ class ClickHouseSystem(SystemUnderTest):
 
         # TPC-H specific settings
         profile_settings.append("            <join_use_nulls>1</join_use_nulls>")
-        profile_settings.append(
-            "            <allow_experimental_correlated_subqueries>1</allow_experimental_correlated_subqueries>"
-        )
 
         # Performance optimizations
         profile_settings.append(
