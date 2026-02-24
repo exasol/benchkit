@@ -1,0 +1,111 @@
+system,query,run,elapsed_s,elapsed_ms,stream_id,rows_returned,success,error,workload,scale_factor,variant
+clickhouse,Q01,1,19.75658516500016,19756.6,0,4,True,,tpch,100,tuned
+clickhouse,Q01,2,10.82303660000025,10823.0,2,4,True,,tpch,100,tuned
+clickhouse,Q01,3,13.583367398000064,13583.4,3,4,True,,tpch,100,tuned
+clickhouse,Q01,4,11.154779139000311,11154.8,3,4,True,,tpch,100,tuned
+clickhouse,Q01,5,12.00552389099994,12005.5,1,4,True,,tpch,100,tuned
+clickhouse,Q02,1,9.456150754000191,9456.2,1,100,True,,tpch,100,tuned
+clickhouse,Q02,2,9.274110558999835,9274.1,1,100,True,,tpch,100,tuned
+clickhouse,Q02,3,12.998762389999683,12998.8,3,100,True,,tpch,100,tuned
+clickhouse,Q02,4,6.069569794000017,6069.6,3,100,True,,tpch,100,tuned
+clickhouse,Q02,5,3.957012771999871,3957.0,1,100,True,,tpch,100,tuned
+clickhouse,Q03,1,17.63377287200001,17633.8,0,10,True,,tpch,100,tuned
+clickhouse,Q03,2,16.156892319000235,16156.9,0,10,True,,tpch,100,tuned
+clickhouse,Q03,3,14.378332778000184,14378.3,1,10,True,,tpch,100,tuned
+clickhouse,Q03,4,6.600949528000001,6600.9,0,10,True,,tpch,100,tuned
+clickhouse,Q03,5,3.357099540000036,3357.1,0,10,True,,tpch,100,tuned
+clickhouse,Q04,1,31.46272649100001,31462.7,1,5,True,,tpch,100,tuned
+clickhouse,Q04,2,23.25915676099976,23259.2,1,5,True,,tpch,100,tuned
+clickhouse,Q04,3,15.153384122999796,15153.4,2,5,True,,tpch,100,tuned
+clickhouse,Q04,4,24.63998853000021,24640.0,3,5,True,,tpch,100,tuned
+clickhouse,Q04,5,24.09773753899981,24097.7,3,5,True,,tpch,100,tuned
+clickhouse,Q05,1,19.376326585999777,19376.3,3,0,False,"Received ClickHouse exception, code: 241, server response: Code: 241. DB::Exception: Query memory limit exceeded: would use 28.01 GiB (attempt to allocate chunk of 161.39 MiB), maximum: 27.94 GiB: While executing FillingRightJoinSide. (MEMORY_LIMIT_EXCEEDED) (for url http://localhost:8123)",tpch,100,tuned
+clickhouse,Q05,2,22.99077751699997,22990.8,0,0,False,"Received ClickHouse exception, code: 241, server response: Code: 241. DB::Exception: Query memory limit exceeded: would use 28.02 GiB (attempt to allocate chunk of 4.12 MiB), maximum: 27.94 GiB: (while reading column l_suppkey): (while reading from part /data/clickhouse/store/5d4/5d469995-5da9-4fca-925c-ad8b4af2c192/all_1_539_4/ in table benchmark.lineitem (5d469995-5da9-4fca-925c-ad8b4af2c192) located on disk default of type local, from mark 38728 with max_rows_to_read = 32768, offset = 0): While reading part all_1_539_4: While executing MergeTreeSelect(pool: ReadPool, algorithm: Thread). (MEMORY_LIMIT_EXCEEDED) (for url http://localhost:8123)",tpch,100,tuned
+clickhouse,Q05,3,20.57843997199961,20578.4,2,0,False,"Received ClickHouse exception, code: 241, server response: Code: 241. DB::Exception: Query memory limit exceeded: would use 28.00 GiB (attempt to allocate chunk of 160.00 MiB), maximum: 27.94 GiB: While executing FillingRightJoinSide. (MEMORY_LIMIT_EXCEEDED) (for url http://localhost:8123)",tpch,100,tuned
+clickhouse,Q05,4,30.305078630000025,30305.1,0,0,False,"Received ClickHouse exception, code: 241, server response: Code: 241. DB::Exception: Query memory limit exceeded: would use 28.02 GiB (attempt to allocate chunk of 162.86 MiB), maximum: 27.94 GiB: While executing FillingRightJoinSide. (MEMORY_LIMIT_EXCEEDED) (for url http://localhost:8123)",tpch,100,tuned
+clickhouse,Q05,5,29.99308485900019,29993.1,2,0,False,"Received ClickHouse exception, code: 241, server response: Code: 241. DB::Exception: Query memory limit exceeded: would use 28.02 GiB (attempt to allocate chunk of 162.54 MiB), maximum: 27.94 GiB: While executing FillingRightJoinSide. (MEMORY_LIMIT_EXCEEDED) (for url http://localhost:8123)",tpch,100,tuned
+clickhouse,Q06,1,1.88203075499996,1882.0,0,1,True,,tpch,100,tuned
+clickhouse,Q06,2,2.121550567000213,2121.6,1,1,True,,tpch,100,tuned
+clickhouse,Q06,3,2.85084774500001,2850.8,2,1,True,,tpch,100,tuned
+clickhouse,Q06,4,2.191463426000155,2191.5,3,1,True,,tpch,100,tuned
+clickhouse,Q06,5,8.925312318000124,8925.3,1,1,True,,tpch,100,tuned
+clickhouse,Q07,1,6.82587989600006,6825.9,0,4,True,,tpch,100,tuned
+clickhouse,Q07,2,8.184767437000119,8184.8,0,4,True,,tpch,100,tuned
+clickhouse,Q07,3,6.629739829999835,6629.7,1,4,True,,tpch,100,tuned
+clickhouse,Q07,4,6.257690918000208,6257.7,3,4,True,,tpch,100,tuned
+clickhouse,Q07,5,11.621704724999743,11621.7,0,4,True,,tpch,100,tuned
+clickhouse,Q08,1,21.884947604000445,21884.9,1,0,False,"Received ClickHouse exception, code: 241, server response: Code: 241. DB::Exception: Query memory limit exceeded: would use 27.94 GiB (attempt to allocate chunk of 4.12 MiB), maximum: 27.94 GiB: (while reading column l_partkey): (while reading from part /data/clickhouse/store/5d4/5d469995-5da9-4fca-925c-ad8b4af2c192/all_1_539_4/ in table benchmark.lineitem (5d469995-5da9-4fca-925c-ad8b4af2c192) located on disk default of type local, from mark 16188 with max_rows_to_read = 24576, offset = 0): While reading part all_1_539_4: While executing MergeTreeSelect(pool: ReadPool, algorithm: Thread). (MEMORY_LIMIT_EXCEEDED) (for url http://localhost:8123)",tpch,100,tuned
+clickhouse,Q08,2,33.87667204299987,33876.7,3,0,False,"Received ClickHouse exception, code: 241, server response: Code: 241. DB::Exception: Query memory limit exceeded: would use 27.95 GiB (attempt to allocate chunk of 4.12 MiB), maximum: 27.94 GiB: (while reading column l_partkey): (while reading from part /data/clickhouse/store/5d4/5d469995-5da9-4fca-925c-ad8b4af2c192/all_1_539_4/ in table benchmark.lineitem (5d469995-5da9-4fca-925c-ad8b4af2c192) located on disk default of type local, from mark 29880 with max_rows_to_read = 24576, offset = 0): While reading part all_1_539_4: While executing MergeTreeSelect(pool: ReadPool, algorithm: Thread). (MEMORY_LIMIT_EXCEEDED) (for url http://localhost:8123)",tpch,100,tuned
+clickhouse,Q08,3,29.236242594000032,29236.2,1,0,False,"Received ClickHouse exception, code: 241, server response: Code: 241. DB::Exception: Query memory limit exceeded: would use 27.94 GiB (attempt to allocate chunk of 4.19 MiB), maximum: 27.94 GiB: (while reading column l_discount): (while reading from part /data/clickhouse/store/5d4/5d469995-5da9-4fca-925c-ad8b4af2c192/all_1_539_4/ in table benchmark.lineitem (5d469995-5da9-4fca-925c-ad8b4af2c192) located on disk default of type local, from mark 61940 with max_rows_to_read = 24576, offset = 0): While reading part all_1_539_4: While executing MergeTreeSelect(pool: ReadPool, algorithm: Thread). (MEMORY_LIMIT_EXCEEDED) (for url http://localhost:8123)",tpch,100,tuned
+clickhouse,Q08,4,25.72485612499986,25724.9,2,0,False,"Received ClickHouse exception, code: 241, server response: Code: 241. DB::Exception: Query memory limit exceeded: would use 27.94 GiB (attempt to allocate chunk of 4.00 MiB), maximum: 27.94 GiB: While executing FillingRightJoinSide. (MEMORY_LIMIT_EXCEEDED) (for url http://localhost:8123)",tpch,100,tuned
+clickhouse,Q08,5,28.47260308800014,28472.6,1,0,False,"Received ClickHouse exception, code: 241, server response: Code: 241. DB::Exception: Query memory limit exceeded: would use 27.94 GiB (attempt to allocate chunk of 4.03 MiB), maximum: 27.94 GiB: (while reading column l_suppkey): (while reading from part /data/clickhouse/store/5d4/5d469995-5da9-4fca-925c-ad8b4af2c192/all_1_539_4/ in table benchmark.lineitem (5d469995-5da9-4fca-925c-ad8b4af2c192) located on disk default of type local, from mark 48248 with max_rows_to_read = 24576, offset = 0): While reading part all_1_539_4: While executing MergeTreeSelect(pool: ReadPool, algorithm: Thread). (MEMORY_LIMIT_EXCEEDED) (for url http://localhost:8123)",tpch,100,tuned
+clickhouse,Q09,1,22.49570615199991,22495.7,2,0,False,"Received ClickHouse exception, code: 241, server response: Code: 241. DB::Exception: Query memory limit exceeded: would use 27.94 GiB (attempt to allocate chunk of 40.00 MiB), maximum: 27.94 GiB: While executing FillingRightJoinSide. (MEMORY_LIMIT_EXCEEDED) (for url http://localhost:8123)",tpch,100,tuned
+clickhouse,Q09,2,15.490152445000149,15490.2,2,0,False,"Received ClickHouse exception, code: 241, server response: Code: 241. DB::Exception: Query memory limit exceeded: would use 27.96 GiB (attempt to allocate chunk of 40.00 MiB), maximum: 27.94 GiB: While executing FillingRightJoinSide. (MEMORY_LIMIT_EXCEEDED) (for url http://localhost:8123)",tpch,100,tuned
+clickhouse,Q09,3,17.14552921199993,17145.5,2,0,False,"Received ClickHouse exception, code: 241, server response: Code: 241. DB::Exception: Query memory limit exceeded: would use 27.98 GiB (attempt to allocate chunk of 40.00 MiB), maximum: 27.94 GiB: While executing FillingRightJoinSide. (MEMORY_LIMIT_EXCEEDED) (for url http://localhost:8123)",tpch,100,tuned
+clickhouse,Q09,4,23.037362677000147,23037.4,1,0,False,"Received ClickHouse exception, code: 241, server response: Code: 241. DB::Exception: Query memory limit exceeded: would use 27.97 GiB (attempt to allocate chunk of 40.00 MiB), maximum: 27.94 GiB: While executing FillingRightJoinSide. (MEMORY_LIMIT_EXCEEDED) (for url http://localhost:8123)",tpch,100,tuned
+clickhouse,Q09,5,27.12258199400003,27122.6,3,0,False,"Received ClickHouse exception, code: 241, server response: Code: 241. DB::Exception: Query memory limit exceeded: would use 27.95 GiB (attempt to allocate chunk of 40.00 MiB), maximum: 27.94 GiB: While executing FillingRightJoinSide. (MEMORY_LIMIT_EXCEEDED) (for url http://localhost:8123)",tpch,100,tuned
+clickhouse,Q10,1,10.815425798999968,10815.4,0,20,True,,tpch,100,tuned
+clickhouse,Q10,2,18.77525930899992,18775.3,2,20,True,,tpch,100,tuned
+clickhouse,Q10,3,25.016668883999955,25016.7,1,20,True,,tpch,100,tuned
+clickhouse,Q10,4,23.86522594200005,23865.2,2,20,True,,tpch,100,tuned
+clickhouse,Q10,5,25.03518939499964,25035.2,0,20,True,,tpch,100,tuned
+clickhouse,Q11,1,4.440731568000047,4440.7,3,0,True,,tpch,100,tuned
+clickhouse,Q11,2,16.080195512000046,16080.2,0,0,True,,tpch,100,tuned
+clickhouse,Q11,3,8.436986774000161,8437.0,3,0,True,,tpch,100,tuned
+clickhouse,Q11,4,3.286249592000331,3286.2,1,0,True,,tpch,100,tuned
+clickhouse,Q11,5,1.3075921890003883,1307.6,2,0,True,,tpch,100,tuned
+clickhouse,Q12,1,6.670566646000225,6670.6,2,2,True,,tpch,100,tuned
+clickhouse,Q12,2,4.089030990000083,4089.0,2,2,True,,tpch,100,tuned
+clickhouse,Q12,3,9.126635433000049,9126.6,3,2,True,,tpch,100,tuned
+clickhouse,Q12,4,2.505127917999744,2505.1,3,2,True,,tpch,100,tuned
+clickhouse,Q12,5,8.20546879099993,8205.5,3,2,True,,tpch,100,tuned
+clickhouse,Q13,1,13.814160695000282,13814.2,0,45,True,,tpch,100,tuned
+clickhouse,Q13,2,13.510834262000117,13510.8,0,45,True,,tpch,100,tuned
+clickhouse,Q13,3,8.901337546999912,8901.3,0,45,True,,tpch,100,tuned
+clickhouse,Q13,4,10.468274512000336,10468.3,2,45,True,,tpch,100,tuned
+clickhouse,Q13,5,19.399966673000108,19400.0,0,45,True,,tpch,100,tuned
+clickhouse,Q14,1,7.909077211999829,7909.1,2,1,True,,tpch,100,tuned
+clickhouse,Q14,2,2.955845701999806,2955.8,1,1,True,,tpch,100,tuned
+clickhouse,Q14,3,10.548759190000055,10548.8,2,1,True,,tpch,100,tuned
+clickhouse,Q14,4,6.971630235999783,6971.6,3,1,True,,tpch,100,tuned
+clickhouse,Q14,5,2.6556397880003715,2655.6,1,1,True,,tpch,100,tuned
+clickhouse,Q15,1,2.9916325009999127,2991.6,3,1,True,,tpch,100,tuned
+clickhouse,Q15,2,4.964940922000096,4964.9,1,1,True,,tpch,100,tuned
+clickhouse,Q15,3,3.101365374000125,3101.4,0,1,True,,tpch,100,tuned
+clickhouse,Q15,4,4.929069873000117,4929.1,1,1,True,,tpch,100,tuned
+clickhouse,Q15,5,1.3725885720000406,1372.6,0,1,True,,tpch,100,tuned
+clickhouse,Q16,1,4.18164080600036,4181.6,3,27840,True,,tpch,100,tuned
+clickhouse,Q16,2,5.817347126999721,5817.3,0,27840,True,,tpch,100,tuned
+clickhouse,Q16,3,6.418186904000322,6418.2,3,27840,True,,tpch,100,tuned
+clickhouse,Q16,4,5.891145271999903,5891.1,0,27840,True,,tpch,100,tuned
+clickhouse,Q16,5,13.303298064000046,13303.3,2,27840,True,,tpch,100,tuned
+clickhouse,Q17,1,10.038170154,10038.2,1,1,True,,tpch,100,tuned
+clickhouse,Q17,2,7.561212733000048,7561.2,1,1,True,,tpch,100,tuned
+clickhouse,Q17,3,5.234784116000355,5234.8,3,1,True,,tpch,100,tuned
+clickhouse,Q17,4,12.62324042199998,12623.2,3,1,True,,tpch,100,tuned
+clickhouse,Q17,5,9.626124266999796,9626.1,1,1,True,,tpch,100,tuned
+clickhouse,Q18,1,26.42176960999996,26421.8,2,0,False,"Received ClickHouse exception, code: 241, server response: Code: 241. DB::Exception: Query memory limit exceeded: would use 27.96 GiB (attempt to allocate chunk of 64.00 MiB), maximum: 27.94 GiB: While executing FillingRightJoinSide. (MEMORY_LIMIT_EXCEEDED) (for url http://localhost:8123)",tpch,100,tuned
+clickhouse,Q18,2,21.57385256500038,21573.9,3,0,False,"Received ClickHouse exception, code: 241, server response: Code: 241. DB::Exception: Query memory limit exceeded: would use 27.98 GiB (attempt to allocate chunk of 64.00 MiB), maximum: 27.94 GiB: While executing FillingRightJoinSide. (MEMORY_LIMIT_EXCEEDED) (for url http://localhost:8123)",tpch,100,tuned
+clickhouse,Q18,3,20.435972041999776,20436.0,0,0,False,"Received ClickHouse exception, code: 241, server response: Code: 241. DB::Exception: Query memory limit exceeded: would use 27.95 GiB (attempt to allocate chunk of 64.00 MiB), maximum: 27.94 GiB: While executing FillingRightJoinSide. (MEMORY_LIMIT_EXCEEDED) (for url http://localhost:8123)",tpch,100,tuned
+clickhouse,Q18,4,24.515275616000054,24515.3,1,0,False,"Received ClickHouse exception, code: 241, server response: Code: 241. DB::Exception: Query memory limit exceeded: would use 27.96 GiB (attempt to allocate chunk of 64.00 MiB), maximum: 27.94 GiB: While executing FillingRightJoinSide. (MEMORY_LIMIT_EXCEEDED) (for url http://localhost:8123)",tpch,100,tuned
+clickhouse,Q18,5,27.43452540399994,27434.5,1,0,False,"Received ClickHouse exception, code: 241, server response: Code: 241. DB::Exception: Query memory limit exceeded: would use 27.95 GiB (attempt to allocate chunk of 64.00 MiB), maximum: 27.94 GiB: While executing FillingRightJoinSide. (MEMORY_LIMIT_EXCEEDED) (for url http://localhost:8123)",tpch,100,tuned
+clickhouse,Q19,1,28.584370922999824,28584.4,2,1,True,,tpch,100,tuned
+clickhouse,Q19,2,30.213229875999787,30213.2,3,1,True,,tpch,100,tuned
+clickhouse,Q19,3,27.26333651699997,27263.3,2,1,True,,tpch,100,tuned
+clickhouse,Q19,4,27.785532111000062,27785.5,0,1,True,,tpch,100,tuned
+clickhouse,Q19,5,9.051146204999895,9051.1,2,1,True,,tpch,100,tuned
+clickhouse,Q20,1,10.800638952999634,10800.6,2,17971,True,,tpch,100,tuned
+clickhouse,Q20,2,8.997465770999952,8997.5,3,17971,True,,tpch,100,tuned
+clickhouse,Q20,3,12.638700225999855,12638.7,2,17971,True,,tpch,100,tuned
+clickhouse,Q20,4,5.454583236999952,5454.6,2,17971,True,,tpch,100,tuned
+clickhouse,Q20,5,12.273309360999974,12273.3,2,17971,True,,tpch,100,tuned
+clickhouse,Q21,1,25.574630673999764,25574.6,0,0,False,"Received ClickHouse exception, code: 241, server response: Code: 241. DB::Exception: Query memory limit exceeded: would use 28.02 GiB (attempt to allocate chunk of 80.00 MiB), maximum: 27.94 GiB: While executing FillingRightJoinSide. (MEMORY_LIMIT_EXCEEDED) (for url http://localhost:8123)",tpch,100,tuned
+clickhouse,Q21,2,12.72101547200009,12721.0,2,0,False,"Received ClickHouse exception, code: 241, server response: Code: 241. DB::Exception: Query memory limit exceeded: would use 27.97 GiB (attempt to allocate chunk of 80.00 MiB), maximum: 27.94 GiB: While executing FillingRightJoinSide. (MEMORY_LIMIT_EXCEEDED) (for url http://localhost:8123)",tpch,100,tuned
+clickhouse,Q21,3,19.63599073100022,19636.0,3,0,False,"Received ClickHouse exception, code: 241, server response: Code: 241. DB::Exception: Query memory limit exceeded: would use 27.97 GiB (attempt to allocate chunk of 80.00 MiB), maximum: 27.94 GiB: While executing FillingRightJoinSide. (MEMORY_LIMIT_EXCEEDED) (for url http://localhost:8123)",tpch,100,tuned
+clickhouse,Q21,4,19.28267518099983,19282.7,0,0,False,"Received ClickHouse exception, code: 241, server response: Code: 241. DB::Exception: Query memory limit exceeded: would use 27.99 GiB (attempt to allocate chunk of 80.00 MiB), maximum: 27.94 GiB: While executing FillingRightJoinSide. (MEMORY_LIMIT_EXCEEDED) (for url http://localhost:8123)",tpch,100,tuned
+clickhouse,Q21,5,13.950157198999932,13950.2,0,0,False,"Received ClickHouse exception, code: 241, server response: Code: 241. DB::Exception: Query memory limit exceeded: would use 27.95 GiB (attempt to allocate chunk of 80.00 MiB), maximum: 27.94 GiB: While executing FillingRightJoinSide. (MEMORY_LIMIT_EXCEEDED) (for url http://localhost:8123)",tpch,100,tuned
+clickhouse,Q22,1,10.783851280999896,10783.9,1,7,True,,tpch,100,tuned
+clickhouse,Q22,2,12.01301910400025,12013.0,1,7,True,,tpch,100,tuned
+clickhouse,Q22,3,6.6343884230000185,6634.4,0,7,True,,tpch,100,tuned
+clickhouse,Q22,4,6.245031575999747,6245.0,1,7,True,,tpch,100,tuned
+clickhouse,Q22,5,12.131327586000223,12131.3,3,7,True,,tpch,100,tuned

@@ -1,0 +1,29 @@
+project_id: perf_tpch_duckdb_sn_r6id16xl_sf50_16s
+title: 'Combined benchmark: perf_tpch_duckdb_sn_r6id16xl_sf50_16s'
+author: Combined
+systems:
+- name: duckdb
+  kind: duckdb
+  version: 1.4.4
+  setup:
+    method: preinstalled
+    extra:
+      memory_limit: 384GB
+      threads: 64
+workload:
+  name: tpch
+  scale_factor: 50
+  runs_per_query: 5
+  warmup_runs: 1
+  data_format: csv
+  generator: dbgen
+  multiuser:
+    enabled: true
+    num_streams: 16
+    randomize: true
+    random_seed: 42
+env:
+  mode: aws
+  instances:
+    duckdb:
+      instance_type: r6id.16xlarge
