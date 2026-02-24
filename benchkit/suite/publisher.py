@@ -303,7 +303,7 @@ class SuitePublisher:
             return None
 
         project_id = cfg.get("project_id", config_path.stem)
-        results_dir = Path("results") / project_id
+        results_dir = self.suite_path / "results" / project_id
 
         # Check if results exist
         runs_csv = results_dir / "runs.csv"
@@ -718,11 +718,11 @@ class SuitePublisher:
         copied_count = 0
         for benchmark in benchmarks:
             # Source: results/{project_id}/reports/3-full/
-            src_dir = Path("results") / benchmark.project_id / "reports" / "3-full"
+            src_dir = self.suite_path / "results" / benchmark.project_id / "reports" / "3-full"
 
             if not src_dir.exists():
                 # Try alternative path structure
-                src_dir = Path("results") / benchmark.project_id / "reports"
+                src_dir = self.suite_path / "results" / benchmark.project_id / "reports"
                 if not src_dir.exists():
                     continue
 
@@ -845,7 +845,7 @@ class SuitePublisher:
 
     def _load_system_info(self, project_id: str) -> dict[str, Any]:
         """Load system.json and setup_*.json for hardware/config details."""
-        results_dir = Path("results") / project_id
+        results_dir = self.suite_path / "results" / project_id
         info: dict[str, Any] = {}
 
         # Load system.json (global) or fall back to system_{name}.json (per-system)
@@ -1001,7 +1001,7 @@ class SuitePublisher:
                 continue
             seen_projects.add(project_id)
 
-            config_path = Path("results") / project_id / "config.yaml"
+            config_path = self.suite_path / "results" / project_id / "config.yaml"
             if not config_path.exists():
                 continue
 
@@ -1037,7 +1037,7 @@ class SuitePublisher:
             setup_json = sys_info.get("setup", {})
 
             # Load workload config from original YAML for variant resolution
-            config_path = Path("results") / benchmark.project_id / "config.yaml"
+            config_path = self.suite_path / "results" / benchmark.project_id / "config.yaml"
             workload_config: dict[str, Any] = {}
             if config_path.exists():
                 try:
@@ -1225,7 +1225,7 @@ class SuitePublisher:
         Returns:
             True if the report is stale or missing, False otherwise
         """
-        results_dir = Path("results") / project_id
+        results_dir = self.suite_path / "results" / project_id
         runs_csv = results_dir / "runs.csv"
         report_html = results_dir / "reports" / "3-full" / "REPORT.html"
 
@@ -1266,6 +1266,17 @@ class SuitePublisher:
                     )
                     try:
                         cfg = load_config(str(config_path))
+                        # Resolve report paths relative to suite directory
+                        # so render_report writes to the correct location
+                        # regardless of CWD
+                        if "report" in cfg:
+                            for key in ("output_path", "figures_dir"):
+                                if key in cfg["report"] and cfg["report"][key]:
+                                    p = Path(cfg["report"][key])
+                                    if not p.is_absolute():
+                                        cfg["report"][key] = str(
+                                            self.suite_path / p
+                                        )
                         render_report(cfg)
                         regenerated += 1
                     except Exception as e:
