@@ -1,0 +1,41 @@
+# Remote Mode: ClickHouse Native Install
+#
+# Fresh remote machine — benchkit installs ClickHouse natively.
+# Includes disk setup (use_additional_disk: true) for data directory.
+
+title: "Remote ClickHouse (Native) — TPC-H SF1"
+author: "Benchmark Team"
+
+env:
+  mode: "remote"
+  nodes:
+    clickhouse:
+      public_ip: "{{CH_PUB}}"
+  ssh_private_key_path: "{{SSH_KEY}}"
+  ssh_user: "ubuntu"
+
+systems:
+  - name: "clickhouse"
+    kind: "clickhouse"
+    version: "25.1.3.23"
+    setup:
+      method: "native"
+      use_additional_disk: true
+      data_dir: "/data/clickhouse"
+      host: "{{CH_PUB}}"
+      port: 8123
+      username: "default"
+      password: "clickhouse123"
+      extra:
+        max_memory_usage: "8000000000"
+        max_threads: "4"
+
+workload:
+  name: "tpch"
+  scale_factor: 1
+  runs_per_query: 1
+  warmup_runs: 0
+  data_format: "csv"
+  generator: "dbgen"
+  queries:
+    include: ["Q01", "Q06", "Q14"]

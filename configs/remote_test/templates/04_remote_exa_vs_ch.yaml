@@ -1,0 +1,58 @@
+# Remote Mode: Exasol vs ClickHouse Comparison
+#
+# Two-system comparison reusing instances from earlier configs:
+#   - Exasol from 01_remote_exasol_installer
+#   - ClickHouse from 03_remote_clickhouse
+#
+# Parallel execution: both systems benchmarked concurrently.
+#
+# Depends on: 01_remote_exasol_installer, 03_remote_clickhouse.
+
+title: "Remote Exasol vs ClickHouse — TPC-H SF1"
+author: "Benchmark Team"
+
+execution:
+  parallel: true
+  max_workers: 2
+
+env:
+  mode: "remote"
+  nodes:
+    exasol:
+      public_ip: "{{EXASOL_PUB}}"
+    clickhouse:
+      public_ip: "{{CH_PUB}}"
+  ssh_private_key_path: "{{SSH_KEY}}"
+  ssh_user: "ubuntu"
+
+systems:
+  - name: "exasol"
+    kind: "exasol"
+    version: "2025.2.0"
+    setup:
+      method: "preinstalled"
+      host: "{{EXASOL_PUB}}"
+      port: 8563
+      username: "sys"
+      password: "exasol456"
+      schema: "BENCHMARK"
+
+  - name: "clickhouse"
+    kind: "clickhouse"
+    version: "25.1.3.23"
+    setup:
+      method: "preinstalled"
+      host: "{{CH_PUB}}"
+      port: 8123
+      username: "default"
+      password: "clickhouse123"
+
+workload:
+  name: "tpch"
+  scale_factor: 1
+  runs_per_query: 1
+  warmup_runs: 0
+  data_format: "csv"
+  generator: "dbgen"
+  queries:
+    include: ["Q01", "Q06", "Q14"]

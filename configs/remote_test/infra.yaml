@@ -1,0 +1,91 @@
+# Infrastructure Provisioning for Remote Test Suite
+#
+# This config provisions the machines needed by the test suite.
+# It is NOT used for benchmarking — only for `benchkit infra apply`.
+#
+# Usage:
+#   1. benchkit infra apply -c configs/remote_test/infra.yaml
+#   2. bash configs/remote_test/setup_ips.sh
+#   3. benchkit suite run configs/remote_test/
+#   4. benchkit infra destroy -c configs/remote_test/infra.yaml
+#
+# Provisions 4 instances:
+#   - exasol:        single node  (used by configs 01, 02, 04)
+#   - clickhouse:    single node  (used by configs 03, 04)
+#   - exasol_mn:     2-node cluster (used by config 05)
+#
+# Update ssh_key_name and ssh_private_key_path before use.
+
+project_id: "remote_test_infra"
+title: "Remote Test Suite Infrastructure"
+author: "Benchmark Team"
+
+env:
+  mode: "aws"
+  region: "eu-west-1"
+  ssh_key_name: "ok-work3"
+  ssh_private_key_path: "~/.ssh/ok-work3.pem"
+  allow_external_database_access: true
+  os_image: "ubuntu-22.04"
+  instances:
+    exasol:
+      instance_type: "r6i.xlarge"
+      disk:
+        type: "gp3"
+        size_gb: 100
+    clickhouse:
+      instance_type: "r6i.xlarge"
+      disk:
+        type: "gp3"
+        size_gb: 100
+    exasol_mn:
+      instance_type: "r6i.xlarge"
+      disk:
+        type: "gp3"
+        size_gb: 100
+
+systems:
+  - name: "exasol"
+    kind: "exasol"
+    version: "2025.2.0"
+    setup:
+      method: "installer"
+      node_count: 1
+      use_additional_disk: true
+      c4_version: "4.28.5"
+      host_addrs: "$EXASOL_PRIVATE_IP"
+      host_external_addrs: "$EXASOL_PUBLIC_IP"
+      image_password: "exasol123"
+      db_password: "exasol456"
+      admin_password: "exasol789"
+      db_mem_size: 12000
+
+  - name: "clickhouse"
+    kind: "clickhouse"
+    version: "25.1.3.23"
+    setup:
+      method: "native"
+      use_additional_disk: true
+      host: "$CLICKHOUSE_PUBLIC_IP"
+      port: 8123
+      username: "default"
+      password: "clickhouse123"
+      data_dir: "/data/clickhouse"
+
+  - name: "exasol_mn"
+    kind: "exasol"
+    version: "2025.2.0"
+    setup:
+      method: "installer"
+      node_count: 2
+      use_additional_disk: true
+      c4_version: "4.28.5"
+      image_password: "exasol123"
+      db_password: "exasol456"
+      admin_password: "exasol789"
+      db_mem_size: 12000
+
+workload:
+  name: "tpch"
+  scale_factor: 1
+  runs_per_query: 1

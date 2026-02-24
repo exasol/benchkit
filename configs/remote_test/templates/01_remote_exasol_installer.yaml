@@ -1,0 +1,49 @@
+# Remote Mode: Exasol Installer (c4)
+#
+# Fresh remote machine — benchkit installs Exasol via c4 installer.
+# Includes disk setup: the storage pipeline runs identically to cloud mode
+# because remote maps to mode="cloud" in ExecutionContext.
+#
+# Important: For single-node installer configs, use LITERAL IPs (not $VAR)
+# because there's no Terraform state to resolve variables from.
+
+title: "Remote Exasol (c4 Installer) — TPC-H SF1"
+author: "Benchmark Team"
+
+env:
+  mode: "remote"
+  nodes:
+    exasol:
+      public_ip: "{{EXASOL_PUB}}"
+      private_ip: "{{EXASOL_PRIV}}"
+  ssh_private_key_path: "{{SSH_KEY}}"
+  ssh_user: "ubuntu"
+
+systems:
+  - name: "exasol"
+    kind: "exasol"
+    version: "2025.2.0"
+    setup:
+      method: "installer"
+      node_count: 1
+      use_additional_disk: true
+      c4_version: "4.28.5"
+      # Literal IPs — required for single-node remote installer
+      host_addrs: "{{EXASOL_PRIV}}"
+      host_external_addrs: "{{EXASOL_PUB}}"
+      image_password: "exasol123"
+      db_password: "exasol456"
+      admin_password: "exasol789"
+      db_mem_size: 12000
+      db_redundancy: 1
+      schema: "BENCHMARK"
+
+workload:
+  name: "tpch"
+  scale_factor: 1
+  runs_per_query: 1
+  warmup_runs: 0
+  data_format: "csv"
+  generator: "dbgen"
+  queries:
+    include: ["Q01", "Q06", "Q14"]

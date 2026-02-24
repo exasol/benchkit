@@ -1,0 +1,47 @@
+# Remote Mode: Exasol 2-Node Cluster
+#
+# Two pre-provisioned machines forming an Exasol cluster via c4.
+# Multinode remote: env.nodes lists multiple IPs, setup.node_count matches.
+#
+# c4 distributes SSH keys, configures storage on each node, and forms
+# the cluster using the provided IP lists.
+
+title: "Remote Exasol 2-Node Cluster — TPC-H SF1"
+author: "Benchmark Team"
+
+env:
+  mode: "remote"
+  nodes:
+    exasol:
+      - public_ip: "{{EXA_MN0_PUB}}"
+        private_ip: "{{EXA_MN0_PRIV}}"
+      - public_ip: "{{EXA_MN1_PUB}}"
+        private_ip: "{{EXA_MN1_PRIV}}"
+  ssh_private_key_path: "{{SSH_KEY}}"
+  ssh_user: "ubuntu"
+
+systems:
+  - name: "exasol"
+    kind: "exasol"
+    version: "2025.2.0"
+    setup:
+      method: "installer"
+      node_count: 2
+      use_additional_disk: true
+      c4_version: "4.28.5"
+      image_password: "exasol123"
+      db_password: "exasol456"
+      admin_password: "exasol789"
+      db_mem_size: 12000
+      db_redundancy: 1
+      schema: "BENCHMARK"
+
+workload:
+  name: "tpch"
+  scale_factor: 1
+  runs_per_query: 1
+  warmup_runs: 0
+  data_format: "csv"
+  generator: "dbgen"
+  queries:
+    include: ["Q01", "Q06", "Q14"]

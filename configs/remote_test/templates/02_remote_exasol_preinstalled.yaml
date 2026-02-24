@@ -1,0 +1,39 @@
+# Remote Mode: Exasol Preinstalled
+#
+# Reuses the Exasol instance installed by 01_remote_exasol_installer.
+# No installation or disk setup — just connect and benchmark.
+#
+# Depends on: 01_remote_exasol_installer (same IP, matching db_password).
+
+title: "Remote Exasol (Preinstalled) — TPC-H SF1"
+author: "Benchmark Team"
+
+env:
+  mode: "remote"
+  nodes:
+    exasol:
+      public_ip: "{{EXASOL_PUB}}"
+  ssh_private_key_path: "{{SSH_KEY}}"
+  ssh_user: "ubuntu"
+
+systems:
+  - name: "exasol"
+    kind: "exasol"
+    version: "2025.2.0"
+    setup:
+      method: "preinstalled"
+      host: "{{EXASOL_PUB}}"
+      port: 8563
+      username: "sys"
+      password: "exasol456"
+      schema: "BENCHMARK"
+
+workload:
+  name: "tpch"
+  scale_factor: 1
+  runs_per_query: 1
+  warmup_runs: 0
+  data_format: "csv"
+  generator: "dbgen"
+  queries:
+    include: ["Q01", "Q06", "Q14"]

@@ -1,0 +1,13 @@
+name: "Remote Mode Tests"
+version: "1.0.0"
+description: "Test configs for remote environment mode — pre-provisioned machines"
+author: "Benchmark Team"
+
+series:
+  remote:
+    name: "Remote Mode"
+    description: "Remote mode scenarios: preinstalled, installer, multinode, multi-system"
+
+execution:
+  mode: sequential
+  continue_on_failure: true
