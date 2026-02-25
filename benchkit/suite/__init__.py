@@ -1589,7 +1589,7 @@ class SuiteRunner:
         finally:
             # Infrastructure cleanup in finally block ensures it happens
             # regardless of success, failure, or exception
-            if cfg is not None and has_cloud and not no_cleanup:
+            if cfg is not None and not no_cleanup:
                 should_cleanup = (
                     benchmark_success and self.config.infrastructure.cleanup_after_each
                 ) or (
@@ -1597,7 +1597,13 @@ class SuiteRunner:
                     and self.config.infrastructure.cleanup_on_failure
                 )
                 if should_cleanup:
-                    self._run_cleanup_with_timeout(cfg, cleanup_timeout, log_callback)
+                    if has_cloud:
+                        self._run_cleanup_with_timeout(
+                            cfg, cleanup_timeout, log_callback
+                        )
+                    else:
+                        # Local/Docker mode: teardown systems (stop containers)
+                        self._teardown_local_systems(cfg, log_callback)
 
     def _run_cleanup_with_timeout(
         self,
@@ -1642,6 +1648,31 @@ class SuiteRunner:
                 f"{cleanup_error[0]}[/yellow]",
                 log_callback,
             )
+
+    def _teardown_local_systems(
+        self,
+        cfg: dict[str, Any],
+        log_callback: Callable[[str], None] | None,
+    ) -> None:
+        """Teardown Docker containers for local-mode benchmarks."""
+        from ..systems import create_system
+
+        project_id = cfg.get("project_id", "")
+        for system_config in cfg.get("systems", []):
+            try:
+                # Inject project_id so container_name matches the one used
+                # during installation (e.g., "exasol_docker_cmp_full_exasol")
+                system_config_copy = {**system_config, "project_id": project_id}
+                system = create_system(system_config_copy)
+                setup_method = system_config.get("setup", {}).get("method", "")
+                if setup_method == "docker":
+                    system.teardown()
+            except Exception as e:
+                self._log(
+                    f"[yellow]Warning: cleanup failed for "
+                    f"{system_config.get('name', '?')}: {e}[/yellow]",
+                    log_callback,
+                )
 
     def show_plan(
         self, discovered: dict[str, list[Path]], state: SuiteState | None = None

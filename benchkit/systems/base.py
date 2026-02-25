@@ -371,6 +371,10 @@ class SystemUnderTest(ABC):
                 "preparation",
             )
         self.execute_command(f"docker rm -f {self.container_name} || true", record=True)
+        # Clean data directory to prevent stale state (e.g., Exasol's
+        # "dev.1 already exists") when re-creating a container.
+        if self.data_dir:
+            self.execute_command(f"rm -rf {self.data_dir}/* || true")
         docker_cmd = ["docker", "run", "-d", "--name", self.container_name]
         if volume_mappings:
             docker_cmd.extend(f"-v {h}:{c}" for h, c in volume_mappings.items())
