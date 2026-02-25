@@ -14,31 +14,31 @@ def get_temp_file_name() -> Path:
         return Path(f.name)
 
 
-def test_bad_url():
+def test_bad_url(tmp_path):
     with pytest.raises(MissingSchema):
-        download_file_to_storage("hello world", Path("data.csv"))
+        download_file_to_storage("hello world", tmp_path / "data.csv")
 
 
-def test_no_server():
+def test_no_server(tmp_path):
     with pytest.raises(ConnectionError):
         download_file_to_storage(
-            "https://localhost:123/data.csv.gz", Path("data.csv.gz")
+            "https://localhost:123/data.csv.gz", tmp_path / "data.csv.gz"
         )
 
 
-def test_no_file():
+def test_no_file(tmp_path):
     with pytest.raises(HTTPError) as e:
         download_file_to_storage(
-            "https://exasol.com/data_no_such_file.tgz", Path("none")
+            "https://exasol.com/data_no_such_file.tgz", tmp_path / "none"
         )
     assert "404" in str(e.value)
 
 
-def test_no_access():
+def test_no_access(tmp_path):
     with pytest.raises(HTTPError) as e:
         download_file_to_storage(
             "https://x-up.s3.amazonaws.com/releases/c4/linux/x86_64/no_such_version/c4",
-            Path("xxx"),
+            tmp_path / "xxx",
         )
     assert "403" in str(e.value)
 
