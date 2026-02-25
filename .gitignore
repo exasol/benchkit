@@ -57,6 +57,8 @@ packages/
 
 # Terraform state (large files, not needed for reports)
 **/terraform/
+!benchkit/infra/terraform/
+!benchkit/infra/terraform/**
 # Benchmark execution logs (not needed for reports)
 docs/**/logs/
 public/**/logs/

@@ -63,11 +63,18 @@ benchkit = "benchkit.cli:app"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["benchkit*", "workloads*", "templates*"]
+include = ["benchkit*", "workloads*"]
 
 [tool.setuptools.package-data]
 workloads = ["**/*.sql", "**/*.json"]
-templates = ["**/*.j2", "**/*.css", "**/*.js", "**/*.html"]
+benchkit = [
+    "templates/**/*.j2",
+    "templates/**/*.css",
+    "templates/**/*.js",
+    "templates/**/*.html",
+    "infra/terraform/**/*.tf",
+    "infra/terraform/**/*.sh",
+]
 
 [tool.black]
 line-length = 88

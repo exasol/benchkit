@@ -125,7 +125,7 @@ def verify_package_contents(package_path: Path) -> None:
             )
 
         # Verify package doesn't include infra/ (should be excluded)
-        infra_files = [f for f in file_list if "/infra/" in f or f.startswith("infra/")]
+        infra_files = [f for f in file_list if ".tf" in f or "terraform/" in f]
         assert (
             len(infra_files) == 0
         ), f"infra/ files should not be in package: {infra_files}"

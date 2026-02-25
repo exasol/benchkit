@@ -62,9 +62,11 @@ class InfraManager:
         self._log_callback = log_callback
 
         # Source Terraform configuration (shared, read-only templates)
-        # Use PROJECT_ROOT to resolve paths, not current cwd which may have been
-        # changed by os.chdir() in another thread
-        self.tf_source_dir = PROJECT_ROOT / "infra" / self.provider
+        # Resolve via __file__ so the path works in installed packages too,
+        # not just when running from the repo root.
+        self.tf_source_dir = (
+            Path(__file__).resolve().parent / "terraform" / self.provider
+        )
 
         # Per-project state directory for complete isolation
         # This allows multiple benchmarks to run in parallel without conflicts

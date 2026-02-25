@@ -114,19 +114,19 @@ def load_json(path: str | Path) -> Any:
 
 
 def _get_package_root() -> Path:
-    """Return the root directory containing benchkit, workloads, and templates.
+    """Return the root directory containing benchkit and workloads.
 
     Resolves via the benchkit package location (which is unique and always
     installed), then navigates to its parent. This avoids namespace collisions
     that occur when using importlib.resources with generic names like
-    'templates' or 'workloads'.
+    'workloads'.
     """
     return Path(str(importlib.resources.files("benchkit"))).parent
 
 
 def get_templates_dir() -> Path:
-    """Return the absolute path to the templates directory."""
-    return _get_package_root() / "templates"
+    """Return the absolute path to the templates directory (inside benchkit package)."""
+    return Path(str(importlib.resources.files("benchkit"))) / "templates"
 
 
 def get_workloads_dir() -> Path:
