@@ -87,7 +87,7 @@ variable "availability_zone_index" {
 resource "stackit_key_pair" "benchmark" {
   count      = var.ssh_key_name != "" ? 1 : 0
   name       = var.ssh_key_name
-  public_key = chomp(file(var.ssh_public_key_path))
+  public_key = var.ssh_public_key_path != "" ? chomp(file(var.ssh_public_key_path)) : ""
 }
 
 # Network

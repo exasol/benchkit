@@ -823,6 +823,11 @@ class InfraManager:
         # Add SSH key if provided
         if ssh_key_name:
             tf_vars["ssh_key_name"] = ssh_key_name
+            ssh_public_key_path = cloud_env_cfg.get("ssh_public_key_path", "")
+            if ssh_public_key_path:
+                tf_vars["ssh_public_key_path"] = str(
+                    Path(ssh_public_key_path).expanduser()
+                )
 
         # Add STACKIT-specific required variables
         if self.provider == "stackit" and cloud_env_cfg:
