@@ -1063,8 +1063,14 @@ echo "Symlink: %s -> $INSTANCE_STORE"
         image = (
             f"exasol/docker-db:{self.version if self.version != 'latest' else 'latest'}"
         )
+        # --privileged is required because Exasol's init calls socket.sethostname()
+        # which needs the SYS_ADMIN capability.
         return self._install_docker_common(
-            image, {8563: 8563, 6583: 6583}, volumes, {"EXA_PRIVILEGED": "yes"}
+            image,
+            {8563: 8563, 6583: 6583},
+            volumes,
+            {"EXA_PRIVILEGED": "yes"},
+            extra_args=["--privileged"],
         )
 
     @exclude_from_package

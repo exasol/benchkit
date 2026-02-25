@@ -214,10 +214,19 @@ class ClickHouseSystem(SystemUnderTest):
         """Install ClickHouse using Docker."""
         memory_limit = (self.setup_config.get("extra") or {}).get("memory_limit", "32g")
         image = f"clickhouse/clickhouse-server:{self.version if self.version != 'latest' else 'latest'}"
+        # CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1 ensures the entrypoint creates
+        # the user with <ip>::/0</ip> (all networks), which is required because
+        # host connections arrive via the Docker bridge, not localhost.
+        # CLICKHOUSE_PASSWORD sets the password to match the config.
+        env_vars = {
+            "CLICKHOUSE_PASSWORD": self.password,
+            "CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT": "1",
+        }
         return self._install_docker_common(
             image,
             {self.http_port: 8123, self.native_port: 9000},
             {str(self.data_dir): "/var/lib/clickhouse"},
+            env_vars=env_vars,
             extra_args=["--memory", memory_limit],
         )
 
@@ -982,8 +991,9 @@ class ClickHouseSystem(SystemUnderTest):
             try:
                 # Check Keeper health using 'ruok' command (returns 'imok' if healthy)
                 # Using system.zookeeper is more reliable as it tests actual functionality
+                password_arg = f"--password={self.password} " if self.password else ""
                 result = self.execute_command(
-                    f"clickhouse-client --user={self.username} --password={self.password} "
+                    f"clickhouse-client --user={self.username} {password_arg}"
                     f"--query=\"SELECT count() FROM system.zookeeper WHERE path = '/'\" 2>/dev/null",
                     timeout=10.0,
                     record=False,
@@ -1272,8 +1282,11 @@ class ClickHouseSystem(SystemUnderTest):
                         bool(result.get("success", False)) and "Ok." in result["stdout"]
                     )
                 else:
+                    password_arg = (
+                        f"--password={self.password} " if self.password else ""
+                    )
                     result = self.execute_command(
-                        f"clickhouse-client --user={self.username} --password={self.password} --query 'SELECT 1' --format TSV",
+                        f"clickhouse-client --user={self.username} {password_arg}--query 'SELECT 1' --format TSV",
                         timeout=10.0,
                     )
                     return (
@@ -1357,23 +1370,25 @@ class ClickHouseSystem(SystemUnderTest):
                 f"Loading {data_path} into {table_name} (format: {data_format})..."
             )
 
+            # Build auth args once — omit --password when empty to avoid
+            # clickhouse-client error "argument for option '--password' should
+            # follow immediately after the equal sign".
+            password_arg = f"--password={self.password} " if self.password else ""
+            client_args = f"clickhouse-client --user={self.username} {password_arg}"
+
             # Build import command based on format
             if data_format == "tsv":
                 # TSV format (ClickBench) - use TabSeparated
                 import_cmd = (
                     f"cat {data_path} | "
-                    f"clickhouse-client "
-                    f"--user={self.username} "
-                    f"--password={self.password} "
+                    f"{client_args}"
                     f'--query="INSERT INTO {schema_name}.{table_name} FORMAT TabSeparated"'
                 )
             elif data_format == "parquet":
                 # Parquet format - use native Parquet loading
                 import_cmd = (
                     f"cat {data_path} | "
-                    f"clickhouse-client "
-                    f"--user={self.username} "
-                    f"--password={self.password} "
+                    f"{client_args}"
                     f'--query="INSERT INTO {schema_name}.{table_name} FORMAT Parquet"'
                 )
             else:
@@ -1381,9 +1396,7 @@ class ClickHouseSystem(SystemUnderTest):
                 # Using FORMAT CSV with custom delimiter for pipe-delimited files
                 import_cmd = (
                     f"sed 's/|$//' {data_path} | "
-                    f"clickhouse-client "
-                    f"--user={self.username} "
-                    f"--password={self.password} "
+                    f"{client_args}"
                     f'--query="INSERT INTO {schema_name}.{table_name} FORMAT CSV" '
                     f"--format_csv_delimiter='|'"
                 )
@@ -1403,9 +1416,7 @@ class ClickHouseSystem(SystemUnderTest):
             if clickhouse_connect is None:
                 # Use clickhouse-client for verification if connect not available
                 count_cmd = (
-                    f"clickhouse-client "
-                    f"--user={self.username} "
-                    f"--password={self.password} "
+                    f"{client_args}"
                     f'--query="SELECT COUNT(*) FROM {schema_name}.{table_name} FORMAT TSV"'
                 )
                 count_result = self.execute_command(
@@ -1479,10 +1490,11 @@ class ClickHouseSystem(SystemUnderTest):
                 row_count = count_result.result_rows[0][0]
 
             else:
+                password_arg = f"--password={self.password} " if self.password else ""
                 import_cmd = (
                     f"clickhouse-client "
                     f"--user={self.username} "
-                    f"--password={self.password} "
+                    f"{password_arg}"
                     f"--query='{import_query}'"
                 )
 
@@ -1501,7 +1513,7 @@ class ClickHouseSystem(SystemUnderTest):
                 count_cmd = (
                     f"clickhouse-client "
                     f"--user={self.username} "
-                    f"--password={self.password} "
+                    f"{password_arg}"
                     f'--query="SELECT COUNT(*) FROM {schema_name}.{table_name} FORMAT TSV"'
                 )
                 count_result = self.execute_command(
@@ -1658,17 +1670,18 @@ class ClickHouseSystem(SystemUnderTest):
             )
 
         try:
+            password_arg = f"--password={self.password} " if self.password else ""
             if self.setup_method == "docker":
                 cmd = (
                     f"docker exec {self.container_name} clickhouse-client "
-                    f"--user={self.username} --password={self.password} "
+                    f"--user={self.username} {password_arg}"
                     f"--database={self.database} "
                     f"--query='{query}' --format=TabSeparated"
                 )
             else:
                 cmd = (
                     f"clickhouse-client "
-                    f"--user={self.username} --password={self.password} "
+                    f"--user={self.username} {password_arg}"
                     f"--database={self.database} "
                     f"--query='{query}' --format=TabSeparated"
                 )
