@@ -83,6 +83,7 @@ posts/
 .env.production
 .env.secrets
 credentials.json
+.stackit/
 config.local.yaml
 configs/*.license
 configs/*.exasol_license

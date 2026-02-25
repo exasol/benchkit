@@ -317,8 +317,12 @@ class InfraManager:
 
         This enables per-project isolation of Terraform state, allowing
         multiple benchmarks to run in parallel without conflicts.
-        Files are updated if the source is newer than the destination.
+        Files are updated if the source is newer or the content differs
+        (e.g. after a provider change from aws to stackit).  When main.tf
+        changes, the .terraform directory is removed to force re-init with
+        the correct provider plugins.
         """
+        import filecmp
         import shutil
 
         # Ensure project state directory exists
@@ -326,15 +330,55 @@ class InfraManager:
 
         # Files to copy from source to project directory
         tf_files = ["main.tf", "user_data.sh"]
+        main_tf_changed = False
 
         for tf_file in tf_files:
             source = self.tf_source_dir / tf_file
             dest = self.project_state_dir / tf_file
 
             if source.exists():
-                # Copy if destination doesn't exist or source is newer
-                if not dest.exists() or source.stat().st_mtime > dest.stat().st_mtime:
+                # Copy if destination doesn't exist, source is newer,
+                # or content differs (handles provider switches)
+                needs_copy = (
+                    not dest.exists() or source.stat().st_mtime > dest.stat().st_mtime
+                )
+                if not needs_copy and not filecmp.cmp(source, dest, shallow=False):
+                    needs_copy = True
+                if needs_copy:
                     shutil.copy2(source, dest)
+                    if tf_file == "main.tf":
+                        main_tf_changed = True
+
+        # If main.tf changed (e.g. provider switch), remove .terraform
+        # to force re-init with the correct provider plugins
+        if main_tf_changed:
+            tf_dir = self.project_state_dir / ".terraform"
+            if tf_dir.exists():
+                self._log("Terraform config changed, re-initializing providers...")
+                shutil.rmtree(tf_dir)
+            lock_file = self.project_state_dir / ".terraform.lock.hcl"
+            if lock_file.exists():
+                lock_file.unlink()
+
+    @staticmethod
+    def _resolve_provider_env_paths() -> None:
+        """Resolve relative paths in provider env vars to absolute paths.
+
+        Terraform's -chdir changes the Go process CWD, so relative paths in
+        environment variables (like STACKIT_SERVICE_ACCOUNT_KEY_PATH) would be
+        resolved from the state directory instead of the repo root.
+        """
+        path_vars = [
+            "STACKIT_SERVICE_ACCOUNT_KEY_PATH",
+            "STACKIT_PRIVATE_KEY_PATH",
+            "GOOGLE_APPLICATION_CREDENTIALS",
+        ]
+        for var in path_vars:
+            value = os.environ.get(var, "")
+            if value and not os.path.isabs(value):
+                abs_path = os.path.abspath(value)
+                if os.path.exists(abs_path):
+                    os.environ[var] = abs_path
 
     def _run_terraform_command_raw(
         self, command: str, args: list[Any] | None = None
@@ -349,6 +393,9 @@ class InfraManager:
 
         with self._get_state_lock():
             try:
+                # Resolve relative credential paths before -chdir changes CWD
+                self._resolve_provider_env_paths()
+
                 # Ensure Terraform files are copied to project state directory
                 self._ensure_terraform_files_copied()
 
@@ -411,6 +458,9 @@ class InfraManager:
 
         with self._get_state_lock():
             try:
+                # Resolve relative credential paths before -chdir changes CWD
+                self._resolve_provider_env_paths()
+
                 # Ensure Terraform files are copied to project state directory
                 self._ensure_terraform_files_copied()
 
@@ -754,9 +804,11 @@ class InfraManager:
         environments = get_all_environments(self.config)
         region = "us-east-1"
         ssh_key_name = ""
+        cloud_env_cfg: dict[str, Any] = {}
         for env_cfg in environments.values():
             mode = env_cfg.get("mode", EnvironmentMode.LOCAL.value)
             if EnvironmentMode.is_cloud_provider(mode):
+                cloud_env_cfg = env_cfg
                 region = env_cfg.get("region", region)
                 ssh_key_name = env_cfg.get("ssh_key_name", ssh_key_name)
                 break  # Use first cloud environment found
@@ -771,6 +823,15 @@ class InfraManager:
         # Add SSH key if provided
         if ssh_key_name:
             tf_vars["ssh_key_name"] = ssh_key_name
+
+        # Add STACKIT-specific required variables
+        if self.provider == "stackit" and cloud_env_cfg:
+            stackit_project_id = cloud_env_cfg.get("stackit_project_id", "")
+            stackit_image_id = cloud_env_cfg.get("stackit_image_id", "")
+            if stackit_project_id:
+                tf_vars["stackit_project_id"] = stackit_project_id
+            if stackit_image_id:
+                tf_vars["stackit_image_id"] = stackit_image_id
 
         return tf_vars
 

@@ -62,20 +62,21 @@ class ExasolNativeInstaller:
         # Get configuration from setup_config
         c4_version = system.setup_config.get("c4_version", "2025.1.4")
 
-        # Build IP address lists for multinode support
-        if system._cloud_instance_managers and len(system._cloud_instance_managers) > 1:
-            # Multinode: build space-separated IP lists
+        # Build IP address lists from cloud instance managers or config
+        if system._cloud_instance_managers:
+            # Cloud deployment: get IPs directly from instance managers
             private_ips = [mgr.private_ip for mgr in system._cloud_instance_managers]
             public_ips = [mgr.public_ip for mgr in system._cloud_instance_managers]
             host_addrs = " ".join(private_ips)
             host_external_addrs = " ".join(public_ips)
+            node_count = len(system._cloud_instance_managers)
             self._log(
-                f"Multinode setup with {len(system._cloud_instance_managers)} nodes:"
+                f"Cloud setup with {node_count} node{'s' if node_count > 1 else ''}:"
             )
             self._log(f"  Private IPs: {host_addrs}")
             self._log(f"  Public IPs: {host_external_addrs}")
         else:
-            # Single node: use configured addresses or resolve from environment
+            # Local/non-cloud: use configured addresses or resolve from environment
             host_addrs = system._resolve_ip_addresses(
                 system.setup_config.get("host_addrs", "localhost")
             )

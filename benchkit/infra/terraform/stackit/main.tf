@@ -93,7 +93,7 @@ resource "stackit_key_pair" "benchmark" {
 # Network
 resource "stackit_network" "benchmark" {
   project_id         = var.stackit_project_id
-  name               = "benchmark-${var.project_id}"
+  name               = "benchmark-${local.safe_project_id}"
   ipv4_nameservers   = ["8.8.8.8", "8.8.4.4"]
   ipv4_prefix_length = 24
   routed             = true
@@ -102,7 +102,7 @@ resource "stackit_network" "benchmark" {
 # Security group
 resource "stackit_security_group" "benchmark" {
   project_id = var.stackit_project_id
-  name       = "benchmark-${var.project_id}"
+  name       = "benchmark-${local.safe_project_id}"
   stateful   = true
 }
 
@@ -122,6 +122,8 @@ resource "stackit_security_group_rule" "ssh" {
 }
 
 # Allow ALL TCP traffic between nodes in the same security group
+# Note: omitting port_range means "all ports" — specifying 1-65535 explicitly
+# triggers a provider bug where the API normalizes it to null.
 resource "stackit_security_group_rule" "internode_tcp" {
   project_id              = var.stackit_project_id
   security_group_id       = stackit_security_group.benchmark.security_group_id
@@ -130,10 +132,6 @@ resource "stackit_security_group_rule" "internode_tcp" {
   remote_security_group_id = stackit_security_group.benchmark.security_group_id
   protocol = {
     name = "tcp"
-  }
-  port_range = {
-    min = 1
-    max = 65535
   }
 }
 
@@ -146,10 +144,6 @@ resource "stackit_security_group_rule" "internode_udp" {
   remote_security_group_id = stackit_security_group.benchmark.security_group_id
   protocol = {
     name = "udp"
-  }
-  port_range = {
-    min = 1
-    max = 65535
   }
 }
 
@@ -196,6 +190,11 @@ resource "stackit_security_group_rule" "egress" {
   ether_type        = "IPv4"
 }
 
+# STACKIT resource names must not contain underscores — sanitize identifiers
+locals {
+  safe_project_id = replace(var.project_id, "_", "-")
+}
+
 # Flatten systems into individual nodes (same logic as AWS)
 locals {
   system_nodes = flatten([
@@ -204,6 +203,7 @@ locals {
         system_key    = system_key
         node_idx      = node_idx
         node_key      = system_config.node_count > 1 ? "${system_key}-node${node_idx}" : system_key
+        safe_node_key = replace(system_config.node_count > 1 ? "${system_key}-node${node_idx}" : system_key, "_", "-")
         instance_type = system_config.instance_type
         disk_size     = system_config.disk_size
         disk_type     = system_config.disk_type
@@ -221,7 +221,7 @@ resource "stackit_volume" "boot" {
   for_each = local.system_nodes_map
 
   project_id        = var.stackit_project_id
-  name              = "benchmark-${var.project_id}-${each.key}-boot"
+  name              = "benchmark-${local.safe_project_id}-${each.value.safe_node_key}-boot"
   availability_zone = var.stackit_availability_zone
   size              = 64
   performance_class = "storage_premium_perf1"
@@ -245,7 +245,7 @@ resource "stackit_volume" "data" {
   for_each = { for k, v in local.system_nodes_map : k => v if v.disk_type != "local" && v.disk_type != "none" }
 
   project_id        = var.stackit_project_id
-  name              = "benchmark-${var.project_id}-${each.key}-data"
+  name              = "benchmark-${local.safe_project_id}-${each.value.safe_node_key}-data"
   availability_zone = var.stackit_availability_zone
   size              = each.value.disk_size
   performance_class = each.value.disk_type
@@ -259,21 +259,33 @@ resource "stackit_volume" "data" {
   } : {})
 }
 
-# Servers
+# Network interfaces (one per node, created before servers)
+resource "stackit_network_interface" "system" {
+  for_each = local.system_nodes_map
+
+  project_id         = var.stackit_project_id
+  network_id         = stackit_network.benchmark.network_id
+  security_group_ids = [stackit_security_group.benchmark.security_group_id]
+}
+
+# Servers (with network interfaces configured inline)
 resource "stackit_server" "system" {
   for_each = local.system_nodes_map
 
   project_id        = var.stackit_project_id
-  name              = "benchmark-${var.project_id}-${each.key}"
+  name              = "benchmark-${local.safe_project_id}-${each.value.safe_node_key}"
   availability_zone = var.stackit_availability_zone
   machine_type      = each.value.instance_type
   keypair_name      = var.ssh_key_name != "" ? stackit_key_pair.benchmark[0].name : null
 
   boot_volume = {
-    size        = 64
     source_type = "volume"
     source_id   = stackit_volume.boot[each.key].volume_id
   }
+
+  network_interfaces = [
+    stackit_network_interface.system[each.key].network_interface_id
+  ]
 
   user_data = file("${path.module}/user_data.sh")
 
@@ -287,24 +299,6 @@ resource "stackit_server" "system" {
   } : {})
 }
 
-# Network interfaces (one per node)
-resource "stackit_network_interface" "system" {
-  for_each = local.system_nodes_map
-
-  project_id         = var.stackit_project_id
-  network_id         = stackit_network.benchmark.network_id
-  security_group_ids = [stackit_security_group.benchmark.security_group_id]
-}
-
-# Attach network interfaces to servers
-resource "stackit_server_network_interface_attach" "system" {
-  for_each = local.system_nodes_map
-
-  project_id           = var.stackit_project_id
-  server_id            = stackit_server.system[each.key].server_id
-  network_interface_id = stackit_network_interface.system[each.key].network_interface_id
-}
-
 # Public IPs (one per node)
 resource "stackit_public_ip" "system" {
   for_each = local.system_nodes_map
@@ -312,7 +306,7 @@ resource "stackit_public_ip" "system" {
   project_id           = var.stackit_project_id
   network_interface_id = stackit_network_interface.system[each.key].network_interface_id
 
-  depends_on = [stackit_server_network_interface_attach.system]
+  depends_on = [stackit_server.system]
 }
 
 # Attach data volumes to servers

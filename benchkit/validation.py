@@ -873,26 +873,29 @@ class PreflightChecker:
 
         return report
 
-    def validate_aws_environment(self) -> ValidationReport:
+    def validate_cloud_environment(self) -> ValidationReport:
         """
-        Run AWS environment validation checks.
+        Run cloud provider environment validation checks.
 
-        Checks performed:
-        1. AWS credentials configured and valid
-        2. SSH key pair exists on AWS (matches ssh_key_name)
-        3. SSH key fingerprint matches local key
-        4. Required AWS permissions present
+        Dispatches to provider-specific validation based on env.mode:
+        - aws: AWS credentials, SSH key pair, fingerprint match
+        - stackit: Project ID, image ID, availability zone, SSH public key, auth
+        - Others: INFO stub noting validation is not yet implemented
 
         Returns:
-            ValidationReport with all AWS check results
+            ValidationReport with all cloud provider check results
         """
-        from .common.enums import EnvironmentMode
-
-        report = ValidationReport()
-        env_config = self._get_env_config()
         mode = self._get_mode()
+        env_config = self._get_env_config()
 
-        if mode != "aws":
+        if mode == "aws":
+            return self._validate_aws_environment(env_config)
+        elif mode == "stackit":
+            return self._validate_stackit_environment(env_config)
+        else:
+            from .common.enums import EnvironmentMode
+
+            report = ValidationReport()
             if EnvironmentMode.is_cloud_provider(mode):
                 report.add(
                     CheckResult(
@@ -904,6 +907,10 @@ class PreflightChecker:
                     )
                 )
             return report
+
+    def _validate_aws_environment(self, env_config: dict[str, Any]) -> ValidationReport:
+        """Run AWS-specific environment validation checks."""
+        report = ValidationReport()
 
         if self.skip_aws_checks:
             report.add(
@@ -944,6 +951,205 @@ class PreflightChecker:
                         ssh_private_key_path, ssh_key_name, region
                     )
                 )
+
+        return report
+
+    def _validate_stackit_environment(
+        self, env_config: dict[str, Any]
+    ) -> ValidationReport:
+        """Run STACKIT-specific environment validation checks.
+
+        Checks:
+        1. stackit_project_id present and valid UUID
+        2. stackit_image_id present and valid UUID
+        3. availability_zone present and matches pattern (e.g. eu01-1)
+        4. ssh_public_key_path file exists
+        5. Authentication: STACKIT_SERVICE_ACCOUNT_KEY_PATH or
+           STACKIT_SERVICE_ACCOUNT_TOKEN env var set
+        """
+        import os
+        import re
+
+        report = ValidationReport()
+        uuid_pattern = re.compile(
+            r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            re.IGNORECASE,
+        )
+
+        # 1. Project ID
+        project_id = env_config.get("stackit_project_id", "")
+        if not project_id:
+            report.add(
+                CheckResult(
+                    name="STACKIT project ID",
+                    passed=False,
+                    severity=CheckSeverity.ERROR,
+                    message="stackit_project_id not configured",
+                    suggestion="Add env.stackit_project_id (UUID) to your config",
+                )
+            )
+        elif not uuid_pattern.match(project_id):
+            report.add(
+                CheckResult(
+                    name="STACKIT project ID",
+                    passed=False,
+                    severity=CheckSeverity.ERROR,
+                    message=f"stackit_project_id is not a valid UUID: {project_id}",
+                    suggestion="Use a valid UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+                )
+            )
+        else:
+            report.add(
+                CheckResult(
+                    name="STACKIT project ID",
+                    passed=True,
+                    severity=CheckSeverity.INFO,
+                    message=f"Project ID configured: {project_id[:8]}...",
+                )
+            )
+
+        # 2. Image ID
+        image_id = env_config.get("stackit_image_id", "")
+        if not image_id:
+            report.add(
+                CheckResult(
+                    name="STACKIT image ID",
+                    passed=False,
+                    severity=CheckSeverity.ERROR,
+                    message="stackit_image_id not configured",
+                    suggestion="Add env.stackit_image_id (UUID) to your config",
+                )
+            )
+        elif not uuid_pattern.match(image_id):
+            report.add(
+                CheckResult(
+                    name="STACKIT image ID",
+                    passed=False,
+                    severity=CheckSeverity.ERROR,
+                    message=f"stackit_image_id is not a valid UUID: {image_id}",
+                    suggestion="Use a valid UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+                )
+            )
+        else:
+            report.add(
+                CheckResult(
+                    name="STACKIT image ID",
+                    passed=True,
+                    severity=CheckSeverity.INFO,
+                    message=f"Image ID configured: {image_id[:8]}...",
+                )
+            )
+
+        # 3. Availability zone
+        az = env_config.get("stackit_availability_zone", "")
+        az_pattern = re.compile(r"^[a-z]{2}\d{2}-\d$")
+        if not az:
+            report.add(
+                CheckResult(
+                    name="STACKIT availability zone",
+                    passed=False,
+                    severity=CheckSeverity.ERROR,
+                    message="stackit_availability_zone not configured",
+                    suggestion="Add env.stackit_availability_zone (e.g. eu01-1) to your config",
+                )
+            )
+        elif not az_pattern.match(az):
+            report.add(
+                CheckResult(
+                    name="STACKIT availability zone",
+                    passed=False,
+                    severity=CheckSeverity.WARNING,
+                    message=f"Unusual availability zone format: {az}",
+                    details="Expected pattern like eu01-1",
+                )
+            )
+        else:
+            report.add(
+                CheckResult(
+                    name="STACKIT availability zone",
+                    passed=True,
+                    severity=CheckSeverity.INFO,
+                    message=f"Availability zone: {az}",
+                )
+            )
+
+        # 4. SSH public key file
+        ssh_public_key_path = env_config.get("ssh_public_key_path", "")
+        if not ssh_public_key_path:
+            report.add(
+                CheckResult(
+                    name="STACKIT SSH public key",
+                    passed=False,
+                    severity=CheckSeverity.ERROR,
+                    message="ssh_public_key_path not configured",
+                    suggestion="Add env.ssh_public_key_path to your config",
+                )
+            )
+        elif not Path(ssh_public_key_path).expanduser().exists():
+            report.add(
+                CheckResult(
+                    name="STACKIT SSH public key",
+                    passed=False,
+                    severity=CheckSeverity.ERROR,
+                    message=f"SSH public key file not found: {ssh_public_key_path}",
+                    suggestion="Create the key or update ssh_public_key_path in config",
+                )
+            )
+        else:
+            report.add(
+                CheckResult(
+                    name="STACKIT SSH public key",
+                    passed=True,
+                    severity=CheckSeverity.INFO,
+                    message=f"SSH public key found: {ssh_public_key_path}",
+                )
+            )
+
+        # 5. Authentication
+        key_path_env = os.environ.get("STACKIT_SERVICE_ACCOUNT_KEY_PATH", "")
+        token_env = os.environ.get("STACKIT_SERVICE_ACCOUNT_TOKEN", "")
+
+        if key_path_env and Path(key_path_env).exists():
+            report.add(
+                CheckResult(
+                    name="STACKIT authentication",
+                    passed=True,
+                    severity=CheckSeverity.INFO,
+                    message="Authenticated via STACKIT_SERVICE_ACCOUNT_KEY_PATH",
+                )
+            )
+        elif key_path_env and not Path(key_path_env).exists():
+            report.add(
+                CheckResult(
+                    name="STACKIT authentication",
+                    passed=False,
+                    severity=CheckSeverity.ERROR,
+                    message=f"STACKIT_SERVICE_ACCOUNT_KEY_PATH file not found: {key_path_env}",
+                    suggestion="Check the file path in STACKIT_SERVICE_ACCOUNT_KEY_PATH",
+                )
+            )
+        elif token_env:
+            report.add(
+                CheckResult(
+                    name="STACKIT authentication",
+                    passed=True,
+                    severity=CheckSeverity.INFO,
+                    message="Authenticated via STACKIT_SERVICE_ACCOUNT_TOKEN",
+                )
+            )
+        else:
+            report.add(
+                CheckResult(
+                    name="STACKIT authentication",
+                    passed=False,
+                    severity=CheckSeverity.ERROR,
+                    message="No STACKIT authentication configured",
+                    suggestion=(
+                        "Set STACKIT_SERVICE_ACCOUNT_KEY_PATH (path to JSON key file) "
+                        "or STACKIT_SERVICE_ACCOUNT_TOKEN environment variable"
+                    ),
+                )
+            )
 
         return report
 
@@ -1004,9 +1210,9 @@ class PreflightChecker:
             remote_report = self.validate_remote_config()
             report.merge(remote_report)
         else:
-            # AWS-specific checks
-            aws_report = self.validate_aws_environment()
-            report.merge(aws_report)
+            # Cloud provider checks (AWS, STACKIT, etc.)
+            cloud_report = self.validate_cloud_environment()
+            report.merge(cloud_report)
 
         return report
 
@@ -1072,9 +1278,9 @@ class PreflightChecker:
         """
         report = self.run_check_command_validation()
 
-        # Additional permission checks for infra deploy (skip for remote mode)
+        # Additional permission checks for infra deploy (AWS only)
         mode = self._get_mode()
-        if mode != "remote":
+        if mode == "aws":
             permissions_report = self.validate_aws_permissions()
             report.merge(permissions_report)
 
@@ -1099,9 +1305,12 @@ class PreflightChecker:
         ssh_checks = [
             c for c in report.checks if "SSH" in c.name or "ssh" in c.name.lower()
         ]
-        aws_checks = [c for c in report.checks if "AWS" in c.name]
+        cloud_providers = ("AWS", "STACKIT", "GCP", "Azure")
+        cloud_checks = [
+            c for c in report.checks if any(p in c.name for p in cloud_providers)
+        ]
         other_checks = [
-            c for c in report.checks if c not in ssh_checks and c not in aws_checks
+            c for c in report.checks if c not in ssh_checks and c not in cloud_checks
         ]
 
         # Display SSH checks
@@ -1110,10 +1319,10 @@ class PreflightChecker:
             for check in ssh_checks:
                 self._display_check(check)
 
-        # Display AWS checks
-        if aws_checks:
-            self.console.print("\n[bold]AWS Checks:[/bold]")
-            for check in aws_checks:
+        # Display cloud provider checks
+        if cloud_checks:
+            self.console.print("\n[bold]Cloud Provider Checks:[/bold]")
+            for check in cloud_checks:
                 self._display_check(check)
 
         # Display other checks

@@ -1566,7 +1566,6 @@ def _destroy_all_environments(cfg: dict[str, Any]) -> tuple[bool, list[str]]:
 @app.command()
 def infra(
     action: str = typer.Argument(..., help="Action: plan, apply, destroy"),
-    provider: str = typer.Option("aws", "--provider", "-p", help="Cloud provider"),
     config: str | None = typer.Option(
         None,
         "--config",
@@ -1590,10 +1589,10 @@ def infra(
 ) -> None:
     """Manage cloud infrastructure for benchmarks.
 
-    Before apply/plan, validates:
+    The cloud provider is determined from the config's env.mode field
+    (e.g. aws, stackit, gcp). Before apply/plan, validates:
     - SSH key exists and has correct permissions (600 or 400)
-    - AWS credentials are configured
-    - AWS key pair exists and matches local key
+    - Provider-specific credentials and configuration
     """
     if action not in ["plan", "apply", "destroy"]:
         console.print(f"[red]Invalid action:[/] {action}. Use: plan, apply, destroy")
@@ -1687,6 +1686,13 @@ def infra(
     has_managed = is_any_system_managed_mode(cfg)
     has_remote = is_any_system_remote_mode(cfg)
 
+    # Derive provider from config (e.g. "aws", "stackit", "gcp")
+    provider = None
+    if has_cloud:
+        from ..common.cli_helpers import get_first_cloud_provider
+
+        provider = get_first_cloud_provider(cfg)
+
     # For plan and apply actions on remote systems
     if has_remote:
         if action == "plan":
@@ -1762,7 +1768,7 @@ def infra(
                 raise typer.Exit(1)
 
     # For plan and apply actions on cloud systems, use InfraManager
-    if has_cloud:
+    if has_cloud and provider:
         manager = InfraManager(provider, cfg)
         console.print(f"  State:   [cyan]{manager.project_state_dir}[/cyan]")
         console.print()
