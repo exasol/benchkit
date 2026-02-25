@@ -162,3 +162,8 @@ configs/test_modes/*.yaml
 
 # Suite state directories
 public/**/.benchkit/
+
+# Temporary root-level files (configs, notes, etc.)
+/*.yaml
+/*.md
+!README.md
