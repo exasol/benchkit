@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Benchkit - Page Not Found</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+:root {
+    --color-primary: #2E86AB;
+    --color-secondary: #A23B72;
+    --color-text: #1a1a1a;
+    --color-text-light: #666;
+    --color-bg: #ffffff;
+    --color-bg-alt: #f8f9fa;
+    --color-border: #e0e0e0;
+    --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-code: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--color-text);
+    background: var(--color-bg-alt);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.header {
+    background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+    color: white;
+    padding: 2rem;
+    text-align: center;
+}
+
+.header h1 { font-size: 1.8rem; font-weight: 700; }
+
+.content {
+    max-width: 700px;
+    margin: 3rem auto;
+    padding: 2rem;
+    background: var(--color-bg);
+    border-radius: 12px;
+    border: 1px solid var(--color-border);
+    text-align: center;
+    flex: 1;
+}
+
+.content h2 {
+    font-size: 1.4rem;
+    margin-bottom: 1rem;
+    color: var(--color-text);
+}
+
+.content p {
+    color: var(--color-text-light);
+    margin-bottom: 1.5rem;
+}
+
+#redirect-msg {
+    display: none;
+    background: #e3f2fd;
+    border: 1px solid #90caf9;
+    border-radius: 8px;
+    padding: 1rem 1.5rem;
+    margin-bottom: 1.5rem;
+    font-family: var(--font-code);
+    font-size: 0.85rem;
+    word-break: break-all;
+}
+
+.links {
+    list-style: none;
+    text-align: left;
+    display: inline-block;
+}
+
+.links li {
+    margin-bottom: 0.5rem;
+}
+
+.links a {
+    color: var(--color-primary);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.links a:hover { text-decoration: underline; }
+
+.footer {
+    text-align: center;
+    padding: 1.5rem;
+    color: var(--color-text-light);
+    font-size: 0.85rem;
+    border-top: 1px solid var(--color-border);
+}
+
+.footer a {
+    color: var(--color-primary);
+    text-decoration: none;
+}
+    </style>
+    <script>
+    (function() {
+        var path = window.location.pathname;
+        var basePath = '/benchkit';
+
+        // Strip base path to get relative path
+        var rel = path;
+        if (path.indexOf(basePath) === 0) {
+            rel = path.slice(basePath.length);
+        }
+        // Ensure leading slash
+        if (rel.charAt(0) !== '/') {
+            rel = '/' + rel;
+        }
+
+        var newRel = null;
+
+        // Rule 1: /scalability/... → /public/exa_vs_ch_scalability/...
+        if (/^\/scalability(\/|$)/.test(rel)) {
+            newRel = '/public/exa_vs_ch_scalability' + rel.slice('/scalability'.length);
+        }
+        // Rule 2: /exa_vs_ch_{size}/... → /public/comparisons/exa_vs_ch_{size}/...
+        else if (/^\/exa_vs_ch_\w+/.test(rel)) {
+            newRel = '/public/comparisons' + rel;
+        }
+        // Rule 3: /extended_scalability/... → /public/extended_scalability/...
+        else if (/^\/extended_scalability(\/|$)/.test(rel)) {
+            newRel = '/public' + rel;
+        }
+        // Rule 4: /starrocks/... → /public/starrocks/...
+        else if (/^\/starrocks(\/|$)/.test(rel)) {
+            newRel = '/public' + rel;
+        }
+
+        if (newRel) {
+            var newUrl = basePath + newRel;
+            // Preserve any trailing slash or lack thereof
+            if (!newRel.match(/\.\w+$/) && newRel.charAt(newRel.length - 1) !== '/') {
+                newUrl += '/';
+            }
+            window.location.replace(newUrl);
+        }
+    })();
+    </script>
+</head>
+<body>
+    <div class="header">
+        <h1>Benchkit</h1>
+    </div>
+
+    <div class="content">
+        <div id="redirect-msg">Redirecting...</div>
+        <h2>Page Not Found</h2>
+        <p>The page you're looking for may have moved. Try one of these:</p>
+        <ul class="links">
+            <li><a href="/benchkit/public/">Results Portal</a> &mdash; all benchmark suites</li>
+            <li><a href="/benchkit/public/comparisons/">Exasol vs ClickHouse</a> &mdash; head-to-head comparisons</li>
+            <li><a href="/benchkit/public/exa_vs_ch_scalability/">Scalability Study</a> &mdash; node, concurrency, multi-variant</li>
+            <li><a href="/benchkit/public/extended_scalability/">Extended Scalability</a> &mdash; comprehensive scaling tests</li>
+            <li><a href="/benchkit/public/starrocks/">Exasol vs StarRocks</a> &mdash; StarRocks comparisons</li>
+            <li><a href="https://github.com/exasol/benchkit">GitHub Repository</a> &mdash; source code &amp; documentation</li>
+        </ul>
+    </div>
+
+    <div class="footer">
+        Powered by <a href="https://github.com/exasol/benchkit">Benchkit</a> &mdash; Database Benchmark Framework
+    </div>
+</body>
+</html>
