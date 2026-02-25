@@ -1,0 +1,35 @@
+# Smoke test: Exasol Docker - single query validation
+# Validates: Exasol Docker startup, pyexasol connectivity, data load, query execution
+# Expected time: ~3 minutes (Exasol Docker startup is slower)
+
+project_id: "docker_smoke_exa"
+title: "Docker Smoke Test - Exasol"
+author: "Benchmark Team"
+
+env:
+  mode: "local"
+
+systems:
+  - name: "exasol"
+    kind: "exasol"
+    version: "2025.2.0"
+    setup:
+      method: "docker"
+      host: "localhost"
+      port: 8563
+      username: "sys"
+      password: "exasol"
+      data_dir: "/tmp/benchkit_docker_test/docker_smoke_exa/exasol"
+
+workload:
+  name: "tpch"
+  scale_factor: 1
+  runs_per_query: 1
+  warmup_runs: 0
+  data_format: "csv"
+  generator: "dbgen"
+  queries:
+    include: ["Q06"]
+
+report:
+  show_bar_chart: true

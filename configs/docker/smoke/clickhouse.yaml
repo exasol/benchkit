@@ -1,0 +1,35 @@
+# Smoke test: ClickHouse Docker - single query validation
+# Validates: Docker pull, container start, health check, data load, query execution
+# Expected time: ~2 minutes
+
+project_id: "docker_smoke_ch"
+title: "Docker Smoke Test - ClickHouse"
+author: "Benchmark Team"
+
+env:
+  mode: "local"
+
+systems:
+  - name: "clickhouse"
+    kind: "clickhouse"
+    version: "24.8"
+    setup:
+      method: "docker"
+      host: "localhost"
+      port: 8123
+      username: "default"
+      password: ""
+      data_dir: "/tmp/benchkit_docker_test/docker_smoke_ch/clickhouse"
+
+workload:
+  name: "tpch"
+  scale_factor: 1
+  runs_per_query: 1
+  warmup_runs: 0
+  data_format: "csv"
+  generator: "dbgen"
+  queries:
+    include: ["Q01"]
+
+report:
+  show_bar_chart: true

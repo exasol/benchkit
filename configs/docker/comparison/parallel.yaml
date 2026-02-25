@@ -1,0 +1,51 @@
+# Comparison test: ClickHouse vs Exasol, parallel execution
+# Validates: Concurrent Docker container management, no port/data conflicts
+# Expected time: ~8 minutes
+
+project_id: "docker_cmp_parallel"
+title: "Docker Comparison - Parallel ClickHouse vs Exasol"
+author: "Benchmark Team"
+
+execution:
+  parallel: true
+  max_workers: 2
+
+env:
+  mode: "local"
+
+systems:
+  - name: "clickhouse"
+    kind: "clickhouse"
+    version: "24.8"
+    setup:
+      method: "docker"
+      host: "localhost"
+      port: 8123
+      username: "default"
+      password: ""
+      data_dir: "/tmp/benchkit_docker_test/docker_cmp_parallel/clickhouse"
+
+  - name: "exasol"
+    kind: "exasol"
+    version: "2025.2.0"
+    setup:
+      method: "docker"
+      host: "localhost"
+      port: 8563
+      username: "sys"
+      password: "exasol"
+      data_dir: "/tmp/benchkit_docker_test/docker_cmp_parallel/exasol"
+
+workload:
+  name: "tpch"
+  scale_factor: 1
+  runs_per_query: 2
+  warmup_runs: 1
+  data_format: "csv"
+  generator: "dbgen"
+  queries:
+    include: ["Q01", "Q06", "Q13"]
+
+report:
+  show_boxplots: true
+  show_bar_chart: true

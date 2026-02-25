@@ -1,0 +1,58 @@
+# Comparison test: Full pipeline with warmup, multiple runs, and all report visualizations
+# Validates: Complete setup -> load -> run -> report -> cleanup flow
+# Expected time: ~15 minutes
+
+project_id: "docker_cmp_full"
+title: "Docker Full Pipeline - ClickHouse vs Exasol"
+author: "Benchmark Team"
+
+execution:
+  parallel: true
+  max_workers: 2
+
+env:
+  mode: "local"
+
+systems:
+  - name: "clickhouse"
+    kind: "clickhouse"
+    version: "24.8"
+    setup:
+      method: "docker"
+      host: "localhost"
+      port: 8123
+      username: "default"
+      password: ""
+      data_dir: "/tmp/benchkit_docker_test/docker_cmp_full/clickhouse"
+      extra:
+        max_memory_usage: "8000000000"
+        max_threads: "4"
+
+  - name: "exasol"
+    kind: "exasol"
+    version: "2025.2.0"
+    setup:
+      method: "docker"
+      host: "localhost"
+      port: 8563
+      username: "sys"
+      password: "exasol"
+      data_dir: "/tmp/benchkit_docker_test/docker_cmp_full/exasol"
+      extra:
+        memory_limit: "8g"
+
+workload:
+  name: "tpch"
+  scale_factor: 1
+  runs_per_query: 3
+  warmup_runs: 1
+  data_format: "csv"
+  generator: "dbgen"
+  queries:
+    include: ["Q01", "Q03", "Q06", "Q13", "Q14"]
+
+report:
+  show_boxplots: true
+  show_latency_cdf: true
+  show_bar_chart: true
+  show_heatmap: true

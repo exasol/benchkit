@@ -1,0 +1,39 @@
+# System test: ClickHouse Docker with multiple queries and extra settings
+# Validates: Extra settings propagation, multi-category query execution
+# Expected time: ~5 minutes
+
+project_id: "docker_sys_ch_multi"
+title: "Docker System Test - ClickHouse Multi-Query"
+author: "Benchmark Team"
+
+env:
+  mode: "local"
+
+systems:
+  - name: "clickhouse"
+    kind: "clickhouse"
+    version: "24.8"
+    setup:
+      method: "docker"
+      host: "localhost"
+      port: 8123
+      username: "default"
+      password: ""
+      data_dir: "/tmp/benchkit_docker_test/docker_sys_ch_multi/clickhouse"
+      extra:
+        max_memory_usage: "8000000000"
+        max_threads: "4"
+
+workload:
+  name: "tpch"
+  scale_factor: 1
+  runs_per_query: 2
+  warmup_runs: 1
+  data_format: "csv"
+  generator: "dbgen"
+  queries:
+    include: ["Q01", "Q03", "Q05", "Q06", "Q12", "Q14"]
+
+report:
+  show_boxplots: true
+  show_bar_chart: true

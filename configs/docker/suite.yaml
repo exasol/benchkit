@@ -1,0 +1,34 @@
+name: "Docker Environment Tests"
+version: "1.0.0"
+description: "Validation suite for Docker-based benchmarking with ClickHouse and Exasol"
+author: "Benchmark Team"
+keywords: ["docker", "local", "tpc-h", "validation"]
+
+series:
+  smoke:
+    name: "Smoke Tests"
+    description: "Minimal single-query validation that Docker setup/load/run works"
+    enabled: true
+
+  system:
+    name: "System-Specific Tests"
+    description: "Per-system tests with multiple query categories and configuration options"
+    enabled: true
+
+  comparison:
+    name: "Comparison Tests"
+    description: "Head-to-head ClickHouse vs Exasol with sequential, parallel, and full pipeline"
+    enabled: true
+
+execution:
+  mode: sequential
+  continue_on_failure: true
+  pause_between: 5
+
+infrastructure:
+  cleanup_after_each: true
+  cleanup_on_failure: true
+
+timeouts:
+  benchmark: 1800
+  cleanup: 300

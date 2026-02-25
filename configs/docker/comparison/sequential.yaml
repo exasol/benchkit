@@ -1,0 +1,50 @@
+# Comparison test: ClickHouse vs Exasol, sequential execution
+# Validates: Two Docker containers on different ports, sequential pipeline
+# Expected time: ~10 minutes
+
+project_id: "docker_cmp_sequential"
+title: "Docker Comparison - Sequential ClickHouse vs Exasol"
+author: "Benchmark Team"
+
+execution:
+  parallel: false
+
+env:
+  mode: "local"
+
+systems:
+  - name: "clickhouse"
+    kind: "clickhouse"
+    version: "24.8"
+    setup:
+      method: "docker"
+      host: "localhost"
+      port: 8123
+      username: "default"
+      password: ""
+      data_dir: "/tmp/benchkit_docker_test/docker_cmp_sequential/clickhouse"
+
+  - name: "exasol"
+    kind: "exasol"
+    version: "2025.2.0"
+    setup:
+      method: "docker"
+      host: "localhost"
+      port: 8563
+      username: "sys"
+      password: "exasol"
+      data_dir: "/tmp/benchkit_docker_test/docker_cmp_sequential/exasol"
+
+workload:
+  name: "tpch"
+  scale_factor: 1
+  runs_per_query: 2
+  warmup_runs: 1
+  data_format: "csv"
+  generator: "dbgen"
+  queries:
+    include: ["Q01", "Q06", "Q13"]
+
+report:
+  show_boxplots: true
+  show_bar_chart: true

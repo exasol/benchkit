@@ -1,0 +1,38 @@
+# System test: Exasol Docker with multiple queries and memory limit
+# Validates: Exasol memory limit, multi-category query execution
+# Expected time: ~5 minutes
+
+project_id: "docker_sys_exa_multi"
+title: "Docker System Test - Exasol Multi-Query"
+author: "Benchmark Team"
+
+env:
+  mode: "local"
+
+systems:
+  - name: "exasol"
+    kind: "exasol"
+    version: "2025.2.0"
+    setup:
+      method: "docker"
+      host: "localhost"
+      port: 8563
+      username: "sys"
+      password: "exasol"
+      data_dir: "/tmp/benchkit_docker_test/docker_sys_exa_multi/exasol"
+      extra:
+        memory_limit: "8g"
+
+workload:
+  name: "tpch"
+  scale_factor: 1
+  runs_per_query: 2
+  warmup_runs: 1
+  data_format: "csv"
+  generator: "dbgen"
+  queries:
+    include: ["Q01", "Q03", "Q05", "Q06", "Q12", "Q14"]
+
+report:
+  show_boxplots: true
+  show_bar_chart: true
