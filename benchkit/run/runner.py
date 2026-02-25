@@ -1093,10 +1093,14 @@ class BenchmarkRunner:
             if not system.wait_for_health():
                 return False, {"error": "health_check_failed"}
 
-        if not workload.prepare(system):
+        # Create a per-system workload instance to avoid thread-unsafe mutation
+        # of shared state (e.g., self.data_dir) during parallel loading
+        local_workload = create_workload(self.config["workload"])
+
+        if not local_workload.prepare(system):
             return False, {"error": "workload_preparation_failed"}
 
-        prep_timings = getattr(workload, "preparation_timings", {})
+        prep_timings = getattr(local_workload, "preparation_timings", {})
 
         return True, prep_timings
 

@@ -353,10 +353,10 @@ class TPCH(Workload):
             self._log(f"Using system-provided data directory: {self.data_dir}")
 
         # Step 0: Generate TPC-H data
-        self._log("0. Generating TPC-H data (format: tbl)...")
+        self._log(f"0. Generating TPC-H data (format: {self.data_format})...")
         if not self._time_step(
             "data_generation_s",
-            lambda: self.generate_data(self.data_dir, data_format="tbl"),
+            lambda: self.generate_data(self.data_dir, data_format=self.data_format),
         ):
             self._log("Failed to generate TPC-H data")
             return False
@@ -409,50 +409,48 @@ class TPCH(Workload):
             return self._load_data_from_pipe(system)
         else:
             # note: generate_data should detect things have already happened.
-            return self.generate_data(self.data_dir) and self._load_data_from_files(
-                system
-            )
+            return self.generate_data(
+                self.data_dir, data_format=self.data_format
+            ) and self._load_data_from_files(system)
 
     def _load_data_from_files(self, system: SystemUnderTest) -> bool:
         schema_name = self.get_schema_name()
 
         for table_name in self.get_table_names():
-            data_file = self.data_dir / f"{table_name}.tbl"
-
-            if not data_file.exists():
-                self._log(f"Data file not found: {data_file}")
-                return False
+            # Resolve data files based on format:
+            #   tbl    → data_dir/table_name.tbl  (single file)
+            #   parquet → data_dir/table_name/*.parquet  (directory of parts)
+            if self.data_format == "parquet":
+                table_dir = self.data_dir / table_name
+                data_files = (
+                    sorted(table_dir.glob("*.parquet")) if table_dir.exists() else []
+                )
+                if not data_files:
+                    self._log(f"No parquet files found in: {table_dir}")
+                    return False
+            else:
+                data_file = self.data_dir / f"{table_name}.tbl"
+                if not data_file.exists():
+                    self._log(f"Data file not found: {data_file}")
+                    return False
+                data_files = [data_file]
 
             self._log(f"Loading {table_name}...")
             columns = self.get_table_columns(table_name)
             column_types = self.get_table_column_types(table_name)
-            success = system.load_data(
-                table_name,
-                data_file,
-                schema=schema_name,
-                format=self.data_format,
-                columns=columns,
-                column_types=column_types,
-            )
+            for data_file in data_files:
+                success = system.load_data(
+                    table_name,
+                    data_file,
+                    schema=schema_name,
+                    format=self.data_format,
+                    columns=columns,
+                    column_types=column_types,
+                )
 
-            if not success:
-                self._log(f"Failed to load {table_name}")
-                return False
-
-            # Delete data file immediately after successful load to save disk space
-            try:
-                data_file.unlink()
-                self._log(f"  ✓ Cleaned up {data_file.name}")
-            except Exception as e:
-                self._log(f"  Warning: Could not delete {data_file.name}: {e}")
-
-        # Try to remove the empty data directory
-        try:
-            if self.data_dir.exists() and not any(self.data_dir.iterdir()):
-                self.data_dir.rmdir()
-                self._log(f"Cleaned up empty data directory: {self.data_dir}")
-        except Exception as e:
-            self._log(f"Warning: Could not remove data directory: {e}")
+                if not success:
+                    self._log(f"Failed to load {table_name}")
+                    return False
 
         return True
 
