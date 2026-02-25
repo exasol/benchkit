@@ -1620,13 +1620,14 @@ class SuiteRunner:
         def _do_cleanup() -> None:
             try:
                 from ..common.cli_helpers import get_first_cloud_provider
+                from ..common.enums import EnvironmentMode
                 from ..infra.manager import InfraManager
 
                 env = cfg.get("env") or {}
                 provider = env.get("mode", "aws")
-                if provider not in ("aws", "gcp", "azure"):
+                if not EnvironmentMode.is_cloud_provider(provider):
                     provider = get_first_cloud_provider(cfg) or provider
-                if provider in ("aws", "gcp", "azure"):
+                if EnvironmentMode.is_cloud_provider(provider):
                     manager = InfraManager(provider, cfg)
                     manager.destroy()
             except Exception as e:

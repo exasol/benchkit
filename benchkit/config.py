@@ -8,6 +8,7 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, field_validator, model_validator
 
+from .common.enums import EnvironmentMode
 from .common.markers import exclude_from_package
 
 
@@ -160,7 +161,13 @@ class EnvironmentConfig(BaseModel):
 
     os_image: str | None = None
     ssh_key_name: str | None = None  # SSH key name for cloud instances
+    ssh_public_key_path: str | None = None  # Path to public key file (STACKIT)
     ssh_private_key_path: str | None = None  # Path to private key file for SSH access
+
+    # STACKIT-specific fields
+    stackit_project_id: str | None = None  # STACKIT project ID
+    stackit_image_id: str | None = None  # STACKIT boot image ID
+    stackit_availability_zone: str | None = None  # STACKIT availability zone
     allow_external_database_access: bool = (
         False  # Allow external access to database ports
     )
@@ -174,7 +181,7 @@ class EnvironmentConfig(BaseModel):
     @classmethod
     def validate_mode(cls, v: str) -> str:
         """Ensure environment mode is valid."""
-        valid_modes = {"local", "aws", "gcp", "azure", "managed", "remote"}
+        valid_modes = EnvironmentMode.valid_values()
         if v not in valid_modes:
             raise ValueError(
                 f"Unknown environment mode '{v}'. Supported: {', '.join(sorted(valid_modes))}"

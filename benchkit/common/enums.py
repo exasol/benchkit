@@ -19,13 +19,14 @@ class EnvironmentMode(str, Enum):
     AWS = "aws"
     GCP = "gcp"
     AZURE = "azure"
+    STACKIT = "stackit"
     MANAGED = "managed"  # Self-managed deployments (e.g., Exasol Personal Edition)
     REMOTE = "remote"  # Pre-provisioned remote machines (user provides IPs)
 
     @classmethod
     def cloud_providers(cls) -> set["EnvironmentMode"]:
         """Return set of cloud provider modes (terraform-managed)."""
-        return {cls.AWS, cls.GCP, cls.AZURE}
+        return {cls.AWS, cls.GCP, cls.AZURE, cls.STACKIT}
 
     @classmethod
     def is_cloud_provider(cls, mode: str) -> bool:

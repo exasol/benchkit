@@ -1,0 +1,103 @@
+title: "Exasol vs ClickHouse vs DuckDB on STACKIT m1a.8d (TPC-H SF1)"
+author: "Benchmark Team"
+
+execution:
+  parallel: true
+  max_workers: 3
+
+env:
+  mode: "stackit"
+  region: "eu01"
+  stackit_project_id: "${STACKIT_PROJECT_ID}"
+  stackit_image_id: "${STACKIT_IMAGE_ID}"
+  stackit_availability_zone: "eu01-1"
+  ssh_key_name: "benchkit-key"
+  ssh_public_key_path: "~/.ssh/benchkit-key.pub"
+  ssh_private_key_path: "~/.ssh/benchkit-key"
+  allow_external_database_access: true
+  instances:
+    exasol:
+      instance_type: "m1a.8d"  # 8 vCPUs, 64GB RAM
+      disk:
+        type: "storage_premium_perf2"
+        size_gb: 200
+      label: "bench-exa"
+    clickhouse:
+      instance_type: "m1a.8d"
+      disk:
+        type: "storage_premium_perf2"
+        size_gb: 200
+      label: "bench-ch"
+    duckdb:
+      instance_type: "m1a.8d"
+      disk:
+        type: "storage_premium_perf2"
+        size_gb: 200
+      label: "bench-duckdb"
+
+systems:
+  - name: "exasol"
+    kind: "exasol"
+    version: "2025.1.8"
+    setup:
+      method: "installer"
+      use_additional_disk: true
+      c4_version: "4.28.5"
+      host_addrs: "$EXASOL_PRIVATE_IP"
+      host_external_addrs: "$EXASOL_PUBLIC_IP"
+      image_password: "exasol123"
+      db_password: "exasol456"
+      admin_password: "exasol789"
+      db_mem_size: 32000  # 32GB
+      extra:
+        optimizer_mode: "analytical"
+        db_params:
+          - "-writeTouchInit=1"
+          - "-cacheMonitorLimit=0"
+          - "-maxOverallSlbUsageRatio=0.95"
+          - "-useQueryCache=0"
+          - "-query_log_timeout=0"
+          - "-joinOrderMethod=0"
+          - "-etlCheckCertsDefault=0"
+
+  - name: "clickhouse"
+    kind: "clickhouse"
+    version: "25.10.2.65"
+    setup:
+      method: "native"
+      use_additional_disk: true
+      data_dir: "/data/clickhouse"
+      host: "$CLICKHOUSE_PUBLIC_IP"
+      port: 8123
+      username: "default"
+      password: "clickhouse123"
+      extra:
+        memory_limit: "32g"
+        max_threads: "8"
+        max_memory_usage: "30000000000"
+
+  - name: "duckdb"
+    kind: "duckdb"
+    version: "1.4.4"
+    setup:
+      method: "native"
+      use_additional_disk: true
+      data_dir: "/data/duckdb"
+      database_path: "/data/duckdb/benchmark.duckdb"
+      extra:
+        memory_limit: "32GB"
+        threads: 8
+
+workload:
+  name: "tpch"
+  scale_factor: 1
+  runs_per_query: 7
+  warmup_runs: 1
+  data_format: "csv"
+  generator: "dbgen"
+
+report:
+  show_boxplots: true
+  show_latency_cdf: true
+  show_bar_chart: true
+  show_heatmap: true

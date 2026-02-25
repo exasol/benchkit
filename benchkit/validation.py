@@ -886,12 +886,14 @@ class PreflightChecker:
         Returns:
             ValidationReport with all AWS check results
         """
+        from .common.enums import EnvironmentMode
+
         report = ValidationReport()
         env_config = self._get_env_config()
         mode = self._get_mode()
 
         if mode != "aws":
-            if mode in ["gcp", "azure"]:
+            if EnvironmentMode.is_cloud_provider(mode):
                 report.add(
                     CheckResult(
                         name=f"{mode.upper()} validation",

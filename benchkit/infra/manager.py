@@ -102,7 +102,7 @@ class InfraManager:
 
     def plan(self) -> InfraResult:
         """Plan infrastructure changes."""
-        if self.provider in ["aws", "gcp", "azure"]:
+        if EnvironmentMode.is_cloud_provider(self.provider):
             return self._terraform_plan()
         else:
             return InfraResult(
@@ -113,7 +113,7 @@ class InfraManager:
 
     def apply(self, wait_for_init: bool = True) -> InfraResult:
         """Apply infrastructure changes."""
-        if self.provider in ["aws", "gcp", "azure"]:
+        if EnvironmentMode.is_cloud_provider(self.provider):
             return self._terraform_apply(wait_for_init)
         else:
             return InfraResult(
@@ -124,7 +124,7 @@ class InfraManager:
 
     def destroy(self) -> InfraResult:
         """Destroy infrastructure."""
-        if self.provider in ["aws", "gcp", "azure"]:
+        if EnvironmentMode.is_cloud_provider(self.provider):
             return self._terraform_destroy()
         else:
             return InfraResult(
@@ -155,7 +155,7 @@ class InfraManager:
             }
             Returns None if infrastructure not provisioned or IPs not available.
         """
-        if self.provider not in ["aws", "gcp", "azure"]:
+        if not EnvironmentMode.is_cloud_provider(self.provider):
             return None
 
         try:
@@ -489,7 +489,7 @@ class InfraManager:
         if not env_config and environments:
             # Find first cloud environment to get region
             for env_cfg in environments.values():
-                if env_cfg.get("mode") in ["aws", "gcp", "azure"]:
+                if EnvironmentMode.is_cloud_provider(env_cfg.get("mode", "")):
                     region = env_cfg.get("region", "us-east-1")
                     break
 
@@ -497,7 +497,7 @@ class InfraManager:
         availability_zone_index = env_config.get("availability_zone_index", 0)
         if not env_config and environments:
             for env_cfg in environments.values():
-                if env_cfg.get("mode") in ["aws", "gcp", "azure"]:
+                if EnvironmentMode.is_cloud_provider(env_cfg.get("mode", "")):
                     availability_zone_index = env_cfg.get("availability_zone_index", 0)
                     break
 
@@ -520,7 +520,7 @@ class InfraManager:
         if not instances_config and environments:
             systems_list = self.config.get("systems", [])
             for env_name, env_cfg in environments.items():
-                if env_cfg.get("mode") in ["aws", "gcp", "azure"]:
+                if EnvironmentMode.is_cloud_provider(env_cfg.get("mode", "")):
                     has_cloud_environments = True
                     instances_config.update(
                         self._extract_instance_config(env_name, env_cfg, systems_list)
@@ -530,7 +530,7 @@ class InfraManager:
             if not has_cloud_environments and environments:
                 raise ValueError(
                     "No cloud environments found. All environments use 'managed' or 'local' mode. "
-                    "Terraform infrastructure is only needed for 'aws', 'gcp', or 'azure' modes."
+                    "Terraform infrastructure is only needed for cloud provider modes."
                 )
             raise ValueError(
                 "Instance configuration is required for cloud benchmarks. "
@@ -584,7 +584,7 @@ class InfraManager:
         ssh_key_name = env_config.get("ssh_key_name", "")
         if not ssh_key_name and environments:
             for env_cfg in environments.values():
-                if env_cfg.get("mode") in ["aws", "gcp", "azure"]:
+                if EnvironmentMode.is_cloud_provider(env_cfg.get("mode", "")):
                     ssh_key_name = env_cfg.get("ssh_key_name", "")
                     if ssh_key_name:
                         break
@@ -595,7 +595,7 @@ class InfraManager:
         allow_external = env_config.get("allow_external_database_access", False)
         if not allow_external and environments:
             for env_cfg in environments.values():
-                if env_cfg.get("mode") in ["aws", "gcp", "azure"]:
+                if EnvironmentMode.is_cloud_provider(env_cfg.get("mode", "")):
                     allow_external = env_cfg.get(
                         "allow_external_database_access", False
                     )
@@ -607,6 +607,48 @@ class InfraManager:
         s3_buckets = self._collect_s3_buckets()
         if s3_buckets:
             tf_vars["s3_buckets"] = json.dumps(s3_buckets)
+
+        # STACKIT-specific variables
+        if self.provider == "stackit":
+            stackit_project_id = env_config.get("stackit_project_id", "")
+            if not stackit_project_id and environments:
+                for env_cfg in environments.values():
+                    if env_cfg.get("mode") == "stackit":
+                        stackit_project_id = env_cfg.get("stackit_project_id", "")
+                        if stackit_project_id:
+                            break
+            if stackit_project_id:
+                tf_vars["stackit_project_id"] = stackit_project_id
+
+            stackit_image_id = env_config.get("stackit_image_id", "")
+            if not stackit_image_id and environments:
+                for env_cfg in environments.values():
+                    if env_cfg.get("mode") == "stackit":
+                        stackit_image_id = env_cfg.get("stackit_image_id", "")
+                        if stackit_image_id:
+                            break
+            if stackit_image_id:
+                tf_vars["stackit_image_id"] = stackit_image_id
+
+            stackit_az = env_config.get("stackit_availability_zone", "")
+            if not stackit_az and environments:
+                for env_cfg in environments.values():
+                    if env_cfg.get("mode") == "stackit":
+                        stackit_az = env_cfg.get("stackit_availability_zone", "")
+                        if stackit_az:
+                            break
+            if stackit_az:
+                tf_vars["stackit_availability_zone"] = stackit_az
+
+            ssh_public_key_path = env_config.get("ssh_public_key_path", "")
+            if not ssh_public_key_path and environments:
+                for env_cfg in environments.values():
+                    if env_cfg.get("mode") == "stackit":
+                        ssh_public_key_path = env_cfg.get("ssh_public_key_path", "")
+                        if ssh_public_key_path:
+                            break
+            if ssh_public_key_path:
+                tf_vars["ssh_public_key_path"] = ssh_public_key_path
 
         return tf_vars
 
@@ -774,6 +816,8 @@ class InfraManager:
             return self._get_aws_instance_info()
         elif self.provider == "gcp":
             return self._get_gcp_instance_info()
+        elif self.provider == "stackit":
+            return self._get_aws_instance_info()  # Same terraform output structure
         else:
             return {"error": f"Provider {self.provider} not supported"}
 
@@ -945,6 +989,7 @@ class InfraManager:
                         "aws_instance",
                         "google_compute_instance",
                         "azurerm_virtual_machine",
+                        "stackit_server",
                     ]:
                         continue
 
