@@ -94,6 +94,10 @@ disallow_untyped_defs = true
 module = "faker.*"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "benchkit.scripts.*"
+ignore_errors = true
+
 [tool.ruff]
 line-length = 88
 target-version = "py310"

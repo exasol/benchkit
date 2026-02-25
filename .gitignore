@@ -126,7 +126,7 @@ bandit-report.json
 .tox/
 .pytest_cache/
 tests/output/
-scripts/
+benchkit/scripts/
 
 # Documentation build
 docs/_build/

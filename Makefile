@@ -140,12 +140,12 @@ infra-destroy: ## Destroy cloud infrastructure
 	python -m benchkit infra destroy --config $(CFG)
 
 check-aws: ## Check AWS credentials and permissions
-	python scripts/check_aws_credentials.py --config $(CFG)
+	python benchkit/scripts/check_aws_credentials.py --config $(CFG)
 
 
 # Code Quality & Unused Code Detection
 analyze-unused: ## Run custom AST-based unused code analyzer
-	python3 scripts/find_unused_code.py
+	python3 benchkit/scripts/find_unused_code.py
 
 lint-unused: ## Find unused imports and variables with ruff
 	ruff check --select F401,F841 benchkit/
