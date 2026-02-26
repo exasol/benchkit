@@ -182,13 +182,8 @@ resource "stackit_security_group_rule" "db_ports_external" {
   }
 }
 
-# Allow all outbound traffic
-resource "stackit_security_group_rule" "egress" {
-  project_id        = var.stackit_project_id
-  security_group_id = stackit_security_group.benchmark.security_group_id
-  direction         = "egress"
-  ether_type        = "IPv4"
-}
+# Note: STACKIT automatically creates an egress allow-all rule for stateful
+# security groups, so no explicit egress rule is needed here.
 
 # STACKIT resource names must not contain underscores — sanitize identifiers
 locals {
