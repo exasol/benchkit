@@ -71,11 +71,11 @@ class TPCH(Workload):
                     self._log("Parquet data already exists, skipping generation")
                     return True
             else:
-                # For tbl format, check for single file
+                # For tbl/csv format, check for single file per table
                 missing = False
                 for table in self.get_table_names():
-                    tbl_file = output_dir / f"{table}.tbl"
-                    if not tbl_file.exists():
+                    data_file = output_dir / f"{table}.{data_format}"
+                    if not data_file.exists():
                         missing = True
                         break
                 if not missing:
@@ -155,9 +155,9 @@ class TPCH(Workload):
             else:
                 missing_files = []
                 for table in self.get_table_names():
-                    tbl_file = output_dir / f"{table}.tbl"
-                    if not tbl_file.exists():
-                        missing_files.append(str(tbl_file))
+                    data_file = output_dir / f"{table}.{data_format}"
+                    if not data_file.exists():
+                        missing_files.append(str(data_file))
                 if missing_files:
                     self._log(f"Missing data files: {missing_files}")
                     return False
@@ -429,7 +429,7 @@ class TPCH(Workload):
                     self._log(f"No parquet files found in: {table_dir}")
                     return False
             else:
-                data_file = self.data_dir / f"{table_name}.tbl"
+                data_file = self.data_dir / f"{table_name}.{self.data_format}"
                 if not data_file.exists():
                     self._log(f"Data file not found: {data_file}")
                     return False

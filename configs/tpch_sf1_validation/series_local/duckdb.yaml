@@ -25,7 +25,7 @@ workload:
   scale_factor: 1
   runs_per_query: 3
   warmup_runs: 1
-  data_format: "csv"
+  data_format: "tbl"
   generator: "dbgen"
 
 report:

@@ -56,7 +56,7 @@ class WorkloadConfig(BaseModel):
     queries: dict[str, list[str]] = {"include": []}  # Optional, defaults to all queries
     runs_per_query: int = 3
     warmup_runs: int = 1
-    data_format: str = "csv"
+    data_format: str = "tbl"
     generator: str = "dbgen"
     variant: str = "official"  # Query variant to use (official, tuned, custom, etc.)
     system_variants: dict[str, str] | None = None  # Per-system variant overrides
@@ -114,7 +114,7 @@ class WorkloadConfig(BaseModel):
     @classmethod
     def validate_data_format(cls, v: str) -> str:
         """Ensure data format is valid."""
-        valid_formats = {"csv", "parquet", "tsv"}
+        valid_formats = {"tbl", "csv", "parquet", "tsv"}
         if v not in valid_formats:
             raise ValueError(
                 f"Unknown data_format '{v}'. Supported: {', '.join(sorted(valid_formats))}"

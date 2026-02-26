@@ -28,7 +28,7 @@ workload:
   scale_factor: 1
   runs_per_query: 2
   warmup_runs: 1
-  data_format: "csv"
+  data_format: "tbl"
   generator: "dbgen"
   queries:
     include: ["Q01", "Q03", "Q05", "Q06", "Q12", "Q14"]

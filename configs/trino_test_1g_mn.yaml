@@ -46,7 +46,7 @@ workload:
   scale_factor: 1                # 1GB dataset for testing
   runs_per_query: 3              # Quick test runs
   warmup_runs: 1
-  data_format: "csv"
+  data_format: "tbl"
   generator: "dbgen"
 
 report:

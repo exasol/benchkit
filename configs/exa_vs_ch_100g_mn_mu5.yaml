@@ -80,7 +80,7 @@ workload:
   scale_factor: 100             # 100GB dataset
   runs_per_query: 15            # Number of measured runs
   warmup_runs: 1                # Warmup runs before measurement
-  data_format: "csv"            # csv or parquet
+  data_format: "tbl"            # tbl or parquet
   generator: "dbgen"
   # Use tuned queries for ClickHouse multinode (avoids correlated subqueries)
   system_variants:

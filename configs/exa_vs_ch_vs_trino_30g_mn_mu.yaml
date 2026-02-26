@@ -113,7 +113,7 @@ workload:
   scale_factor: 30        # 30GB dataset
   runs_per_query: 7
   warmup_runs: 1
-  data_format: "csv"
+  data_format: "tbl"
   generator: "dbgen"
   # Use tuned queries for ClickHouse multinode (avoids correlated subqueries)
   system_variants:

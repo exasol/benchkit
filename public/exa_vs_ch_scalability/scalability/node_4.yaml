@@ -81,7 +81,7 @@ workload:
   scale_factor: 30
   runs_per_query: 5
   warmup_runs: 1
-  data_format: "csv"
+  data_format: "tbl"
   generator: "dbgen"
   system_variants:
     clickhouse: "tuned"

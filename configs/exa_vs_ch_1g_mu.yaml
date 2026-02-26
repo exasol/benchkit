@@ -76,7 +76,7 @@ workload:
   scale_factor: 1               # 1GB dataset for test
   runs_per_query: 7             # Number of measured runs
   warmup_runs: 1                # Warmup runs before measurement
-  data_format: "csv"            # csv or parquet
+  data_format: "tbl"            # tbl or parquet
   generator: "dbgen"
   multiuser:
     enabled: true

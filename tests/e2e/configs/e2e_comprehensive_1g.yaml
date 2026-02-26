@@ -182,7 +182,7 @@ workload:
   scale_factor: 1           # 1GB - minimal for E2E testing
   runs_per_query: 2         # 2 runs - enough to verify execution
   warmup_runs: 1            # 1 warmup run
-  data_format: "csv"
+  data_format: "tbl"
   generator: "dbgen"
   # Test query variants: tuned queries for ClickHouse multinode
   system_variants:

@@ -15,7 +15,7 @@ workload:
   scale_factor: 25
   runs_per_query: 5
   warmup_runs: 1
-  data_format: csv
+  data_format: tbl
   generator: dbgen
   multiuser:
     enabled: true
