@@ -1,0 +1,9 @@
+{
+  "system_name": "clickhouse",
+  "connection_info": {
+    "public_ip": "54.154.1.197",
+    "private_ip": "10.0.1.36"
+  },
+  "installation_s": 30.560474832000182,
+  "timestamp": "2026-01-19T16:42:36.681736"
+}
