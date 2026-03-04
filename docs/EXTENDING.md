@@ -916,6 +916,6 @@ benchkit suite publish ./my-suite --output docs/
 # single_node_only: DuckDB
 ```
 
-See [configs/extended_scalability/](../configs/extended_scalability/) for a comprehensive real-world example.
+See [public/scalability/](../public/scalability/) for a comprehensive real-world example.
 
 This extensible design allows the framework to grow and adapt to new requirements while maintaining consistency and reliability across all components.

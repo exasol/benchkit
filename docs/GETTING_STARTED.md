@@ -514,7 +514,7 @@ infrastructure:
   cleanup_after_each: true
 ```
 
-See [configs/extended_scalability/](../configs/extended_scalability/) for a comprehensive example.
+See [public/scalability/](../public/scalability/) for a comprehensive example.
 
 ## Configuration Guide
 
@@ -1415,8 +1415,8 @@ benchkit run --config configs/my_benchmark.yaml \
 ### Multi-Dimensional Scalability Study
 
 ```bash
-# Use the extended scalability suite for comprehensive testing
-cd configs/extended_scalability
+# Use the scalability suite for comprehensive testing
+cd public/scalability
 
 # Preview the execution plan
 benchkit suite run . --dry-run
@@ -1431,7 +1431,7 @@ benchkit suite run . --resume
 benchkit suite status .
 
 # Generate comparison dashboard
-benchkit suite publish . --output ../../docs/scalability_results
+benchkit suite publish . --output results/scalability_dashboard
 ```
 
 ### Creating a Custom Suite

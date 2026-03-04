@@ -48,8 +48,9 @@ benchkit/
 │   └── common/                # Shared utilities and markers
 ├── templates/                 # Jinja2 templates for reports
 │   └── suite_publish/         # Static dashboard templates
-├── configs/                   # Benchmark configurations
-│   └── extended_scalability/  # Example benchmark suite
+├── public/                    # Published suites and benchmark results
+│   ├── performance/           # Community performance benchmark suite
+│   └── scalability/           # Scalability study suite
 ├── infra/aws/                 # AWS Terraform templates (source)
 ├── workloads/tpch/            # TPC-H queries and schemas
 └── results/                   # Generated results (auto-created)

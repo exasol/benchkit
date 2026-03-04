@@ -106,9 +106,9 @@ benchkit suite publish ./my-benchmark-suite/
 benchkit/
 ├── benchkit/                  # Core framework
 ├── public/                    # Published suites and community contributions
-│   ├── performance/           # Primary community contribution suite
-│   ├── extended_scalability/  # Extended scalability study
-│   └── ...                    # Other benchmark suites
+│   ├── performance/           # Community performance benchmark suite
+│   ├── scalability/           # Scalability study suite
+│   └── ...                    # Other benchmark data
 ├── configs/                   # Operational/dev benchmark configurations
 ├── docs/                      # Documentation
 └── results/                   # Generated results (auto-created)
@@ -192,8 +192,8 @@ my-suite/
 └── .benchkit/              # State directory (auto-managed)
 ```
 
-See [public/extended_scalability/](public/extended_scalability/) for a comprehensive example
-comparing 5 database systems across node scaling, data volume, and concurrency dimensions.
+See [public/scalability/](public/scalability/) for a comprehensive example
+comparing database systems across node scaling, data volume, and concurrency dimensions.
 
 ## Documentation
 
