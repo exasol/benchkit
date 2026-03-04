@@ -119,6 +119,7 @@ class SuiteConfig(BaseModel):
     homepage: str = ""
     keywords: list[str] = []
 
+    results_dir: str | None = None  # Path to results, relative to suite dir
     series: dict[str, SeriesConfig] = {}
     execution: SuiteExecutionConfig = SuiteExecutionConfig()
     infrastructure: SuiteInfrastructureConfig = SuiteInfrastructureConfig()
@@ -405,6 +406,16 @@ class SuiteRunner:
         self.config = config
         self.state_manager = SuiteStateManager(suite_path)
         self._discovered_configs: dict[str, list[Path]] = {}
+
+    def _resolve_results_dir(self, project_id: str) -> Path:
+        """Resolve results directory for a project.
+
+        If results_dir is configured, resolves relative to suite directory.
+        Otherwise falls back to CWD-relative ``results/`` for backward compatibility.
+        """
+        if self.config.results_dir:
+            return self.suite_path / self.config.results_dir / project_id
+        return Path("results") / project_id
 
     def discover_configs(
         self, series_filter: str | None = None, include_disabled: bool = False
@@ -949,7 +960,7 @@ class SuiteRunner:
                     except Exception:
                         project_id = config_path.stem
 
-                runs_csv = Path("results") / project_id / "runs.csv"
+                runs_csv = self._resolve_results_dir(project_id) / "runs.csv"
                 if runs_csv.exists():
                     bench_state.status = "completed"
                     bench_state.error = None
@@ -1289,7 +1300,7 @@ class SuiteRunner:
         run_timestamp = time.strftime("%Y-%m-%dT%H-%M-%S")
         suite_slug = self._slugify(self.config.name)
         log_dir = (
-            PROJECT_ROOT / "results" / suite_slug / "logs" / f"run_{run_timestamp}"
+            self._resolve_results_dir(suite_slug) / "logs" / f"run_{run_timestamp}"
         ).resolve()
 
         executor = SuiteParallelExecutor(
@@ -1378,9 +1389,7 @@ class SuiteRunner:
             )
 
             log_dir = (
-                PROJECT_ROOT
-                / "results"
-                / suite_slug
+                self._resolve_results_dir(suite_slug)
                 / "logs"
                 / f"run_{run_timestamp}"
                 / series_name
@@ -1487,7 +1496,7 @@ class SuiteRunner:
                     return False
 
             project_id = cfg.get("project_id", config_path.stem)
-            outdir = Path("results") / project_id
+            outdir = self._resolve_results_dir(project_id)
             outdir.mkdir(parents=True, exist_ok=True)
 
             runner = BenchmarkRunner(cfg, outdir, log_callback=log_callback)
@@ -1867,7 +1876,7 @@ class SuiteRunner:
 
                 # Get actual status from results directory
                 status_info = self._get_benchmark_status(config_path, verbose)
-                results_dir = Path("results") / project_id
+                results_dir = self._resolve_results_dir(project_id)
                 has_run_results = (results_dir / "runs.csv").exists()
 
                 if has_run_results:
@@ -1984,7 +1993,7 @@ class SuiteRunner:
             return result
 
         project_id = cfg.get("project_id", config_path.stem)
-        results_dir = Path("results") / project_id
+        results_dir = self._resolve_results_dir(project_id)
         systems = cfg.get("systems", [])
         system_names = [s["name"] for s in systems]
 
@@ -1994,7 +2003,7 @@ class SuiteRunner:
             has_managed = is_any_system_managed_mode(cfg)
 
             if has_cloud:
-                tf_base = PROJECT_ROOT / "results" / project_id / "terraform"
+                tf_base = results_dir / "terraform"
 
                 # Collect all terraform state files:
                 # - Shared state: terraform/terraform.tfstate (non-sequential mode)
@@ -2424,7 +2433,7 @@ class SuiteRunner:
                     new_status = "skipped"
                 else:
                     # Check if runs.csv exists (indicates run phase completed)
-                    results_dir = Path("results") / project_id
+                    results_dir = self._resolve_results_dir(project_id)
                     runs_csv = results_dir / "runs.csv"
                     has_run_results = runs_csv.exists()
 
@@ -2561,7 +2570,7 @@ class SuiteRunner:
 
         for bench_state in completed_benchmarks:
             config_path = Path(bench_state.config_path)
-            results_dir = Path("results") / bench_state.project_id
+            results_dir = self._resolve_results_dir(bench_state.project_id)
 
             if not results_dir.exists():
                 console.print(
@@ -2609,7 +2618,7 @@ class SuiteRunner:
         sources: list[SourceSpec] = []
         for bench_state in completed_benchmarks:
             config_path = Path(bench_state.config_path)
-            results_dir = Path("results") / bench_state.project_id
+            results_dir = self._resolve_results_dir(bench_state.project_id)
 
             if not results_dir.exists():
                 continue

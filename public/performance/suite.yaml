@@ -2,6 +2,7 @@ name: "Performance Benchmarks"
 version: "2.0.0"
 description: "Community-contributed database performance benchmarks"
 author: "Benchkit Community"
+results_dir: "results"
 
 series:
   tpch:
