@@ -121,21 +121,13 @@ body {
 
         var newRel = null;
 
-        // Rule 1: /scalability/... → /public/exa_vs_ch_scalability/...
+        // Rule 1: /scalability/... → /public/archive/scalability/...
         if (/^\/scalability(\/|$)/.test(rel)) {
-            newRel = '/public/exa_vs_ch_scalability' + rel.slice('/scalability'.length);
+            newRel = '/public/archive/scalability' + rel.slice('/scalability'.length);
         }
         // Rule 2: /exa_vs_ch_{size}/... → /public/comparisons/exa_vs_ch_{size}/...
         else if (/^\/exa_vs_ch_\w+/.test(rel)) {
             newRel = '/public/comparisons' + rel;
-        }
-        // Rule 3: /extended_scalability/... → /public/extended_scalability/...
-        else if (/^\/extended_scalability(\/|$)/.test(rel)) {
-            newRel = '/public' + rel;
-        }
-        // Rule 4: /starrocks/... → /public/starrocks/...
-        else if (/^\/starrocks(\/|$)/.test(rel)) {
-            newRel = '/public' + rel;
         }
 
         if (newRel) {
@@ -160,10 +152,7 @@ body {
         <p>The page you're looking for may have moved. Try one of these:</p>
         <ul class="links">
             <li><a href="/benchkit/public/">Results Portal</a> &mdash; all benchmark suites</li>
-            <li><a href="/benchkit/public/comparisons/">Exasol vs ClickHouse</a> &mdash; head-to-head comparisons</li>
-            <li><a href="/benchkit/public/exa_vs_ch_scalability/">Scalability Study</a> &mdash; node, concurrency, multi-variant</li>
-            <li><a href="/benchkit/public/extended_scalability/">Extended Scalability</a> &mdash; comprehensive scaling tests</li>
-            <li><a href="/benchkit/public/starrocks/">Exasol vs StarRocks</a> &mdash; StarRocks comparisons</li>
+            <li><a href="/benchkit/public/scalability/">Scalability</a> &mdash; node, data volume, and concurrency scaling</li>
             <li><a href="https://github.com/exasol/benchkit">GitHub Repository</a> &mdash; source code &amp; documentation</li>
         </ul>
     </div>
