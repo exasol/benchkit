@@ -588,6 +588,17 @@ class ReportRenderer:
                 continue
             preparation_timings[system_name] = load_json(load_file)
 
+        # Ensure backward compatibility with older result files
+        for timings in preparation_timings.values():
+            timings.setdefault(
+                "total_preparation_s",
+                timings.get("data_generation_s", 0)
+                + timings.get("schema_creation_s", 0)
+                + timings.get("data_loading_s", 0),
+            )
+            timings.setdefault("total_raw_bytes", 0)
+            timings.setdefault("total_stored_bytes", 0)
+
         return preparation_timings
 
     def _load_infrastructure_timings(self, results_dir: Path) -> dict[str, Any]:
