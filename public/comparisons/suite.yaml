@@ -1,6 +1,7 @@
 name: "Database Comparisons"
 version: "1.0.0"
 description: "Head-to-head database comparison benchmarks"
+results_dir: "results"
 
 series:
   exasol_vs_clickhouse:

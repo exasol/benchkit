@@ -168,3 +168,11 @@ public/**/.benchkit/
 /*.yaml
 /*.md
 !README.md
+
+# Comparisons box (Exasol vs ClickHouse 2026) — mirror the performance-box exceptions
+# so the entry data (runs.csv + *.json) is tracked; keep the duplicate per-entry
+# reports/ subdir ignored (the site uses the self-contained top-level reports/).
+!public/comparisons/results/
+!public/comparisons/results/**/*.csv
+public/comparisons/results/*/reports/
+public/comparisons/results/*/figures/

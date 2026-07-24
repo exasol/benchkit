@@ -1,0 +1,1669 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="auto">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Database Comparison Results - Benchmark Suite Results Dashboard">
+    <title>Database Comparison Results | Benchmark Dashboard</title>
+    <link rel="stylesheet" href="assets/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+</head>
+<body>
+    <div class="dashboard">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="header-title">
+                    <h1>Database Comparison Results</h1>
+                    <p class="header-description">Head-to-head database comparison benchmarks</p>
+                </div>
+                <div class="header-meta">
+                    <span class="meta-badge">
+                        <strong>2</strong> benchmarks
+                    </span>
+                    <span class="meta-badge">
+                        v1.0.0
+                    </span>
+                    <span class="meta-badge meta-date">
+                        Generated: <time datetime="2026-06-23T14:07:31.710936+00:00">2026-06-23</time>
+                    </span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Filters Section -->
+        <section class="filters-section">
+            <div class="filters-header">
+                <h2>Filters</h2>
+                <button class="btn btn-outline" id="reset-filters">Reset All</button>
+            </div>
+            <div class="filters-grid">
+                <!-- Series Filter -->
+                <div class="filter-group" data-dimension="series">
+                    <label>Series</label>
+                    <div class="filter-chips" id="series-chips">
+                        <button class="chip active" data-value="Exasol vs ClickHouse">Exasol vs ClickHouse</button>
+                    </div>
+                </div>
+
+                <!-- Systems Filter -->
+                <div class="filter-group" data-dimension="systems">
+                    <label>Systems</label>
+                    <div class="filter-chips" id="systems-chips">
+                        <button class="chip active" data-value="clickhouse_25_10">clickhouse_25_10</button>
+                        <button class="chip active" data-value="clickhouse_26_4">clickhouse_26_4</button>
+                        <button class="chip active" data-value="exasol">exasol</button>
+                    </div>
+                </div>
+
+                <!-- Node Count Filter -->
+
+                <!-- Stream Count Filter -->
+
+                <!-- Scale Factor Filter -->
+                <div class="filter-group" data-dimension="scaleFactor">
+                    <label>Scale Factor</label>
+                    <div class="filter-chips" id="sf-chips">
+                        <button class="chip active" data-value="30">SF30</button>
+                        <button class="chip active" data-value="100">SF100</button>
+                    </div>
+                </div>
+
+                <!-- Metric & Scale -->
+                <div class="filter-group filter-group-metric-scale" data-dimension="metric">
+                    <label>Metric / Scale</label>
+                    <div class="metric-scale-row">
+                        <div class="metric-toggles" id="metric-toggles">
+                            <button class="toggle" data-metric="median">Median</button>
+                            <button class="toggle" data-metric="avg">Average</button>
+                            <button class="toggle active" data-metric="geomean">Geomean</button>
+                            <button class="toggle" data-metric="total">Total</button>
+                        </div>
+                        <button class="scale-toggle" id="scale-toggle" data-log="true">
+                            <span class="scale-log">Log</span>
+                            <span class="scale-linear">Linear</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Stats Cards -->
+        <section class="stats-section">
+            <div class="stats-cards">
+                <div class="stat-card">
+                    <span class="stat-value" id="stat-benchmarks">2</span>
+                    <span class="stat-label">Benchmarks</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-value" id="stat-queries">-</span>
+                    <span class="stat-label">Query Executions</span>
+                </div>
+                <div class="stat-card stat-winner">
+                    <span class="stat-value" id="stat-fastest">-</span>
+                    <span class="stat-label">Fastest Overall</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-value" id="stat-speedup">-</span>
+                    <span class="stat-label">Max Speedup</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Charts Section -->
+        <section class="charts-section">
+            <!-- Scaling Charts — only render visible ones -->
+            <div class="chart-row chart-row-1">
+
+
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3>Scaling by Scale Factor</h3>
+                        <p class="chart-description">Performance vs data size</p>
+                    </div>
+                    <div id="scaling-by-sf" class="chart"></div>
+                </div>
+            </div>
+
+            <!-- Primary Charts (full width) -->
+            <div class="chart-container full-width">
+                <div class="chart-header">
+                    <h3>System Comparison Across Benchmarks</h3>
+                    <p class="chart-description">Runtime comparison for each benchmark configuration</p>
+                </div>
+                <div id="comparison-chart" class="chart"></div>
+            </div>
+
+            <!-- Secondary Charts -->
+            <div class="chart-row chart-row-1">
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3>Performance Heatmap</h3>
+                        <p class="chart-description">Query performance matrix (green=fast, red=slow)</p>
+                    </div>
+                    <div id="heatmap-chart" class="chart"></div>
+                    <div class="heatmap-controls">
+                        <label>Benchmark:</label>
+                        <select id="heatmap-benchmark-select"></select>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Tertiary Charts -->
+            <div class="chart-row chart-row-1">
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3>Query Performance by Query</h3>
+                        <p class="chart-description">Individual query runtimes (hover for details)</p>
+                    </div>
+                    <div id="query-scatter-chart" class="chart"></div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- Benchmark Table -->
+        <section class="table-section">
+            <div class="table-header">
+                <h2>Benchmark Results</h2>
+                <span class="table-count" id="table-count">Showing all benchmarks</span>
+            </div>
+            <div class="table-wrapper">
+                <table class="benchmark-table" id="benchmark-table">
+                    <thead>
+                        <tr>
+                            <th>Benchmark</th>
+                            <th>Scale Factor</th>
+                            <th>Systems</th>
+                            <th>Winner</th>
+                            <th>Speedup</th>
+                            <th>Report</th>
+                        </tr>
+                    </thead>
+                    <tbody id="benchmark-tbody">
+                        <!-- Populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Generated by <a href="https://github.com/exasol/benchkit" target="_blank">BenchKit</a></p>
+            <p class="footer-date">2026-06-23T14:07:31.710936+00:00</p>
+        </footer>
+    </div>
+
+    <!-- Embedded Data -->
+    <script type="application/json" id="benchmark-data">
+    {
+  "meta": {
+    "suite_name": "Database Comparisons",
+    "suite_version": "1.0.0",
+    "suite_description": "Head-to-head database comparison benchmarks",
+    "generated_at": "2026-06-23T14:07:31.710936+00:00",
+    "total_benchmarks": 2
+  },
+  "filters": {
+    "series": [
+      "Exasol vs ClickHouse"
+    ],
+    "systems": [
+      "clickhouse_25_10",
+      "clickhouse_26_4",
+      "exasol"
+    ],
+    "workloads": [
+      "tpch"
+    ],
+    "scale_factors": [
+      30,
+      100
+    ],
+    "node_counts": [
+      1
+    ],
+    "stream_counts": [
+      1
+    ]
+  },
+  "benchmarks": [
+    {
+      "id": "exasol_vs_clickhouse/exa_vs_ch_2026_100g",
+      "series": "Exasol vs ClickHouse",
+      "config": "exa_vs_ch_2026_100g",
+      "project_id": "exa_vs_ch_2026_100g",
+      "workload": "tpch",
+      "scale_factor": 100,
+      "node_count": 1,
+      "stream_count": 1,
+      "environment": "aws",
+      "instance_type": "r6id.8xlarge",
+      "run_date": "2026-06-22 13:33:37",
+      "report_url": "reports/exasol_vs_clickhouse/exa_vs_ch_2026_100g/REPORT.html",
+      "systems": [
+        {
+          "name": "clickhouse_25_10",
+          "kind": "clickhouse",
+          "version": "25.10.2.65",
+          "node_count": 1,
+          "median_ms": 2876.5,
+          "avg_ms": 6683.19,
+          "geomean_ms": 2471.66,
+          "total_ms": 147921.7,
+          "min_ms": 213.9,
+          "max_ms": 62675.1,
+          "query_count": 22,
+          "bench_score": 25.3,
+          "success_rate": 100.0
+        },
+        {
+          "name": "clickhouse_26_4",
+          "kind": "clickhouse",
+          "version": "26.4.4.38",
+          "node_count": 1,
+          "median_ms": 1500.05,
+          "avg_ms": 5110.8,
+          "geomean_ms": 1353.55,
+          "total_ms": 112438.3,
+          "min_ms": 144.6,
+          "max_ms": 77884.5,
+          "query_count": 22,
+          "bench_score": 38.5,
+          "success_rate": 100.0
+        },
+        {
+          "name": "exasol",
+          "kind": "exasol",
+          "version": "2026.1.0",
+          "node_count": 1,
+          "median_ms": 254.25,
+          "avg_ms": 319.91,
+          "geomean_ms": 193.85,
+          "total_ms": 7024.1,
+          "min_ms": 26.9,
+          "max_ms": 1134.4,
+          "query_count": 22,
+          "bench_score": 406.9,
+          "success_rate": 100.0
+        }
+      ],
+      "queries": {
+        "Q01": {
+          "clickhouse_25_10": {
+            "median": 2798.0,
+            "avg": 2820.54,
+            "min": 2711.6,
+            "max": 2992.0,
+            "std": 102.48,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 2522.3,
+            "avg": 2533.46,
+            "min": 2507.2,
+            "max": 2618.9,
+            "std": 30.01,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 809.4,
+            "avg": 807.32,
+            "min": 799.7,
+            "max": 811.9,
+            "std": 3.95,
+            "count": 15,
+            "success_rate": 100.0
+          }
+        },
+        "Q02": {
+          "clickhouse_25_10": {
+            "median": 1292.5,
+            "avg": 1297.6,
+            "min": 1247.5,
+            "max": 1373.3,
+            "std": 34.36,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 4042.5,
+            "avg": 4047.55,
+            "min": 3873.4,
+            "max": 4451.2,
+            "std": 124.43,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 78.6,
+            "avg": 78.65,
+            "min": 76.6,
+            "max": 80.1,
+            "std": 1.12,
+            "count": 15,
+            "success_rate": 100.0
+          }
+        },
+        "Q03": {
+          "clickhouse_25_10": {
+            "median": 4941.7,
+            "avg": 4970.59,
+            "min": 4801.5,
+            "max": 5324.0,
+            "std": 145.63,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 1400.8,
+            "avg": 1403.79,
+            "min": 1393.8,
+            "max": 1421.1,
+            "std": 8.7,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 354.8,
+            "avg": 358.97,
+            "min": 351.8,
+            "max": 389.0,
+            "std": 9.61,
+            "count": 15,
+            "success_rate": 100.0
+          }
+        },
+        "Q04": {
+          "clickhouse_25_10": {
+            "median": 2632.7,
+            "avg": 2638.72,
+            "min": 2467.2,
+            "max": 2796.0,
+            "std": 100.31,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 1580.8,
+            "avg": 1581.52,
+            "min": 1569.5,
+            "max": 1595.5,
+            "std": 5.92,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 62.4,
+            "avg": 62.51,
+            "min": 61.4,
+            "max": 64.6,
+            "std": 0.77,
+            "count": 15,
+            "success_rate": 100.0
+          }
+        },
+        "Q05": {
+          "clickhouse_25_10": {
+            "median": 12833.6,
+            "avg": 12719.9,
+            "min": 11604.8,
+            "max": 13437.2,
+            "std": 612.15,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 1771.9,
+            "avg": 1776.77,
+            "min": 1764.7,
+            "max": 1817.9,
+            "std": 15.21,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 221.9,
+            "avg": 222.03,
+            "min": 219.7,
+            "max": 224.4,
+            "std": 1.56,
+            "count": 15,
+            "success_rate": 100.0
+          }
+        },
+        "Q06": {
+          "clickhouse_25_10": {
+            "median": 217.6,
+            "avg": 220.03,
+            "min": 213.9,
+            "max": 233.7,
+            "std": 5.68,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 145.4,
+            "avg": 145.78,
+            "min": 144.6,
+            "max": 148.9,
+            "std": 1.15,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 43.0,
+            "avg": 42.99,
+            "min": 42.2,
+            "max": 43.9,
+            "std": 0.44,
+            "count": 15,
+            "success_rate": 100.0
+          }
+        },
+        "Q07": {
+          "clickhouse_25_10": {
+            "median": 5390.3,
+            "avg": 5361.91,
+            "min": 5071.9,
+            "max": 5745.6,
+            "std": 223.91,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 1108.7,
+            "avg": 1114.39,
+            "min": 1097.2,
+            "max": 1152.8,
+            "std": 16.09,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 291.3,
+            "avg": 290.85,
+            "min": 284.1,
+            "max": 294.9,
+            "std": 2.69,
+            "count": 15,
+            "success_rate": 100.0
+          }
+        },
+        "Q08": {
+          "clickhouse_25_10": {
+            "median": 10068.0,
+            "avg": 10074.7,
+            "min": 9297.1,
+            "max": 10971.1,
+            "std": 452.03,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 1621.3,
+            "avg": 1624.03,
+            "min": 1611.8,
+            "max": 1636.2,
+            "std": 8.01,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 81.0,
+            "avg": 80.87,
+            "min": 79.4,
+            "max": 82.2,
+            "std": 0.9,
+            "count": 15,
+            "success_rate": 100.0
+          }
+        },
+        "Q09": {
+          "clickhouse_25_10": {
+            "median": 17520.0,
+            "avg": 17405.53,
+            "min": 14629.1,
+            "max": 18591.3,
+            "std": 1147.59,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 5223.4,
+            "avg": 5222.25,
+            "min": 5181.0,
+            "max": 5264.7,
+            "std": 25.0,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 1022.9,
+            "avg": 1031.1,
+            "min": 1018.5,
+            "max": 1134.4,
+            "std": 29.01,
+            "count": 15,
+            "success_rate": 100.0
+          }
+        },
+        "Q10": {
+          "clickhouse_25_10": {
+            "median": 3457.4,
+            "avg": 3423.88,
+            "min": 3235.1,
+            "max": 3590.5,
+            "std": 118.48,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 2360.4,
+            "avg": 2364.39,
+            "min": 2347.0,
+            "max": 2393.5,
+            "std": 14.29,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 590.9,
+            "avg": 591.58,
+            "min": 583.5,
+            "max": 603.9,
+            "std": 5.67,
+            "count": 15,
+            "success_rate": 100.0
+          }
+        },
+        "Q11": {
+          "clickhouse_25_10": {
+            "median": 675.8,
+            "avg": 682.65,
+            "min": 653.4,
+            "max": 740.0,
+            "std": 26.33,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 436.8,
+            "avg": 432.98,
+            "min": 387.8,
+            "max": 471.6,
+            "std": 24.13,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 156.5,
+            "avg": 155.91,
+            "min": 148.2,
+            "max": 161.8,
+            "std": 3.88,
+            "count": 15,
+            "success_rate": 100.0
+          }
+        },
+        "Q12": {
+          "clickhouse_25_10": {
+            "median": 851.9,
+            "avg": 850.29,
+            "min": 830.2,
+            "max": 870.6,
+            "std": 13.35,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 802.1,
+            "avg": 805.67,
+            "min": 797.7,
+            "max": 828.7,
+            "std": 9.63,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 86.2,
+            "avg": 86.26,
+            "min": 84.6,
+            "max": 88.6,
+            "std": 1.09,
+            "count": 15,
+            "success_rate": 100.0
+          }
+        },
+        "Q13": {
+          "clickhouse_25_10": {
+            "median": 5880.4,
+            "avg": 5883.9,
+            "min": 5644.2,
+            "max": 6127.9,
+            "std": 159.91,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 2107.8,
+            "avg": 2125.65,
+            "min": 2089.8,
+            "max": 2273.8,
+            "std": 47.64,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 697.1,
+            "avg": 698.4,
+            "min": 692.3,
+            "max": 712.6,
+            "std": 5.57,
+            "count": 15,
+            "success_rate": 100.0
+          }
+        },
+        "Q14": {
+          "clickhouse_25_10": {
+            "median": 263.3,
+            "avg": 263.03,
+            "min": 253.7,
+            "max": 274.4,
+            "std": 6.27,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 202.1,
+            "avg": 204.84,
+            "min": 200.5,
+            "max": 219.2,
+            "std": 6.44,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 87.8,
+            "avg": 87.99,
+            "min": 85.5,
+            "max": 91.1,
+            "std": 1.52,
+            "count": 15,
+            "success_rate": 100.0
+          }
+        },
+        "Q15": {
+          "clickhouse_25_10": {
+            "median": 394.8,
+            "avg": 400.36,
+            "min": 379.2,
+            "max": 445.3,
+            "std": 20.05,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 320.6,
+            "avg": 319.41,
+            "min": 282.9,
+            "max": 346.8,
+            "std": 18.01,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 391.4,
+            "avg": 401.18,
+            "min": 375.7,
+            "max": 464.2,
+            "std": 26.25,
+            "count": 15,
+            "success_rate": 100.0
+          }
+        },
+        "Q16": {
+          "clickhouse_25_10": {
+            "median": 524.6,
+            "avg": 523.52,
+            "min": 478.5,
+            "max": 549.6,
+            "std": 16.66,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 422.7,
+            "avg": 422.78,
+            "min": 403.9,
+            "max": 437.4,
+            "std": 7.92,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 471.8,
+            "avg": 471.29,
+            "min": 459.2,
+            "max": 478.9,
+            "std": 4.86,
+            "count": 15,
+            "success_rate": 100.0
+          }
+        },
+        "Q17": {
+          "clickhouse_25_10": {
+            "median": 8405.3,
+            "avg": 8410.84,
+            "min": 8175.5,
+            "max": 8619.0,
+            "std": 130.84,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 1489.2,
+            "avg": 1490.87,
+            "min": 1481.6,
+            "max": 1507.6,
+            "std": 8.22,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 30.3,
+            "avg": 30.27,
+            "min": 29.3,
+            "max": 31.0,
+            "std": 0.43,
+            "count": 15,
+            "success_rate": 100.0
+          }
+        },
+        "Q18": {
+          "clickhouse_25_10": {
+            "median": 7670.3,
+            "avg": 7646.83,
+            "min": 7334.6,
+            "max": 7975.9,
+            "std": 178.83,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 5577.8,
+            "avg": 5576.36,
+            "min": 5509.7,
+            "max": 5674.8,
+            "std": 39.67,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 661.9,
+            "avg": 663.7,
+            "min": 652.2,
+            "max": 691.9,
+            "std": 10.6,
+            "count": 15,
+            "success_rate": 100.0
+          }
+        },
+        "Q19": {
+          "clickhouse_25_10": {
+            "median": 2902.6,
+            "avg": 2926.16,
+            "min": 2796.1,
+            "max": 3065.7,
+            "std": 75.11,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 1507.3,
+            "avg": 1512.27,
+            "min": 1498.3,
+            "max": 1537.5,
+            "std": 13.52,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 27.3,
+            "avg": 27.25,
+            "min": 26.9,
+            "max": 27.5,
+            "std": 0.19,
+            "count": 15,
+            "success_rate": 100.0
+          }
+        },
+        "Q20": {
+          "clickhouse_25_10": {
+            "median": 617.9,
+            "avg": 618.15,
+            "min": 595.4,
+            "max": 650.1,
+            "std": 15.72,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 457.1,
+            "avg": 459.45,
+            "min": 450.9,
+            "max": 484.1,
+            "std": 8.05,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 324.2,
+            "avg": 308.29,
+            "min": 285.8,
+            "max": 327.3,
+            "std": 19.58,
+            "count": 15,
+            "success_rate": 100.0
+          }
+        },
+        "Q21": {
+          "clickhouse_25_10": {
+            "median": 57752.3,
+            "avg": 57043.34,
+            "min": 47777.5,
+            "max": 62675.1,
+            "std": 4280.16,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 76654.9,
+            "avg": 76592.77,
+            "min": 75853.5,
+            "max": 77884.5,
+            "std": 502.35,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 441.2,
+            "avg": 448.64,
+            "min": 436.1,
+            "max": 565.9,
+            "std": 32.52,
+            "count": 15,
+            "success_rate": 100.0
+          }
+        },
+        "Q22": {
+          "clickhouse_25_10": {
+            "median": 830.7,
+            "avg": 847.65,
+            "min": 776.0,
+            "max": 954.4,
+            "std": 49.71,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 682.4,
+            "avg": 680.59,
+            "min": 621.1,
+            "max": 719.2,
+            "std": 25.1,
+            "count": 15,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 92.2,
+            "avg": 92.09,
+            "min": 91.0,
+            "max": 93.2,
+            "std": 0.69,
+            "count": 15,
+            "success_rate": 100.0
+          }
+        }
+      }
+    },
+    {
+      "id": "exasol_vs_clickhouse/exa_vs_ch_2026_30g",
+      "series": "Exasol vs ClickHouse",
+      "config": "exa_vs_ch_2026_30g",
+      "project_id": "exa_vs_ch_2026_30g",
+      "workload": "tpch",
+      "scale_factor": 30,
+      "node_count": 1,
+      "stream_count": 1,
+      "environment": "aws",
+      "instance_type": "r5d.4xlarge",
+      "run_date": "2026-06-21 17:44:34",
+      "report_url": "reports/exasol_vs_clickhouse/exa_vs_ch_2026_30g/REPORT.html",
+      "systems": [
+        {
+          "name": "clickhouse_25_10",
+          "kind": "clickhouse",
+          "version": "25.10.2.65",
+          "node_count": 1,
+          "median_ms": 1611.6,
+          "avg_ms": 2815.68,
+          "geomean_ms": 1164.01,
+          "total_ms": 61905.2,
+          "min_ms": 119.8,
+          "max_ms": 21538.9,
+          "query_count": 22,
+          "bench_score": 16.8,
+          "success_rate": 100.0
+        },
+        {
+          "name": "clickhouse_26_4",
+          "kind": "clickhouse",
+          "version": "26.4.4.38",
+          "node_count": 1,
+          "median_ms": 941.65,
+          "avg_ms": 2383.58,
+          "geomean_ms": 811.91,
+          "total_ms": 52586.7,
+          "min_ms": 111.7,
+          "max_ms": 32486.7,
+          "query_count": 22,
+          "bench_score": 21.9,
+          "success_rate": 100.0
+        },
+        {
+          "name": "exasol",
+          "kind": "exasol",
+          "version": "2026.1.0",
+          "node_count": 1,
+          "median_ms": 183.25,
+          "avg_ms": 233.64,
+          "geomean_ms": 144.0,
+          "total_ms": 5123.2,
+          "min_ms": 22.3,
+          "max_ms": 769.4,
+          "query_count": 22,
+          "bench_score": 165.9,
+          "success_rate": 100.0
+        }
+      ],
+      "queries": {
+        "Q01": {
+          "clickhouse_25_10": {
+            "median": 1634.9,
+            "avg": 1637.09,
+            "min": 1624.5,
+            "max": 1653.2,
+            "std": 10.83,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 1441.7,
+            "avg": 1453.31,
+            "min": 1417.6,
+            "max": 1502.4,
+            "std": 33.36,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 623.2,
+            "avg": 623.69,
+            "min": 621.8,
+            "max": 626.4,
+            "std": 1.48,
+            "count": 7,
+            "success_rate": 100.0
+          }
+        },
+        "Q02": {
+          "clickhouse_25_10": {
+            "median": 595.7,
+            "avg": 609.51,
+            "min": 592.4,
+            "max": 660.6,
+            "std": 25.01,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 1263.8,
+            "avg": 1273.64,
+            "min": 1232.9,
+            "max": 1346.9,
+            "std": 36.8,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 54.4,
+            "avg": 54.41,
+            "min": 52.2,
+            "max": 56.2,
+            "std": 1.41,
+            "count": 7,
+            "success_rate": 100.0
+          }
+        },
+        "Q03": {
+          "clickhouse_25_10": {
+            "median": 2471.8,
+            "avg": 2485.24,
+            "min": 2431.9,
+            "max": 2540.2,
+            "std": 36.48,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 846.2,
+            "avg": 846.09,
+            "min": 824.6,
+            "max": 867.7,
+            "std": 15.57,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 254.4,
+            "avg": 253.59,
+            "min": 250.6,
+            "max": 255.2,
+            "std": 1.75,
+            "count": 7,
+            "success_rate": 100.0
+          }
+        },
+        "Q04": {
+          "clickhouse_25_10": {
+            "median": 1221.2,
+            "avg": 1222.7,
+            "min": 1210.2,
+            "max": 1234.2,
+            "std": 8.52,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 1021.9,
+            "avg": 1028.73,
+            "min": 1015.6,
+            "max": 1080.8,
+            "std": 23.27,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 48.4,
+            "avg": 48.63,
+            "min": 48.1,
+            "max": 49.7,
+            "std": 0.53,
+            "count": 7,
+            "success_rate": 100.0
+          }
+        },
+        "Q05": {
+          "clickhouse_25_10": {
+            "median": 5475.7,
+            "avg": 5463.24,
+            "min": 5309.4,
+            "max": 5561.0,
+            "std": 90.4,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 1277.7,
+            "avg": 1277.6,
+            "min": 1262.6,
+            "max": 1299.3,
+            "std": 12.98,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 172.2,
+            "avg": 172.53,
+            "min": 171.5,
+            "max": 174.0,
+            "std": 0.84,
+            "count": 7,
+            "success_rate": 100.0
+          }
+        },
+        "Q06": {
+          "clickhouse_25_10": {
+            "median": 121.2,
+            "avg": 122.49,
+            "min": 119.8,
+            "max": 126.8,
+            "std": 2.7,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 114.9,
+            "avg": 115.07,
+            "min": 111.7,
+            "max": 119.4,
+            "std": 2.86,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 33.0,
+            "avg": 42.04,
+            "min": 32.5,
+            "max": 96.0,
+            "std": 23.8,
+            "count": 7,
+            "success_rate": 100.0
+          }
+        },
+        "Q07": {
+          "clickhouse_25_10": {
+            "median": 2825.6,
+            "avg": 2791.69,
+            "min": 2629.7,
+            "max": 2875.0,
+            "std": 81.49,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 701.7,
+            "avg": 715.56,
+            "min": 683.2,
+            "max": 820.4,
+            "std": 46.81,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 211.4,
+            "avg": 211.49,
+            "min": 209.7,
+            "max": 213.0,
+            "std": 1.34,
+            "count": 7,
+            "success_rate": 100.0
+          }
+        },
+        "Q08": {
+          "clickhouse_25_10": {
+            "median": 5720.4,
+            "avg": 5728.26,
+            "min": 5686.7,
+            "max": 5765.9,
+            "std": 31.18,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 1141.0,
+            "avg": 1139.0,
+            "min": 1120.3,
+            "max": 1158.1,
+            "std": 11.78,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 64.9,
+            "avg": 64.73,
+            "min": 63.3,
+            "max": 66.7,
+            "std": 1.27,
+            "count": 7,
+            "success_rate": 100.0
+          }
+        },
+        "Q09": {
+          "clickhouse_25_10": {
+            "median": 7774.5,
+            "avg": 7720.89,
+            "min": 7568.3,
+            "max": 7828.2,
+            "std": 101.28,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 2950.3,
+            "avg": 2951.97,
+            "min": 2916.4,
+            "max": 3001.7,
+            "std": 32.25,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 761.5,
+            "avg": 762.84,
+            "min": 759.2,
+            "max": 769.4,
+            "std": 3.79,
+            "count": 7,
+            "success_rate": 100.0
+          }
+        },
+        "Q10": {
+          "clickhouse_25_10": {
+            "median": 1626.3,
+            "avg": 1641.51,
+            "min": 1601.0,
+            "max": 1718.8,
+            "std": 41.8,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 1474.4,
+            "avg": 1480.16,
+            "min": 1463.5,
+            "max": 1503.8,
+            "std": 15.79,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 379.7,
+            "avg": 379.5,
+            "min": 371.4,
+            "max": 390.3,
+            "std": 6.15,
+            "count": 7,
+            "success_rate": 100.0
+          }
+        },
+        "Q11": {
+          "clickhouse_25_10": {
+            "median": 363.8,
+            "avg": 369.74,
+            "min": 361.0,
+            "max": 394.1,
+            "std": 11.76,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 238.0,
+            "avg": 242.17,
+            "min": 232.5,
+            "max": 260.0,
+            "std": 9.99,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 128.9,
+            "avg": 131.27,
+            "min": 124.2,
+            "max": 149.2,
+            "std": 8.37,
+            "count": 7,
+            "success_rate": 100.0
+          }
+        },
+        "Q12": {
+          "clickhouse_25_10": {
+            "median": 526.9,
+            "avg": 528.97,
+            "min": 514.3,
+            "max": 547.1,
+            "std": 12.94,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 501.4,
+            "avg": 505.79,
+            "min": 488.1,
+            "max": 526.4,
+            "std": 15.6,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 64.6,
+            "avg": 64.8,
+            "min": 64.3,
+            "max": 65.8,
+            "std": 0.57,
+            "count": 7,
+            "success_rate": 100.0
+          }
+        },
+        "Q13": {
+          "clickhouse_25_10": {
+            "median": 2426.6,
+            "avg": 2401.04,
+            "min": 2166.9,
+            "max": 2504.0,
+            "std": 112.8,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 1303.5,
+            "avg": 1285.21,
+            "min": 1235.3,
+            "max": 1338.7,
+            "std": 44.6,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 567.5,
+            "avg": 567.86,
+            "min": 564.8,
+            "max": 573.0,
+            "std": 2.66,
+            "count": 7,
+            "success_rate": 100.0
+          }
+        },
+        "Q14": {
+          "clickhouse_25_10": {
+            "median": 133.5,
+            "avg": 131.91,
+            "min": 122.8,
+            "max": 143.2,
+            "std": 7.62,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 133.9,
+            "avg": 133.91,
+            "min": 131.4,
+            "max": 136.1,
+            "std": 1.66,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 61.8,
+            "avg": 61.74,
+            "min": 60.9,
+            "max": 62.9,
+            "std": 0.8,
+            "count": 7,
+            "success_rate": 100.0
+          }
+        },
+        "Q15": {
+          "clickhouse_25_10": {
+            "median": 155.7,
+            "avg": 158.81,
+            "min": 152.5,
+            "max": 177.1,
+            "std": 8.56,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 164.9,
+            "avg": 177.6,
+            "min": 159.7,
+            "max": 221.0,
+            "std": 21.71,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 213.0,
+            "avg": 213.21,
+            "min": 205.0,
+            "max": 220.9,
+            "std": 4.72,
+            "count": 7,
+            "success_rate": 100.0
+          }
+        },
+        "Q16": {
+          "clickhouse_25_10": {
+            "median": 280.3,
+            "avg": 286.57,
+            "min": 275.6,
+            "max": 319.0,
+            "std": 14.85,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 292.8,
+            "avg": 293.64,
+            "min": 282.2,
+            "max": 316.3,
+            "std": 10.94,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 388.3,
+            "avg": 390.13,
+            "min": 376.8,
+            "max": 414.3,
+            "std": 11.99,
+            "count": 7,
+            "success_rate": 100.0
+          }
+        },
+        "Q17": {
+          "clickhouse_25_10": {
+            "median": 2633.7,
+            "avg": 2615.96,
+            "min": 2534.8,
+            "max": 2660.9,
+            "std": 42.41,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 847.0,
+            "avg": 848.99,
+            "min": 838.4,
+            "max": 865.6,
+            "std": 9.8,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 22.9,
+            "avg": 22.77,
+            "min": 22.3,
+            "max": 23.1,
+            "std": 0.3,
+            "count": 7,
+            "success_rate": 100.0
+          }
+        },
+        "Q18": {
+          "clickhouse_25_10": {
+            "median": 2570.6,
+            "avg": 2582.16,
+            "min": 2511.7,
+            "max": 2652.5,
+            "std": 50.67,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 2794.5,
+            "avg": 2812.77,
+            "min": 2758.3,
+            "max": 2887.3,
+            "std": 49.27,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 429.4,
+            "avg": 429.23,
+            "min": 427.4,
+            "max": 431.2,
+            "std": 1.25,
+            "count": 7,
+            "success_rate": 100.0
+          }
+        },
+        "Q19": {
+          "clickhouse_25_10": {
+            "median": 1585.6,
+            "avg": 1594.31,
+            "min": 1579.3,
+            "max": 1621.7,
+            "std": 18.27,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 1128.1,
+            "avg": 1126.71,
+            "min": 1109.7,
+            "max": 1148.0,
+            "std": 14.7,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 25.4,
+            "avg": 32.03,
+            "min": 24.4,
+            "max": 72.9,
+            "std": 18.04,
+            "count": 7,
+            "success_rate": 100.0
+          }
+        },
+        "Q20": {
+          "clickhouse_25_10": {
+            "median": 242.9,
+            "avg": 235.23,
+            "min": 219.7,
+            "max": 247.3,
+            "std": 13.04,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 313.5,
+            "avg": 316.14,
+            "min": 310.6,
+            "max": 327.9,
+            "std": 6.01,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 232.6,
+            "avg": 227.59,
+            "min": 192.5,
+            "max": 235.5,
+            "std": 15.51,
+            "count": 7,
+            "success_rate": 100.0
+          }
+        },
+        "Q21": {
+          "clickhouse_25_10": {
+            "median": 21041.8,
+            "avg": 21141.84,
+            "min": 20936.6,
+            "max": 21538.9,
+            "std": 205.64,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 32167.3,
+            "avg": 31969.24,
+            "min": 30912.3,
+            "max": 32486.7,
+            "std": 564.0,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 311.6,
+            "avg": 312.14,
+            "min": 310.4,
+            "max": 314.3,
+            "std": 1.52,
+            "count": 7,
+            "success_rate": 100.0
+          }
+        },
+        "Q22": {
+          "clickhouse_25_10": {
+            "median": 476.5,
+            "avg": 475.77,
+            "min": 467.1,
+            "max": 484.7,
+            "std": 7.31,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "clickhouse_26_4": {
+            "median": 468.2,
+            "avg": 445.39,
+            "min": 381.9,
+            "max": 490.1,
+            "std": 47.66,
+            "count": 7,
+            "success_rate": 100.0
+          },
+          "exasol": {
+            "median": 74.1,
+            "avg": 73.96,
+            "min": 73.3,
+            "max": 74.7,
+            "std": 0.48,
+            "count": 7,
+            "success_rate": 100.0
+          }
+        }
+      }
+    }
+  ],
+  "table_columns": [
+    {
+      "key": "benchmark",
+      "label": "Benchmark"
+    },
+    {
+      "key": "scale_factor",
+      "label": "Scale Factor"
+    },
+    {
+      "key": "systems",
+      "label": "Systems"
+    },
+    {
+      "key": "winner",
+      "label": "Winner"
+    },
+    {
+      "key": "speedup",
+      "label": "Speedup"
+    },
+    {
+      "key": "report",
+      "label": "Report"
+    }
+  ]
+}
+    </script>
+
+    <script src="assets/app.js"></script>
+</body>
+</html>

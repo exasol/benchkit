@@ -1,0 +1,71 @@
+project_id: exa_vs_ch_2026_100g
+title: "Exasol 2026.1 vs ClickHouse 25.10 vs 26.4 \u2014 TPC-H SF100"
+author: Oleksandr Kozachuk, Principal Architect at Exasol AG
+systems:
+- name: clickhouse_25_10
+  kind: clickhouse
+  version: 25.10.2.65
+  setup:
+    method: preinstalled
+    extra:
+      memory_limit: 230g
+      max_threads: '32'
+      max_memory_usage: '200000000000'
+      max_bytes_before_external_group_by: '100000000000'
+      max_bytes_before_external_sort: '100000000000'
+- name: clickhouse_26_4
+  kind: clickhouse
+  version: 26.4.4.38
+  setup:
+    method: preinstalled
+    extra:
+      clickhouse_settings:
+        use_top_k_dynamic_filtering: 1
+        use_skip_indexes_for_top_k: 1
+        optimize_aggregation_in_order: 1
+        query_plan_convert_join_to_in: 1
+        enable_join_runtime_filters: 1
+      memory_limit: 230g
+      max_threads: '32'
+      max_memory_usage: '200000000000'
+      max_bytes_before_external_group_by: '100000000000'
+      max_bytes_before_external_sort: '100000000000'
+- name: exasol
+  kind: exasol
+  version: 2026.1.0
+  setup:
+    method: preinstalled
+    extra:
+      optimizer_mode: analytical
+      db_params:
+      - -writeTouchInit=1
+      - -cacheMonitorLimit=0
+      - -maxOverallSlbUsageRatio=0.95
+      - -useQueryCache=0
+      - -query_log_timeout=0
+      - -joinOrderMethod=0
+      - -etlCheckCertsDefault=0
+workload:
+  name: tpch
+  scale_factor: 100
+  runs_per_query: 15
+  warmup_runs: 2
+  data_format: tbl
+  generator: dbgen
+  system_variants:
+    clickhouse_26_4: tuned
+env:
+  mode: aws
+  region: eu-west-1
+  instances:
+    clickhouse_25_10:
+      instance_type: r6id.8xlarge
+    clickhouse_26_4:
+      instance_type: r6id.8xlarge
+    exasol:
+      instance_type: r6id.8xlarge
+report:
+  show_boxplots: true
+  show_latency_cdf: true
+  show_bar_chart: true
+  show_heatmap: true
